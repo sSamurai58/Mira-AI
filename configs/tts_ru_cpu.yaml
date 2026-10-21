@@ -1,0 +1,31 @@
+# Mini-TTS с нуля, русский, ориентир — CPU
+sample_rate: 22050
+n_fft: 1024
+hop_length: 256
+win_length: 1024
+n_mels: 80
+fmin: 0
+fmax: 8000
+
+# Крошечная сеть — иначе на CPU обучение займёт вечность
+embedding_dim: 64
+encoder_hidden: 64
+decoder_hidden: 128
+attention_dim: 64
+prenet_dim: 64
+postnet_channels: 64
+postnet_kernel: 5
+dropout: 0.1
+
+batch_size: 8
+learning_rate: 0.001
+epochs: 50
+grad_clip: 1.0
+teacher_forcing: 1.0
+
+max_text_len: 120
+max_mel_len: 600
+
+data_dir: data/ru
+checkpoint_dir: checkpoints
+log_every: 20
