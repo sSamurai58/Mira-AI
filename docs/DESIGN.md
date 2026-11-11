@@ -67,6 +67,7 @@
 | `assist` | Ассистент | Голос: состояние, PTT, последняя реплика |
 | `history` | История | Лента реплик / сессий |
 | `memory` | Память | Поиск по прошлым разговорам |
+| `skills` | Скиллы | Список / добавить / вкл-выкл (как Cursor/Claude) |
 | `settings` | Настройки | Микрофон, TTS, LLM-провайдер, разрешения экрана/браузера |
 
 ## Экраны
@@ -76,6 +77,7 @@
 | Assist Home | `assist` | Статус + PTT + лента диалога | `stub` |
 | History | `history` | Текущие / недавние сессии | `stub` |
 | Memory search | `memory` | «О чём говорили тогда…» | `stub` |
+| Skills | `skills` | Каталог skills, импорт, toggle | `stub` |
 | Settings | `settings` | LLM, TTS, экран/браузер, пути | `stub` |
 | Confirm action | modal | Подтверждение контроля экрана/браузера | `planned` |
 
