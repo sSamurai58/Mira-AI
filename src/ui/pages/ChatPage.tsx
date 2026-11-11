@@ -197,8 +197,11 @@ export function ChatPage({
         const desktopPart = event.desktop
           ? `desktop: ${event.desktop}`
           : "desktop: none";
+        const msgPart = event.messaging
+          ? `msg: ${event.messaging}`
+          : "msg: none";
         setContextNote(
-          `${skillPart} · ${protoPart} · ${webPart} · ${desktopPart}`,
+          `${skillPart} · ${protoPart} · ${webPart} · ${desktopPart} · ${msgPart}`,
         );
       }
 
@@ -244,8 +247,11 @@ export function ChatPage({
         const desktopPart = event.desktopUsed
           ? `desktop: ${event.desktopUsed}`
           : "desktop: none";
+        const msgPart = event.messagingUsed
+          ? `msg: ${event.messagingUsed}`
+          : "msg: none";
         setContextNote(
-          `${skillPart} · ${protoPart} · ${webPart} · ${desktopPart}`,
+          `${skillPart} · ${protoPart} · ${webPart} · ${desktopPart} · ${msgPart}`,
         );
         setBusy(false);
         requestIdRef.current = null;

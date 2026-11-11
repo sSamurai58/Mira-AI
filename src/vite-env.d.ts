@@ -79,6 +79,7 @@ type MiraChatEvent =
       protocol: { id: string; name: string } | null;
       web?: string | null;
       desktop?: string | null;
+      messaging?: string | null;
     }
   | { type: "assistant_start"; sessionId: string }
   | { type: "token"; text: string }
@@ -90,6 +91,7 @@ type MiraChatEvent =
       protocolUsed: { id: string; name: string } | null;
       webUsed: string | null;
       desktopUsed: string | null;
+      messagingUsed: string | null;
     }
   | { type: "error"; message: string };
 
@@ -121,6 +123,16 @@ type MiraHealth = {
     preferred: string;
     requireConfirmOpen: boolean;
   };
+  messaging?: {
+    enabled: boolean;
+    primary: string;
+    telegramConfigured: boolean;
+    requireConfirm: boolean;
+    mode: "live" | "dry-run";
+    stubs: Array<{ provider: string; status: string }>;
+  };
+  messengerContacts?: number;
+  messengerMessages?: number;
 };
 
 interface MiraBridge {
@@ -200,6 +212,89 @@ interface MiraBridge {
       visited_at: string;
     }>
   >;
+  getMessagingPolicy: () => Promise<{
+    enabled: boolean;
+    primary: string;
+    telegramConfigured: boolean;
+    requireConfirm: boolean;
+    mode: "live" | "dry-run";
+    stubs: Array<{ provider: string; status: string }>;
+  }>;
+  getMessagingStatus: () => Promise<{
+    policy: {
+      enabled: boolean;
+      primary: string;
+      telegramConfigured: boolean;
+      requireConfirm: boolean;
+      mode: "live" | "dry-run";
+      stubs: Array<{ provider: string; status: string }>;
+    };
+    contacts: Array<{
+      id: string;
+      provider: string;
+      display_name: string;
+      handle: string;
+      chat_id: string;
+      enabled: number;
+      created_at: string;
+    }>;
+    recent: Array<{
+      id: string;
+      provider: string;
+      contact_id: string | null;
+      chat_id: string;
+      direction: string;
+      body: string;
+      status: string;
+      external_id: string | null;
+      created_at: string;
+    }>;
+  }>;
+  listMessengerContacts: (provider?: string) => Promise<
+    Array<{
+      id: string;
+      provider: string;
+      display_name: string;
+      handle: string;
+      chat_id: string;
+      enabled: number;
+      created_at: string;
+    }>
+  >;
+  listMessengerMessages: (limit?: number) => Promise<
+    Array<{
+      id: string;
+      provider: string;
+      contact_id: string | null;
+      chat_id: string;
+      direction: string;
+      body: string;
+      status: string;
+      external_id: string | null;
+      created_at: string;
+    }>
+  >;
+  upsertMessengerContact: (item: {
+    id?: string;
+    provider: string;
+    displayName: string;
+    handle: string;
+    chatId: string;
+    enabled?: boolean;
+  }) => Promise<{
+    id: string;
+    provider: string;
+    display_name: string;
+    handle: string;
+    chat_id: string;
+    enabled: number;
+    created_at: string;
+  }>;
+  testMessagingSend: (payload?: {
+    text?: string;
+    recipient?: string;
+    body?: string;
+  }) => Promise<{ ok: boolean; detail: string; result: unknown }>;
   respondConfirm: (
     id: string,
     accepted: boolean,

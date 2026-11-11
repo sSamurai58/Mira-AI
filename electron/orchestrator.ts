@@ -18,6 +18,13 @@ import {
   searchHistory,
 } from "./tools/browser";
 import {
+  formatMessagingBlock,
+  getMessagingPolicy,
+  looksLikeMessagingIntent,
+  parseMessengerIntent,
+  sendOrReplyMessage,
+} from "./tools/messaging";
+import {
   captureScreen,
   clickAt,
   formatScreenBlock,
@@ -49,7 +56,7 @@ import {
 } from "./store";
 
 const SYSTEM_PROMPT =
-  "Ты Mira — локальный голосовой ИИ-помощник. Отвечай по делу на языке пользователя. Если даны фрагменты памяти, интернет-данные, снимок экрана или история браузера — опирайся на них. Skills подключаются только по необходимости.";
+  "Ты Mira — локальный голосовой ИИ-помощник. Отвечай по делу на языке пользователя. Если даны фрагменты памяти, интернет-данные, снимок экрана, история браузера или результат отправки в мессенджер — опирайся на них. Skills подключаются только по необходимости.";
 
 export type ChatStreamEvent =
   | { type: "user"; utterance: UtteranceRow }
@@ -59,6 +66,7 @@ export type ChatStreamEvent =
       protocol: { id: string; name: string } | null;
       web?: string | null;
       desktop?: string | null;
+      messaging?: string | null;
     }
   | { type: "assistant_start"; sessionId: string }
   | { type: "token"; text: string }
@@ -70,6 +78,7 @@ export type ChatStreamEvent =
       protocolUsed: { id: string; name: string } | null;
       webUsed: string | null;
       desktopUsed: string | null;
+      messagingUsed: string | null;
     }
   | { type: "error"; message: string };
 
@@ -212,10 +221,23 @@ export async function sendChatMessage(
   let webBlock: string | null = null;
   let desktopUsed: string | null = null;
   let desktopBlock: string | null = null;
+  let messagingUsed: string | null = null;
+  let messagingBlock: string | null = null;
 
-  // Prefer explicit desktop/browser intents over generic web when both match.
+  // Prefer explicit desktop/browser/messaging intents over generic web when both match.
   try {
-    if (looksLikeScreenSeeIntent(text) && getScreenPolicy().enabled) {
+    if (looksLikeMessagingIntent(text) && getMessagingPolicy().enabled) {
+      const intent = parseMessengerIntent(text);
+      if (intent) {
+        const sent = await sendOrReplyMessage(intent);
+        messagingUsed = `${sent.provider}-${sent.action}:${sent.mode}${sent.ok ? "" : "-fail"}`;
+        messagingBlock = formatMessagingBlock(sent);
+      } else {
+        messagingUsed = "parse-fail";
+        messagingBlock =
+          "[Мессенджер] Не удалось разобрать получателя/текст. Пример: «Напиши Ивану в Telegram, что встречу переносим».";
+      }
+    } else if (looksLikeScreenSeeIntent(text) && getScreenPolicy().enabled) {
       const shot = await captureScreen();
       desktopUsed = "screen-capture";
       desktopBlock = formatScreenBlock("capture", shot);
@@ -282,9 +304,11 @@ export async function sendChatMessage(
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    if (!webUsed && !desktopUsed) {
+    if (!webUsed && !desktopUsed && !messagingUsed) {
       webUsed = "error";
       webBlock = `[Инструменты: ошибка] ${message}`;
+    } else if (messagingUsed) {
+      messagingBlock = `${messagingBlock ?? ""}\n[Ошибка] ${message}`;
     } else if (desktopUsed) {
       desktopBlock = `${desktopBlock ?? ""}\n[Ошибка] ${message}`;
     } else {
@@ -298,6 +322,7 @@ export async function sendChatMessage(
     protocol: protocol ? { id: protocol.id, name: protocol.name } : null,
     web: webUsed,
     desktop: desktopUsed,
+    messaging: messagingUsed,
   });
 
   const history = listUtterances(session.id);
@@ -316,6 +341,7 @@ export async function sendChatMessage(
   }
   if (webBlock) messages.push({ role: "system", content: webBlock });
   if (desktopBlock) messages.push({ role: "system", content: desktopBlock });
+  if (messagingBlock) messages.push({ role: "system", content: messagingBlock });
 
   for (const u of history) {
     if (u.role === "system") continue;
@@ -374,6 +400,7 @@ export async function sendChatMessage(
     protocolUsed: protocol ? { id: protocol.id, name: protocol.name } : null,
     webUsed,
     desktopUsed,
+    messagingUsed,
   });
 
   return getSession(session.id) ?? session;

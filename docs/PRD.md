@@ -164,7 +164,7 @@
 | 9 | Скиллы | `partial` | P3: md-каталог; on-demand triggers; не весь каталог в контексте |
 | 10 | Протоколы | `partial` | P3: md + Панель CRUD/Run; триггер из Диалога |
 | 11 | Голоса | `partial` | P2: каталог системных TTS + выбор; импорт/студия — P9 |
-| 12 | Мессенджеры | `planned` | TG / WhatsApp / Instagram (+ др.): send & reply по команде |
+| 12 | Мессенджеры | `partial` | P6: Telegram send/reply + confirm; WA/IG stubs |
 | 13 | Blender 3D | `planned` | Полный доступ к Blender + Blender-skills on-demand |
 | 14 | Обучение по материалам | `planned` | Задачи 14.1–14.9; библиотека + анализ + память + опц. skill |
 | 15 | Студия голоса | `planned` | UX-цикл + 15.1–15.9; автообработка после загрузки; рост словаря |

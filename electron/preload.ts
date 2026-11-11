@@ -58,6 +58,7 @@ export type MiraChatEvent =
       protocol: { id: string; name: string } | null;
       web?: string | null;
       desktop?: string | null;
+      messaging?: string | null;
     }
   | { type: "assistant_start"; sessionId: string }
   | { type: "token"; text: string }
@@ -69,6 +70,7 @@ export type MiraChatEvent =
       protocolUsed: { id: string; name: string } | null;
       webUsed: string | null;
       desktopUsed: string | null;
+      messagingUsed: string | null;
     }
   | { type: "error"; message: string };
 
@@ -126,6 +128,25 @@ contextBridge.exposeInMainWorld("mira", {
     ipcRenderer.invoke("mira:test-browser-open", url),
   searchBrowserHistory: (query?: string) =>
     ipcRenderer.invoke("mira:search-browser-history", query),
+  getMessagingPolicy: () => ipcRenderer.invoke("mira:get-messaging-policy"),
+  getMessagingStatus: () => ipcRenderer.invoke("mira:get-messaging-status"),
+  listMessengerContacts: (provider?: string) =>
+    ipcRenderer.invoke("mira:list-messenger-contacts", provider),
+  listMessengerMessages: (limit?: number) =>
+    ipcRenderer.invoke("mira:list-messenger-messages", limit),
+  upsertMessengerContact: (item: {
+    id?: string;
+    provider: string;
+    displayName: string;
+    handle: string;
+    chatId: string;
+    enabled?: boolean;
+  }) => ipcRenderer.invoke("mira:upsert-messenger-contact", item),
+  testMessagingSend: (payload?: {
+    text?: string;
+    recipient?: string;
+    body?: string;
+  }) => ipcRenderer.invoke("mira:test-messaging-send", payload),
   respondConfirm: (id: string, accepted: boolean) =>
     ipcRenderer.invoke("mira:confirm-response", id, accepted),
   onConfirmRequest: (handler: (req: MiraConfirmRequest) => void) => {

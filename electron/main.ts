@@ -15,6 +15,12 @@ import {
   openBrowserUrl,
   searchHistory,
 } from "./tools/browser";
+import {
+  getMessagingPolicy,
+  getMessagingStatusSnapshot,
+  parseMessengerIntent,
+  sendOrReplyMessage,
+} from "./tools/messaging";
 import { captureScreen, getScreenPolicy } from "./tools/screen";
 import { getWebPolicy, webSearch } from "./tools/web";
 import {
@@ -24,9 +30,12 @@ import {
   getDatabasePath,
   getSession,
   getStoreHealth,
+  listMessengerContacts,
+  listMessengerMessages,
   listSessions,
   listUtterances,
   openStore,
+  upsertMessengerContact,
 } from "./store";
 
 const isDev = process.env.MIRA_DEV === "1";
@@ -76,7 +85,7 @@ app.whenReady().then(() => {
     const cfg = getPublicConfig();
     const validation = validateLlmConfig();
     return {
-      phase: "P5",
+      phase: "P6",
       databasePath: getDatabasePath(),
       ...health,
       llm: cfg,
@@ -87,6 +96,7 @@ app.whenReady().then(() => {
       web: getWebPolicy(),
       screen: getScreenPolicy(),
       browser: getBrowserPolicy(),
+      messaging: getMessagingPolicy(),
     };
   });
 
@@ -259,6 +269,65 @@ app.whenReady().then(() => {
 
   ipcMain.handle("mira:search-browser-history", (_e, query?: string) =>
     searchHistory(query ?? "", 20),
+  );
+
+  ipcMain.handle("mira:get-messaging-policy", () => getMessagingPolicy());
+  ipcMain.handle("mira:get-messaging-status", () =>
+    getMessagingStatusSnapshot(),
+  );
+  ipcMain.handle("mira:list-messenger-contacts", (_e, provider?: string) =>
+    listMessengerContacts(provider),
+  );
+  ipcMain.handle("mira:list-messenger-messages", (_e, limit?: number) =>
+    listMessengerMessages(limit ?? 20),
+  );
+  ipcMain.handle(
+    "mira:upsert-messenger-contact",
+    (
+      _e,
+      item: {
+        id?: string;
+        provider: string;
+        displayName: string;
+        handle: string;
+        chatId: string;
+        enabled?: boolean;
+      },
+    ) => upsertMessengerContact(item),
+  );
+
+  ipcMain.handle(
+    "mira:test-messaging-send",
+    async (
+      _e,
+      payload?: { text?: string; recipient?: string; body?: string },
+    ) => {
+      try {
+        const text =
+          payload?.text?.trim() ||
+          `Напиши ${payload?.recipient?.trim() || "Ивану"} в Telegram, что ${payload?.body?.trim() || "тест из Настроек Mira"}`;
+        const intent = parseMessengerIntent(text);
+        if (!intent) {
+          return {
+            ok: false,
+            detail: "Не удалось разобрать команду отправки",
+            result: null,
+          };
+        }
+        const result = await sendOrReplyMessage(intent);
+        return {
+          ok: result.ok,
+          detail: result.detail,
+          result,
+        };
+      } catch (err) {
+        return {
+          ok: false,
+          detail: err instanceof Error ? err.message : String(err),
+          result: null,
+        };
+      }
+    },
   );
 
   createWindow();
