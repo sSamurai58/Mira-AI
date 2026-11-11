@@ -296,8 +296,45 @@ export function applyTheme(id: ThemeId): void {
   root.style.setProperty("--success", tokens.success);
   root.style.setProperty("--terminal-bg", tokens.terminalBg);
   root.style.setProperty("--terminal-fg", tokens.terminalFg);
+  // Derived HUD tokens from the active theme (no hardcoded neon palette)
+  root.style.setProperty(
+    "--track",
+    mixHex(tokens.border, tokens.bgElevated, 0.45) ?? tokens.border,
+  );
+  root.style.setProperty(
+    "--panel-line",
+    `color-mix(in srgb, ${tokens.accent} 26%, transparent)`,
+  );
   root.dataset.theme = theme.id;
   localStorage.setItem("mira.theme", theme.id);
+}
+
+function mixHex(a: string, b: string, t: number): string | null {
+  const pa = parseHex(a);
+  const pb = parseHex(b);
+  if (!pa || !pb) return null;
+  const m = (x: number, y: number) => Math.round(x + (y - x) * t);
+  const to = (n: number) => n.toString(16).padStart(2, "0");
+  return `#${to(m(pa[0], pb[0]))}${to(m(pa[1], pb[1]))}${to(m(pa[2], pb[2]))}`;
+}
+
+function parseHex(hex: string): [number, number, number] | null {
+  const h = hex.replace("#", "");
+  if (h.length === 6) {
+    return [
+      Number.parseInt(h.slice(0, 2), 16),
+      Number.parseInt(h.slice(2, 4), 16),
+      Number.parseInt(h.slice(4, 6), 16),
+    ];
+  }
+  if (h.length === 8) {
+    return [
+      Number.parseInt(h.slice(0, 2), 16),
+      Number.parseInt(h.slice(2, 4), 16),
+      Number.parseInt(h.slice(4, 6), 16),
+    ];
+  }
+  return null;
 }
 
 export function loadStoredThemeId(): ThemeId {

@@ -12,7 +12,7 @@ export function ErrorBanner({
   onDismiss,
 }: ErrorBannerProps) {
   return (
-    <div className="banner" role="alert">
+    <div className="banner-error row" role="alert" style={{ justifyContent: "space-between" }}>
       <div>
         <strong>Ошибка</strong>
         <div className="muted">{message}</div>

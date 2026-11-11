@@ -3,6 +3,24 @@
 Тёмный UI голосового ИИ-помощника Mira.  
 Источник правды по интерфейсу (см. `RULES.md`).
 
+## Visual language (редизайн 2026-11-11)
+
+Композиция — Jarvis-HUD (3 колонки, стекло, ядро, правый журнал) по дизайн-референсу ассистента. **Цвета и акценты** — только из каталога тем Mira (`--bg` / `--accent` / …), не палитра референса.
+
+| Слой | Решение |
+|------|---------|
+| Display | **Syne** — бренд / приветствие |
+| UI | **Manrope** — интерфейс (вместо Inter из референса) |
+| Mono | **JetBrains Mono** — цифры, время, метки |
+| Default theme | `deep-sea-neon` |
+| Atmosphere | сетка 40px + дрейфующие пятна из `--accent` / `--border` / `--success` |
+| Shell | nav 250 · центр · rail 340; glass-card 22px; HUD-скобки |
+| Ядро | SVG `CoreOrb` уровни 1–5; состояния idle/listening/thinking/speaking |
+| Home | ядро + метрики + чат; справа ресурсы / нагрузка / журнал |
+| Motion | радар, ореолы, пульс ядра, волна, радужная рамка ввода; `prefers-reduced-motion` off |
+| IA | по-прежнему **4** корневых пункта (Диалог / Память / Мастерская / Настройки) |
+
+
 ## Agent skills для дизайна и анимации
 
 При проектировании/реализации UI и motion агент подключает **только нужные** скиллы из `.cursor/skills/` (upstream: [emilkowalski/skills](https://github.com/emilkowalski/skills/tree/main/skills)). Это **не** продуктовый каталог PRD #9.
@@ -235,9 +253,9 @@ Mira
 
 | Блок | Назначение | Статус |
 |------|------------|--------|
-| `AppShell` | 4 пункта nav + слот | `partial` (P0 shell) |
-| `ChatThread` | Лента диалога | `stub` (placeholder bubbles) |
-| `VoiceOrb` / статус | Состояние голоса | `partial` (listening/thinking/speaking) |
+| `AppShell` | 4 пункта nav + topbar + уровень ядра | `partial` (Jarvis shell) |
+| `ChatThread` | Лента диалога на home | `partial` |
+| `CoreOrb` / статус | Ядро + voice-state | `partial` (уровни 1–5, анимации) |
 | `PushToTalk` | Говорить | `partial` (Web Speech ASR) |
 | `ModelVoiceChips` | Быстрый выбор модели/голоса | `partial` (voice select on Home) |
 | `WorkshopNav` | Сегменты Мастерской | `partial` |

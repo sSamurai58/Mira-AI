@@ -7,7 +7,7 @@ import { HudPage } from "./pages/HudPage";
 import { MemoryPage } from "./pages/MemoryPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { WorkshopPage } from "./pages/WorkshopPage";
-
+import { loadCoreLevel } from "./coreLevel";
 import {
   applyTheme,
   loadStoredThemeId,
@@ -23,14 +23,73 @@ import type { VoiceState } from "./voiceState";
 
 type RootNav = "chat" | "memory" | "workshop" | "settings";
 
-function navItems(): { id: RootNav; label: string }[] {
+function navItems(): {
+  id: RootNav;
+  label: string;
+  tone: "accent" | "success" | "warning" | "danger";
+}[] {
   const lang = getUiLang();
   return [
-    { id: "chat", label: t("chat", lang) },
-    { id: "memory", label: t("memory", lang) },
-    { id: "workshop", label: t("workshop", lang) },
-    { id: "settings", label: t("settings", lang) },
+    { id: "chat", label: t("chat", lang), tone: "accent" },
+    { id: "memory", label: t("memory", lang), tone: "success" },
+    { id: "workshop", label: t("workshop", lang), tone: "warning" },
+    { id: "settings", label: t("settings", lang), tone: "danger" },
   ];
+}
+
+function NavIcon({ id }: { id: RootNav }) {
+  const common = {
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.7,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    className: "nav-ico",
+  };
+  if (id === "chat") {
+    return (
+      <svg {...common}>
+        <circle cx="12" cy="12" r="7" />
+        <circle cx="12" cy="12" r="2.5" />
+      </svg>
+    );
+  }
+  if (id === "memory") {
+    return (
+      <svg {...common}>
+        <path d="M5 8h14M5 12h14M5 16h10" />
+      </svg>
+    );
+  }
+  if (id === "workshop") {
+    return (
+      <svg {...common}>
+        <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 0 5.4-5.4l-2.1 2.1-1.9-1.9 2-2.1z" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...common}>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2" />
+    </svg>
+  );
+}
+
+function voiceLabel(state: VoiceState): string {
+  switch (state) {
+    case "listening":
+      return "Слушает";
+    case "thinking":
+      return "Думает";
+    case "speaking":
+      return "Говорит";
+    case "error":
+      return "Ошибка";
+    default:
+      return "Готово";
+  }
 }
 
 export function App() {
@@ -49,18 +108,20 @@ export function App() {
   const [doctorText, setDoctorText] = useState("Doctor…");
   const [healthText, setHealthText] = useState("Проверка store…");
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [coreLevel, setCoreLevel] = useState(() => loadCoreLevel());
+  const [clock, setClock] = useState(() =>
+    new Date().toLocaleTimeString("ru-RU", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }),
+  );
   const [autoSpeak, setAutoSpeak] = useState(() => {
-    // Default off in empty-voice / headless demos; user can enable in Settings.
     if (localStorage.getItem("mira.autoSpeak") === "1") return true;
     if (localStorage.getItem("mira.autoSpeak") === "0") return false;
     localStorage.setItem("mira.autoSpeak", "0");
     return false;
   });
-
   const [navLabels, setNavLabels] = useState(() => navItems());
-  const titles = Object.fromEntries(
-    navLabels.map((n) => [n.id, n.label]),
-  ) as Record<RootNav, string>;
 
   useEffect(() => {
     applyTheme(themeId);
@@ -70,21 +131,16 @@ export function App() {
     localStorage.setItem("mira.voiceState", voiceState);
   }, [voiceState]);
 
-  if (isHud) {
-    return <HudPage />;
-  }
-
-
   useEffect(() => {
     const onStorage = () => {
       setAutoSpeak(localStorage.getItem("mira.autoSpeak") !== "0");
       setNavLabels(navItems());
+      setCoreLevel(loadCoreLevel());
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  // Keep autoSpeak / i18n in sync when changed from Settings in same window
   useEffect(() => {
     const id = window.setInterval(() => {
       const next = localStorage.getItem("mira.autoSpeak") !== "0";
@@ -92,10 +148,16 @@ export function App() {
       setNavLabels((prev) => {
         const nextNav = navItems();
         return prev.map((p) => p.label).join() ===
-          nextNav.map((p) => p.label).join()
+          nextNav.map((n) => n.label).join()
           ? prev
           : nextNav;
       });
+      setClock(
+        new Date().toLocaleTimeString("ru-RU", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      );
     }, 800);
     return () => window.clearInterval(id);
   }, []);
@@ -110,9 +172,7 @@ export function App() {
     try {
       const health = await window.mira.getHealth();
       const voice = getVoiceEngineStatus();
-      setHealthText(
-        JSON.stringify({ ...health, voice }, null, 2),
-      );
+      setHealthText(JSON.stringify({ ...health, voice }, null, 2));
       if (health.llmOk === false && health.llmReason) {
         setErrorMessage(health.llmReason);
       }
@@ -139,18 +199,14 @@ export function App() {
 
   const refreshDoctor = useCallback(async () => {
     if (!window.mira?.runDoctor) {
-      const local = mergeDoctorReport(null);
-      setDoctorText(formatDoctorView(local));
+      setDoctorText(formatDoctorView(mergeDoctorReport(null)));
       return;
     }
     try {
       const main = await window.mira.runDoctor();
-      const merged = mergeDoctorReport(main);
-      setDoctorText(formatDoctorView(merged));
+      setDoctorText(formatDoctorView(mergeDoctorReport(main)));
     } catch (err) {
-      setDoctorText(
-        err instanceof Error ? err.message : "Doctor failed",
-      );
+      setDoctorText(err instanceof Error ? err.message : "Doctor failed");
     }
   }, []);
 
@@ -165,39 +221,121 @@ export function App() {
     setSessionId(id);
   }, []);
 
+  const requestNewChat = useCallback(() => {
+    setNav("chat");
+    window.dispatchEvent(new Event("mira:new-chat"));
+  }, []);
+
+  if (isHud) {
+    return <HudPage />;
+  }
+
+  const levelPct = (coreLevel / 5) * 100;
+  const ringC = 2 * Math.PI * 24;
+  const ringDash = (levelPct / 100) * ringC;
+
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-voice={voiceState}>
+      <div className="atmosphere" aria-hidden />
+      <div className="atmosphere-mid" aria-hidden />
+      <div className="atmosphere-grid" aria-hidden />
+
       <aside className="nav">
-        <div className="brand">
+        <div className="brand-row">
+          <span className="brand-orb" aria-hidden />
           <div className="brand-name">{APP_NAME}</div>
-          <div className="brand-phase">phase {APP_PHASE}</div>
+          <div className="brand-phase">{APP_PHASE}</div>
         </div>
-        {navLabels.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={`nav-btn ${nav === item.id ? "active" : ""}`}
-            onClick={() => setNav(item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
+
+        <button
+          type="button"
+          className="btn-new-chat"
+          onClick={requestNewChat}
+        >
+          <span aria-hidden>+</span>
+          Новая беседа
+        </button>
+
+        <nav className="nav-list" aria-label="Основное">
+          {navLabels.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={`nav-btn ${nav === item.id ? "active" : ""}`}
+              data-tone={item.tone}
+              onClick={() => setNav(item.id)}
+            >
+              <NavIcon id={item.id} />
+              <span className="nav-btn-label">{item.label}</span>
+            </button>
+          ))}
+        </nav>
+
+        <div className="nav-spacer" />
+
+        <div className="core-level-card">
+          <div className="core-level-ring" aria-hidden>
+            <svg viewBox="0 0 56 56" width="56" height="56">
+              <circle
+                cx="28"
+                cy="28"
+                r="24"
+                fill="none"
+                stroke="var(--track)"
+                strokeWidth="4"
+              />
+              <circle
+                cx="28"
+                cy="28"
+                r="24"
+                fill="none"
+                stroke="var(--success)"
+                strokeWidth="4"
+                strokeLinecap="round"
+                strokeDasharray={`${ringDash} ${ringC}`}
+                transform="rotate(-90 28 28)"
+              />
+            </svg>
+            <span>
+              {coreLevel}/5
+            </span>
+          </div>
+          <div className="core-level-copy">
+            <strong>Уровень ядра</strong>
+            <span>растёт вместе с ИИ</span>
+          </div>
+        </div>
       </aside>
 
-      <main className="main">
-        <header className="main-header">
-          <h1>{titles[nav]}</h1>
-          <div className="row">
-            <span className="chip">
-              state <strong>{voiceState}</strong>
+      <div className="workspace">
+        <header className="topbar">
+          <div className="pill-row">
+            <span className={`pill ${nav === "chat" ? "active" : ""}`}>
+              <button type="button" onClick={() => setNav("chat")}>
+                Главная
+              </button>
             </span>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setConfirmOpen(true)}
-            >
-              Demo confirm
-            </button>
+            <span className={`pill ${nav === "workshop" ? "active" : ""}`}>
+              <button type="button" onClick={() => setNav("workshop")}>
+                Мастерская
+              </button>
+            </span>
+            <span className="pill">
+              <button
+                type="button"
+                onClick={() => setConfirmOpen(true)}
+                title="Demo confirm"
+              >
+                +
+              </button>
+            </span>
+          </div>
+          <div className="mono tiny">
+            {clock} · Mira · тема {themeId}
+          </div>
+          <div className={`pill status-pill state-${voiceState}`}>
+            <span className="status-dot" aria-hidden />
+            {voiceLabel(voiceState)}
           </div>
         </header>
 
@@ -214,7 +352,7 @@ export function App() {
           />
         ) : null}
 
-        <div className="main-body">
+        <div className="workspace-body">
           {nav === "chat" ? (
             <ChatPage
               voiceState={voiceState}
@@ -223,6 +361,7 @@ export function App() {
               onError={setErrorMessage}
               onVoiceState={setVoiceState}
               autoSpeak={autoSpeak}
+              coreLevel={coreLevel}
             />
           ) : null}
           {nav === "memory" ? (
@@ -243,7 +382,7 @@ export function App() {
             />
           ) : null}
         </div>
-      </main>
+      </div>
 
       <ConfirmModal
         open={confirmOpen}

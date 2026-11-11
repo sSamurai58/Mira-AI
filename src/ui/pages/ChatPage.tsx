@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { CoreOrb } from "../components/CoreOrb";
+import { HomeRail } from "../components/HomeRail";
+import { HudCorners } from "../components/HudCorners";
 import { createAsrSession, isAsrAvailable } from "../voice/asr";
 import {
   getActiveVoiceId,
@@ -23,6 +26,7 @@ type ChatPageProps = {
   onError: (message: string) => void;
   onVoiceState: (state: VoiceState) => void;
   autoSpeak: boolean;
+  coreLevel?: number;
 };
 
 type Bubble = {
@@ -39,6 +43,7 @@ export function ChatPage({
   onError,
   onVoiceState,
   autoSpeak,
+  coreLevel = 4,
 }: ChatPageProps) {
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const [input, setInput] = useState("");
@@ -557,135 +562,260 @@ export function ChatPage({
     setActiveVoiceIdState(id);
   }
 
+  useEffect(() => {
+    const onNew = () => {
+      void handleNewChat();
+    };
+    window.addEventListener("mira:new-chat", onNew);
+    return () => window.removeEventListener("mira:new-chat", onNew);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busy, sessionId]);
+
+  const greeting =
+    voiceState === "listening"
+      ? "Привет! Я слушаю. Чем займёмся?"
+      : voiceState === "thinking"
+        ? "Думаю…"
+        : voiceState === "speaking"
+          ? "Говорю…"
+          : "Готова. Скажите или напишите.";
+
+  const waveActive =
+    voiceState === "listening" || voiceState === "speaking" || Boolean(interim);
+
+  const hintWords = interim
+    ? interim.split(/\s+/).filter(Boolean).slice(0, 8)
+    : ["Скажите", "или", "напишите", "команду", "для", "Mira"];
+
   return (
-    <div className="stack chat-layout">
-      <div className="row">
-        <span className="chip">
-          Модель <strong>{modelLabel}</strong>
-        </span>
-        <span className="chip">
-          state <strong>{voiceState}</strong>
-        </span>
-        <span className="chip" title={engineNote}>
-          voice <strong>{activeVoiceId ? "on" : "n/a"}</strong>
-        </span>
-        {handsFree.enabled ? (
-          <span className="chip">
-            hands-free <strong>«{handsFree.wakePhrase}»</strong>
-          </span>
-        ) : null}
-        <button type="button" className="btn" onClick={() => void handleNewChat()}>
-          Новый диалог
-        </button>
-        <button
-          type="button"
-          className="btn btn-primary"
-          onMouseDown={() => handlePtt(true)}
-          onMouseUp={() => handlePtt(false)}
-          onMouseLeave={() => {
-            if (voiceState === "listening") handlePtt(false);
-          }}
-          onTouchStart={() => handlePtt(true)}
-          onTouchEnd={() => handlePtt(false)}
-          disabled={busy}
-        >
-          Push to talk
-        </button>
-        {!isAsrAvailable() ? (
-          <button type="button" className="btn" onClick={handleDemoPtt} disabled={busy}>
-            Demo PTT
-          </button>
-        ) : null}
-        {voiceState === "speaking" ? (
-          <>
+    <div className="home-grid">
+      <div className="home-center">
+        <section className="glass-card">
+          <HudCorners />
+          <div className="core-card-grid">
+            <div className="core-col">
+              <CoreOrb level={coreLevel} voiceState={voiceState} size={340} />
+              <div className="level-ticks" aria-hidden>
+                {Array.from({ length: 5 }, (_, i) => (
+                  <span key={i} className={i < coreLevel ? "on" : ""} />
+                ))}
+              </div>
+              <div className="pill-row state-pills">
+                <span
+                  className="pill"
+                  data-active={
+                    voiceState === "listening" || voiceState === "idle"
+                      ? "true"
+                      : "false"
+                  }
+                >
+                  Слушает
+                </span>
+                <span
+                  className="pill"
+                  data-active={voiceState === "thinking" ? "true" : "false"}
+                >
+                  Думает
+                </span>
+                <span
+                  className="pill"
+                  data-active={voiceState === "speaking" ? "true" : "false"}
+                >
+                  Говорит
+                </span>
+              </div>
+            </div>
+
+            <div className="core-meta">
+              <h2 className="greeting">{greeting}</h2>
+
+              <div className="stat-block">
+                <HudCorners />
+                <span className="stat-label">Модель</span>
+                <div className="stat-value">{modelLabel}</div>
+              </div>
+              <div className="stat-block">
+                <HudCorners />
+                <span className="stat-label">Средний ответ</span>
+                <div className="stat-value g2">~0,4 с</div>
+              </div>
+              <div className="stat-block">
+                <HudCorners />
+                <span className="stat-label">Голос</span>
+                <div className="stat-value g3">
+                  {activeVoiceId ? "on" : "n/a"}
+                </div>
+              </div>
+
+              <div className="voice-panel">
+                <h4>Голосовой ввод</h4>
+                <div className={`wave ${waveActive ? "" : "is-idle"}`} aria-hidden>
+                  {Array.from({ length: 40 }, (_, i) => (
+                    <span
+                      key={i}
+                      style={{
+                        height: `${28 + ((i * 37) % 72)}%`,
+                        animationDelay: `${(i % 7) * 0.08}s`,
+                      }}
+                    />
+                  ))}
+                </div>
+                <div className="word-chips">
+                  {hintWords.map((w, i) => (
+                    <span
+                      key={`${w}-${i}`}
+                      className={`word-chip ${i === 1 ? "is-hot" : ""}`}
+                    >
+                      {w}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="glass-card chat-card">
+          <div className="chat-toolbar">
+            <span className="chip">
+              Модель <strong>{modelLabel}</strong>
+            </span>
+            {handsFree.enabled ? (
+              <span className="chip">
+                hands-free <strong>«{handsFree.wakePhrase}»</strong>
+              </span>
+            ) : null}
+            {wakeHint ? <span className="chip">{wakeHint}</span> : null}
+            {contextNote ? <span className="chip">{contextNote}</span> : null}
+            {memoryNote ? <span className="chip">{memoryNote}</span> : null}
+            {interim ? (
+              <span className="chip">
+                Слушаю: <strong>{interim}</strong>
+              </span>
+            ) : null}
+
+            {voices.length > 0 ? (
+              <label className="row voice-select">
+                <span className="muted">Голос</span>
+                <select
+                  value={activeVoiceId ?? ""}
+                  onChange={(e) => handleVoicePick(e.target.value)}
+                >
+                  {voices.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name} ({v.lang})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+
+            {!isAsrAvailable() ? (
+              <button
+                type="button"
+                className="btn"
+                onClick={handleDemoPtt}
+                disabled={busy}
+              >
+                Demo PTT
+              </button>
+            ) : null}
+            {voiceState === "speaking" ? (
+              <>
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  onClick={handleBargeIn}
+                  title="Стоп TTS и сразу слушать (Space)"
+                >
+                  Перебить
+                </button>
+                <button type="button" className="btn" onClick={handleStopSpeak}>
+                  Стоп
+                </button>
+              </>
+            ) : null}
+          </div>
+
+          <div className="thread">
+            {bubbles.length === 0 ? (
+              <p className="muted" style={{ margin: 0 }}>
+                Скажите «Мира», зажмите микрофон или напишите ниже.
+              </p>
+            ) : (
+              bubbles.map((b) => (
+                <div key={b.id} className={`bubble ${b.role}`}>
+                  {b.content || (b.pending ? "…" : "")}
+                </div>
+              ))
+            )}
+            <div ref={bottomRef} />
+          </div>
+
+          <div className="hint-chips">
+            {[
+              "Что на камере",
+              "Включи ТВ",
+              "Покажи модель",
+              "Новая заметка",
+            ].map((label) => (
+              <button
+                key={label}
+                type="button"
+                className="hint-chip"
+                disabled={busy}
+                onClick={() => void sendText(label)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <form className="composer-row" onSubmit={handleSubmit}>
+            <div className="rainbow-field">
+              <input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Скажите или напишите…"
+                disabled={busy}
+                aria-label="Сообщение для Mira"
+              />
+            </div>
             <button
               type="button"
-              className="btn btn-danger"
-              onClick={handleBargeIn}
-              title="Стоп TTS и сразу слушать (Space)"
+              className={`mic-btn ${voiceState === "listening" ? "is-hot" : ""}`}
+              aria-label="Push to talk"
+              disabled={busy}
+              onMouseDown={() => handlePtt(true)}
+              onMouseUp={() => handlePtt(false)}
+              onMouseLeave={() => {
+                if (voiceState === "listening") handlePtt(false);
+              }}
+              onTouchStart={() => handlePtt(true)}
+              onTouchEnd={() => handlePtt(false)}
             >
-              Перебить
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                <path d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-3.1A7 7 0 0 0 19 11h-2z" />
+              </svg>
             </button>
-            <button type="button" className="btn" onClick={handleStopSpeak}>
-              Стоп
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={busy || !input.trim()}
+            >
+              {busy ? "Думаю…" : "Отправить"}
             </button>
-          </>
-        ) : null}
-      </div>
-      {wakeHint ? <div className="chip">{wakeHint}</div> : null}
-
-      {voices.length > 0 ? (
-        <label className="row voice-select">
-          <span className="muted">Голос</span>
-          <select
-            value={activeVoiceId ?? ""}
-            onChange={(e) => handleVoicePick(e.target.value)}
-          >
-            {voices.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.name} ({v.lang})
-              </option>
-            ))}
-          </select>
-        </label>
-      ) : (
-        <p className="muted" style={{ margin: 0 }}>
-          Каталог голосов пуст в этой среде — TTS/ASR появятся в Electron/Chrome с
-          системными голосами.
-        </p>
-      )}
-
-      {contextNote ? <div className="chip">{contextNote}</div> : null}
-      {memoryNote ? <div className="chip">{memoryNote}</div> : null}
-      {interim ? (
-        <div className="chip">
-          Слушаю: <strong>{interim}</strong>
-        </div>
-      ) : null}
-
-      <div className="panel voice-stage compact-orb">
-        <div className="orb" data-state={voiceState} aria-hidden />
-        <div className="muted">{engineNote || "Voice engine…"}</div>
+          </form>
+          {engineNote ? (
+            <p className="mono tiny muted" style={{ margin: 0 }}>
+              {engineNote}
+            </p>
+          ) : null}
+        </section>
       </div>
 
-      <div className="panel thread chat-thread">
-        {bubbles.length === 0 ? (
-          <p className="muted" style={{ margin: 0 }}>
-            Зажмите PTT, включите hands-free (Настройки → Голос) или напишите
-            текст. Во время озвучки — «Перебить» / Space.
-          </p>
-        ) : (
-          bubbles.map((b) => (
-            <div key={b.id} className={`bubble ${b.role}`}>
-              {b.content || (b.pending ? "…" : "")}
-            </div>
-          ))
-        )}
-        <div ref={bottomRef} />
-      </div>
-
-      <form className="composer" onSubmit={handleSubmit}>
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Спросите Mira…"
-          rows={3}
-          disabled={busy}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              e.currentTarget.form?.requestSubmit();
-            }
-          }}
-        />
-        <button
-          type="submit"
-          className="btn btn-primary"
-          disabled={busy || !input.trim()}
-        >
-          {busy ? "Думаю…" : "Отправить"}
-        </button>
-      </form>
+      <HomeRail modelLabel={modelLabel} voiceNote={activeVoiceId ? "voice on" : "voice n/a"} />
     </div>
   );
 }
+
