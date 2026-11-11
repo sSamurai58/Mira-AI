@@ -47,4 +47,10 @@ export default defineConfig({
     outDir: "dist",
     emptyOutDir: true,
   },
+  optimizeDeps: {
+    include: ["pdfjs-dist", "tesseract.js"],
+  },
+  worker: {
+    format: "es",
+  },
 });

@@ -11,6 +11,11 @@ files:
   - package.json
   - "!**/*.map"
 asar: true
+asarUnpack:
+  # pdf.js / tesseract assets resolve more reliably outside asar
+  - "**/node_modules/pdfjs-dist/**"
+  - "**/node_modules/tesseract.js/**"
+  - "**/node_modules/tesseract.js-core/**"
 # Skip native rebuild so Linux can produce Windows zip; on windows-latest
 # CI, node-pty still uses prebuilds / spawn fallback when needed.
 npmRebuild: false
@@ -20,6 +25,7 @@ extraResources:
     to: icon.png
   - from: seed
     to: seed
+
 publish:
   provider: github
   owner: sSamurai58
