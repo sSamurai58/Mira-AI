@@ -13,6 +13,7 @@
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "db:check": "tsx scripts/db-check.ts",
     "p1:smoke": "tsx scripts/p1-smoke.ts",
+    "p2:smoke": "tsx scripts/p2-smoke.ts",
     "start": "npm run build && electron ."
   },
   "engines": {

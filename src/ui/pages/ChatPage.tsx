@@ -1,5 +1,13 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import { StubBadge } from "../components/StubBadge";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { createAsrSession, isAsrAvailable } from "../voice/asr";
+import {
+  getActiveVoiceId,
+  setActiveVoiceId,
+  waitForVoices,
+} from "../voice/catalog";
+import { getVoiceEngineStatus } from "../voice/engineStatus";
+import { speakText, stopSpeaking } from "../voice/tts";
+import type { VoiceInfo } from "../voice/types";
 import type { VoiceState } from "../voiceState";
 
 type ChatPageProps = {
@@ -8,7 +16,7 @@ type ChatPageProps = {
   onSessionChange: (sessionId: string) => void;
   onError: (message: string) => void;
   onVoiceState: (state: VoiceState) => void;
-  onHoldPtt: (down: boolean) => void;
+  autoSpeak: boolean;
 };
 
 type Bubble = {
@@ -24,19 +32,114 @@ export function ChatPage({
   onSessionChange,
   onError,
   onVoiceState,
-  onHoldPtt,
+  autoSpeak,
 }: ChatPageProps) {
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [modelLabel, setModelLabel] = useState("…");
   const [memoryNote, setMemoryNote] = useState<string | null>(null);
+  const [interim, setInterim] = useState("");
+  const [voices, setVoices] = useState<VoiceInfo[]>([]);
+  const [activeVoiceId, setActiveVoiceIdState] = useState<string | null>(null);
+  const [engineNote, setEngineNote] = useState("");
   const requestIdRef = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const asrRef = useRef<ReturnType<typeof createAsrSession> | null>(null);
+  const sessionIdRef = useRef(sessionId);
+  const sendTextRef = useRef<(text: string) => Promise<void>>(async () => undefined);
+
+  useEffect(() => {
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [bubbles, busy]);
+  }, [bubbles, busy, interim]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function bootVoices() {
+      const list = await waitForVoices();
+      if (cancelled) return;
+      setVoices(list);
+      setActiveVoiceIdState(getActiveVoiceId(list));
+      setEngineNote(getVoiceEngineStatus().detail);
+    }
+    void bootVoices();
+    return () => {
+      cancelled = true;
+      stopSpeaking();
+      asrRef.current?.stop();
+    };
+  }, []);
+
+  const speakAssistant = useCallback(
+    (text: string) => {
+      if (!autoSpeak) {
+        onVoiceState("idle");
+        return;
+      }
+      speakText(text, activeVoiceId, {
+        onStart: () => onVoiceState("speaking"),
+        onEnd: () => onVoiceState("idle"),
+        onError: (msg) => {
+          onError(msg);
+          onVoiceState("error");
+        },
+      });
+    },
+    [activeVoiceId, autoSpeak, onError, onVoiceState],
+  );
+
+  const sendText = useCallback(
+    async (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed || busy) return;
+      if (!window.mira) {
+        onError(
+          "Чат доступен в Electron (`npm run dev:electron` / `npm start`).",
+        );
+        return;
+      }
+
+      setBusy(true);
+      setMemoryNote(null);
+      onVoiceState("thinking");
+      stopSpeaking();
+
+      const requestId = crypto.randomUUID();
+      requestIdRef.current = requestId;
+
+      setBubbles((prev) => [
+        ...prev,
+        { id: `local-user-${requestId}`, role: "user", content: trimmed },
+        {
+          id: `local-assistant-${requestId}`,
+          role: "assistant",
+          content: "",
+          pending: true,
+        },
+      ]);
+
+      const result = await window.mira.sendChat({
+        sessionId: sessionIdRef.current,
+        text: trimmed,
+        requestId,
+      });
+
+      if (result.sessionId) onSessionChange(result.sessionId);
+      if (!result.ok && result.error) {
+        setBusy(false);
+        onVoiceState("error");
+        onError(result.error);
+        setBubbles((prev) => prev.filter((b) => !b.pending));
+      }
+    },
+    [busy, onError, onSessionChange, onVoiceState],
+  );
+
+  sendTextRef.current = sendText;
 
   useEffect(() => {
     let cancelled = false;
@@ -114,8 +217,8 @@ export function ChatPage({
             : null,
         );
         setBusy(false);
-        onVoiceState("idle");
         requestIdRef.current = null;
+        speakAssistant(event.utterance.content);
       }
 
       if (event.type === "error") {
@@ -126,58 +229,72 @@ export function ChatPage({
         requestIdRef.current = null;
       }
     });
-  }, [onError, onVoiceState]);
+  }, [onError, onVoiceState, speakAssistant]);
 
   async function handleNewChat() {
     if (!window.mira || busy) return;
+    stopSpeaking();
     const session = await window.mira.createSession("Новый диалог");
     setBubbles([]);
     setMemoryNote(null);
     onSessionChange(session.id);
+    onVoiceState("idle");
   }
 
-  async function handleSubmit(e: FormEvent) {
+  function handleSubmit(e: FormEvent) {
     e.preventDefault();
     const text = input.trim();
-    if (!text || busy) return;
-    if (!window.mira) {
-      onError(
-        "Чат доступен в Electron (`npm run dev:electron` / `npm start`). В чистом браузере IPC нет.",
-      );
+    if (!text) return;
+    setInput("");
+    void sendText(text);
+  }
+
+  function handlePtt(down: boolean) {
+    if (busy) return;
+
+    if (down) {
+      stopSpeaking();
+      setInterim("");
+      onVoiceState("listening");
+
+      asrRef.current = createAsrSession({
+        onInterim: setInterim,
+        onFinal: (transcript) => {
+          setInterim("");
+          void sendTextRef.current(transcript);
+        },
+        onError: (msg) => {
+          onError(msg);
+          onVoiceState("error");
+        },
+        onEnd: () => {
+          setInterim("");
+        },
+      });
+      asrRef.current.start();
       return;
     }
 
-    setInput("");
-    setBusy(true);
-    setMemoryNote(null);
-    onVoiceState("thinking");
-    const requestId = crypto.randomUUID();
-    requestIdRef.current = requestId;
+    asrRef.current?.stop();
+  }
 
-    setBubbles((prev) => [
-      ...prev,
-      { id: `local-user-${requestId}`, role: "user", content: text },
-      {
-        id: `local-assistant-${requestId}`,
-        role: "assistant",
-        content: "",
-        pending: true,
-      },
-    ]);
+  function handleDemoPtt() {
+    if (busy) return;
+    stopSpeaking();
+    onVoiceState("listening");
+    window.setTimeout(() => {
+      void sendText("Демо PTT: расскажи коротко кто ты.");
+    }, 250);
+  }
 
-    const result = await window.mira.sendChat({
-      sessionId,
-      text,
-      requestId,
-    });
+  function handleStopSpeak() {
+    stopSpeaking();
+    onVoiceState("idle");
+  }
 
-    if (result.sessionId) onSessionChange(result.sessionId);
-    if (!result.ok && result.error) {
-      setBusy(false);
-      onVoiceState("error");
-      onError(result.error);
-      setBubbles((prev) => prev.filter((b) => !b.pending));
-    }
+  function handleVoicePick(id: string) {
+    setActiveVoiceId(id);
+    setActiveVoiceIdState(id);
   }
 
   return (
@@ -189,30 +306,76 @@ export function ChatPage({
         <span className="chip">
           state <strong>{voiceState}</strong>
         </span>
-        {sessionId ? (
-          <span className="chip mono">{sessionId.slice(0, 8)}…</span>
-        ) : null}
+        <span className="chip" title={engineNote}>
+          voice <strong>{activeVoiceId ? "on" : "n/a"}</strong>
+        </span>
         <button type="button" className="btn" onClick={() => void handleNewChat()}>
           Новый диалог
         </button>
         <button
           type="button"
           className="btn btn-primary"
-          onMouseDown={() => onHoldPtt(true)}
-          onMouseUp={() => onHoldPtt(false)}
-          onMouseLeave={() => onHoldPtt(false)}
+          onMouseDown={() => handlePtt(true)}
+          onMouseUp={() => handlePtt(false)}
+          onMouseLeave={() => {
+            if (voiceState === "listening") handlePtt(false);
+          }}
+          onTouchStart={() => handlePtt(true)}
+          onTouchEnd={() => handlePtt(false)}
+          disabled={busy}
         >
-          PTT <StubBadge label="P2" />
+          Push to talk
         </button>
+        {!isAsrAvailable() ? (
+          <button type="button" className="btn" onClick={handleDemoPtt} disabled={busy}>
+            Demo PTT
+          </button>
+        ) : null}
+        {voiceState === "speaking" ? (
+          <button type="button" className="btn btn-danger" onClick={handleStopSpeak}>
+            Стоп
+          </button>
+        ) : null}
       </div>
 
+      {voices.length > 0 ? (
+        <label className="row voice-select">
+          <span className="muted">Голос</span>
+          <select
+            value={activeVoiceId ?? ""}
+            onChange={(e) => handleVoicePick(e.target.value)}
+          >
+            {voices.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.name} ({v.lang})
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        <p className="muted" style={{ margin: 0 }}>
+          Каталог голосов пуст в этой среде — TTS/ASR появятся в Electron/Chrome с
+          системными голосами.
+        </p>
+      )}
+
       {memoryNote ? <div className="chip">{memoryNote}</div> : null}
+      {interim ? (
+        <div className="chip">
+          Слушаю: <strong>{interim}</strong>
+        </div>
+      ) : null}
+
+      <div className="panel voice-stage compact-orb">
+        <div className="orb" data-state={voiceState} aria-hidden />
+        <div className="muted">{engineNote || "Voice engine…"}</div>
+      </div>
 
       <div className="panel thread chat-thread">
         {bubbles.length === 0 ? (
           <p className="muted" style={{ margin: 0 }}>
-            Напишите сообщение — ответит mock или OpenAI-compatible модель из
-            `.env`.
+            Зажмите PTT и говорите — или напишите текст. Ответ озвучивается
+            автоматически.
           </p>
         ) : (
           bubbles.map((b) => (
@@ -224,7 +387,7 @@ export function ChatPage({
         <div ref={bottomRef} />
       </div>
 
-      <form className="composer" onSubmit={(e) => void handleSubmit(e)}>
+      <form className="composer" onSubmit={handleSubmit}>
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -238,7 +401,11 @@ export function ChatPage({
             }
           }}
         />
-        <button type="submit" className="btn btn-primary" disabled={busy || !input.trim()}>
+        <button
+          type="submit"
+          className="btn btn-primary"
+          disabled={busy || !input.trim()}
+        >
           {busy ? "Думаю…" : "Отправить"}
         </button>
       </form>

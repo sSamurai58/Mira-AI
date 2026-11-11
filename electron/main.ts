@@ -59,7 +59,7 @@ app.whenReady().then(() => {
     const cfg = getPublicConfig();
     const validation = validateLlmConfig();
     return {
-      phase: "P1",
+      phase: "P2",
       databasePath: getDatabasePath(),
       ...health,
       llm: cfg,

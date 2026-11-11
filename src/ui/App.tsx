@@ -11,6 +11,7 @@ import {
   loadStoredThemeId,
   type ThemeId,
 } from "./themes";
+import { getVoiceEngineStatus } from "./voice/engineStatus";
 import type { VoiceState } from "./voiceState";
 
 type RootNav = "chat" | "memory" | "workshop" | "settings";
@@ -38,10 +39,30 @@ export function App() {
   const [doctorOpen, setDoctorOpen] = useState(false);
   const [healthText, setHealthText] = useState("Проверка store…");
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [autoSpeak, setAutoSpeak] = useState(
+    () => localStorage.getItem("mira.autoSpeak") !== "0",
+  );
 
   useEffect(() => {
     applyTheme(themeId);
   }, [themeId]);
+
+  useEffect(() => {
+    const onStorage = () => {
+      setAutoSpeak(localStorage.getItem("mira.autoSpeak") !== "0");
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  // Keep autoSpeak in sync when changed from Settings in same window
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const next = localStorage.getItem("mira.autoSpeak") !== "0";
+      setAutoSpeak((prev) => (prev === next ? prev : next));
+    }, 800);
+    return () => window.clearInterval(id);
+  }, []);
 
   const refreshHealth = useCallback(async () => {
     if (!window.mira) {
@@ -52,7 +73,10 @@ export function App() {
     }
     try {
       const health = await window.mira.getHealth();
-      setHealthText(JSON.stringify(health, null, 2));
+      const voice = getVoiceEngineStatus();
+      setHealthText(
+        JSON.stringify({ ...health, voice }, null, 2),
+      );
       if (health.llmOk === false && health.llmReason) {
         setErrorMessage(health.llmReason);
       }
@@ -73,25 +97,17 @@ export function App() {
   const doctorBody = useMemo(
     () =>
       [
-        "Doctor (P1 / задел F13)",
+        "Doctor (P2 / задел F13)",
         "",
-        "• Mic: ещё не подключён (P2)",
-        "• API: см. Настройки → API и модели / .env",
-        "• Blender: интеграция — P10",
+        `• Voice: ${getVoiceEngineStatus().detail}`,
+        "• Mic permission: системный диалог браузера/Electron при первом PTT",
+        "• API: Настройки → API и модели / .env",
+        "• Blender: P10",
         "",
         healthText,
       ].join("\n"),
     [healthText],
   );
-
-  function handleHoldPtt(down: boolean) {
-    if (down) {
-      setVoiceState("listening");
-      setErrorMessage(null);
-      return;
-    }
-    setVoiceState("idle");
-  }
 
   const handleSessionChange = useCallback((id: string) => {
     setSessionId(id);
@@ -154,7 +170,7 @@ export function App() {
               onSessionChange={handleSessionChange}
               onError={setErrorMessage}
               onVoiceState={setVoiceState}
-              onHoldPtt={handleHoldPtt}
+              autoSpeak={autoSpeak}
             />
           ) : null}
           {nav === "memory" ? (

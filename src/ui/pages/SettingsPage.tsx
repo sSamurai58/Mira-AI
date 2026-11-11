@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
-import { THEMES, type ThemeId } from "../themes";
 import { StubBadge } from "../components/StubBadge";
+import { THEMES, type ThemeId } from "../themes";
+import {
+  getActiveVoiceId,
+  setActiveVoiceId,
+  waitForVoices,
+} from "../voice/catalog";
+import { getVoiceEngineStatus } from "../voice/engineStatus";
+import { speakText, stopSpeaking } from "../voice/tts";
+import type { VoiceInfo } from "../voice/types";
 
 const SECTIONS = [
   { id: "appearance", label: "Внешний вид" },
@@ -29,6 +37,12 @@ export function SettingsPage({
   const [cfgText, setCfgText] = useState("…");
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
+  const [voices, setVoices] = useState<VoiceInfo[]>([]);
+  const [activeVoiceId, setActiveVoiceIdState] = useState<string | null>(null);
+  const [engineDetail, setEngineDetail] = useState("");
+  const [autoSpeak, setAutoSpeak] = useState(
+    () => localStorage.getItem("mira.autoSpeak") !== "0",
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -45,6 +59,20 @@ export function SettingsPage({
       cancelled = true;
     };
   }, [section]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void waitForVoices().then((list) => {
+      if (cancelled) return;
+      setVoices(list);
+      setActiveVoiceIdState(getActiveVoiceId(list));
+      setEngineDetail(getVoiceEngineStatus().detail);
+    });
+    return () => {
+      cancelled = true;
+      stopSpeaking();
+    };
+  }, []);
 
   async function handleTest() {
     if (!window.mira) return;
@@ -122,10 +150,64 @@ export function SettingsPage({
           />
         ) : null}
         {section === "voice" ? (
-          <StubSection
-            title="Голос и аудио"
-            body="Микрофон, вывод, wake-word (F9) — фаза P2+."
-          />
+          <>
+            <div className="row">
+              <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Голос и аудио</h2>
+              <StubBadge label="P2" />
+            </div>
+            <p className="muted" style={{ margin: 0 }}>
+              {engineDetail || "Определение движка…"}
+            </p>
+            <label className="row">
+              <input
+                type="checkbox"
+                checked={autoSpeak}
+                onChange={(e) => {
+                  const on = e.target.checked;
+                  setAutoSpeak(on);
+                  localStorage.setItem("mira.autoSpeak", on ? "1" : "0");
+                }}
+              />
+              <span>Автоозвучка ответов</span>
+            </label>
+            {voices.length === 0 ? (
+              <p className="muted" style={{ margin: 0 }}>
+                Системные голоса не найдены. Откройте Mira в Electron/Chrome.
+              </p>
+            ) : (
+              <label className="stack">
+                <span className="muted">Активный голос</span>
+                <select
+                  value={activeVoiceId ?? ""}
+                  onChange={(e) => {
+                    setActiveVoiceId(e.target.value);
+                    setActiveVoiceIdState(e.target.value);
+                  }}
+                >
+                  {voices.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name} ({v.lang})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() =>
+                    speakText(
+                      "Проверка голоса Mira. Звучу ли я достаточно естественно?",
+                      activeVoiceId,
+                    )
+                  }
+                >
+                  Прослушать
+                </button>
+              </label>
+            )}
+            <p className="muted" style={{ margin: 0 }}>
+              Wake-word / barge-in — F9. Устройства ввода ОС — системные.
+            </p>
+          </>
         ) : null}
         {section === "api" ? (
           <>

@@ -4,8 +4,9 @@
 
 ## Фаза сейчас
 
-**P1 — MVP-0:** текстовый диалог + LLM (OpenAI-compatible или `mock`) + память/поиск в SQLite.  
-P0 каркас: Electron + React + TypeScript, 4 корня UI, темы.
+**P2 — Голос:** PTT → Web Speech ASR → LLM → TTS; каталог системных голосов.  
+P1: текстовый диалог + LLM (`mock` / OpenAI-compatible) + память.  
+P0: Electron + React + TypeScript, 4 корня UI, темы.
 
 Дорожная карта: [`docs/WIP.md`](./docs/WIP.md).
 
@@ -16,9 +17,11 @@ cp .env.example .env
 npm install
 npm run db:check     # создаёт data/mira.db и bootstrap-сессию
 npm run p1:smoke     # headless: mock-чат + поиск памяти
+npm run p2:smoke     # headless: каталог голосов / engine status
 npm run dev          # UI в браузере (без IPC)
-npm run dev:electron # UI + Electron + SQLite + LLM
+npm run dev:electron # UI + Electron + SQLite + LLM + голос
 ```
+
 
 Без `OPENAI_API_KEY` используется **mock**. Для живой модели:
 

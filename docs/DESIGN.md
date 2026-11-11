@@ -237,9 +237,9 @@ Mira
 |------|------------|--------|
 | `AppShell` | 4 пункта nav + слот | `partial` (P0 shell) |
 | `ChatThread` | Лента диалога | `stub` (placeholder bubbles) |
-| `VoiceOrb` / статус | Состояние голоса | `partial` (demo states) |
-| `PushToTalk` | Говорить | `stub` (UI only) |
-| `ModelVoiceChips` | Быстрый выбор модели/голоса | `stub` |
+| `VoiceOrb` / статус | Состояние голоса | `partial` (listening/thinking/speaking) |
+| `PushToTalk` | Говорить | `partial` (Web Speech ASR) |
+| `ModelVoiceChips` | Быстрый выбор модели/голоса | `partial` (voice select on Home) |
 | `WorkshopNav` | Сегменты Мастерской | `partial` |
 | `SettingsNav` | Разделы настроек | `partial` (темы работают) |
 | `ConfirmModal` | Превью опасного действия / исходящего сообщения / shell | `partial` (demo) |
