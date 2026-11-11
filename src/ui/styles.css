@@ -713,17 +713,23 @@ strong {
 .core-orb-glow {
   pointer-events: none;
   position: absolute;
-  inset: 8%;
+  inset: 4%;
   border-radius: 50%;
   z-index: 0;
-  background: radial-gradient(
-    circle at 50% 45%,
-    color-mix(in srgb, var(--accent) 38%, transparent),
-    color-mix(in srgb, var(--accent) 12%, transparent) 42%,
-    transparent 72%
-  );
-  filter: blur(18px);
-  opacity: 0.9;
+  background:
+    radial-gradient(
+      circle at 50% 48%,
+      color-mix(in srgb, var(--warning) 42%, transparent),
+      transparent 38%
+    ),
+    radial-gradient(
+      circle at 50% 45%,
+      color-mix(in srgb, var(--accent) 36%, transparent),
+      color-mix(in srgb, var(--accent) 10%, transparent) 48%,
+      transparent 74%
+    );
+  filter: blur(20px);
+  opacity: 0.95;
   animation: pulse-core 3.2s ease-in-out infinite;
 }
 
