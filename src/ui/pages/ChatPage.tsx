@@ -63,7 +63,6 @@ export function ChatPage({
   const [handsFree, setHandsFree] = useState<HandsFreePrefs>(() =>
     getHandsFreePrefs(),
   );
-  const [wakeHint, setWakeHint] = useState<string | null>(null);
   const requestIdRef = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const asrRef = useRef<ReturnType<typeof createAsrSession> | null>(null);
@@ -462,7 +461,6 @@ export function ChatPage({
   function stopWakeListen() {
     wakeRef.current?.stop();
     wakeRef.current = null;
-    setWakeHint(null);
   }
 
   function startCommandListen() {
@@ -509,10 +507,8 @@ export function ChatPage({
     }
 
     stopWakeListen();
-    setWakeHint(`Hands-free: скажите «${prefs.wakePhrase}»…`);
     wakeRef.current = createAsrSession({
       onInterim: (text) => {
-        setWakeHint(`Слышу: ${text}`);
         if (
           matchWakeWord(text, prefs.wakePhrase, prefs.sensitivity)
         ) {
@@ -536,8 +532,8 @@ export function ChatPage({
           window.setTimeout(() => startWakeListen(), 200);
         }
       },
-      onError: (msg) => {
-        if (msg !== "no-speech") setWakeHint(`Wake ASR: ${msg}`);
+      onError: () => {
+        /* wake errors are non-fatal; loop restarts onEnd when idle */
       },
       onEnd: () => {
         if (
@@ -762,7 +758,6 @@ export function ChatPage({
                 hands-free <strong>«{handsFree.wakePhrase}»</strong>
               </span>
             ) : null}
-            {wakeHint ? <span className="chip">{wakeHint}</span> : null}
             {contextNote ? <span className="chip">{contextNote}</span> : null}
             {memoryNote ? <span className="chip">{memoryNote}</span> : null}
             {interim ? (
