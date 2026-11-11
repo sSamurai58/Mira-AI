@@ -15,6 +15,7 @@ import {
   type PendingChatAttachment,
 } from "../chat/attachments";
 import { ChatMarkdown } from "../chat/ChatMarkdown";
+import { textForSpeech } from "../chat/codeSpeech";
 import { CoreOrb } from "../components/CoreOrb";
 import { HomeRail } from "../components/HomeRail";
 import { HudCorners } from "../components/HudCorners";
@@ -153,15 +154,11 @@ export function ChatPage({
         onVoiceState("idle");
         return;
       }
-      const spoken = text
-        .replace(/\*\*([^*]+)\*\*/g, "$1")
-        .replace(/__([^_]+)__/g, "$1")
-        .replace(/\*([^*]+)\*/g, "$1")
-        .replace(/_([^_]+)_/g, "$1")
-        .replace(/`([^`]+)`/g, "$1")
-        .replace(/^\s*[-*•]\s+/gm, "")
-        .replace(/\n+/g, " ")
-        .trim();
+      const spoken = textForSpeech(text);
+      if (!spoken) {
+        onVoiceState("idle");
+        return;
+      }
       speakText(spoken, activeVoiceId, {
         onStart: () => onVoiceState("speaking"),
         onEnd: () => onVoiceState("idle"),
