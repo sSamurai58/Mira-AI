@@ -43,18 +43,23 @@
 html,
 body,
 #root {
+  width: 100%;
+  max-width: 100%;
   height: 100%;
+  max-height: 100%;
+  margin: 0;
   overflow: hidden;
+  overscroll-behavior: none;
 }
 
 body {
-  margin: 0;
   font-family: var(--font-sans);
   font-size: 14px;
   line-height: 1.5;
   color: var(--text-muted);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
+  position: relative;
 }
 
 /* Scroll without visible bars (chat / journal only) */
@@ -87,15 +92,18 @@ strong {
 .app-shell {
   position: relative;
   display: grid;
-  grid-template-columns: var(--nav-w) minmax(0, 1fr);
+  grid-template-columns: minmax(200px, var(--nav-w)) minmax(0, 1fr);
   gap: var(--gap);
   width: 100%;
+  max-width: 100%;
   height: 100%;
   min-height: 0;
   max-height: 100%;
   padding: var(--pad-screen);
+  box-sizing: border-box;
   isolation: isolate;
   overflow: hidden;
+  contain: layout paint;
 }
 
 .atmosphere {
@@ -103,6 +111,8 @@ strong {
   position: absolute;
   inset: 0;
   z-index: 0;
+  overflow: hidden;
+  contain: paint;
   background:
     radial-gradient(
       800px 540px at 45% 40%,
@@ -128,23 +138,24 @@ strong {
   position: absolute;
   border-radius: 50%;
   filter: blur(90px);
+  /* keep glow inside the clipped atmosphere layer */
   will-change: transform;
 }
 
 .atmosphere::before {
-  width: 540px;
-  height: 540px;
-  left: -4%;
-  top: -8%;
+  width: 420px;
+  height: 420px;
+  left: 0;
+  top: 0;
   background: color-mix(in srgb, var(--accent) 45%, transparent);
   animation: drift-a 16s ease-in-out infinite alternate;
 }
 
 .atmosphere::after {
-  width: 540px;
-  height: 540px;
-  right: -6%;
-  bottom: -10%;
+  width: 420px;
+  height: 420px;
+  right: 0;
+  bottom: 0;
   background: color-mix(in srgb, var(--success) 35%, transparent);
   animation: drift-b 19s ease-in-out infinite alternate;
 }
@@ -153,10 +164,18 @@ strong {
   pointer-events: none;
   position: absolute;
   z-index: 0;
-  width: 540px;
-  height: 540px;
-  left: 35%;
-  top: 28%;
+  inset: 0;
+  overflow: hidden;
+  contain: paint;
+}
+
+.atmosphere-mid::before {
+  content: "";
+  position: absolute;
+  width: 420px;
+  height: 420px;
+  left: 32%;
+  top: 26%;
   border-radius: 50%;
   filter: blur(90px);
   background: color-mix(in srgb, var(--border) 30%, transparent);
@@ -168,6 +187,7 @@ strong {
   position: absolute;
   inset: 0;
   z-index: 0;
+  overflow: hidden;
   opacity: 0.045;
   background-image:
     linear-gradient(var(--text-muted) 1px, transparent 1px),
@@ -180,7 +200,7 @@ strong {
     transform: translate(0, 0) scale(1);
   }
   to {
-    transform: translate(90px, 60px) scale(1.25);
+    transform: translate(40px, 28px) scale(1.12);
   }
 }
 
@@ -189,7 +209,7 @@ strong {
     transform: translate(0, 0) scale(1);
   }
   to {
-    transform: translate(-70px, -40px) scale(1.2);
+    transform: translate(-36px, -24px) scale(1.1);
   }
 }
 
@@ -198,7 +218,7 @@ strong {
     transform: translate(0, 0) scale(1);
   }
   to {
-    transform: translate(50px, -50px) scale(1.18);
+    transform: translate(28px, -28px) scale(1.08);
   }
 }
 
@@ -412,6 +432,8 @@ strong {
   flex-direction: column;
   gap: var(--gap);
   min-width: 0;
+  width: 100%;
+  max-width: 100%;
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -590,10 +612,12 @@ strong {
 
 .home-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) var(--rail-w);
+  grid-template-columns: minmax(0, 1fr) minmax(260px, var(--rail-w));
   gap: var(--gap);
   align-items: stretch;
   flex: 1;
+  width: 100%;
+  max-width: 100%;
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -640,12 +664,14 @@ strong {
   width: min(100%, 220px);
   max-width: 220px;
   max-height: 100%;
+  overflow: hidden;
 }
 
 .core-orb svg {
   display: block;
-  overflow: visible;
-  filter: drop-shadow(0 0 18px color-mix(in srgb, var(--accent) 25%, transparent));
+  overflow: hidden;
+  /* soft glow without expanding layout overflow */
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--accent) 20%, transparent));
 }
 
 .core-radar {
@@ -1815,6 +1841,15 @@ select:disabled {
   color: var(--accent);
 }
 
+@media (max-width: 1200px) {
+  :root {
+    --nav-w: 220px;
+    --rail-w: 300px;
+    --pad-screen: 14px;
+    --gap: 12px;
+  }
+}
+
 @media (max-width: 1100px) {
   html,
   body,
@@ -1827,6 +1862,7 @@ select:disabled {
     overflow: auto;
     height: auto;
     max-height: none;
+    contain: none;
   }
 
   .nav {
