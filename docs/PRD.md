@@ -168,7 +168,7 @@
 | 13 | Blender 3D | `planned` | Полный доступ к Blender + Blender-skills on-demand |
 | 14 | Обучение по материалам | `planned` | Задачи 14.1–14.9; библиотека + анализ + память + опц. skill |
 | 15 | Студия голоса | `planned` | UX-цикл + 15.1–15.9; автообработка после загрузки; рост словаря |
-| 16 | Терминал | `planned` | Полноценный встроенный TTY; задачи 16.1–16.8; Мастерская + опц. split |
+| 16 | Терминал | `partial` | P7: xterm + node-pty multi-session; dialog commands + confirm; prefs |
 
 ### На будущее (не must)
 

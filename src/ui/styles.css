@@ -501,6 +501,51 @@ textarea {
   padding: 12px 14px;
 }
 
+.terminal-panel {
+  min-height: 420px;
+}
+
+.terminal-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.terminal-toolbar {
+  flex-wrap: wrap;
+}
+
+.terminal-cwd {
+  flex: 1;
+  min-width: 180px;
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+.terminal-host {
+  height: min(52vh, 480px);
+  min-height: 280px;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--terminal-bg);
+  color: var(--terminal-fg);
+  overflow: hidden;
+}
+
+.terminal-host .xterm {
+  height: 100%;
+}
+
+.terminal-host .xterm-viewport {
+  overflow-y: auto !important;
+}
+
 @media (max-width: 860px) {
   .voice-row {
     flex-direction: column;

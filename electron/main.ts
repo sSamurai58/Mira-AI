@@ -11,6 +11,22 @@ import {
 } from "./markdownCatalog";
 import { runMemorySearch, sendChatMessage } from "./orchestrator";
 import {
+  clearTerminalHistory,
+  createTerminalSession,
+  disposeAllTerminals,
+  ensureDefaultTerminal,
+  getTerminalHistory,
+  getTerminalPrefs,
+  getTerminalSession,
+  killTerminal,
+  listTerminalSessions,
+  resizeTerminal,
+  runCommandInTerminal,
+  setTerminalCwd,
+  setTerminalHandlers,
+  writeTerminal,
+} from "./terminal/manager";
+import {
   getBrowserPolicy,
   openBrowserUrl,
   searchHistory,
@@ -22,6 +38,7 @@ import {
   sendOrReplyMessage,
 } from "./tools/messaging";
 import { captureScreen, getScreenPolicy } from "./tools/screen";
+import { getTerminalPolicy, isDangerousTerminalCommand } from "./tools/terminal";
 import { getWebPolicy, webSearch } from "./tools/web";
 import {
   closeStore,
@@ -80,12 +97,21 @@ app.whenReady().then(() => {
   ensureSeededCatalog("skills");
   ensureSeededCatalog("protocols");
 
+  setTerminalHandlers({
+    onData: (sessionId, data) => {
+      broadcast("mira:terminal-data", { sessionId, data });
+    },
+    onExit: (sessionId, exitCode) => {
+      broadcast("mira:terminal-exit", { sessionId, exitCode });
+    },
+  });
+
   ipcMain.handle("mira:get-health", () => {
     const health = getStoreHealth();
     const cfg = getPublicConfig();
     const validation = validateLlmConfig();
     return {
-      phase: "P6",
+      phase: "P7",
       databasePath: getDatabasePath(),
       ...health,
       llm: cfg,
@@ -97,6 +123,8 @@ app.whenReady().then(() => {
       screen: getScreenPolicy(),
       browser: getBrowserPolicy(),
       messaging: getMessagingPolicy(),
+      terminal: getTerminalPolicy(),
+      terminalSessions: listTerminalSessions().length,
     };
   });
 
@@ -330,6 +358,59 @@ app.whenReady().then(() => {
     },
   );
 
+  ipcMain.handle("mira:get-terminal-policy", () => getTerminalPolicy());
+  ipcMain.handle("mira:get-terminal-prefs", () => getTerminalPrefs());
+  ipcMain.handle("mira:list-terminal-sessions", () => listTerminalSessions());
+  ipcMain.handle(
+    "mira:create-terminal-session",
+    (_e, opts?: { title?: string; cwd?: string; cols?: number; rows?: number }) =>
+      createTerminalSession(opts),
+  );
+  ipcMain.handle("mira:ensure-terminal", () => ensureDefaultTerminal());
+  ipcMain.handle("mira:get-terminal-session", (_e, id: string) =>
+    getTerminalSession(id),
+  );
+  ipcMain.handle("mira:write-terminal", (_e, id: string, data: string) =>
+    writeTerminal(id, data),
+  );
+  ipcMain.handle(
+    "mira:resize-terminal",
+    (_e, id: string, cols: number, rows: number) =>
+      resizeTerminal(id, cols, rows),
+  );
+  ipcMain.handle("mira:kill-terminal", (_e, id: string) => killTerminal(id));
+  ipcMain.handle("mira:clear-terminal", (_e, id: string) =>
+    clearTerminalHistory(id),
+  );
+  ipcMain.handle("mira:get-terminal-history", (_e, id: string) =>
+    getTerminalHistory(id),
+  );
+  ipcMain.handle("mira:set-terminal-cwd", (_e, id: string, cwd: string) =>
+    setTerminalCwd(id, cwd),
+  );
+  ipcMain.handle(
+    "mira:run-terminal-command",
+    async (_e, command: string, sessionId?: string | null) => {
+      try {
+        const dangerous = isDangerousTerminalCommand(command);
+        const result = await runCommandInTerminal(command, {
+          sessionId,
+          waitMs: 5000,
+        });
+        return { ok: true, dangerous, ...result };
+      } catch (err) {
+        return {
+          ok: false,
+          dangerous: isDangerousTerminalCommand(command),
+          detail: err instanceof Error ? err.message : String(err),
+          sessionId: null,
+          output: "",
+          backend: null,
+        };
+      }
+    },
+  );
+
   createWindow();
 
   app.on("activate", () => {
@@ -338,6 +419,7 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
+  disposeAllTerminals();
   closeStore();
   if (process.platform !== "darwin") app.quit();
 });

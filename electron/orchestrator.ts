@@ -36,6 +36,13 @@ import {
   typeText,
 } from "./tools/screen";
 import {
+  executeTerminalFromChat,
+  extractTerminalCommand,
+  formatTerminalBlock,
+  getTerminalPolicy,
+  looksLikeTerminalIntent,
+} from "./tools/terminal";
+import {
   extractSearchQueryFromText,
   formatWebBlock,
   getWebPolicy,
@@ -56,7 +63,7 @@ import {
 } from "./store";
 
 const SYSTEM_PROMPT =
-  "Ты Mira — локальный голосовой ИИ-помощник. Отвечай по делу на языке пользователя. Если даны фрагменты памяти, интернет-данные, снимок экрана, история браузера или результат отправки в мессенджер — опирайся на них. Skills подключаются только по необходимости.";
+  "Ты Mira — локальный голосовой ИИ-помощник. Отвечай по делу на языке пользователя. Если даны фрагменты памяти, интернет-данные, снимок экрана, история браузера, мессенджер или вывод терминала — опирайся на них. Skills подключаются только по необходимости.";
 
 export type ChatStreamEvent =
   | { type: "user"; utterance: UtteranceRow }
@@ -67,6 +74,7 @@ export type ChatStreamEvent =
       web?: string | null;
       desktop?: string | null;
       messaging?: string | null;
+      terminal?: string | null;
     }
   | { type: "assistant_start"; sessionId: string }
   | { type: "token"; text: string }
@@ -79,6 +87,7 @@ export type ChatStreamEvent =
       webUsed: string | null;
       desktopUsed: string | null;
       messagingUsed: string | null;
+      terminalUsed: string | null;
     }
   | { type: "error"; message: string };
 
@@ -223,10 +232,23 @@ export async function sendChatMessage(
   let desktopBlock: string | null = null;
   let messagingUsed: string | null = null;
   let messagingBlock: string | null = null;
+  let terminalUsed: string | null = null;
+  let terminalBlock: string | null = null;
 
-  // Prefer explicit desktop/browser/messaging intents over generic web when both match.
+  // Prefer explicit tool intents over generic web when both match.
   try {
-    if (looksLikeMessagingIntent(text) && getMessagingPolicy().enabled) {
+    if (looksLikeTerminalIntent(text) && getTerminalPolicy().enabled) {
+      const cmd = extractTerminalCommand(text);
+      if (cmd) {
+        const ran = await executeTerminalFromChat(cmd);
+        terminalUsed = `terminal:${ran.mode}${ran.dangerous ? ":dangerous" : ""}`;
+        terminalBlock = formatTerminalBlock(ran);
+      } else {
+        terminalUsed = "parse-fail";
+        terminalBlock =
+          "[Терминал] Не удалось извлечь команду. Пример: «Выполни в терминале: ls -la».";
+      }
+    } else if (looksLikeMessagingIntent(text) && getMessagingPolicy().enabled) {
       const intent = parseMessengerIntent(text);
       if (intent) {
         const sent = await sendOrReplyMessage(intent);
@@ -304,9 +326,11 @@ export async function sendChatMessage(
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    if (!webUsed && !desktopUsed && !messagingUsed) {
+    if (!webUsed && !desktopUsed && !messagingUsed && !terminalUsed) {
       webUsed = "error";
       webBlock = `[Инструменты: ошибка] ${message}`;
+    } else if (terminalUsed) {
+      terminalBlock = `${terminalBlock ?? ""}\n[Ошибка] ${message}`;
     } else if (messagingUsed) {
       messagingBlock = `${messagingBlock ?? ""}\n[Ошибка] ${message}`;
     } else if (desktopUsed) {
@@ -323,6 +347,7 @@ export async function sendChatMessage(
     web: webUsed,
     desktop: desktopUsed,
     messaging: messagingUsed,
+    terminal: terminalUsed,
   });
 
   const history = listUtterances(session.id);
@@ -342,6 +367,7 @@ export async function sendChatMessage(
   if (webBlock) messages.push({ role: "system", content: webBlock });
   if (desktopBlock) messages.push({ role: "system", content: desktopBlock });
   if (messagingBlock) messages.push({ role: "system", content: messagingBlock });
+  if (terminalBlock) messages.push({ role: "system", content: terminalBlock });
 
   for (const u of history) {
     if (u.role === "system") continue;
@@ -401,6 +427,7 @@ export async function sendChatMessage(
     webUsed,
     desktopUsed,
     messagingUsed,
+    terminalUsed,
   });
 
   return getSession(session.id) ?? session;

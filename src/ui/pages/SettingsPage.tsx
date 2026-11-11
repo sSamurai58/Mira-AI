@@ -239,12 +239,7 @@ export function SettingsPage({
         {section === "integrations" ? (
           <IntegrationsSection />
         ) : null}
-        {section === "terminal" ? (
-          <StubSection
-            title="Терминал"
-            body="Prefs shell/шрифт — P7. Эмулятор живёт в Мастерской."
-          />
-        ) : null}
+        {section === "terminal" ? <TerminalSettingsSection /> : null}
         {section === "data" ? (
           <>
             <div className="row">
@@ -263,6 +258,93 @@ export function SettingsPage({
         ) : null}
       </div>
     </div>
+  );
+}
+
+function TerminalSettingsSection() {
+  const [policyText, setPolicyText] = useState("…");
+  const [fontSize, setFontSize] = useState(
+    () => localStorage.getItem("mira.terminalFontSize") || "14",
+  );
+  const [scrollback, setScrollback] = useState(
+    () => localStorage.getItem("mira.terminalScrollback") || "2000",
+  );
+  const [test, setTest] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      if (!window.mira) {
+        if (!cancelled) setPolicyText("IPC недоступен");
+        return;
+      }
+      const policy = await window.mira.getTerminalPolicy();
+      if (!cancelled) setPolicyText(JSON.stringify(policy, null, 2));
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <>
+      <div className="row">
+        <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Терминал</h2>
+        <StubBadge label="P7 #16" />
+      </div>
+      <p className="muted" style={{ margin: 0 }}>
+        Prefs: `TERMINAL_SHELL`, `TERMINAL_CWD`, `TERMINAL_FONT_SIZE`,
+        `TERMINAL_SCROLLBACK`. Эмулятор — Мастерская → Терминал. Команды из
+        Диалога: «Выполни в терминале: …» (confirm).
+      </p>
+      <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
+        {policyText}
+      </pre>
+      <label className="stack">
+        <span className="muted">Размер шрифта (UI)</span>
+        <input
+          value={fontSize}
+          onChange={(e) => {
+            setFontSize(e.target.value);
+            localStorage.setItem("mira.terminalFontSize", e.target.value);
+          }}
+        />
+      </label>
+      <label className="stack">
+        <span className="muted">Scrollback (UI)</span>
+        <input
+          value={scrollback}
+          onChange={(e) => {
+            setScrollback(e.target.value);
+            localStorage.setItem("mira.terminalScrollback", e.target.value);
+          }}
+        />
+      </label>
+      <div className="row">
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={busy}
+          onClick={() => {
+            if (!window.mira) return;
+            setBusy(true);
+            void window.mira
+              .runTerminalCommand("echo mira-p7 && pwd")
+              .then((res) => {
+                setTest(
+                  `${res.ok ? "OK" : "FAIL"} — ${(res.output || res.detail || "").slice(0, 160)}`,
+                );
+              })
+              .finally(() => setBusy(false));
+          }}
+        >
+          Тест echo/pwd
+        </button>
+        {test ? <span className="chip">{test}</span> : null}
+      </div>
+    </>
   );
 }
 

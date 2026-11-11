@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { StubBadge } from "../components/StubBadge";
+import { TerminalView } from "../components/TerminalView";
 import {
   getActiveVoiceId,
   setActiveVoiceId,
@@ -300,7 +301,9 @@ export function WorkshopPage() {
         </div>
       ) : null}
 
-      {segment === "library" || segment === "terminal" ? (
+      {segment === "terminal" ? <TerminalView /> : null}
+
+      {segment === "library" ? (
         <div className="panel stack">
           <div className="row">
             <h2 style={{ margin: 0, fontSize: "1.05rem" }}>{active.label}</h2>

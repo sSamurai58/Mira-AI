@@ -59,6 +59,7 @@ export type MiraChatEvent =
       web?: string | null;
       desktop?: string | null;
       messaging?: string | null;
+      terminal?: string | null;
     }
   | { type: "assistant_start"; sessionId: string }
   | { type: "token"; text: string }
@@ -71,8 +72,21 @@ export type MiraChatEvent =
       webUsed: string | null;
       desktopUsed: string | null;
       messagingUsed: string | null;
+      terminalUsed: string | null;
     }
   | { type: "error"; message: string };
+
+export type MiraTerminalSession = {
+  id: string;
+  title: string;
+  cwd: string;
+  shell: string;
+  cols: number;
+  rows: number;
+  createdAt: string;
+  alive: boolean;
+  backend: "node-pty" | "spawn";
+};
 
 contextBridge.exposeInMainWorld("mira", {
   getHealth: () => ipcRenderer.invoke("mira:get-health"),
@@ -147,6 +161,33 @@ contextBridge.exposeInMainWorld("mira", {
     recipient?: string;
     body?: string;
   }) => ipcRenderer.invoke("mira:test-messaging-send", payload),
+  getTerminalPolicy: () => ipcRenderer.invoke("mira:get-terminal-policy"),
+  getTerminalPrefs: () => ipcRenderer.invoke("mira:get-terminal-prefs"),
+  listTerminalSessions: (): Promise<MiraTerminalSession[]> =>
+    ipcRenderer.invoke("mira:list-terminal-sessions"),
+  createTerminalSession: (opts?: {
+    title?: string;
+    cwd?: string;
+    cols?: number;
+    rows?: number;
+  }): Promise<MiraTerminalSession> =>
+    ipcRenderer.invoke("mira:create-terminal-session", opts),
+  ensureTerminal: (): Promise<MiraTerminalSession> =>
+    ipcRenderer.invoke("mira:ensure-terminal"),
+  getTerminalSession: (id: string): Promise<MiraTerminalSession | null> =>
+    ipcRenderer.invoke("mira:get-terminal-session", id),
+  writeTerminal: (id: string, data: string) =>
+    ipcRenderer.invoke("mira:write-terminal", id, data),
+  resizeTerminal: (id: string, cols: number, rows: number) =>
+    ipcRenderer.invoke("mira:resize-terminal", id, cols, rows),
+  killTerminal: (id: string) => ipcRenderer.invoke("mira:kill-terminal", id),
+  clearTerminal: (id: string) => ipcRenderer.invoke("mira:clear-terminal", id),
+  getTerminalHistory: (id: string): Promise<string> =>
+    ipcRenderer.invoke("mira:get-terminal-history", id),
+  setTerminalCwd: (id: string, cwd: string): Promise<MiraTerminalSession> =>
+    ipcRenderer.invoke("mira:set-terminal-cwd", id, cwd),
+  runTerminalCommand: (command: string, sessionId?: string | null) =>
+    ipcRenderer.invoke("mira:run-terminal-command", command, sessionId),
   respondConfirm: (id: string, accepted: boolean) =>
     ipcRenderer.invoke("mira:confirm-response", id, accepted),
   onConfirmRequest: (handler: (req: MiraConfirmRequest) => void) => {
@@ -164,5 +205,25 @@ contextBridge.exposeInMainWorld("mira", {
     ) => handler(payload);
     ipcRenderer.on("mira:chat-event", listener);
     return () => ipcRenderer.removeListener("mira:chat-event", listener);
+  },
+  onTerminalData: (
+    handler: (payload: { sessionId: string; data: string }) => void,
+  ) => {
+    const listener = (
+      _event: IpcRendererEvent,
+      payload: { sessionId: string; data: string },
+    ) => handler(payload);
+    ipcRenderer.on("mira:terminal-data", listener);
+    return () => ipcRenderer.removeListener("mira:terminal-data", listener);
+  },
+  onTerminalExit: (
+    handler: (payload: { sessionId: string; exitCode: number }) => void,
+  ) => {
+    const listener = (
+      _event: IpcRendererEvent,
+      payload: { sessionId: string; exitCode: number },
+    ) => handler(payload);
+    ipcRenderer.on("mira:terminal-exit", listener);
+    return () => ipcRenderer.removeListener("mira:terminal-exit", listener);
   },
 });

@@ -243,7 +243,7 @@ Mira
 | `WorkshopNav` | Сегменты Мастерской | `partial` |
 | `SettingsNav` | Разделы настроек | `partial` (темы работают) |
 | `ConfirmModal` | Превью опасного действия / исходящего сообщения / shell | `partial` (P4–P6: web/screen/browser/Telegram send) |
-| `TerminalView` | Эмулятор + вкладки сессий | `stub` |
+| `TerminalView` | Эмулятор + вкладки сессий | `partial` (P7: xterm + multi-tab) |
 | `StubBadge` | Заглушка | `done` |
 
 ## Экраны (сводка)
@@ -255,7 +255,7 @@ Mira
 | Memory — learned | `memory` | `stub` |
 | Workshop hub + segments | `workshop` | `stub` |
 | Voice Studio (nested) | `workshop/voices` | `stub` |
-| Terminal | `workshop/terminal` (+ optional chat split) | `stub` |
+| Terminal | `workshop/terminal` (+ optional chat split) | `partial` (P7; split из Диалога — later) |
 | Settings hub + разделы | `settings` | `partial` (темы, API, голос, Интеграции: web/screen/browser/TG) |
 | Confirm modal | global | `planned` |
 

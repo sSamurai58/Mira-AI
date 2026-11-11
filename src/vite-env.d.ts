@@ -80,6 +80,7 @@ type MiraChatEvent =
       web?: string | null;
       desktop?: string | null;
       messaging?: string | null;
+      terminal?: string | null;
     }
   | { type: "assistant_start"; sessionId: string }
   | { type: "token"; text: string }
@@ -92,8 +93,21 @@ type MiraChatEvent =
       webUsed: string | null;
       desktopUsed: string | null;
       messagingUsed: string | null;
+      terminalUsed: string | null;
     }
   | { type: "error"; message: string };
+
+type MiraTerminalSession = {
+  id: string;
+  title: string;
+  cwd: string;
+  shell: string;
+  cols: number;
+  rows: number;
+  createdAt: string;
+  alive: boolean;
+  backend: "node-pty" | "spawn";
+};
 
 type MiraHealth = {
   phase: string;
@@ -133,6 +147,17 @@ type MiraHealth = {
   };
   messengerContacts?: number;
   messengerMessages?: number;
+  terminal?: {
+    enabled: boolean;
+    requireConfirmDangerous: boolean;
+    prefs: {
+      shell: string;
+      fontSize: number;
+      scrollback: number;
+      defaultCwd: string;
+    };
+  };
+  terminalSessions?: number;
 };
 
 interface MiraBridge {
@@ -295,6 +320,52 @@ interface MiraBridge {
     recipient?: string;
     body?: string;
   }) => Promise<{ ok: boolean; detail: string; result: unknown }>;
+  getTerminalPolicy: () => Promise<{
+    enabled: boolean;
+    requireConfirmDangerous: boolean;
+    prefs: {
+      shell: string;
+      fontSize: number;
+      scrollback: number;
+      defaultCwd: string;
+    };
+  }>;
+  getTerminalPrefs: () => Promise<{
+    shell: string;
+    fontSize: number;
+    scrollback: number;
+    defaultCwd: string;
+  }>;
+  listTerminalSessions: () => Promise<MiraTerminalSession[]>;
+  createTerminalSession: (opts?: {
+    title?: string;
+    cwd?: string;
+    cols?: number;
+    rows?: number;
+  }) => Promise<MiraTerminalSession>;
+  ensureTerminal: () => Promise<MiraTerminalSession>;
+  getTerminalSession: (id: string) => Promise<MiraTerminalSession | null>;
+  writeTerminal: (id: string, data: string) => Promise<boolean>;
+  resizeTerminal: (
+    id: string,
+    cols: number,
+    rows: number,
+  ) => Promise<boolean>;
+  killTerminal: (id: string) => Promise<boolean>;
+  clearTerminal: (id: string) => Promise<string>;
+  getTerminalHistory: (id: string) => Promise<string>;
+  setTerminalCwd: (id: string, cwd: string) => Promise<MiraTerminalSession>;
+  runTerminalCommand: (
+    command: string,
+    sessionId?: string | null,
+  ) => Promise<{
+    ok: boolean;
+    dangerous: boolean;
+    sessionId: string | null;
+    output: string;
+    backend: string | null;
+    detail?: string;
+  }>;
   respondConfirm: (
     id: string,
     accepted: boolean,
@@ -302,6 +373,12 @@ interface MiraBridge {
   onConfirmRequest: (handler: (req: MiraConfirmRequest) => void) => () => void;
   onChatEvent: (
     handler: (payload: { requestId: string; event: MiraChatEvent }) => void,
+  ) => () => void;
+  onTerminalData: (
+    handler: (payload: { sessionId: string; data: string }) => void,
+  ) => () => void;
+  onTerminalExit: (
+    handler: (payload: { sessionId: string; exitCode: number }) => void,
   ) => () => void;
 }
 
