@@ -71,6 +71,7 @@
 | `protocols` | Протоколы | Панель: список, md-импорт, шаги, запуск, вкл/выкл |
 | `voices` | Голоса | Каталог, превью, выбор активного, добавить новый |
 | `messaging` | Мессенджеры | Подключённые аккаунты, чаты, лог исходящих |
+| `blender` | Blender | Статус связи с Blender, путь к проекту, активные Blender-skills |
 | `settings` | Настройки | Микрофон, LLM-провайдер, разрешения экрана/браузера/мессенджеров |
 
 ## Экраны
@@ -84,6 +85,7 @@
 | Protocols Panel | `protocols` | CRUD протоколов, шаги, Run | `stub` |
 | Voices | `voices` | Список голосов, preview, add, select | `stub` |
 | Messaging | `messaging` | Аккаунты TG/WA/IG, чаты, история исходящих | `stub` |
+| Blender | `blender` | Connected scene, Blender-skills active badge | `stub` |
 | Settings | `settings` | LLM, экран/браузер/мессенджеры, пути | `stub` |
 | Confirm action | modal | Подтверждение экрана/браузера/отправки сообщения | `planned` |
 

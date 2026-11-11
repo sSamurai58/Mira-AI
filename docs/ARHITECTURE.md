@@ -10,7 +10,7 @@
 3. **Сменные адаптеры** — LLM (Claude / Gemini / GPT…), ASR, TTS без lock-in.
 4. **Инструменты по команде** — интернет, экран, браузер вызываются явно из диалога.
 5. **Явные stubs** — незавершённое в `PRD.md` / `DESIGN.md`.
-6. **Обязательный scope** — возможности 1–12 из `PRD.md` (в т.ч. мессенджеры).
+6. **Обязательный scope** — возможности 1–13 из `PRD.md` (в т.ч. Blender 3D).
 
 ## Один процесс
 
@@ -24,9 +24,9 @@
 │                    │                                         │
 │     ┌──────────────┼──────────────┬──────────────┬───────────┐ │
 │     ▼              ▼              ▼              ▼           ▼ │
-│  Internet      Screen see     Screen ctrl     Browser   Messengers│
-│   tools         / capture      automation      tools    TG/WA/IG │
-│     └──────────────┴──────────────┴──────────────┴───────────┘ │
+│  Internet   Screen    Browser   Messengers   Blender           │
+│   tools     see/ctrl   tools     TG/WA/IG     (bpy / bridge)   │
+│     └──────────┴──────────┴──────────┴──────────┘              │
 │                    │                                           │
 │             ┌──────▼──────┐     ┌─────────────┐  ┌───────────┐ │
 │             │ SQLite store│     │   Skills    │  │ Protocols │ │
@@ -42,7 +42,7 @@
 3. **Skills on-demand:** из каталога выбрать и временно подключить только релевантные (по задаче/команде); остальные **не** в контексте.
 4. Если фраза — **триггер протокола** → выполнить упорядоченные шаги (команды/действия); иначе обычный диалог.
 5. LLM (выбранный провайдер) → ответ + tool-calls при необходимости.
-6. Инструменты: интернет / видимость экрана / контроль UI / браузер / **мессенджеры**.
+6. Инструменты: интернет / экран / браузер / мессенджеры / **Blender** (при задаче — + Blender-skills on-demand).
 7. Ответ пользователю текстом + **человечная** озвучка (TTS).
 8. Сохранение реплик и метаданных tool-call в SQLite.
 
@@ -75,6 +75,7 @@
 | `tools.screen` | Capture + automation | Обход подтверждений |
 | `tools.browser` | Вкладки, история, поиск по критериям | Хранение API-ключей |
 | `tools.messaging` | TG / WhatsApp / Instagram…: send, reply, resolve chat | Отправка без команды/confirm |
+| `tools.blender` | Доступ к Blender: сцена, ops, скрипты | Работа без on-demand Blender-skills там, где они нужны |
 | `skills` | Каталог: add; **activate/deactivate on-demand**; load только активных | Держать все skills всегда в промпте; вызов OS в обход tools |
 | `protocols` | Последовательности шагов; md + Панель CRUD/run | Тихие действия без команды пользователя |
 | `store` | SQLite, миграции | Правила диалога |
@@ -108,7 +109,7 @@
 │   ├── memory/
 │   ├── skills/         # user skills (Cursor/Claude-like)
 │   ├── protocols/      # command sequences (md + Panel)
-│   ├── tools/          # web, screen, browser, messaging
+│   ├── tools/          # web, screen, browser, messaging, blender
 │   ├── store/
 │   └── config/
 ├── data/
@@ -119,7 +120,7 @@
 
 ## На будущее (не в must)
 
-Модули появятся после PRD **F1/F2**, не раньше стабилизации 1–12:
+Модули появятся после PRD **F1/F2**, не раньше стабилизации 1–13:
 
 | Модуль | PRD | Назначение |
 |--------|-----|------------|
