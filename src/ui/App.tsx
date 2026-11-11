@@ -111,7 +111,7 @@ export function App() {
         `• Voice: ${getVoiceEngineStatus().detail}`,
         "• Mic permission: системный диалог браузера/Electron при первом PTT",
         "• API: Настройки → API и модели / .env",
-        "• Blender: P10",
+        "• Blender: P10 (demo cube+light; dry-run без бинарника)",
         "",
         healthText,
       ].join("\n"),

@@ -6,14 +6,14 @@
 
 | Поле | Значение |
 |------|----------|
-| Фаза | **P9 — Студия голоса ✅** (ожидает подтверждения → **P10**) |
-| Продукт | Голосовой ИИ-помощник Mira (диалог, память, сеть, экран, TG, TTY, learn, voice studio) |
-| Код | P0–P9: studio create→phrases→upload/record→auto QA/TTS pack→catalog #11 |
+| Фаза | **P10 — Blender ✅** (ожидает подтверждения → **P11**) |
+| Продукт | Голосовой ИИ-помощник Mira (диалог, память, сеть, экран, TG, TTY, learn, voice, Blender) |
+| Код | P0–P10: blender bridge dry-run/live + blender-scene on-demand + demo cube/light |
 | Предыдущее | Учебный TTS (`mira_tts`) удалён; не восстанавливаем как есть |
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
 | Дорожная карта | `WIP.md` § «План разработки» — фазы **P0→P11**, затем F* |
 
-**Сейчас:** P9 закрыт. После OK — **P10** (Blender).
+**Сейчас:** P10 закрыт. После OK — **P11** (стабилизация must).
 
 ## Решения
 
@@ -75,6 +75,9 @@
 | 2026-11-11 | Publish security harden | IPC token+sender gate; terminal confirm; path allowlist; SSRF guard; owner_id sessions; redact health paths; system browser history off by default |
 | 2026-11-11 | TTS train P9 = local corpus pack | Neural train later; synthesis fallback = Web Speech; custom voice в #11 + LLM-profile stub |
 | 2026-11-11 | P9 готов | 15.1–15.9 happy-path; p9:smoke OK |
+| 2026-11-11 | Blender bridge P10 | bpy через CLI `--background --python`; dry-run без бинарника |
+| 2026-11-11 | Blender-skills on-demand | `blender-scene` default off; в контекст только на Blender-задачу |
+| 2026-11-11 | P10 готов | демо-сцена куб+свет; p10:smoke OK |
 
 ## Баги
 
@@ -111,6 +114,7 @@
 | 2026-11-11 | Завершён этап P7 (встроенный терминал) |
 | 2026-11-11 | Завершён этап P8 (библиотека и обучение) |
 | 2026-11-11 | Завершён этап P9 (студия голоса) |
+| 2026-11-11 | Завершён этап P10 (Blender bridge) |
 | 2026-11-11 | DESIGN: информационная архитектура, карта настроек |
 | 2026-11-11 | Подключены agent skills Emil Kowalski (design/animation) |
 | 2026-11-11 | Добавлен каталог 14 цветовых тем + референсы в docs/themes/ |

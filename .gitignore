@@ -19,6 +19,7 @@ data/protocols/
 data/screenshots/
 data/library/
 data/voice-studio/
+data/blender/
 !data/.gitkeep
 
 # logs / OS

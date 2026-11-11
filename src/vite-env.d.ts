@@ -82,6 +82,7 @@ type MiraChatEvent =
       messaging?: string | null;
       terminal?: string | null;
       learned?: string | null;
+      blender?: string | null;
     }
   | { type: "assistant_start"; sessionId: string }
   | { type: "token"; text: string }
@@ -96,6 +97,7 @@ type MiraChatEvent =
       messagingUsed: string | null;
       terminalUsed: string | null;
       learnedUsed: string | null;
+      blenderUsed: string | null;
     }
   | { type: "error"; message: string };
 
@@ -230,6 +232,14 @@ type MiraHealth = {
   learnedUnits?: number;
   voiceProjects?: number;
   customVoices?: number;
+  blender?: {
+    enabled: boolean;
+    binaryPath: string | null;
+    found: boolean;
+    mode: "live" | "dry-run";
+    requireConfirm: boolean;
+    outputDir: string;
+  };
 };
 
 interface MiraBridge {
@@ -530,6 +540,21 @@ interface MiraBridge {
     };
   }>;
   readVoicePreview: (filePath: string) => Promise<string>;
+  getBlenderPolicy: () => Promise<{
+    enabled: boolean;
+    binaryPath: string | null;
+    found: boolean;
+    mode: "live" | "dry-run";
+    requireConfirm: boolean;
+    outputDir: string;
+  }>;
+  testBlenderDemo: () => Promise<{
+    ok: boolean;
+    detail: string;
+    mode: string;
+    scriptPath: string | null;
+    outputBlend: string | null;
+  }>;
 }
 
 interface Window {

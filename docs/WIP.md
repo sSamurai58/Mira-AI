@@ -31,9 +31,9 @@ Future **F1–F13** — только после стабилизации must (�
 
 | Поле | Значение |
 |------|----------|
-| Текущая фаза | **P9 ✅ завершена** — ждём подтверждения на **P10** |
-| Следующее действие | После OK: P10 Blender (#13) |
-| Запрещено сейчас | F1–F12, #13 до своей фазы |
+| Текущая фаза | **P10 ✅ завершена** — ждём подтверждения на **P11** |
+| Следующее действие | После OK: P11 стабилизация must |
+| Запрещено сейчас | F1–F12 до своей фазы / после P11 |
 
 ### Стартовые допущения стека (подтвердить в P0 → MEMORY)
 
@@ -199,11 +199,13 @@ Future **F1–F13** — только после стабилизации must (�
 
 ### P10 — Blender (#13)
 
-- [ ] Путь/статус Blender в Интеграции
-- [ ] Bridge (bpy/remote) + пакет Blender-skills on-demand
-- [ ] Одна демо-задача сцена end-to-end
+- [x] Путь/статус Blender в Интеграции (`BLENDER_PATH`, policy, тест демо)
+- [x] Bridge (`blender --background --python`) + dry-run без бинарника
+- [x] Skill `blender-scene` on-demand (default off)
+- [x] Демо-задача: куб + свет + камера end-to-end из Диалога
+- [x] Smoke: `npm run p10:smoke`
 
-**Выход P10:** осмысленная работа в Blender по голосовой/текстовой задаче.
+**Выход P10:** выполнен (диалог → blender tool + skill; live при наличии Blender).
 
 ---
 
@@ -235,7 +237,7 @@ Future **F1–F13** — только после стабилизации must (�
 | OS для screen control | P5.1 ✅ linux→windows→macos |
 | Первый мессенджер | P6.1 |
 | Движок обучения TTS студии | P9 ✅ corpus pack + Web Speech fallback |
-| Blender bridge | P10 |
+| Blender bridge | P10 ✅ CLI bpy + dry-run |
 
 ---
 

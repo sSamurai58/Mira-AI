@@ -74,6 +74,10 @@ import {
   listCustomVoices,
   listVoiceProjects,
 } from "./voiceStudio/studio";
+import {
+  getBlenderPolicy,
+  runDemoScene,
+} from "./tools/blender";
 import fs from "node:fs";
 
 const isDev = process.env.MIRA_DEV === "1";
@@ -142,7 +146,7 @@ app.whenReady().then(() => {
     const cfg = getPublicConfig();
     const validation = validateLlmConfig();
     return {
-      phase: "P9",
+      phase: "P10",
       databasePath: "<local-sqlite>",
       ok: health.ok,
       path: "<local-sqlite>",
@@ -165,6 +169,7 @@ app.whenReady().then(() => {
       browser: getBrowserPolicy(),
       messaging: getMessagingPolicy(),
       terminal: getTerminalPolicy(),
+      blender: getBlenderPolicy(),
       terminalSessions: listTerminalSessions().length,
       library: listLibraryItems(5).length,
       desktopTools: desktopToolsEnabled(),
@@ -538,6 +543,32 @@ app.whenReady().then(() => {
         phraseId: payload.phraseId,
       }),
   );
+  on("mira:get-blender-policy", () => getBlenderPolicy());
+  on(
+    "mira:test-blender-demo",
+    async () => {
+      try {
+        const job = await runDemoScene();
+        return {
+          ok: job.ok,
+          detail: job.detail,
+          mode: job.mode,
+          scriptPath: job.scriptPath,
+          outputBlend: job.outputBlend,
+        };
+      } catch (err) {
+        return {
+          ok: false,
+          detail: err instanceof Error ? err.message : String(err),
+          mode: "dry-run",
+          scriptPath: null,
+          outputBlend: null,
+        };
+      }
+    },
+    { privileged: true },
+  );
+
   on(
     "mira:read-voice-preview",
     (_e, filePath: string) => {

@@ -372,6 +372,8 @@ function IntegrationsSection() {
   const [screenTest, setScreenTest] = useState<string | null>(null);
   const [browserTest, setBrowserTest] = useState<string | null>(null);
   const [messagingTest, setMessagingTest] = useState<string | null>(null);
+  const [blenderPolicy, setBlenderPolicy] = useState("…");
+  const [blenderTest, setBlenderTest] = useState<string | null>(null);
   const [historyText, setHistoryText] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [tgChatId, setTgChatId] = useState("");
@@ -385,22 +387,26 @@ function IntegrationsSection() {
           setScreenPolicy("IPC недоступен");
           setBrowserPolicy("IPC недоступен");
           setMessagingPolicy("IPC недоступен");
+          setBlenderPolicy("IPC недоступен");
           setContactsText("IPC недоступен");
         }
         return;
       }
-      const [web, screen, browser, messaging, contacts] = await Promise.all([
-        window.mira.getWebPolicy(),
-        window.mira.getScreenPolicy(),
-        window.mira.getBrowserPolicy(),
-        window.mira.getMessagingPolicy(),
-        window.mira.listMessengerContacts(),
-      ]);
+      const [web, screen, browser, messaging, blender, contacts] =
+        await Promise.all([
+          window.mira.getWebPolicy(),
+          window.mira.getScreenPolicy(),
+          window.mira.getBrowserPolicy(),
+          window.mira.getMessagingPolicy(),
+          window.mira.getBlenderPolicy(),
+          window.mira.listMessengerContacts(),
+        ]);
       if (cancelled) return;
       setWebPolicy(JSON.stringify(web, null, 2));
       setScreenPolicy(JSON.stringify(screen, null, 2));
       setBrowserPolicy(JSON.stringify(browser, null, 2));
       setMessagingPolicy(JSON.stringify(messaging, null, 2));
+      setBlenderPolicy(JSON.stringify(blender, null, 2));
       setContactsText(
         contacts
           .map(
@@ -420,7 +426,7 @@ function IntegrationsSection() {
     <>
       <div className="row">
         <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Интеграции</h2>
-        <StubBadge label="P6" />
+        <StubBadge label="P10" />
       </div>
 
       <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Интернет (#4)</h3>
@@ -613,9 +619,40 @@ function IntegrationsSection() {
         {messagingTest ? <span className="chip">{messagingTest}</span> : null}
       </div>
       <p className="muted" style={{ margin: 0 }}>
-        WhatsApp / Instagram — интерфейс-заглушки (без отправки). Blender —
-        следующая фаза после терминала.
+        WhatsApp / Instagram — интерфейс-заглушки (без отправки).
       </p>
+
+      <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Blender (#13)</h3>
+      <p className="muted" style={{ margin: 0 }}>
+        `BLENDER_ENABLED`, `BLENDER_PATH`, `BLENDER_MODE=dry-run|live`,
+        `BLENDER_CONFIRM`. Демо: куб + свет + камера через bpy. Skill
+        `blender-scene` — on-demand (default off).
+      </p>
+      <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
+        {blenderPolicy}
+      </pre>
+      <div className="row">
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={busy !== null}
+          onClick={() => {
+            if (!window.mira) return;
+            setBusy("blender");
+            void window.mira
+              .testBlenderDemo()
+              .then((res) => {
+                setBlenderTest(
+                  `${res.ok ? "OK" : "FAIL"} · ${res.mode} — ${res.detail}`,
+                );
+              })
+              .finally(() => setBusy(null));
+          }}
+        >
+          Тест демо-сцены
+        </button>
+        {blenderTest ? <span className="chip">{blenderTest}</span> : null}
+      </div>
     </>
   );
 }

@@ -262,8 +262,11 @@ export function ChatPage({
         const learnedPart = event.learnedUsed
           ? `learned: ${event.learnedUsed}`
           : "learned: none";
+        const blenderPart = event.blenderUsed
+          ? `blender: ${event.blenderUsed}`
+          : "blender: none";
         setContextNote(
-          `${skillPart} · ${protoPart} · ${webPart} · ${desktopPart} · ${msgPart} · ${termPart} · ${learnedPart}`,
+          `${skillPart} · ${protoPart} · ${webPart} · ${desktopPart} · ${msgPart} · ${termPart} · ${learnedPart} · ${blenderPart}`,
         );
         setBusy(false);
         requestIdRef.current = null;

@@ -165,7 +165,7 @@
 | 10 | Протоколы | `partial` | P3: md + Панель CRUD/Run; триггер из Диалога |
 | 11 | Голоса | `partial` | P2 системные TTS + P9 custom voices из студии в каталоге |
 | 12 | Мессенджеры | `partial` | P6: Telegram send/reply + confirm; WA/IG stubs |
-| 13 | Blender 3D | `planned` | Полный доступ к Blender + Blender-skills on-demand |
+| 13 | Blender 3D | `partial` | P10: CLI bpy bridge + dry-run; demo scene; skills on-demand |
 | 14 | Обучение по материалам | `partial` | P8: library→analyze→learned_units→dialog; skill confirm; PDF/AV stub |
 | 15 | Студия голоса | `partial` | P9: цикл 15.1–15.9; corpus TTS stub; neural train later |
 | 16 | Терминал | `partial` | P7: xterm + node-pty multi-session; dialog commands + confirm; prefs |

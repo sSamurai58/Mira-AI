@@ -21,6 +21,7 @@
     "p7:smoke": "tsx scripts/p7-smoke.ts",
     "p8:smoke": "tsx scripts/p8-smoke.ts",
     "p9:smoke": "tsx scripts/p9-smoke.ts",
+    "p10:smoke": "tsx scripts/p10-smoke.ts",
     "start": "npm run build && electron ."
   },
   "engines": {

@@ -57,6 +57,13 @@ import {
   webSearch,
 } from "./tools/web";
 import {
+  formatBlenderBlock,
+  getBlenderPolicy,
+  isBlenderSkill,
+  looksLikeBlenderIntent,
+  runDemoScene,
+} from "./tools/blender";
+import {
   addUtterance,
   createSession,
   getSession,
@@ -69,7 +76,7 @@ import {
 } from "./store";
 
 const SYSTEM_PROMPT =
-  "Ты Mira — локальный голосовой ИИ-помощник. Отвечай по делу на языке пользователя. Если даны фрагменты памяти, выученное из библиотеки, интернет-данные, снимок экрана, история браузера, мессенджер или вывод терминала — опирайся на них. Skills подключаются только по необходимости.";
+  "Ты Mira — локальный голосовой ИИ-помощник. Отвечай по делу на языке пользователя. Если даны фрагменты памяти, выученное из библиотеки, интернет-данные, снимок экрана, история браузера, мессенджер, вывод терминала или результат Blender — опирайся на них. Skills подключаются только по необходимости.";
 
 export type ChatStreamEvent =
   | { type: "user"; utterance: UtteranceRow }
@@ -82,6 +89,7 @@ export type ChatStreamEvent =
       messaging?: string | null;
       terminal?: string | null;
       learned?: string | null;
+      blender?: string | null;
     }
   | { type: "assistant_start"; sessionId: string }
   | { type: "token"; text: string }
@@ -96,6 +104,7 @@ export type ChatStreamEvent =
       messagingUsed: string | null;
       terminalUsed: string | null;
       learnedUsed: string | null;
+      blenderUsed: string | null;
     }
   | { type: "error"; message: string };
 
@@ -143,14 +152,25 @@ function titleFromFirstMessage(text: string): string {
 }
 
 export function selectSkillsForTurn(text: string): CatalogItem[] {
-  const all = loadMarkdownCatalog("skills").filter((s) => s.enabled);
+  const catalog = loadMarkdownCatalog("skills");
+  const enabled = catalog.filter((s) => s.enabled);
   const explicit = matchExplicitSkillCommand(text);
   if (explicit) {
-    const found = all.find((s) => s.id === explicit);
+    const found =
+      enabled.find((s) => s.id === explicit) ||
+      // allow explicit activate of default-off blender skills
+      catalog.find((s) => s.id === explicit);
     return found ? [found] : [];
   }
+
+  // Blender: on-demand skills even when enabled=false in catalog
+  if (looksLikeBlenderIntent(text)) {
+    const blender = catalog.filter(isBlenderSkill).slice(0, 2);
+    if (blender.length) return blender;
+  }
+
   // on-demand by triggers only — never all skills
-  return matchByTriggers(text, all).slice(0, 2);
+  return matchByTriggers(text, enabled).slice(0, 2);
 }
 
 export function selectProtocolForTurn(text: string): CatalogItem | null {
@@ -244,10 +264,16 @@ export async function sendChatMessage(
   let terminalBlock: string | null = null;
   let learnedUsed: string | null = null;
   let learnedBlock: string | null = null;
+  let blenderUsed: string | null = null;
+  let blenderBlock: string | null = null;
 
   // Prefer explicit tool intents over generic web when both match.
   try {
-    if (looksLikeLibraryLearnIntent(text)) {
+    if (looksLikeBlenderIntent(text) && getBlenderPolicy().enabled) {
+      const job = await runDemoScene();
+      blenderUsed = `blender:${job.task}:${job.mode}${job.ok ? "" : "-fail"}`;
+      blenderBlock = formatBlenderBlock(job);
+    } else if (looksLikeLibraryLearnIntent(text)) {
       const q = extractLearnQuery(text) || text;
       const units = searchLearnedUnits(q, 8);
       learnedUsed = units.length ? `learned:${units.length}` : "learned:none";
@@ -346,10 +372,13 @@ export async function sendChatMessage(
       !desktopUsed &&
       !messagingUsed &&
       !terminalUsed &&
-      !learnedUsed
+      !learnedUsed &&
+      !blenderUsed
     ) {
       webUsed = "error";
       webBlock = `[Инструменты: ошибка] ${message}`;
+    } else if (blenderUsed) {
+      blenderBlock = `${blenderBlock ?? ""}\n[Ошибка] ${message}`;
     } else if (learnedUsed) {
       learnedBlock = `${learnedBlock ?? ""}\n[Ошибка] ${message}`;
     } else if (terminalUsed) {
@@ -372,6 +401,7 @@ export async function sendChatMessage(
     messaging: messagingUsed,
     terminal: terminalUsed,
     learned: learnedUsed,
+    blender: blenderUsed,
   });
 
   const history = listUtterances(session.id);
@@ -393,6 +423,7 @@ export async function sendChatMessage(
   if (messagingBlock) messages.push({ role: "system", content: messagingBlock });
   if (terminalBlock) messages.push({ role: "system", content: terminalBlock });
   if (learnedBlock) messages.push({ role: "system", content: learnedBlock });
+  if (blenderBlock) messages.push({ role: "system", content: blenderBlock });
 
   for (const u of history) {
     if (u.role === "system") continue;
@@ -454,6 +485,7 @@ export async function sendChatMessage(
     messagingUsed,
     terminalUsed,
     learnedUsed,
+    blenderUsed,
   });
 
   return getSession(session.id) ?? session;

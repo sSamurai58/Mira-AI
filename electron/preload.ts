@@ -61,6 +61,7 @@ export type MiraChatEvent =
       messaging?: string | null;
       terminal?: string | null;
       learned?: string | null;
+      blender?: string | null;
     }
   | { type: "assistant_start"; sessionId: string }
   | { type: "token"; text: string }
@@ -75,6 +76,7 @@ export type MiraChatEvent =
       messagingUsed: string | null;
       terminalUsed: string | null;
       learnedUsed: string | null;
+      blenderUsed: string | null;
     }
   | { type: "error"; message: string };
 
@@ -223,6 +225,8 @@ contextBridge.exposeInMainWorld("mira", {
   }) => call("mira:import-voice-clip-bytes", payload),
   readVoicePreview: (filePath: string) =>
     call("mira:read-voice-preview", filePath),
+  getBlenderPolicy: () => call("mira:get-blender-policy"),
+  testBlenderDemo: () => call("mira:test-blender-demo"),
   respondConfirm: (id: string, accepted: boolean) =>
     call("mira:confirm-response", id, accepted),
   onConfirmRequest: (handler: (req: MiraConfirmRequest) => void) => {
