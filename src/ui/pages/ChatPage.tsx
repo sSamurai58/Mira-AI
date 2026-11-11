@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { getBrowserLlmLabel, streamBrowserChat } from "../browserLlm";
 import { CoreOrb } from "../components/CoreOrb";
 import { HomeRail } from "../components/HomeRail";
 import { HudCorners } from "../components/HudCorners";
@@ -144,7 +145,6 @@ export function ChatPage({
       requestIdRef.current = requestId;
       setBusy(true);
       setMemoryNote(null);
-      setContextNote("demo: browser mock (без Electron IPC)");
       onVoiceState("thinking");
       setBubbles((prev) => [
         ...prev,
@@ -157,37 +157,93 @@ export function ChatPage({
         },
       ]);
 
-      const reply = [
-        "Browser-demo Mira (mock).",
-        `Вы сказали: «${trimmed.slice(0, 240)}».`,
-        "Полный чат с SQLite/tools — в Electron. Здесь быстрый демо-ответ без IPC.",
-        "Живые модели: LLM_PROVIDER=openai|claude|gemini|grok + ключ в .env.",
-      ].join(" ");
+      const history = bubbles
+        .filter((b) => !b.pending && (b.role === "user" || b.role === "assistant"))
+        .map((b) => ({ role: b.role, content: b.content }));
 
-      let built = "";
-      for (const word of reply.split(/(\s+)/)) {
-        built += word;
-        const snapshot = built;
+      try {
+        const cfg = await streamBrowserChat({
+          userText: trimmed,
+          history,
+          handlers: {
+            onToken: (chunk) => {
+              setBubbles((prev) =>
+                prev.map((b) =>
+                  b.id === `local-assistant-${requestId}`
+                    ? { ...b, content: b.content + chunk, pending: true }
+                    : b,
+                ),
+              );
+            },
+            onDone: (full) => {
+              const label = getBrowserLlmLabel();
+              setBubbles((prev) =>
+                prev.map((b) =>
+                  b.id === `local-assistant-${requestId}`
+                    ? { ...b, content: full || b.content, pending: false }
+                    : b,
+                ),
+              );
+              setModelLabel(label);
+              setContextNote(`browser · ${label}`);
+              setBusy(false);
+              speakAssistant(full);
+            },
+            onError: (err) => {
+              setBusy(false);
+              onVoiceState("error");
+              onError(err.message);
+              setBubbles((prev) => prev.filter((b) => !b.pending));
+            },
+          },
+        });
+        setModelLabel(cfg.label);
+      } catch (err) {
+        // Fallback mock only when no key configured
+        const msg = err instanceof Error ? err.message : String(err);
+        const noKey = /нет api-ключа/i.test(msg);
+        if (!noKey) {
+          setBusy(false);
+          onVoiceState("error");
+          onError(msg);
+          setBubbles((prev) => prev.filter((b) => !b.pending));
+          return;
+        }
+
+        setContextNote("demo: browser mock — сохраните ключ в API и модели");
+        setModelLabel("browser-only");
+        const reply = [
+          "Browser-demo Mira (mock).",
+          `Вы сказали: «${trimmed.slice(0, 240)}».`,
+          "Ключ Grok/OpenAI ещё не сохранён в этой вкладке.",
+          "Настройки → API и модели → провайдер grok + XAI_API_KEY → Сохранить, затем снова напишите сюда.",
+        ].join(" ");
+
+        let built = "";
+        for (const word of reply.split(/(\s+)/)) {
+          built += word;
+          const snapshot = built;
+          setBubbles((prev) =>
+            prev.map((b) =>
+              b.id === `local-assistant-${requestId}`
+                ? { ...b, content: snapshot, pending: true }
+                : b,
+            ),
+          );
+          await new Promise((r) => setTimeout(r, 8));
+        }
         setBubbles((prev) =>
           prev.map((b) =>
             b.id === `local-assistant-${requestId}`
-              ? { ...b, content: snapshot, pending: true }
+              ? { ...b, content: built, pending: false }
               : b,
           ),
         );
-        await new Promise((r) => setTimeout(r, 8));
+        setBusy(false);
+        speakAssistant(built);
       }
-      setBubbles((prev) =>
-        prev.map((b) =>
-          b.id === `local-assistant-${requestId}`
-            ? { ...b, content: built, pending: false }
-            : b,
-        ),
-      );
-      setBusy(false);
-      speakAssistant(built);
     },
-    [onVoiceState, speakAssistant],
+    [bubbles, onError, onVoiceState, speakAssistant],
   );
 
   const sendText = useCallback(
@@ -243,7 +299,7 @@ export function ChatPage({
     let cancelled = false;
     async function boot() {
       if (!window.mira) {
-        setModelLabel("browser-only");
+        if (!cancelled) setModelLabel(getBrowserLlmLabel());
         return;
       }
       const cfg = await window.mira.getConfig();

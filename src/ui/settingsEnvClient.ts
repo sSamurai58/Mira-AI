@@ -169,3 +169,90 @@ export function isTruthyEnv(value: string | undefined): boolean {
 export function boolToEnv(on: boolean): string {
   return on ? "true" : "false";
 }
+
+/** Unmasked browser-local settings (for demo LLM calls). */
+export function getRawBrowserSettings(): Record<string, string> {
+  return readLocal();
+}
+
+export type BrowserLlmConfig = {
+  provider: "openai" | "grok" | "claude" | "gemini" | "mock";
+  model: string;
+  apiKey: string;
+  /** Same-origin proxy path or absolute OpenAI-compatible base */
+  baseUrl: string;
+  label: string;
+};
+
+/**
+ * Resolve which live model the browser demo can call.
+ * Uses Vite `/mira-llm/*` proxies to avoid CORS.
+ */
+export function resolveBrowserLlmConfig(
+  values: Record<string, string> = readLocal(),
+): BrowserLlmConfig {
+  let provider = (values.LLM_PROVIDER || "mock").trim().toLowerCase();
+  if (provider === "xai") provider = "grok";
+
+  const openaiKey = (values.OPENAI_API_KEY || "").trim();
+  const xaiKey = (values.XAI_API_KEY || "").trim();
+  const anthropicKey = (values.ANTHROPIC_API_KEY || "").trim();
+  const geminiKey = (values.GEMINI_API_KEY || "").trim();
+
+  // Auto-pick when provider left on mock but a key exists
+  if (provider === "mock" || provider === "offline" || !provider) {
+    if (xaiKey) provider = "grok";
+    else if (openaiKey) provider = "openai";
+    else if (anthropicKey) provider = "claude";
+    else if (geminiKey) provider = "gemini";
+  }
+
+  const model = (values.LLM_MODEL || "").trim();
+
+  if (provider === "grok" && xaiKey) {
+    return {
+      provider: "grok",
+      model: model || "grok-2-latest",
+      apiKey: xaiKey,
+      baseUrl: "/mira-llm/xai",
+      label: `grok/${model || "grok-2-latest"}`,
+    };
+  }
+  if (provider === "openai" && openaiKey) {
+    const custom = (values.OPENAI_BASE_URL || "").trim();
+    const useProxy = !custom || custom.includes("api.openai.com");
+    return {
+      provider: "openai",
+      model: model || "gpt-4o-mini",
+      apiKey: openaiKey,
+      baseUrl: useProxy ? "/mira-llm/openai" : custom.replace(/\/$/, ""),
+      label: `openai/${model || "gpt-4o-mini"}`,
+    };
+  }
+  if (provider === "claude" && anthropicKey) {
+    return {
+      provider: "claude",
+      model: model || "claude-3-5-sonnet-latest",
+      apiKey: anthropicKey,
+      baseUrl: "/mira-llm/anthropic",
+      label: `claude/${model || "claude-3-5-sonnet-latest"}`,
+    };
+  }
+  if (provider === "gemini" && geminiKey) {
+    return {
+      provider: "gemini",
+      model: model || "gemini-2.0-flash",
+      apiKey: geminiKey,
+      baseUrl: "/mira-llm/gemini",
+      label: `gemini/${model || "gemini-2.0-flash"}`,
+    };
+  }
+
+  return {
+    provider: "mock",
+    model: "mock",
+    apiKey: "",
+    baseUrl: "",
+    label: "browser-only",
+  };
+}
