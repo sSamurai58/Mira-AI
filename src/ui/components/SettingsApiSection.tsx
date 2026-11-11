@@ -26,7 +26,7 @@ const PROVIDERS = [
 ] as const;
 
 const PROVIDER_MODEL_HINT: Record<string, string> = {
-  grok: "grok-2-latest / grok-3",
+  grok: "grok-4.7 / grok-4.6 / grok-4.3",
   openai: "gpt-4o-mini / gpt-4o",
   claude: "claude-3-5-sonnet-latest",
   gemini: "gemini-2.0-flash",

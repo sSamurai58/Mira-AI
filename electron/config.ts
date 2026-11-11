@@ -79,7 +79,7 @@ export function loadConfig(force = false): AppConfig {
         : provider === "gemini"
           ? "gemini-2.0-flash"
           : provider === "grok"
-            ? "grok-2-latest"
+            ? "grok-4.7"
             : provider === "offline"
               ? "mira-offline-stub"
               : "gpt-4o-mini";
@@ -88,9 +88,20 @@ export function loadConfig(force = false): AppConfig {
   const llmModel = (() => {
     if (!requestedModel) return defaultModel;
     const lower = requestedModel.toLowerCase();
-    // Don't send OpenAI model ids to xAI / Claude / Gemini (404)
-    if (provider === "grok" && !lower.startsWith("grok") && !lower.startsWith("xai")) {
-      return defaultModel;
+    // Don't send OpenAI model ids / retired grok-2* to xAI (404)
+    if (provider === "grok") {
+      if (!lower.startsWith("grok") && !lower.startsWith("xai")) {
+        return defaultModel;
+      }
+      if (
+        lower === "grok-2" ||
+        lower === "grok-2-latest" ||
+        lower.startsWith("grok-2-") ||
+        lower === "grok-beta" ||
+        lower === "grok-vision-beta"
+      ) {
+        return defaultModel;
+      }
     }
     if (provider === "claude" && !lower.startsWith("claude")) return defaultModel;
     if (
