@@ -61,7 +61,7 @@ export function mergeDoctorReport(
   const ok = blocking.length === 0 && (main?.ok ?? true);
   return {
     ok,
-    phase: main?.phase ?? "P11",
+    phase: main?.phase ?? "F13",
     generatedAt: main?.generatedAt ?? new Date().toISOString(),
     findings: filtered,
     summary: ok
@@ -73,7 +73,7 @@ export function mergeDoctorReport(
 
 export function formatDoctorView(report: DoctorReportView): string {
   const lines = [
-    `Doctor-light (${report.phase}) · ${report.summary}`,
+    `Doctor (${report.phase}) · ${report.summary}`,
     `at ${report.generatedAt}`,
     "",
   ];

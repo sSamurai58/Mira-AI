@@ -21,6 +21,7 @@ data/library/
 data/voice-studio/
 data/blender/
 data/backups/
+data/logs/
 !data/.gitkeep
 
 # logs / OS

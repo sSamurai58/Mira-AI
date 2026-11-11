@@ -74,6 +74,7 @@ import {
   type SessionRow,
   type UtteranceRow,
 } from "./store";
+import { appendAppLog } from "./logging";
 
 const SYSTEM_PROMPT =
   "Ты Mira — локальный голосовой ИИ-помощник. Отвечай по делу на языке пользователя. Если даны фрагменты памяти, выученное из библиотеки, интернет-данные, снимок экрана, история браузера, мессенджер, вывод терминала или результат Blender — опирайся на них. Skills подключаются только по необходимости.";
@@ -367,6 +368,19 @@ export async function sendChatMessage(
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    appendAppLog({
+      level: "error",
+      category: "orchestrator",
+      message,
+      meta: {
+        webUsed,
+        desktopUsed,
+        messagingUsed,
+        terminalUsed,
+        learnedUsed,
+        blenderUsed,
+      },
+    });
     if (
       !webUsed &&
       !desktopUsed &&

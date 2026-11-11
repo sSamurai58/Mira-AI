@@ -8,6 +8,7 @@ import {
   getStoreHealth,
   openStore,
 } from "./store";
+import { appendAppLog } from "./logging";
 
 export const BACKUP_FORMAT = "mira-backup-v1";
 
@@ -193,11 +194,17 @@ export async function exportBackup(opts?: {
       "utf8",
     );
 
+    const detail = `Экспорт: ${path.basename(packagePath)} · parts=${parts.join(",")}`;
+    appendAppLog({
+      category: "backup",
+      message: detail,
+      meta: { packagePath, parts, includeSecrets },
+    });
     return {
       ok: true,
       packagePath,
       manifest,
-      detail: `Экспорт: ${path.basename(packagePath)} · parts=${parts.join(",")}`,
+      detail,
     };
   } finally {
     openStore();
@@ -268,10 +275,16 @@ export async function importBackup(packagePath: string): Promise<{
     ensureBootstrapSession();
   }
 
+  const detail = `Импорт OK · ${path.basename(abs)}${manifest.includeSecrets ? " (secrets.env не применён автоматически)" : ""}`;
+  appendAppLog({
+    category: "backup",
+    message: detail,
+    meta: { packagePath: abs, parts: manifest.parts },
+  });
   return {
     ok: true,
     packagePath: abs,
-    detail: `Импорт OK · ${path.basename(abs)}${manifest.includeSecrets ? " (secrets.env не применён автоматически)" : ""}`,
+    detail,
   };
 }
 
@@ -380,10 +393,17 @@ export async function forgetData(scope: ForgetScope): Promise<{
 
   ensureBootstrapSession();
 
+  const detail = `Очищено: ${scope}`;
+  appendAppLog({
+    level: "warn",
+    category: "forget",
+    message: detail,
+    meta: { scope, deleted },
+  });
   return {
     ok: true,
     scope,
-    detail: `Очищено: ${scope}`,
+    detail,
     deleted,
   };
 }

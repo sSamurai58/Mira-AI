@@ -24,6 +24,7 @@
     "p10:smoke": "tsx scripts/p10-smoke.ts",
     "p11:smoke": "tsx scripts/p11-smoke.ts",
     "f11:smoke": "tsx scripts/f11-smoke.ts",
+    "f13:smoke": "tsx scripts/f13-smoke.ts",
     "start": "npm run build && electron ."
   },
   "engines": {

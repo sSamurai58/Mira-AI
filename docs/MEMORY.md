@@ -6,14 +6,14 @@
 
 | Поле | Значение |
 |------|----------|
-| Фаза | **F11 — Backup / «забыть» ✅** |
+| Фаза | **F13 — Doctor / логи ✅** |
 | Продукт | Голосовой ИИ-помощник Mira (диалог, память, сеть, экран, TG, TTY, learn, voice, Blender) |
-| Код | P0–P11 + F11: mira-backup-v1 export/import + forget scopes |
+| Код | P0–P11 + F11 + F13: doctor findings + app_logs / jsonl viewer |
 | Предыдущее | Учебный TTS (`mira_tts`) удалён; не восстанавливаем как есть |
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
-| Дорожная карта | Must закрыт; F*: F11 ✅ → **F13** → F9 |
+| Дорожная карта | Must закрыт; F*: F11 ✅ → F13 ✅ → **F9** |
 
-**Сейчас:** F11 закрыт. После OK — **F13** (полный Doctor / логи).
+**Сейчас:** F13 закрыт. После OK — **F9** (wake-word / barge-in).
 
 ## Решения
 
@@ -83,6 +83,8 @@
 | 2026-11-11 | P11 готов | критерии 1–16 ≥ partial; p11:smoke OK |
 | 2026-11-11 | Backup format mira-backup-v1 | БД + library + voice-studio + skills/protocols; secrets только opt-in |
 | 2026-11-11 | F11 готов | export/import + forget (memory/learned/library/voice/all); f11:smoke OK |
+| 2026-11-11 | Session logs F13 | SQLite `app_logs` + `data/logs/*.jsonl`; doctor показывает recentErrors |
+| 2026-11-11 | F13 готов | полный Doctor + log viewer; f13:smoke OK |
 
 ## Баги
 
@@ -122,6 +124,7 @@
 | 2026-11-11 | Завершён этап P10 (Blender bridge) |
 | 2026-11-11 | Завершён этап P11 (стабилизация must) |
 | 2026-11-11 | Завершён F11 (backup / забывать) |
+| 2026-11-11 | Завершён F13 (Doctor / логи) |
 | 2026-11-11 | DESIGN: информационная архитектура, карта настроек |
 | 2026-11-11 | Подключены agent skills Emil Kowalski (design/animation) |
 | 2026-11-11 | Добавлен каталог 14 цветовых тем + референсы в docs/themes/ |

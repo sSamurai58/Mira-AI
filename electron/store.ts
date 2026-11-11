@@ -241,6 +241,16 @@ export function openStore(): DatabaseSync {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS app_logs (
+      id TEXT PRIMARY KEY,
+      level TEXT NOT NULL,
+      category TEXT NOT NULL,
+      message TEXT NOT NULL,
+      meta_json TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_app_logs_created
+      ON app_logs(created_at DESC);
   `);
 
   try {

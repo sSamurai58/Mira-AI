@@ -561,6 +561,11 @@ interface MiraBridge {
     generatedAt: string;
     summary: string;
     text: string;
+    recentErrors?: Array<{
+      created_at: string;
+      category: string;
+      message: string;
+    }>;
     findings: Array<{
       id: string;
       area: string;
@@ -568,8 +573,31 @@ interface MiraBridge {
       title: string;
       detail: string;
       fix?: string;
+      severity?: string;
     }>;
   }>;
+  listAppLogs: (opts?: {
+    limit?: number;
+    category?: string;
+    level?: "info" | "warn" | "error" | "debug";
+  }) => Promise<
+    Array<{
+      id: string;
+      level: string;
+      category: string;
+      message: string;
+      meta_json: string | null;
+      created_at: string;
+    }>
+  >;
+  getLoggingStatus: () => Promise<{
+    dir: string;
+    files: string[];
+    dbCount: number;
+    latestFile: string | null;
+  }>;
+  readLogFile: (fileName: string, maxLines?: number) => Promise<string>;
+  clearAppLogs: () => Promise<{ ok: boolean; deleted: number }>;
   getBackupStatus: () => Promise<{
     databasePath: string;
     libraryDir: string;

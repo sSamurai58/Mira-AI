@@ -228,6 +228,15 @@ contextBridge.exposeInMainWorld("mira", {
   getBlenderPolicy: () => call("mira:get-blender-policy"),
   testBlenderDemo: () => call("mira:test-blender-demo"),
   runDoctor: () => call("mira:run-doctor"),
+  listAppLogs: (opts?: {
+    limit?: number;
+    category?: string;
+    level?: "info" | "warn" | "error" | "debug";
+  }) => call("mira:list-app-logs", opts),
+  getLoggingStatus: () => call("mira:get-logging-status"),
+  readLogFile: (fileName: string, maxLines?: number) =>
+    call("mira:read-log-file", fileName, maxLines),
+  clearAppLogs: () => call("mira:clear-app-logs"),
   getBackupStatus: () => call("mira:get-backup-status"),
   exportBackup: (opts?: { includeSecrets?: boolean }) =>
     call("mira:export-backup", opts),

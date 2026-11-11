@@ -86,6 +86,13 @@ import {
   importBackup,
   type ForgetScope,
 } from "./backup";
+import {
+  clearAppLogs,
+  getLoggingStatus,
+  listAppLogs,
+  readLogFileTail,
+  type LogLevel,
+} from "./logging";
 import fs from "node:fs";
 
 const isDev = process.env.MIRA_DEV === "1";
@@ -154,7 +161,7 @@ app.whenReady().then(() => {
     const cfg = getPublicConfig();
     const validation = validateLlmConfig();
     return {
-      phase: "P11",
+      phase: "F13",
       databasePath: "<local-sqlite>",
       ok: health.ok,
       path: "<local-sqlite>",
@@ -556,6 +563,19 @@ app.whenReady().then(() => {
     const report = runDoctor();
     return { ...report, text: formatDoctorText(report) };
   });
+  on(
+    "mira:list-app-logs",
+    (_e, opts?: { limit?: number; category?: string; level?: LogLevel }) =>
+      listAppLogs(opts),
+  );
+  on("mira:get-logging-status", () => getLoggingStatus());
+  on(
+    "mira:read-log-file",
+    (_e, fileName: string, maxLines?: number) =>
+      readLogFileTail(String(fileName ?? ""), maxLines ?? 80),
+    { privileged: true },
+  );
+  on("mira:clear-app-logs", () => clearAppLogs(), { privileged: true });
   on("mira:get-backup-status", () => getBackupStatus());
   on(
     "mira:export-backup",

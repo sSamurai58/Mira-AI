@@ -262,6 +262,8 @@ function DataPrivacySection(props: {
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [includeSecrets, setIncludeSecrets] = useState(false);
+  const [logsText, setLogsText] = useState("…");
+  const [logFile, setLogFile] = useState("");
 
   async function refreshStatus() {
     if (!window.mira?.getBackupStatus) {
@@ -275,8 +277,31 @@ function DataPrivacySection(props: {
     }
   }
 
+  async function refreshLogs() {
+    if (!window.mira?.listAppLogs) {
+      setLogsText("IPC недоступен");
+      return;
+    }
+    const [rows, status] = await Promise.all([
+      window.mira.listAppLogs({ limit: 40 }),
+      window.mira.getLoggingStatus(),
+    ]);
+    if (!logFile && status.latestFile) setLogFile(status.latestFile);
+    setLogsText(
+      [
+        JSON.stringify(status, null, 2),
+        "",
+        ...rows.map(
+          (r) =>
+            `${r.created_at} [${r.level}/${r.category}] ${r.message}`,
+        ),
+      ].join("\n"),
+    );
+  }
+
   useEffect(() => {
     void refreshStatus();
+    void refreshLogs();
   }, []);
 
   return (
@@ -285,12 +310,11 @@ function DataPrivacySection(props: {
         <h2 style={{ margin: 0, fontSize: "1.05rem" }}>
           Данные и приватность
         </h2>
-        <StubBadge label="F11" />
+        <StubBadge label="F13" />
       </div>
       <p className="muted" style={{ margin: 0 }}>
-        Export/import пакета (`mira-backup-v1`: БД, library, voice-studio,
-        skills/protocols). Секреты в пакет — только с явной опцией. «Забыть» —
-        с confirm и предупреждением о необратимости.
+        Export/import (`mira-backup-v1`), «забыть» с confirm, Doctor + логи
+        сессии (F13). Секреты в пакет — только opt-in.
       </p>
       <div className="row" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
         <button
@@ -395,6 +419,69 @@ function DataPrivacySection(props: {
       </div>
       {note ? <p className="muted" style={{ margin: 0 }}>{note}</p> : null}
       {busy ? <p className="muted mono">busy: {busy}</p> : null}
+
+      <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Логи сессии</h3>
+      <p className="muted" style={{ margin: 0 }}>
+        SQLite `app_logs` + файлы `data/logs/mira-YYYY-MM-DD.jsonl`.
+      </p>
+      <div className="row" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
+        <button
+          type="button"
+          className="btn"
+          disabled={busy !== null}
+          onClick={() => {
+            setBusy("logs");
+            void refreshLogs().finally(() => setBusy(null));
+          }}
+        >
+          Обновить логи
+        </button>
+        <button
+          type="button"
+          className="btn"
+          disabled={busy !== null || !logFile}
+          onClick={() => {
+            if (!window.mira || !logFile) return;
+            setBusy("logfile");
+            void window.mira
+              .readLogFile(logFile, 60)
+              .then((text) => setLogsText(text))
+              .catch((err) =>
+                setNote(err instanceof Error ? err.message : String(err)),
+              )
+              .finally(() => setBusy(null));
+          }}
+        >
+          Хвост файла
+        </button>
+        <button
+          type="button"
+          className="btn"
+          disabled={busy !== null}
+          onClick={() => {
+            if (!window.mira) return;
+            setBusy("clear-logs");
+            void window.mira
+              .clearAppLogs()
+              .then((res) => {
+                setNote(`Логи очищены: ${res.deleted}`);
+                return refreshLogs();
+              })
+              .finally(() => setBusy(null));
+          }}
+        >
+          Очистить DB-логи
+        </button>
+        <input
+          value={logFile}
+          onChange={(e) => setLogFile(e.target.value)}
+          placeholder="mira-….jsonl"
+          style={{ minWidth: "12rem" }}
+        />
+      </div>
+      <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
+        {logsText}
+      </pre>
       <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
         {statusText}
       </pre>
