@@ -6,6 +6,7 @@ import { getSettingsEnv, setSettingsEnv } from "./settingsEnv";
 import { wireConfirmBridge } from "./confirmBridge";
 import { createLlmAdapter } from "./llm";
 import {
+  deleteCatalogItem,
   ensureSeededCatalog,
   loadMarkdownCatalog,
   setCatalogEnabled,
@@ -451,6 +452,16 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
         body: string;
       },
     ) => writeCatalogItem("skills", item),
+  );
+  on(
+    "mira:delete-skill",
+    (_e, id: string) => deleteCatalogItem("skills", id),
+    { privileged: true },
+  );
+  on(
+    "mira:delete-protocol",
+    (_e, id: string) => deleteCatalogItem("protocols", id),
+    { privileged: true },
   );
 
   on("mira:get-web-policy", () => getWebPolicy());

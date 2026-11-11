@@ -182,6 +182,8 @@ contextBridge.exposeInMainWorld("mira", {
     enabled: boolean;
     body: string;
   }) => call("mira:save-skill", item),
+  deleteSkill: (id: string) => call("mira:delete-skill", id),
+  deleteProtocol: (id: string) => call("mira:delete-protocol", id),
   getWebPolicy: () => call("mira:get-web-policy"),
   getScreenPolicy: () => call("mira:get-screen-policy"),
   getBrowserPolicy: () => call("mira:get-browser-policy"),
