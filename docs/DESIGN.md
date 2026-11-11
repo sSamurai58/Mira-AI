@@ -235,16 +235,16 @@ Mira
 
 | Блок | Назначение | Статус |
 |------|------------|--------|
-| `AppShell` | 4 пункта nav + слот | `stub` |
-| `ChatThread` | Лента диалога | `stub` |
-| `VoiceOrb` / статус | Состояние голоса | `stub` |
-| `PushToTalk` | Говорить | `stub` |
+| `AppShell` | 4 пункта nav + слот | `partial` (P0 shell) |
+| `ChatThread` | Лента диалога | `stub` (placeholder bubbles) |
+| `VoiceOrb` / статус | Состояние голоса | `partial` (demo states) |
+| `PushToTalk` | Говорить | `stub` (UI only) |
 | `ModelVoiceChips` | Быстрый выбор модели/голоса | `stub` |
-| `WorkshopNav` | Сегменты Мастерской | `stub` |
-| `SettingsNav` | Разделы настроек | `stub` |
-| `ConfirmModal` | Превью опасного действия / исходящего сообщения / shell | `planned` |
+| `WorkshopNav` | Сегменты Мастерской | `partial` |
+| `SettingsNav` | Разделы настроек | `partial` (темы работают) |
+| `ConfirmModal` | Превью опасного действия / исходящего сообщения / shell | `partial` (demo) |
 | `TerminalView` | Эмулятор + вкладки сессий | `stub` |
-| `StubBadge` | Заглушка | `planned` |
+| `StubBadge` | Заглушка | `done` |
 
 ## Экраны (сводка)
 

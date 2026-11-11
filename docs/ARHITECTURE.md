@@ -96,17 +96,25 @@
 | `store` | SQLite, миграции | Правила диалога |
 | `config` | `.env`, выбор провайдеров | Секреты в UI/логах |
 
-## Дерево репо (сейчас)
+## Дерево репо (сейчас, после P0)
 
 ```
 .
-└── docs/
-    ├── ARHITECTURE.md
-    ├── DESIGN.md
-    ├── MEMORY.md
-    ├── PRD.md
-    ├── RULES.md
-    └── WIP.md
+├── docs/
+├── electron/           # main, preload, SQLite store
+├── src/
+│   ├── ui/             # React AppShell + pages
+│   ├── config/
+│   ├── store/          # shared types
+│   ├── orchestrator/   # stub → P1
+│   ├── llm/            # stub → P1
+│   ├── asr/ tts/ voices/ voice_studio/
+│   ├── memory/ library/ learn/
+│   ├── skills/ protocols/ terminal/ tools/
+├── data/               # mira.db (local, gitignored)
+├── .env.example
+├── package.json
+└── README.md
 ```
 
 ## Дерево репо (целевое)
