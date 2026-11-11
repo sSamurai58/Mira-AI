@@ -584,74 +584,80 @@ export function ChatPage({
   const waveActive =
     voiceState === "listening" || voiceState === "speaking" || Boolean(interim);
 
-  const hintWords = interim
-    ? interim.split(/\s+/).filter(Boolean).slice(0, 8)
-    : ["Скажите", "или", "напишите", "команду", "для", "Mira"];
-
   return (
     <div className="home-grid">
       <div className="home-center">
         <section className="glass-card core-card">
           <HudCorners />
+          <header className="core-head">
+            <h2 className="greeting">{greeting}</h2>
+            <div className="pill-row state-pills">
+              <span
+                className="pill"
+                data-active={
+                  voiceState === "listening" || voiceState === "idle"
+                    ? "true"
+                    : "false"
+                }
+              >
+                Слушает
+              </span>
+              <span
+                className="pill"
+                data-active={voiceState === "thinking" ? "true" : "false"}
+              >
+                Думает
+              </span>
+              <span
+                className="pill"
+                data-active={voiceState === "speaking" ? "true" : "false"}
+              >
+                Говорит
+              </span>
+            </div>
+          </header>
+
           <div className="core-card-grid">
             <div className="core-col">
-              <CoreOrb level={coreLevel} voiceState={voiceState} size={180} />
+              <CoreOrb level={coreLevel} voiceState={voiceState} size={150} />
               <div className="level-ticks" aria-hidden>
                 {Array.from({ length: 5 }, (_, i) => (
                   <span key={i} className={i < coreLevel ? "on" : ""} />
                 ))}
               </div>
-              <div className="pill-row state-pills">
-                <span
-                  className="pill"
-                  data-active={
-                    voiceState === "listening" || voiceState === "idle"
-                      ? "true"
-                      : "false"
-                  }
-                >
-                  Слушает
-                </span>
-                <span
-                  className="pill"
-                  data-active={voiceState === "thinking" ? "true" : "false"}
-                >
-                  Думает
-                </span>
-                <span
-                  className="pill"
-                  data-active={voiceState === "speaking" ? "true" : "false"}
-                >
-                  Говорит
-                </span>
-              </div>
             </div>
 
             <div className="core-meta">
-              <h2 className="greeting">{greeting}</h2>
-
-              <div className="stat-block">
-                <HudCorners />
-                <span className="stat-label">Модель</span>
-                <div className="stat-value">{modelLabel}</div>
-              </div>
-              <div className="stat-block">
-                <HudCorners />
-                <span className="stat-label">Средний ответ</span>
-                <div className="stat-value g2">~0,4 с</div>
-              </div>
-              <div className="stat-block">
-                <HudCorners />
-                <span className="stat-label">Голос</span>
-                <div className="stat-value g3">
-                  {activeVoiceId ? "on" : "n/a"}
+              <div className="stat-row">
+                <div className="stat-block">
+                  <span className="stat-label">Модель</span>
+                  <div className="stat-value" title={modelLabel}>
+                    {modelLabel}
+                  </div>
+                </div>
+                <div className="stat-block">
+                  <span className="stat-label">Ответ</span>
+                  <div className="stat-value g2">~0,4 с</div>
+                </div>
+                <div className="stat-block">
+                  <span className="stat-label">Голос</span>
+                  <div className="stat-value g3">
+                    {activeVoiceId ? "on" : "n/a"}
+                  </div>
                 </div>
               </div>
 
               <div className="voice-panel">
-                <h4>Голосовой ввод</h4>
+                <div className="voice-panel-top">
+                  <h4>Голосовой ввод</h4>
+                  {interim ? (
+                    <span className="mono tiny voice-interim">{interim}</span>
+                  ) : (
+                    <span className="muted tiny">PTT · hands-free · текст</span>
+                  )}
+                </div>
                 <div className={`wave ${waveActive ? "" : "is-idle"}`} aria-hidden>
-                  {Array.from({ length: 40 }, (_, i) => (
+                  {Array.from({ length: 28 }, (_, i) => (
                     <span
                       key={i}
                       style={{
@@ -659,16 +665,6 @@ export function ChatPage({
                         animationDelay: `${(i % 7) * 0.08}s`,
                       }}
                     />
-                  ))}
-                </div>
-                <div className="word-chips">
-                  {hintWords.map((w, i) => (
-                    <span
-                      key={`${w}-${i}`}
-                      className={`word-chip ${i === 1 ? "is-hot" : ""}`}
-                    >
-                      {w}
-                    </span>
                   ))}
                 </div>
               </div>
