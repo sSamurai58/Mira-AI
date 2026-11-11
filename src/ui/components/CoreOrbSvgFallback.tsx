@@ -1,3 +1,4 @@
+import { normalizeCoreLevel } from "../coreLevel";
 import type { VoiceState } from "../voiceState";
 
 const NODE_COLORS = [
@@ -15,7 +16,8 @@ type Props = {
 
 /** Lightweight SVG core if WebGL2 is unavailable. */
 export function CoreOrbSvgFallback({ level, voiceState }: Props) {
-  const lv = Math.min(5, Math.max(1, Math.round(level)));
+  const lv = normalizeCoreLevel(level);
+  const stage = Math.min(5, lv);
   const cx = 260;
   const cy = 260;
 
@@ -66,7 +68,7 @@ export function CoreOrbSvgFallback({ level, voiceState }: Props) {
           strokeLinecap="round"
         />
       </g>
-      {lv >= 2 ? (
+      {stage >= 2 ? (
         <g className="core-spin core-spin-c">
           {Array.from({ length: 48 }, (_, i) => {
             const a = (i / 48) * Math.PI * 2;
@@ -85,7 +87,7 @@ export function CoreOrbSvgFallback({ level, voiceState }: Props) {
           })}
         </g>
       ) : null}
-      {lv >= 3 ? (
+      {stage >= 3 ? (
         <g className="core-spin core-spin-d">
           {Array.from({ length: 6 }, (_, i) => {
             const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
@@ -101,7 +103,7 @@ export function CoreOrbSvgFallback({ level, voiceState }: Props) {
           })}
         </g>
       ) : null}
-      {lv >= 4 ? (
+      {stage >= 4 ? (
         <g className="core-spin core-spin-e">
           {Array.from({ length: 48 }, (_, i) => {
             const a = (i / 48) * Math.PI * 2;
@@ -118,10 +120,11 @@ export function CoreOrbSvgFallback({ level, voiceState }: Props) {
           })}
         </g>
       ) : null}
-      {lv >= 5 ? (
+      {stage >= 5 ? (
         <g className="core-spin core-spin-f">
-          {Array.from({ length: 16 }, (_, i) => {
-            const a = (i / 16) * Math.PI * 2;
+          {Array.from({ length: Math.min(32, 16 + Math.floor(lv / 2)) }, (_, i) => {
+            const n = Math.min(32, 16 + Math.floor(lv / 2));
+            const a = (i / n) * Math.PI * 2;
             return (
               <circle
                 key={i}

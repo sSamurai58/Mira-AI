@@ -747,6 +747,48 @@ strong {
   letter-spacing: 0.04em;
 }
 
+.core-level-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.core-level-step {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.core-level-value {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 4.5rem;
+}
+
+.core-level-value strong {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.core-level-value span {
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.core-level-ring span {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+}
+
 .core-orb svg {
   display: block;
   overflow: hidden;

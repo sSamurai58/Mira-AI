@@ -1,4 +1,6 @@
-/** WebGL holographic core — particle shells that evolve with Mira level. */
+/** WebGL holographic core — particle shells that evolve with Mira level (1…∞). */
+
+import { normalizeCoreLevel } from "../coreLevel";
 
 export type CoreVoice = "idle" | "listening" | "thinking" | "speaking";
 
@@ -72,8 +74,10 @@ void main(){
 }
 `;
 
-function clampLevel(n: number): number {
-  return Math.min(5, Math.max(1, Math.round(n)));
+function budget(base: number, level: number, softCap: number): number {
+  // log growth so level 100 stays interactive
+  const scale = 1 + Math.log2(1 + Math.max(0, level - 1)) * 0.55;
+  return Math.min(softCap, Math.max(8, Math.floor(base * scale)));
 }
 
 function fibSphere(count: number, radius: number): Float32Array {
@@ -293,23 +297,29 @@ function mat4FromEulerYXZ(
 }
 
 function buildLayers(level: number): Layer[] {
-  const lv = clampLevel(level);
+  const lv = normalizeCoreLevel(level);
   const layers: Layer[] = [];
+  const colors: Array<keyof CorePalette> = [
+    "accent",
+    "success",
+    "warning",
+    "glow",
+  ];
 
-  // L1 — heart + sparse shell
-  const heart = fibSphere(lv >= 4 ? 220 : 140, 0.18);
+  // L1 — heart + sparse shell (density grows forever)
+  const heart = fibSphere(budget(lv >= 4 ? 180 : 120, lv, 420), 0.18);
   layers.push({
     kind: "heart",
     minLevel: 1,
     positions: heart,
     phases: phasesFor(heart.length / 3, 0.85),
     count: heart.length / 3,
-    spin: 0.55,
+    spin: 0.55 + Math.min(0.4, lv * 0.01),
     tilt: 0.2,
     size: 2.4,
     color: "glow",
   });
-  const shell1 = fibSphere(280, 0.55);
+  const shell1 = fibSphere(budget(240, lv, 900), 0.55);
   layers.push({
     kind: "shell",
     minLevel: 1,
@@ -321,7 +331,7 @@ function buildLayers(level: number): Layer[] {
     size: 1.6,
     color: "accent",
   });
-  const ring1 = ringPoints(180, 0.72, 0.02);
+  const ring1 = ringPoints(budget(160, lv, 480), 0.72, 0.02);
   layers.push({
     kind: "ring",
     minLevel: 1,
@@ -335,7 +345,7 @@ function buildLayers(level: number): Layer[] {
   });
 
   if (lv >= 2) {
-    const shell2 = fibSphere(520, 0.78);
+    const shell2 = fibSphere(budget(420, lv, 1200), 0.78);
     layers.push({
       kind: "shell",
       minLevel: 2,
@@ -347,7 +357,7 @@ function buildLayers(level: number): Layer[] {
       size: 1.35,
       color: "success",
     });
-    const ticks = ringPoints(96, 0.92, 0);
+    const ticks = ringPoints(budget(96, lv, 280), 0.92, 0);
     layers.push({
       kind: "ring",
       minLevel: 2,
@@ -362,7 +372,8 @@ function buildLayers(level: number): Layer[] {
   }
 
   if (lv >= 3) {
-    const ribbon = ribbonPoints(900, 0.88, 5, 0.14);
+    const waves = 5 + Math.min(10, Math.floor(lv / 3));
+    const ribbon = ribbonPoints(budget(720, lv, 1800), 0.88, waves, 0.14);
     layers.push({
       kind: "ribbon",
       minLevel: 3,
@@ -374,7 +385,7 @@ function buildLayers(level: number): Layer[] {
       size: 1.7,
       color: "accent",
     });
-    const shell3 = fibSphere(700, 1.05);
+    const shell3 = fibSphere(budget(560, lv, 1400), 1.05);
     layers.push({
       kind: "shell",
       minLevel: 3,
@@ -389,8 +400,8 @@ function buildLayers(level: number): Layer[] {
   }
 
   if (lv >= 4) {
-    const ringA = ringPoints(260, 1.18, 0.03);
-    const ringB = ringPoints(220, 1.28, 0.05);
+    const ringA = ringPoints(budget(220, lv, 600), 1.18, 0.03);
+    const ringB = ringPoints(budget(200, lv, 560), 1.28, 0.05);
     layers.push({
       kind: "ring",
       minLevel: 4,
@@ -413,7 +424,7 @@ function buildLayers(level: number): Layer[] {
       size: 1.3,
       color: "accent",
     });
-    const cloud = fibSphere(1100, 1.35);
+    const cloud = fibSphere(budget(900, lv, 2000), 1.35);
     layers.push({
       kind: "shell",
       minLevel: 4,
@@ -428,7 +439,7 @@ function buildLayers(level: number): Layer[] {
   }
 
   if (lv >= 5) {
-    const filaments = filamentPoints(1600, 1.45);
+    const filaments = filamentPoints(budget(1200, lv, 2800), 1.45);
     layers.push({
       kind: "filaments",
       minLevel: 5,
@@ -440,7 +451,12 @@ function buildLayers(level: number): Layer[] {
       size: 1.15,
       color: "success",
     });
-    const ribbon2 = ribbonPoints(1100, 1.22, 8, 0.18);
+    const ribbon2 = ribbonPoints(
+      budget(900, lv, 2000),
+      1.22,
+      8 + Math.min(12, Math.floor(lv / 4)),
+      0.18,
+    );
     layers.push({
       kind: "ribbon",
       minLevel: 5,
@@ -452,6 +468,49 @@ function buildLayers(level: number): Layer[] {
       size: 1.5,
       color: "warning",
     });
+  }
+
+  // Beyond 5 — keep evolving: extra shells / orbits every level (soft-capped count)
+  if (lv >= 6) {
+    const extraTiers = Math.min(8, lv - 5);
+    for (let i = 0; i < extraTiers; i++) {
+      const tier = 6 + i;
+      if (lv < tier) break;
+      const radius = 1.5 + i * 0.12;
+      const shell = fibSphere(
+        budget(280 + i * 40, lv, 900),
+        radius,
+      );
+      layers.push({
+        kind: "shell",
+        minLevel: tier,
+        positions: shell,
+        phases: phasesFor(shell.length / 3, 0.28),
+        count: shell.length / 3,
+        spin: (i % 2 === 0 ? 0.14 : -0.17) * (1 + i * 0.05),
+        tilt: 0.3 + i * 0.18,
+        size: 1.0,
+        color: colors[i % colors.length],
+      });
+      if (i % 2 === 0) {
+        const orbit = ringPoints(
+          budget(140 + i * 20, lv, 420),
+          radius + 0.08,
+          0.02 + i * 0.005,
+        );
+        layers.push({
+          kind: "ring",
+          minLevel: tier,
+          positions: orbit,
+          phases: phasesFor(orbit.length / 3, 0.5),
+          count: orbit.length / 3,
+          spin: (i % 2 === 0 ? 0.5 : -0.45) * (1 + i * 0.04),
+          tilt: -0.5 - i * 0.12,
+          size: 1.2,
+          color: colors[(i + 1) % colors.length],
+        });
+      }
+    }
   }
 
   return layers.filter((l) => l.minLevel <= lv);
@@ -481,7 +540,7 @@ export function createCoreWebgl(
   });
   if (!gl) return null;
 
-  let level = clampLevel(opts.level);
+  let level = normalizeCoreLevel(opts.level);
   let voice: CoreVoice = opts.voice;
   let palette = opts.palette;
   let layers = buildLayers(level);
@@ -624,7 +683,7 @@ export function createCoreWebgl(
 
   return {
     setLevel(next) {
-      const n = clampLevel(next);
+      const n = normalizeCoreLevel(next);
       if (n === level) return;
       level = n;
       rebuild();

@@ -5,6 +5,7 @@ import {
   type CoreHandle,
   type CoreVoice,
 } from "../core/coreWebgl";
+import { normalizeCoreLevel } from "../coreLevel";
 import type { VoiceState } from "../voiceState";
 import { CoreOrbSvgFallback } from "./CoreOrbSvgFallback";
 
@@ -13,10 +14,6 @@ type CoreOrbProps = {
   voiceState?: VoiceState;
   size?: number;
 };
-
-function clampLevel(level: number): number {
-  return Math.min(5, Math.max(1, Math.round(level)));
-}
 
 function toCoreVoice(state: VoiceState): CoreVoice {
   if (
@@ -35,7 +32,7 @@ export function CoreOrb({
   voiceState = "idle",
   size = 320,
 }: CoreOrbProps) {
-  const lv = clampLevel(level);
+  const lv = normalizeCoreLevel(level);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const handleRef = useRef<CoreHandle | null>(null);
@@ -100,7 +97,7 @@ export function CoreOrb({
       data-engine={useFallback ? "svg" : "webgl"}
       style={{ width: size, maxWidth: "100%" }}
       role="img"
-      aria-label={`Ядро Mira, уровень ${lv} из 5, состояние ${voiceState}`}
+      aria-label={`Ядро Mira, уровень ${lv}, состояние ${voiceState}`}
     >
       {useFallback ? (
         <CoreOrbSvgFallback level={lv} voiceState={voiceState} />

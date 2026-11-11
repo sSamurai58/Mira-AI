@@ -843,26 +843,40 @@ export function ChatPage({
               <div className="core-col">
                 <CoreOrb level={coreLevel} voiceState={voiceState} size={320} />
                 <div
-                  className="level-ticks"
+                  className="core-level-controls"
                   role="group"
                   aria-label="Уровень ядра"
                 >
-                  {Array.from({ length: 5 }, (_, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      className={i < coreLevel ? "on" : ""}
-                      aria-label={`Уровень ${i + 1}`}
-                      aria-pressed={coreLevel === i + 1}
-                      onClick={() => {
-                        saveCoreLevel(i + 1);
-                        window.dispatchEvent(new Event("storage"));
-                      }}
-                    />
-                  ))}
+                  <button
+                    type="button"
+                    className="btn core-level-step"
+                    aria-label="Понизить уровень"
+                    disabled={coreLevel <= 1}
+                    onClick={() => {
+                      saveCoreLevel(coreLevel - 1);
+                      window.dispatchEvent(new Event("storage"));
+                    }}
+                  >
+                    −
+                  </button>
+                  <div className="core-level-value" aria-live="polite">
+                    <strong>{coreLevel}</strong>
+                    <span className="muted">уровень</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn core-level-step"
+                    aria-label="Повысить уровень"
+                    onClick={() => {
+                      saveCoreLevel(coreLevel + 1);
+                      window.dispatchEvent(new Event("storage"));
+                    }}
+                  >
+                    +
+                  </button>
                 </div>
                 <p className="core-level-caption muted">
-                  Уровень ядра {coreLevel}/5 · растёт с Мирой
+                  Уровень ядра {coreLevel} · без потолка · растёт с Мирой
                 </p>
               </div>
 

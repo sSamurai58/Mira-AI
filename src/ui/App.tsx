@@ -8,7 +8,7 @@ import { HudPage } from "./pages/HudPage";
 import { MemoryPage } from "./pages/MemoryPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { WorkshopPage } from "./pages/WorkshopPage";
-import { loadCoreLevel } from "./coreLevel";
+import { coreLevelRingPct, loadCoreLevel } from "./coreLevel";
 import {
   applyTheme,
   loadStoredThemeId,
@@ -256,7 +256,7 @@ export function App() {
     return <HudPage />;
   }
 
-  const levelPct = (coreLevel / 5) * 100;
+  const levelPct = coreLevelRingPct(coreLevel);
   const ringC = 2 * Math.PI * 24;
   const ringDash = (levelPct / 100) * ringC;
 
@@ -329,13 +329,11 @@ export function App() {
                 transform="rotate(-90 28 28)"
               />
             </svg>
-            <span>
-              {coreLevel}/5
-            </span>
+            <span>{coreLevel}</span>
           </div>
           <div className="core-level-copy">
             <strong>Уровень ядра</strong>
-            <span>растёт вместе с ИИ</span>
+            <span>1…∞ · растёт с Мирой</span>
           </div>
         </div>
       </aside>
