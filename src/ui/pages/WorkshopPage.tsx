@@ -574,7 +574,7 @@ export function WorkshopPage() {
                       className={`btn ${activeId === v.id ? "btn-primary" : ""}`}
                       onClick={() => selectVoice(v.id)}
                     >
-                      Выбрать
+                      {activeId === v.id ? "Выбран" : "Выбрать"}
                     </button>
                     {v.custom ? (
                       <button
