@@ -60,6 +60,7 @@ import {
   downloadUpdate,
   getUpdateStatus,
   initUpdater,
+  openReleasesPage,
   quitAndInstall,
 } from "./updater";
 import {
@@ -957,6 +958,7 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
     () => quitAndInstall(),
     { privileged: true },
   );
+  on("mira:open-releases-page", async () => openReleasesPage());
 
   createWindow();
 

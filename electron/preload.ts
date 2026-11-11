@@ -373,6 +373,7 @@ contextBridge.exposeInMainWorld("mira", {
   checkForUpdates: () => call("mira:check-for-updates"),
   downloadUpdate: () => call("mira:download-update"),
   quitAndInstall: () => call("mira:quit-and-install"),
+  openReleasesPage: () => call("mira:open-releases-page"),
 
   onConfirmRequest: (handler: (req: MiraConfirmRequest) => void) => {
     const listener = (_event: IpcRendererEvent, req: MiraConfirmRequest) =>

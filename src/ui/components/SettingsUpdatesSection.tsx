@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { StubBadge } from "./StubBadge";
 import { IntegCard } from "./SettingsFormBits";
 
+const RELEASES_URL = "https://github.com/sSamurai58/Mira-AI/releases";
+
 const DEMO_STATUS: MiraUpdateStatus = {
   channel: "idle",
   currentVersion: "0.0.2-demo",
@@ -13,6 +15,7 @@ const DEMO_STATUS: MiraUpdateStatus = {
   canDownload: false,
   canInstall: false,
   packaged: false,
+  releasesUrl: RELEASES_URL,
 };
 
 export function SettingsUpdatesSection() {
@@ -96,6 +99,24 @@ export function SettingsUpdatesSection() {
     }
   }
 
+  async function openReleases() {
+    setBusy("releases");
+    setNote(null);
+    try {
+      if (window.mira?.openReleasesPage) {
+        const res = await window.mira.openReleasesPage();
+        setNote(res.detail);
+        return;
+      }
+      window.open(status.releasesUrl || RELEASES_URL, "_blank", "noopener");
+      setNote("Открыл страницу релизов");
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   const channelLabel: Record<string, string> = {
     idle: "ожидание",
     checking: "проверка…",
@@ -103,7 +124,7 @@ export function SettingsUpdatesSection() {
     "not-available": "актуально",
     downloading: "скачивание…",
     downloaded: "готово к установке",
-    error: "ошибка",
+    error: "нет связи / ошибка",
   };
 
   return (
@@ -156,6 +177,14 @@ export function SettingsUpdatesSection() {
               onClick={() => void install()}
             >
               {busy === "install" ? "Перезапуск…" : "Обновить и перезапустить"}
+            </button>
+            <button
+              type="button"
+              className="btn"
+              disabled={busy !== null}
+              onClick={() => void openReleases()}
+            >
+              {busy === "releases" ? "Открываю…" : "Открыть релизы"}
             </button>
             {note ? <span className="chip">{note}</span> : null}
           </div>

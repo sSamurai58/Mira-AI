@@ -274,6 +274,7 @@ type MiraUpdateStatus = {
   canDownload: boolean;
   canInstall: boolean;
   packaged: boolean;
+  releasesUrl?: string;
 };
 
 interface MiraBridge {
@@ -547,6 +548,7 @@ interface MiraBridge {
   checkForUpdates: () => Promise<MiraUpdateStatus>;
   downloadUpdate: () => Promise<MiraUpdateStatus>;
   quitAndInstall: () => Promise<{ ok: boolean; detail: string }>;
+  openReleasesPage: () => Promise<{ ok: boolean; detail: string }>;
   onUpdateEvent: (handler: (status: MiraUpdateStatus) => void) => () => void;
   listLibraryItems: () => Promise<MiraLibraryItem[]>;
   getLibraryItem: (id: string) => Promise<MiraLibraryItem | null>;
