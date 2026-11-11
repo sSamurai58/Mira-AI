@@ -7,7 +7,9 @@
   "scripts": {
     "dev": "vite",
     "dev:electron": "concurrently -k \"vite\" \"wait-on http://127.0.0.1:5173 && npm run electron:dev\"",
-    "electron:dev": "tsc -p tsconfig.electron.json && cross-env MIRA_DEV=1 electron . --disable-gpu --disable-software-rasterizer",
+    "electron:dev": "tsc -p tsconfig.electron.json && cross-env MIRA_DEV=1 ELECTRON_OZONE_PLATFORM_HINT=x11 electron . --use-gl=angle --use-angle=swiftshader --remote-debugging-port=9223",
+
+
 
     "build": "tsc -p tsconfig.app.json --noEmit && vite build && tsc -p tsconfig.electron.json",
     "preview": "vite preview",
