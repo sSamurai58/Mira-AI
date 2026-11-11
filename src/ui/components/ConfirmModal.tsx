@@ -45,10 +45,15 @@ export function ConfirmModal({
   }, [open, skillPropose]);
 
   const normalizedId = useMemo(() => normalizeSkillId(skillId), [skillId]);
-  const existing = useMemo(
-    () => new Set((skillPropose?.existingIds ?? []).map((id) => id.toLowerCase())),
-    [skillPropose],
-  );
+  const existing = useMemo(() => {
+    const raw = skillPropose?.existingIds;
+    const ids = Array.isArray(raw) ? raw : [];
+    return new Set(
+      ids
+        .filter((id): id is string => typeof id === "string")
+        .map((id) => id.toLowerCase()),
+    );
+  }, [skillPropose]);
   const duplicate =
     Boolean(skillPropose) &&
     Boolean(normalizedId) &&

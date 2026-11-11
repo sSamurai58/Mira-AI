@@ -54,11 +54,20 @@ export type MiraCatalogItem = {
   relativePath: string;
 };
 
+export type MiraConfirmSkillPropose = {
+  defaultId: string;
+  defaultName: string;
+  summary: string;
+  existingIds: string[];
+  sourceTitle: string;
+};
+
 export type MiraConfirmRequest = {
   id: string;
   title: string;
   body: string;
   confirmLabel?: string;
+  skillPropose?: MiraConfirmSkillPropose;
 };
 
 export type MiraChatEvent =
@@ -384,6 +393,12 @@ contextBridge.exposeInMainWorld("mira", {
       handler(req);
     ipcRenderer.on("mira:confirm-request", listener);
     return () => ipcRenderer.removeListener("mira:confirm-request", listener);
+  },
+  onConfirmDismiss: (handler: (payload: { id: string }) => void) => {
+    const listener = (_event: IpcRendererEvent, payload: { id: string }) =>
+      handler(payload);
+    ipcRenderer.on("mira:confirm-dismiss", listener);
+    return () => ipcRenderer.removeListener("mira:confirm-dismiss", listener);
   },
   onChatEvent: (
     handler: (payload: { requestId: string; event: MiraChatEvent }) => void,

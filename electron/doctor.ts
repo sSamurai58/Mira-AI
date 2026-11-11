@@ -131,7 +131,7 @@ export function runDoctor(): DoctorReport {
       detail: `capture=${screen.enabled} control=${screen.controlEnabled} os=${screen.osPriority}`,
       fix: screen.enabled
         ? undefined
-        : "SCREEN_ENABLED=true. Если capture пустой — проверьте права экрана ОС / xdotool для control.",
+        : "SCREEN_ENABLED=true. Если capture пустой — проверьте права экрана ОС. Control: xdotool (Linux) или Win32 (Windows), только после Confirm.",
     }),
   );
   findings.push(
