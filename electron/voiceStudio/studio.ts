@@ -361,6 +361,28 @@ export function trainVoiceModel(projectId: string): {
       ? Math.round((qa.linkedAccepted / qa.phraseCount) * 100)
       : 0;
 
+  if (qa.phraseCount < 1) {
+    const project = touchProject(projectId, {
+      status: "needs_data",
+      recommendation:
+        "Обучение невозможно: нет фраз. Сгенерируйте или добавьте фразы 1…N, затем привяжите аудио.",
+    });
+    return {
+      project,
+      analysis: qa.analyses,
+      voice: null,
+      report: {
+        ok: false,
+        stage: "needs_data",
+        phraseCount: 0,
+        acceptedClips: qa.acceptedCount,
+        linkedAccepted: qa.linkedAccepted,
+        coveragePct: 0,
+        detail: project.recommendation ?? "Нет фраз",
+      },
+    };
+  }
+
   if (qa.acceptedCount === 0) {
     const project = touchProject(projectId, {
       status: "needs_data",
@@ -383,10 +405,10 @@ export function trainVoiceModel(projectId: string): {
     };
   }
 
-  if (qa.acceptedCount < MIN_TRAIN_CLIPS) {
+  if (qa.linkedAccepted < MIN_TRAIN_CLIPS) {
     const project = touchProject(projectId, {
       status: "ready_to_train",
-      recommendation: `Для обучения нужно минимум ${MIN_TRAIN_CLIPS} принятых клипов (сейчас ${qa.acceptedCount}). Добавьте записи к фразам 1…N.`,
+      recommendation: `Для обучения нужно минимум ${MIN_TRAIN_CLIPS} принятых клипов, привязанных к фразам (сейчас linked=${qa.linkedAccepted}, accepted=${qa.acceptedCount}).`,
     });
     return {
       project,
@@ -399,7 +421,7 @@ export function trainVoiceModel(projectId: string): {
         acceptedClips: qa.acceptedCount,
         linkedAccepted: qa.linkedAccepted,
         coveragePct,
-        detail: project.recommendation ?? "Мало клипов",
+        detail: project.recommendation ?? "Мало привязанных клипов",
       },
     };
   }
@@ -538,14 +560,34 @@ function prepareCorpusAfterImport(projectId: string): {
     qa.phraseCount > 0
       ? Math.round((qa.linkedAccepted / qa.phraseCount) * 100)
       : 0;
-  const ready = qa.acceptedCount >= MIN_TRAIN_CLIPS;
+  const ready =
+    qa.phraseCount >= 1 && qa.linkedAccepted >= MIN_TRAIN_CLIPS;
   const project = touchProject(projectId, {
     status: ready ? "ready_to_train" : "collecting",
     recommendation: ready
-      ? `Корпус готов к обучению: ${qa.acceptedCount} клипов, покрытие фраз ${coveragePct}%. Нажмите «Обучить модель».`
-      : `Собрано ${qa.acceptedCount}/${MIN_TRAIN_CLIPS} принятых клипов. Добавьте аудио к фразам 1…N, затем обучите модель.`,
+      ? `Корпус готов к обучению: ${qa.linkedAccepted} клипов привязано к фразам, покрытие ${coveragePct}%. Нажмите «Обучить модель».`
+      : `Нужно ≥${MIN_TRAIN_CLIPS} принятых клипов с привязкой к фразам (сейчас linked=${qa.linkedAccepted}). Нумерация 1…N.`,
   });
   return { project, analysis: qa.analyses, voice: null };
+}
+
+const MAX_CLIP_BYTES = 15_000_000;
+
+function resolvePhraseForProject(
+  projectId: string,
+  phraseId: string | null | undefined,
+): string | null {
+  if (!phraseId) return null;
+  const row = openStore()
+    .prepare(
+      `SELECT id, project_id FROM voice_phrases WHERE id = ?`,
+    )
+    .get(phraseId) as { id: string; project_id: string } | undefined;
+  if (!row) throw new Error("Фраза не найдена");
+  if (row.project_id !== projectId) {
+    throw new Error("Фраза принадлежит другому проекту голоса");
+  }
+  return row.id;
 }
 
 export function importClip(opts: {
@@ -559,22 +601,27 @@ export function importClip(opts: {
 } {
   const project = getVoiceProject(opts.projectId);
   if (!project) throw new Error("Проект не найден");
+  const phraseId = resolvePhraseForProject(opts.projectId, opts.phraseId);
   const abs = path.resolve(opts.sourcePath);
   assertStudioPath(abs);
-  // If path is outside project clips, copy into project dir — but allowlist is studio/seed only.
-  // For paths under seed, copy in; for already in project clips, keep.
   const destDir = studioRoot(opts.projectId, "clips");
   const base =
     opts.originalName?.replace(/[^\w.\-]+/g, "_") ||
     path.basename(abs) ||
     `clip-${Date.now()}.webm`;
-  const dest = path.join(destDir, `${Date.now()}-${base}`);
-  fs.copyFileSync(abs, dest);
+  // Avoid double-write when source is already inside this project's clips dir
+  // (importClipBytes writes once, then calls importClip).
+  const alreadyInDest =
+    abs === destDir || abs.startsWith(destDir + path.sep);
+  const dest = alreadyInDest
+    ? abs
+    : path.join(destDir, `${Date.now()}-${base}`);
+  if (!alreadyInDest) fs.copyFileSync(abs, dest);
 
   const clip: VoiceClipRow = {
     id: crypto.randomUUID(),
     project_id: opts.projectId,
-    phrase_id: opts.phraseId ?? null,
+    phrase_id: phraseId,
     file_path: dest,
     qa_json: null,
     accepted: 0,
@@ -596,10 +643,10 @@ export function importClip(opts: {
       clip.created_at,
     );
 
-  if (opts.phraseId) {
+  if (phraseId) {
     openStore()
       .prepare(`UPDATE voice_phrases SET recorded = 1 WHERE id = ?`)
-      .run(opts.phraseId);
+      .run(phraseId);
   }
 
   touchProject(opts.projectId, { status: "processing" });
@@ -614,10 +661,17 @@ export function importClipBytes(opts: {
   fileName: string;
   phraseId?: string | null;
 }): ReturnType<typeof importClip> {
+  const buf = Buffer.from(opts.bytes);
+  if (buf.byteLength > MAX_CLIP_BYTES) {
+    throw new Error(
+      `Клип слишком большой (${buf.byteLength} B). Лимит ${MAX_CLIP_BYTES} B.`,
+    );
+  }
+  if (buf.byteLength < 1) throw new Error("Пустой аудиофайл");
   const destDir = studioRoot(opts.projectId, "clips");
   const safe = opts.fileName.replace(/[^\w.\-]+/g, "_") || "clip.webm";
   const dest = path.join(destDir, `${Date.now()}-${safe}`);
-  fs.writeFileSync(dest, Buffer.from(opts.bytes));
+  fs.writeFileSync(dest, buf);
   return importClip({
     projectId: opts.projectId,
     sourcePath: dest,
@@ -694,9 +748,13 @@ export function updateCustomVoice(
   return getCustomVoice(id)!;
 }
 
-export function deleteCustomVoice(id: string): { ok: boolean; detail: string } {
+export function deleteCustomVoice(id: string): {
+  ok: boolean;
+  detail: string;
+  clearedVoiceId: string | null;
+} {
   const cur = getCustomVoice(id);
-  if (!cur) return { ok: false, detail: "Голос не найден" };
+  if (!cur) return { ok: false, detail: "Голос не найден", clearedVoiceId: null };
   openStore().prepare(`DELETE FROM custom_voices WHERE id = ?`).run(id);
   openStore()
     .prepare(
@@ -709,14 +767,17 @@ export function deleteCustomVoice(id: string): { ok: boolean; detail: string } {
       new Date().toISOString(),
       cur.project_id,
     );
-  return { ok: true, detail: `Удалён ${id}` };
+  return { ok: true, detail: `Удалён ${id}`, clearedVoiceId: id };
 }
 
-export function deleteVoiceProject(
-  id: string,
-): { ok: boolean; detail: string } {
+export function deleteVoiceProject(id: string): {
+  ok: boolean;
+  detail: string;
+  clearedVoiceId: string | null;
+} {
   const cur = getVoiceProject(id);
-  if (!cur) return { ok: false, detail: "Проект не найден" };
+  if (!cur) return { ok: false, detail: "Проект не найден", clearedVoiceId: null };
+  const clearedVoiceId = cur.custom_voice_id;
   const store = openStore();
   store.prepare(`DELETE FROM voice_clips WHERE project_id = ?`).run(id);
   store.prepare(`DELETE FROM voice_phrases WHERE project_id = ?`).run(id);
@@ -726,7 +787,11 @@ export function deleteVoiceProject(
   if (fs.existsSync(dir)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }
-  return { ok: true, detail: `Проект ${cur.name} удалён` };
+  return {
+    ok: true,
+    detail: `Проект ${cur.name} удалён`,
+    clearedVoiceId,
+  };
 }
 
 export function addCustomPhrase(

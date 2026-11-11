@@ -8,8 +8,8 @@ import { ThemeSelect } from "../components/ThemeSelect";
 import { THEMES, type ThemeId } from "../themes";
 import {
   getActiveVoiceId,
+  listCatalogVoices,
   setActiveVoiceId,
-  waitForVoices,
 } from "../voice/catalog";
 import { getVoiceEngineStatus } from "../voice/engineStatus";
 import {
@@ -80,7 +80,7 @@ export function SettingsPage({
 
   useEffect(() => {
     let cancelled = false;
-    void waitForVoices().then((list) => {
+    void listCatalogVoices().then((list) => {
       if (cancelled) return;
       setVoices(list);
       setActiveVoiceIdState(getActiveVoiceId(list));

@@ -90,15 +90,42 @@ export function App() {
     typeof window !== "undefined" &&
     (window.location.hash === "#/hud" || window.location.hash === "#hud");
 
-  const [nav, setNav] = useState<RootNav>(() => {
-    const hash = typeof window !== "undefined" ? window.location.hash : "";
+  function navFromHash(hash: string): RootNav {
     if (hash.includes("settings")) return "settings";
     if (hash.includes("workshop")) return "workshop";
     if (hash.includes("memory")) return "memory";
     if (hash.includes("chat") || hash.includes("dialog")) return "chat";
     if (hash.includes("home")) return "home";
     return "home";
-  });
+  }
+
+  function hashForNav(id: RootNav): string {
+    switch (id) {
+      case "home":
+        return "#/home";
+      case "chat":
+        return "#/chat";
+      case "memory":
+        return "#/memory";
+      case "workshop":
+        return "#/workshop";
+      case "settings":
+        return "#/settings";
+      default:
+        return "#/home";
+    }
+  }
+
+  const [nav, setNavState] = useState<RootNav>(() =>
+    navFromHash(typeof window !== "undefined" ? window.location.hash : ""),
+  );
+  const setNav = useCallback((id: RootNav) => {
+    setNavState(id);
+    const next = hashForNav(id);
+    if (window.location.hash !== next) {
+      window.location.hash = next;
+    }
+  }, []);
   const [themeId, setThemeId] = useState<ThemeId>(() => loadStoredThemeId());
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [pendingConfirm, setPendingConfirm] =
@@ -124,6 +151,14 @@ export function App() {
   useEffect(() => {
     localStorage.setItem("mira.voiceState", voiceState);
   }, [voiceState]);
+
+  useEffect(() => {
+    function onHash() {
+      setNavState(navFromHash(window.location.hash));
+    }
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
   useEffect(() => {
     const onStorage = () => {

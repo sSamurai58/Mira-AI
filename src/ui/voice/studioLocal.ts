@@ -107,16 +107,21 @@ export function localUpdateProject(
   return next;
 }
 
-export function localDeleteProject(id: string): { ok: boolean; detail: string } {
+export function localDeleteProject(id: string): {
+  ok: boolean;
+  detail: string;
+  clearedVoiceId: string | null;
+} {
   const store = read();
   const cur = store.projects.find((p) => p.id === id);
-  if (!cur) return { ok: false, detail: "Проект не найден" };
+  if (!cur) return { ok: false, detail: "Проект не найден", clearedVoiceId: null };
+  const clearedVoiceId = cur.custom_voice_id;
   store.projects = store.projects.filter((p) => p.id !== id);
   store.phrases = store.phrases.filter((p) => p.project_id !== id);
   store.clips = store.clips.filter((c) => c.project_id !== id);
   store.customVoices = store.customVoices.filter((v) => v.project_id !== id);
   write(store);
-  return { ok: true, detail: `Проект ${cur.name} удалён` };
+  return { ok: true, detail: `Проект ${cur.name} удалён`, clearedVoiceId };
 }
 
 export function localUpdateCustomVoice(
@@ -147,12 +152,14 @@ export function localUpdateCustomVoice(
   return next;
 }
 
-export function localDeleteCustomVoice(
-  id: string,
-): { ok: boolean; detail: string } {
+export function localDeleteCustomVoice(id: string): {
+  ok: boolean;
+  detail: string;
+  clearedVoiceId: string | null;
+} {
   const store = read();
   const cur = store.customVoices.find((v) => v.id === id);
-  if (!cur) return { ok: false, detail: "Голос не найден" };
+  if (!cur) return { ok: false, detail: "Голос не найден", clearedVoiceId: null };
   store.customVoices = store.customVoices.filter((v) => v.id !== id);
   const pIdx = store.projects.findIndex((p) => p.id === cur.project_id);
   if (pIdx >= 0) {
@@ -166,7 +173,7 @@ export function localDeleteCustomVoice(
     };
   }
   write(store);
-  return { ok: true, detail: `Удалён ${id}` };
+  return { ok: true, detail: `Удалён ${id}`, clearedVoiceId: id };
 }
 
 const PHRASE_BANK = [
@@ -267,7 +274,17 @@ export function localImportClipBytes(opts: {
   const store = read();
   const pIdx = store.projects.findIndex((p) => p.id === opts.projectId);
   if (pIdx < 0) throw new Error("Проект не найден");
+  if (opts.phraseId) {
+    const phrase = store.phrases.find((p) => p.id === opts.phraseId);
+    if (!phrase) throw new Error("Фраза не найдена");
+    if (phrase.project_id !== opts.projectId) {
+      throw new Error("Фраза принадлежит другому проекту голоса");
+    }
+  }
   const size = opts.bytes.length;
+  if (size > 15_000_000) {
+    throw new Error(`Клип слишком большой (${size} B). Лимит 15000000 B.`);
+  }
   const accepted = size >= 800;
   const clip: MiraVoiceClip = {
     id: crypto.randomUUID(),
@@ -298,9 +315,6 @@ export function localImportClipBytes(opts: {
       updated_at: now(),
     };
   } else {
-    const acceptedCount = store.clips.filter(
-      (c) => c.project_id === project.id && c.accepted,
-    ).length;
     const phraseCount = store.phrases.filter(
       (p) => p.project_id === project.id,
     ).length;
@@ -309,13 +323,14 @@ export function localImportClipBytes(opts: {
     ).length;
     const coveragePct =
       phraseCount > 0 ? Math.round((linkedAccepted / phraseCount) * 100) : 0;
-    const ready = acceptedCount >= MIN_TRAIN_CLIPS;
+    const ready =
+      phraseCount >= 1 && linkedAccepted >= MIN_TRAIN_CLIPS;
     store.projects[pIdx] = {
       ...project,
       status: ready ? "ready_to_train" : "collecting",
       recommendation: ready
-        ? `Корпус готов к обучению: ${acceptedCount} клипов, покрытие ${coveragePct}%. Нажмите «Обучить модель».`
-        : `Собрано ${acceptedCount}/${MIN_TRAIN_CLIPS} принятых клипов. Добавьте аудио к фразам 1…N.`,
+        ? `Корпус готов к обучению: ${linkedAccepted} клипов привязано, покрытие ${coveragePct}%. Нажмите «Обучить модель».`
+        : `Нужно ≥${MIN_TRAIN_CLIPS} клипов с привязкой к фразам (сейчас linked=${linkedAccepted}).`,
       updated_at: now(),
     };
   }
@@ -365,6 +380,32 @@ export function localTrainVoiceModel(projectId: string): {
   };
   write(store);
 
+  if (phrases.length < 1) {
+    const detail =
+      "Обучение невозможно: нет фраз. Сгенерируйте или добавьте фразы 1…N.";
+    store.projects[pIdx] = {
+      ...store.projects[pIdx],
+      status: "needs_data",
+      recommendation: detail,
+      updated_at: now(),
+    };
+    write(store);
+    return {
+      project: store.projects[pIdx],
+      analysis: [],
+      voice: null,
+      report: {
+        ok: false,
+        stage: "needs_data",
+        phraseCount: 0,
+        acceptedClips: acceptedClips.length,
+        linkedAccepted,
+        coveragePct: 0,
+        detail,
+      },
+    };
+  }
+
   if (acceptedClips.length === 0) {
     const detail =
       "Обучение невозможно: нет принятых клипов. Запишите аудио к фразам 1…N.";
@@ -391,8 +432,8 @@ export function localTrainVoiceModel(projectId: string): {
     };
   }
 
-  if (acceptedClips.length < MIN_TRAIN_CLIPS) {
-    const detail = `Для обучения нужно минимум ${MIN_TRAIN_CLIPS} принятых клипов (сейчас ${acceptedClips.length}).`;
+  if (linkedAccepted < MIN_TRAIN_CLIPS) {
+    const detail = `Для обучения нужно минимум ${MIN_TRAIN_CLIPS} клипов, привязанных к фразам (сейчас linked=${linkedAccepted}).`;
     store.projects[pIdx] = {
       ...store.projects[pIdx],
       status: "ready_to_train",

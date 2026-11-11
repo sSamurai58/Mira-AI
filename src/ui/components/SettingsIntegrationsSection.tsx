@@ -112,7 +112,16 @@ export function SettingsIntegrationsSection() {
   async function handleSave(group: string, keys: string[]) {
     setSavingKey(group);
     const patch: Record<string, string> = {};
-    for (const key of keys) patch[key] = draft[key] ?? "";
+    for (const key of keys) {
+      const value = draft[key] ?? "";
+      if (
+        (key.endsWith("_TOKEN") || key.endsWith("_API_KEY")) &&
+        (!value.trim() || value.trim().startsWith("••••"))
+      ) {
+        continue;
+      }
+      patch[key] = value;
+    }
     const res = await saveSettingsEnv(patch);
     setSnap(res.snap);
     setDraft((prev) => ({ ...prev, ...res.snap.values }));

@@ -14,6 +14,7 @@ import { TerminalView } from "../components/TerminalView";
 import { VoiceStudioPanel } from "../components/VoiceStudioPanel";
 
 import {
+  clearActiveVoiceId,
   getActiveVoiceId,
   isCustomVoiceId,
   listCatalogVoices,
@@ -145,9 +146,8 @@ export function WorkshopPage() {
       const res = window.mira?.deleteCustomVoice
         ? await window.mira.deleteCustomVoice(voice.id)
         : localDeleteCustomVoice(voice.id);
-      if (activeId === voice.id) {
-        localStorage.removeItem("mira.activeVoiceId");
-      }
+      clearActiveVoiceId(res.clearedVoiceId ?? voice.id);
+      if (activeId === voice.id) setActiveId(null);
       setVoiceNote(res.detail);
       if (focusVoiceProjectId && voice.projectId === focusVoiceProjectId) {
         setFocusVoiceProjectId(null);
@@ -159,9 +159,8 @@ export function WorkshopPage() {
       return;
     }
     hideSystemVoice(voice.id);
-    if (activeId === voice.id) {
-      localStorage.removeItem("mira.activeVoiceId");
-    }
+    clearActiveVoiceId(voice.id);
+    if (activeId === voice.id) setActiveId(null);
     setVoiceNote(`Скрыт системный голос ${voice.name}`);
     await refreshVoices();
   }

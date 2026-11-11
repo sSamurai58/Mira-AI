@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ThemeSelect } from "./ThemeSelect";
-import { setActiveVoiceId } from "../voice/catalog";
+import { clearActiveVoiceId, setActiveVoiceId } from "../voice/catalog";
 import {
   localAddPhrase,
   localCreateProject,
@@ -129,6 +129,7 @@ export function VoiceStudioPanel(props: {
       const res = electron
         ? await window.mira!.deleteVoiceProject(project.id)
         : localDeleteProject(project.id);
+      if (res.clearedVoiceId) clearActiveVoiceId(res.clearedVoiceId);
       setNote(res.detail);
       setPhraseId("");
       await refresh();
@@ -337,7 +338,7 @@ export function VoiceStudioPanel(props: {
     phrases.length > 0
       ? Math.round((linkedAccepted / phrases.length) * 100)
       : 0;
-  const canTrain = acceptedClips >= 3;
+  const canTrain = phrases.length >= 1 && linkedAccepted >= 3;
 
   return (
     <div className="panel stack">
@@ -447,7 +448,7 @@ export function VoiceStudioPanel(props: {
                 title={
                   canTrain
                     ? "QA клипов → сборка корпуса → публикация в каталог"
-                    : "Нужно минимум 3 принятых клипа"
+                    : "Нужно ≥1 фраза и ≥3 принятых клипа, привязанных к фразам"
                 }
               >
                 {busy === "train"

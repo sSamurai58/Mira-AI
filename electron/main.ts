@@ -598,7 +598,11 @@ app.whenReady().then(() => {
         lang: payload.lang,
       }),
   );
-  on("mira:delete-voice-project", (_e, id: string) => deleteVoiceProject(id));
+  on(
+    "mira:delete-voice-project",
+    (_e, id: string) => deleteVoiceProject(id),
+    { privileged: true },
+  );
   on(
     "mira:update-custom-voice",
     (_e, payload: { id: string; name?: string; lang?: string }) =>
@@ -654,6 +658,7 @@ app.whenReady().then(() => {
         fileName: payload.fileName,
         phraseId: payload.phraseId,
       }),
+    { privileged: true },
   );
   on("mira:get-blender-policy", () => getBlenderPolicy());
   on("mira:run-doctor", () => {
