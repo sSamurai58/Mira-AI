@@ -78,6 +78,7 @@ import {
   getBlenderPolicy,
   runDemoScene,
 } from "./tools/blender";
+import { formatDoctorText, runDoctor } from "./doctor";
 import fs from "node:fs";
 
 const isDev = process.env.MIRA_DEV === "1";
@@ -146,7 +147,7 @@ app.whenReady().then(() => {
     const cfg = getPublicConfig();
     const validation = validateLlmConfig();
     return {
-      phase: "P10",
+      phase: "P11",
       databasePath: "<local-sqlite>",
       ok: health.ok,
       path: "<local-sqlite>",
@@ -544,6 +545,10 @@ app.whenReady().then(() => {
       }),
   );
   on("mira:get-blender-policy", () => getBlenderPolicy());
+  on("mira:run-doctor", () => {
+    const report = runDoctor();
+    return { ...report, text: formatDoctorText(report) };
+  });
   on(
     "mira:test-blender-demo",
     async () => {

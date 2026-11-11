@@ -227,6 +227,7 @@ contextBridge.exposeInMainWorld("mira", {
     call("mira:read-voice-preview", filePath),
   getBlenderPolicy: () => call("mira:get-blender-policy"),
   testBlenderDemo: () => call("mira:test-blender-demo"),
+  runDoctor: () => call("mira:run-doctor"),
   respondConfirm: (id: string, accepted: boolean) =>
     call("mira:confirm-response", id, accepted),
   onConfirmRequest: (handler: (req: MiraConfirmRequest) => void) => {

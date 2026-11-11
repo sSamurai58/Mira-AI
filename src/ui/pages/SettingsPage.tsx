@@ -26,12 +26,14 @@ type SettingsPageProps = {
   themeId: ThemeId;
   onThemeChange: (id: ThemeId) => void;
   healthText: string;
+  onOpenDoctor?: () => void;
 };
 
 export function SettingsPage({
   themeId,
   onThemeChange,
   healthText,
+  onOpenDoctor,
 }: SettingsPageProps) {
   const [section, setSection] = useState<SectionId>("appearance");
   const [cfgText, setCfgText] = useState("…");
@@ -246,11 +248,21 @@ export function SettingsPage({
               <h2 style={{ margin: 0, fontSize: "1.05rem" }}>
                 Данные и приватность
               </h2>
-              <StubBadge label="P1 store" />
+              <StubBadge label="P11 doctor" />
             </div>
             <p className="muted" style={{ margin: 0 }}>
-              Backup/забыть — F11. Health:
+              Doctor-light: mic / API / Blender / tools. Backup/забыть — F11
+              (следующий приоритет после P11).
             </p>
+            <div className="row">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => onOpenDoctor?.()}
+              >
+                Открыть Doctor
+              </button>
+            </div>
             <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
               {healthText}
             </pre>

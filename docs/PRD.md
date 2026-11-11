@@ -113,8 +113,8 @@
 | `planned` | В обязательном scope, ещё не начато |
 | `out` | Вне scope (пока) |
 
-Все шестнадцать пунктов сейчас — **`planned`** (код приложения ещё не начат; в репо — docs).  
-Порядок внедрения: дорожная карта **P0→P11** в `WIP.md` (не реализовывать #6–16 до выхода ранних фаз).
+Обязательный контур **1–16** — статус ≥ **`partial`** с happy-path (фаза **P11** / `p11:smoke`).  
+Дальше — F* по приоритету в `MEMORY`/`WIP` (F11 → F13 → F9).
 
 ## Дополнительные возможности (на будущее)
 
@@ -146,7 +146,7 @@
 |---------|--------|-------------|
 | Папка `docs/` | `done` | Живые документы |
 | Обязательные возможности в PRD | `done` | Этот раздел |
-| Рабочий код | `partial` | P0–P5: Electron app + tools web/screen/browser |
+| Рабочий код | `partial` | P0–P11: Electron app + tools через Blender/studio; doctor-light |
 | Старый `mira_tts` | `out` | Удалён; новый контур речи — заново |
 
 ### Обязательный контур
@@ -186,16 +186,16 @@
 | F10 | Профили пользователя | `planned` (future) | Голос / память / ключи по профилю |
 | F11 | Backup / export / import / «забыть» | `planned` (future) | Данные и приватность |
 | F12 | Режим подтверждений | `planned` (future) | always / smart / dangerous-list |
-| F13 | Логи и Doctor | `planned` (future) | Диагностика mic / API / Blender… |
+| F13 | Логи и Doctor | `planned` (future) | Doctor-light уже в P11; полный лог-viewer — F13 |
 
 ### Платформа
 
 | Возможность | Статус | Примечание |
 |-------------|--------|-----------|
-| Один процесс | `planned` | MEMORY |
-| SQLite | `planned` | История диалогов и метаданные |
-| Тёмный UI + состояния голоса | `stub` | DESIGN |
-| `.env` / `.env.example` | `planned` | RULES |
+| Один процесс | `done` | Electron main + renderer |
+| SQLite | `done` | `node:sqlite`; sessions/utterances/tools tables |
+| Тёмный UI + состояния голоса | `done` | 14 тем; voice state chip; DESIGN |
+| `.env` / `.env.example` | `done` | Секреты вне git; пример актуален |
 
 ## Пользовательские сценарии (ориентиры)
 

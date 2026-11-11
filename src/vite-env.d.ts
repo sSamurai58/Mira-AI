@@ -555,6 +555,21 @@ interface MiraBridge {
     scriptPath: string | null;
     outputBlend: string | null;
   }>;
+  runDoctor: () => Promise<{
+    ok: boolean;
+    phase: string;
+    generatedAt: string;
+    summary: string;
+    text: string;
+    findings: Array<{
+      id: string;
+      area: string;
+      ok: boolean;
+      title: string;
+      detail: string;
+      fix?: string;
+    }>;
+  }>;
 }
 
 interface Window {

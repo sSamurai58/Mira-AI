@@ -11,6 +11,10 @@ import {
   loadStoredThemeId,
   type ThemeId,
 } from "./themes";
+import {
+  formatDoctorView,
+  mergeDoctorReport,
+} from "./doctor/formatDoctorReport";
 import { getVoiceEngineStatus } from "./voice/engineStatus";
 import type { VoiceState } from "./voiceState";
 
@@ -39,6 +43,7 @@ export function App() {
     useState<MiraConfirmRequest | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [doctorOpen, setDoctorOpen] = useState(false);
+  const [doctorText, setDoctorText] = useState("Doctor…");
   const [healthText, setHealthText] = useState("Проверка store…");
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [autoSpeak, setAutoSpeak] = useState(
@@ -103,20 +108,29 @@ export function App() {
     });
   }, []);
 
-  const doctorBody = useMemo(
-    () =>
-      [
-        "Doctor (P2 / задел F13)",
-        "",
-        `• Voice: ${getVoiceEngineStatus().detail}`,
-        "• Mic permission: системный диалог браузера/Electron при первом PTT",
-        "• API: Настройки → API и модели / .env",
-        "• Blender: P10 (demo cube+light; dry-run без бинарника)",
-        "",
-        healthText,
-      ].join("\n"),
-    [healthText],
-  );
+  const refreshDoctor = useCallback(async () => {
+    if (!window.mira?.runDoctor) {
+      const local = mergeDoctorReport(null);
+      setDoctorText(formatDoctorView(local));
+      return;
+    }
+    try {
+      const main = await window.mira.runDoctor();
+      const merged = mergeDoctorReport(main);
+      setDoctorText(formatDoctorView(merged));
+    } catch (err) {
+      setDoctorText(
+        err instanceof Error ? err.message : "Doctor failed",
+      );
+    }
+  }, []);
+
+  const openDoctor = useCallback(() => {
+    setDoctorOpen(true);
+    void refreshDoctor();
+  }, [refreshDoctor]);
+
+  const doctorBody = useMemo(() => doctorText, [doctorText]);
 
   const handleSessionChange = useCallback((id: string) => {
     setSessionId(id);
@@ -166,7 +180,7 @@ export function App() {
               setVoiceState("idle");
               void refreshHealth();
             }}
-            onDoctor={() => setDoctorOpen(true)}
+            onDoctor={openDoctor}
             onDismiss={() => setErrorMessage(null)}
           />
         ) : null}
@@ -196,6 +210,7 @@ export function App() {
               themeId={themeId}
               onThemeChange={setThemeId}
               healthText={healthText}
+              onOpenDoctor={openDoctor}
             />
           ) : null}
         </div>
