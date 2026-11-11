@@ -367,8 +367,11 @@ contextBridge.exposeInMainWorld("mira", {
   deleteProfile: (id: string) => call("mira:delete-profile", id),
   getHudPolicy: () => call("mira:get-hud-policy"),
   toggleHud: () => call("mira:toggle-hud"),
-  respondConfirm: (id: string, accepted: boolean) =>
-    call("mira:confirm-response", id, accepted),
+  respondConfirm: (
+    id: string,
+    accepted: boolean,
+    fields?: { skillId?: string; skillName?: string },
+  ) => call("mira:confirm-response", id, accepted, fields),
   getUpdateStatus: () => call("mira:get-update-status"),
   checkForUpdates: () => call("mira:check-for-updates"),
   downloadUpdate: () => call("mira:download-update"),

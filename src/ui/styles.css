@@ -1963,22 +1963,60 @@ strong {
   animation: modal-in 200ms var(--ease-out);
 }
 
+.modal.modal-wide {
+  width: min(560px, calc(100vw - 40px));
+}
+
 .modal h2 {
   margin: 0 0 8px;
   font-family: var(--font-display);
   font-size: 1.2rem;
 }
 
-.modal p {
+.modal p,
+.modal .modal-body {
   margin: 0 0 8px;
   color: var(--text-muted);
+  white-space: pre-wrap;
 }
 
 .modal-actions {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 16px;
+}
+
+.skill-propose-form {
+  display: grid;
+  gap: 12px;
+  margin: 12px 0 4px;
+}
+
+.skill-propose-summary {
+  display: grid;
+  gap: 6px;
+}
+
+.skill-propose-summary-body {
+  margin: 0;
+  max-height: 180px;
+  overflow: auto;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--text-muted) 22%, transparent);
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  color: var(--text);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.field-error {
+  color: var(--danger, #ff6b6b);
+  font-size: 0.8rem;
 }
 
 @keyframes fade-in {

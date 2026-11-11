@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { dataRoot, seedRoot } from "../appPaths";
-import { requestUserConfirm } from "../confirmBridge";
-import { writeCatalogItem } from "../markdownCatalog";
+import { requestUserConfirmDetailed } from "../confirmBridge";
+import { loadMarkdownCatalog, writeCatalogItem } from "../markdownCatalog";
 import { ensureMiraLibraryLayout, miraLibraryDir } from "../paths";
 import {
   addLearnedUnit,
@@ -446,6 +446,48 @@ export function processLibraryItem(id: string): {
   };
 }
 
+function buildSkillSummary(analysis: LibraryAnalysis, title: string): string {
+  const theses = analysis.theses.slice(0, 3).map((t) => `• ${t}`);
+  const style = analysis.styleNotes.slice(0, 2).map((s) => `• ${s}`);
+  const logic = analysis.logicMoves.slice(0, 2).map((l) => `• ${l}`);
+  const phrases = analysis.phrases.slice(0, 3).map((p) => `• ${p}`);
+  const terms = analysis.terms.slice(0, 6).join(", ") || "—";
+  return [
+    `Материал: ${title}`,
+    "",
+    "Тезисы:",
+    ...(theses.length ? theses : ["• —"]),
+    "",
+    "Стиль:",
+    ...(style.length ? style : ["• —"]),
+    "",
+    "Логика:",
+    ...(logic.length ? logic : ["• —"]),
+    "",
+    "Фразы:",
+    ...(phrases.length ? phrases : ["• —"]),
+    "",
+    `Термины: ${terms}`,
+  ].join("\n");
+}
+
+function normalizeSkillId(raw: string): string {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function uniqueSkillId(base: string, existingIds: string[]): string {
+  const taken = new Set(existingIds.map((id) => id.toLowerCase()));
+  let id = normalizeSkillId(base) || "learned-skill";
+  if (!taken.has(id)) return id;
+  let n = 2;
+  while (taken.has(`${id}-${n}`)) n += 1;
+  return `${id}-${n}`;
+}
+
 export async function proposeSkillFromItem(id: string): Promise<{
   ok: boolean;
   detail: string;
@@ -460,7 +502,13 @@ export async function proposeSkillFromItem(id: string): Promise<{
     ? (JSON.parse(item.analysis_json) as LibraryAnalysis)
     : analyzeText(item.extracted_text ?? "", item.title);
 
-  const skillId = `learned-${slugify(item.title)}`.replace(/[^a-z0-9-]/gi, "");
+  const existingIds = loadMarkdownCatalog("skills").map((s) => s.id);
+  const defaultId = uniqueSkillId(
+    `learned-${slugify(item.title)}`.replace(/[^a-z0-9-]/gi, ""),
+    existingIds,
+  );
+  const defaultName = `Learned: ${item.title}`;
+  const summary = buildSkillSummary(analysis, item.title);
   const body = [
     `# Skill from «${item.title}»`,
     "",
@@ -479,20 +527,41 @@ export async function proposeSkillFromItem(id: string): Promise<{
     `Источник: ${item.source_path}`,
   ].join("\n");
 
-  const ok = await requestUserConfirm({
+  const confirm = await requestUserConfirmDetailed({
     actionClass: "skill",
     risk: "low",
     title: "Создать skill из материала?",
-    body: `Будет создан skill «${skillId}» (default off) из «${item.title}».\n\nПодтвердите создание в каталоге #9.`,
+    body: `Черновик skill из «${item.title}» попадёт в каталог #9 (по умолчанию выключен). Можно изменить ID и название.`,
     confirmLabel: "Создать skill",
+    skillPropose: {
+      defaultId,
+      defaultName,
+      summary,
+      existingIds,
+      sourceTitle: item.title,
+    },
   });
-  if (!ok) {
+  if (!confirm.accepted) {
     return { ok: false, detail: "Отклонено пользователем", skillId: null };
   }
 
+  const skillId = normalizeSkillId(confirm.fields?.skillId ?? defaultId);
+  if (!skillId) {
+    return { ok: false, detail: "Пустой ID skill", skillId: null };
+  }
+  if (existingIds.some((id) => id.toLowerCase() === skillId)) {
+    return {
+      ok: false,
+      detail: `Skill «${skillId}» уже существует — выберите другое имя`,
+      skillId: null,
+    };
+  }
+  const skillName =
+    (confirm.fields?.skillName ?? defaultName).trim() || defaultName;
+
   writeCatalogItem("skills", {
     id: skillId,
-    name: `Learned: ${item.title}`,
+    name: skillName,
     description: `Авточерновик из библиотеки «${item.title}»`,
     triggers: [
       item.title.toLowerCase(),

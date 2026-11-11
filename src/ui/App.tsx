@@ -389,15 +389,16 @@ export function App() {
         title={pendingConfirm?.title ?? "Подтверждение"}
         body={pendingConfirm?.body ?? ""}
         confirmLabel={pendingConfirm?.confirmLabel ?? "Подтвердить"}
+        skillPropose={pendingConfirm?.skillPropose ?? null}
         onCancel={() => {
           if (pendingConfirm && window.mira) {
             void window.mira.respondConfirm(pendingConfirm.id, false);
           }
           setPendingConfirm(null);
         }}
-        onConfirm={() => {
+        onConfirm={(fields) => {
           if (pendingConfirm && window.mira) {
-            void window.mira.respondConfirm(pendingConfirm.id, true);
+            void window.mira.respondConfirm(pendingConfirm.id, true, fields);
           }
           setPendingConfirm(null);
         }}

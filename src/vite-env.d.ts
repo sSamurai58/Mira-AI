@@ -76,11 +76,20 @@ type MiraCatalogItem = {
   relativePath: string;
 };
 
+type MiraConfirmSkillPropose = {
+  defaultId: string;
+  defaultName: string;
+  summary: string;
+  existingIds: string[];
+  sourceTitle: string;
+};
+
 type MiraConfirmRequest = {
   id: string;
   title: string;
   body: string;
   confirmLabel?: string;
+  skillPropose?: MiraConfirmSkillPropose;
 };
 
 type MiraChatEvent =
@@ -533,6 +542,7 @@ interface MiraBridge {
   respondConfirm: (
     id: string,
     accepted: boolean,
+    fields?: { skillId?: string; skillName?: string },
   ) => Promise<{ ok: boolean }>;
   onConfirmRequest: (handler: (req: MiraConfirmRequest) => void) => () => void;
   onChatEvent: (
