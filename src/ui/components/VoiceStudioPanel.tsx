@@ -8,8 +8,25 @@ import {
   localGeneratePhrases,
   localImportClipBytes,
   localStudioSnapshot,
+  localTrainVoiceModel,
   localUpdateProject,
 } from "../voice/studioLocal";
+
+const STATUS_LABEL: Record<string, string> = {
+  created: "Создан",
+  phrases: "Фразы собраны",
+  collecting: "Сбор корпуса",
+  processing: "QA клипов",
+  ready_to_train: "Готов к обучению",
+  training: "Обучение…",
+  needs_data: "Нужно больше аудио",
+  ready_partial: "Обучена (черновик)",
+  ready: "Обучена",
+};
+
+function statusLabel(status: string) {
+  return STATUS_LABEL[status] ?? status;
+}
 
 export function VoiceStudioPanel(props: {
   onCatalogChanged?: () => void;
@@ -130,10 +147,32 @@ export function VoiceStudioPanel(props: {
         : localGeneratePhrases(project.id, 5);
       setNote(
         rows.length
-          ? `+${rows.length} фраз для записи`
+          ? `+${rows.length} фраз для записи (нумеруйте аудио 1…N)`
           : "Новых фраз нет — добавьте свою ниже",
       );
       await refresh(project.id);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function trainModel() {
+    if (!project) return;
+    setBusy("train");
+    try {
+      const res = electron
+        ? await window.mira!.trainVoiceModel(project.id)
+        : localTrainVoiceModel(project.id);
+      setNote(
+        `${res.report.ok ? "OK" : "FAIL"} · ${res.report.detail} · клипы ${res.report.acceptedClips}, покрытие ${res.report.coveragePct}%`,
+      );
+      if (res.voice) {
+        setActiveVoiceId(res.voice.id);
+        props.onCatalogChanged?.();
+      }
+      await refresh(project.id);
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(null);
     }
@@ -166,16 +205,10 @@ export function VoiceStudioPanel(props: {
         sourcePath: filePath.trim(),
         phraseId: phraseId || null,
       });
-      const voice = res.processed.voice;
       setNote(
-        voice
-          ? `Автообработка OK → голос в каталоге: ${voice.id}`
-          : `Анализ: ${res.processed.project.status} · ${res.processed.project.recommendation ?? ""}`,
+        res.processed.project.recommendation ??
+          `QA: ${statusLabel(res.processed.project.status)}`,
       );
-      if (voice) {
-        setActiveVoiceId(voice.id);
-        props.onCatalogChanged?.();
-      }
       await refresh(project.id);
     } catch (err) {
       setNote(err instanceof Error ? err.message : String(err));
@@ -202,16 +235,10 @@ export function VoiceStudioPanel(props: {
             fileName: file.name,
             phraseId: phraseId || null,
           });
-      const voice = res.processed.voice;
       setNote(
-        voice
-          ? `Файл принят → ${voice.name} в каталоге`
-          : res.processed.project.recommendation ?? "Обработано",
+        res.processed.project.recommendation ??
+          `Клип загружен · ${statusLabel(res.processed.project.status)}`,
       );
-      if (voice) {
-        setActiveVoiceId(voice.id);
-        props.onCatalogChanged?.();
-      }
       await refresh(project.id);
     } catch (err) {
       setNote(err instanceof Error ? err.message : String(err));
@@ -258,16 +285,10 @@ export function VoiceStudioPanel(props: {
                   fileName: `rec-${Date.now()}.webm`,
                   phraseId: phraseId || null,
                 });
-            const voice = res.processed.voice;
             setNote(
-              voice
-                ? `Запись → голос ${voice.id}`
-                : res.processed.project.recommendation ?? "OK",
+              res.processed.project.recommendation ??
+                `Запись принята · ${statusLabel(res.processed.project.status)}`,
             );
-            if (voice) {
-              setActiveVoiceId(voice.id);
-              props.onCatalogChanged?.();
-            }
             await refresh(project.id);
           } catch (err) {
             setNote(err instanceof Error ? err.message : String(err));
@@ -310,17 +331,36 @@ export function VoiceStudioPanel(props: {
     setNote("Browser-demo: превью через Web Speech после выбора голоса");
   }
 
+  const acceptedClips = clips.filter((c) => c.accepted).length;
+  const linkedAccepted = clips.filter((c) => c.accepted && c.phrase_id).length;
+  const coveragePct =
+    phrases.length > 0
+      ? Math.round((linkedAccepted / phrases.length) * 100)
+      : 0;
+  const canTrain = acceptedClips >= 3;
+
   return (
     <div className="panel stack">
       <div className="row">
         <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Студия голоса</h2>
-        <span className="muted mono">P9 #15</span>
+        <span className="muted mono">P9 #15 · обучение модели</span>
       </div>
       <p className="muted" style={{ margin: 0 }}>
-        Создать → фразы (генерация / своя) → запись mic или загрузка аудио →
-        автосборка TTS → голос в каталоге. Свои голоса можно полностью
-        настраивать и удалять.
+        Здесь вы обучаете локальную голосовую модель Mira: собираете корпус
+        «фраза ↔ аудио», прогоняете QA и запускаете обучение. После обучения
+        голос появляется в каталоге (превью из клипов; синтез новых фраз — через
+        профиль + Web Speech до neural-trainer).
       </p>
+      <ol className="muted" style={{ margin: 0, paddingLeft: "1.2rem" }}>
+        <li>Создайте проект голоса (имя + язык).</li>
+        <li>Сгенерируйте или добавьте фразы — они нумеруются 1…N.</li>
+        <li>
+          Запишите mic / загрузите аудио, привязав клип к номеру фразы (удобно
+          называть файлы 1.wav, 2.wav…).
+        </li>
+        <li>Когда набрано ≥3 принятых клипа — нажмите «Обучить модель».</li>
+        <li>Голос попадает в каталог; можно донабрать корпус и переобучить.</li>
+      </ol>
 
       <div className="row" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
         <input
@@ -341,19 +381,19 @@ export function VoiceStudioPanel(props: {
           disabled={Boolean(busy)}
           onClick={() => void createProject()}
         >
-          Создать новый голос
+          Создать проект обучения
         </button>
       </div>
 
       {projects.length > 0 ? (
         <label className="stack" style={{ gap: "0.25rem" }}>
-          <span className="muted">Проект / настройка</span>
+          <span className="muted">Проект модели</span>
           <ThemeSelect
             aria-label="Проект голоса"
             value={project?.id ?? ""}
             options={projects.map((p) => ({
               value: p.id,
-              label: `${p.name} · ${p.status}`,
+              label: `${p.name} · ${statusLabel(p.status)}`,
             }))}
             onChange={(id) => void refresh(id)}
           />
@@ -363,7 +403,7 @@ export function VoiceStudioPanel(props: {
       {project ? (
         <>
           <div className="panel stack" style={{ gap: "0.5rem" }}>
-            <strong>Настройки голоса</strong>
+            <strong>Параметры модели</strong>
             <label className="field-label">
               Имя
               <input
@@ -380,22 +420,41 @@ export function VoiceStudioPanel(props: {
               />
             </label>
             <div className="muted">
-              Статус: {project.status}
+              Статус: <strong>{statusLabel(project.status)}</strong>
               {project.recommendation ? ` · ${project.recommendation}` : ""}
             </div>
-            {project.custom_voice_id ? (
-              <span className="mono muted">
-                catalog: {project.custom_voice_id}
-              </span>
-            ) : null}
+            <div className="muted mono">
+              Корпус: фраз {phrases.length} · принятых клипов {acceptedClips} ·
+              привязано {linkedAccepted} · покрытие {coveragePct}%
+              {project.custom_voice_id
+                ? ` · catalog ${project.custom_voice_id}`
+                : ""}
+            </div>
             <div className="row" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
               <button
                 type="button"
-                className="btn btn-primary"
+                className="btn"
                 disabled={Boolean(busy)}
                 onClick={() => void saveSettings()}
               >
-                Сохранить настройки
+                Сохранить параметры
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={Boolean(busy) || !canTrain}
+                onClick={() => void trainModel()}
+                title={
+                  canTrain
+                    ? "QA клипов → сборка корпуса → публикация в каталог"
+                    : "Нужно минимум 3 принятых клипа"
+                }
+              >
+                {busy === "train"
+                  ? "Обучение…"
+                  : project.custom_voice_id
+                    ? "Переобучить модель"
+                    : "Обучить модель"}
               </button>
               <button
                 type="button"
@@ -403,7 +462,7 @@ export function VoiceStudioPanel(props: {
                 disabled={Boolean(busy)}
                 onClick={() => void removeProject()}
               >
-                Удалить голос
+                Удалить проект
               </button>
             </div>
           </div>
@@ -431,7 +490,7 @@ export function VoiceStudioPanel(props: {
               disabled={!project.custom_voice_id || Boolean(busy)}
               onClick={() => void previewCustom()}
             >
-              Превью корпуса
+              Превью модели
             </button>
           </div>
 

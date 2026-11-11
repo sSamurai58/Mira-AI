@@ -9,6 +9,7 @@ import {
   importClip,
   listCustomVoices,
   listPhrases,
+  trainVoiceModel,
 } from "../electron/voiceStudio/studio";
 
 loadConfig(true);
@@ -37,40 +38,47 @@ async function main() {
     "voice-studio",
     "sample-phrase.wav",
   );
-  const phrase = listPhrases(project.id)[0];
-  const imported = importClip({
-    projectId: project.id,
-    sourcePath: sample,
-    phraseId: phrase.id,
-  });
-  assert.ok(imported.processed.voice, "custom voice not built");
-  assert.ok(
-    imported.processed.project.custom_voice_id,
-    "project missing custom_voice_id",
-  );
-  assert.ok(imported.processed.project.llm_profile, "llm profile missing");
-  assert.ok(
-    ["ready", "ready_partial"].includes(imported.processed.project.status),
-  );
+  const phrases = listPhrases(project.id);
+  for (let i = 0; i < 3; i++) {
+    const imported = importClip({
+      projectId: project.id,
+      sourcePath: sample,
+      phraseId: phrases[i]?.id,
+    });
+    assert.equal(imported.processed.voice, null, "train is explicit");
+    assert.ok(
+      ["collecting", "ready_to_train", "processing", "needs_data"].includes(
+        imported.processed.project.status,
+      ),
+    );
+  }
 
-  // second clip updates same custom voice
-  const again = importClip({
+  const trained = trainVoiceModel(project.id);
+  assert.ok(trained.report.ok, trained.report.detail);
+  assert.ok(trained.voice, "custom voice not built");
+  assert.ok(trained.project.custom_voice_id, "project missing custom_voice_id");
+  assert.ok(trained.project.llm_profile, "llm profile missing");
+  assert.ok(["ready", "ready_partial"].includes(trained.project.status));
+
+  // retrain after another clip keeps stable voice id
+  importClip({
     projectId: project.id,
     sourcePath: sample,
-    phraseId: listPhrases(project.id)[1]?.id,
+    phraseId: phrases[3]?.id,
   });
+  const again = trainVoiceModel(project.id);
   assert.equal(
-    again.processed.voice?.id,
-    imported.processed.voice!.id,
-    "voice id should be stable on update",
+    again.voice?.id,
+    trained.voice!.id,
+    "voice id should be stable on retrain",
   );
 
   const catalog = listCustomVoices();
-  assert.ok(catalog.some((v) => v.id === imported.processed.voice!.id));
+  assert.ok(catalog.some((v) => v.id === trained.voice!.id));
 
   const snap = getStudioSnapshot(project.id);
   assert.ok(snap.phrases.length >= 6);
-  assert.ok(snap.clips.length >= 2);
+  assert.ok(snap.clips.length >= 3);
   assert.ok(snap.project?.recommendation);
 
   // path allowlist
@@ -92,9 +100,10 @@ async function main() {
         projectId: project.id,
         phrases: snap.phrases.length,
         clips: snap.clips.length,
-        customVoiceId: imported.processed.voice!.id,
-        status: again.processed.project.status,
-        recommendation: again.processed.project.recommendation,
+        customVoiceId: trained.voice!.id,
+        status: again.project.status,
+        recommendation: again.project.recommendation,
+        report: again.report,
       },
       null,
       2,

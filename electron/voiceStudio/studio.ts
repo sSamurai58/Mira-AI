@@ -122,7 +122,8 @@ export function createVoiceProject(input: {
     name: input.name.trim() || "Новый голос",
     lang: (input.lang ?? "ru-RU").trim() || "ru-RU",
     status: "created",
-    recommendation: "Сгенерируйте первую пачку фраз для начитки.",
+    recommendation:
+      "Шаг 1: сгенерируйте или добавьте фразы 1…N для начитки корпуса.",
     llm_profile: null,
     custom_voice_id: null,
     created_at: now,
@@ -288,15 +289,21 @@ function analyzeClipFile(filePath: string, phraseText: string | null) {
   };
 }
 
-function autoProcessProject(projectId: string): {
-  project: VoiceProjectRow;
-  analysis: ReturnType<typeof analyzeClipFile>[];
-  voice: CustomVoiceRow | null;
+const MIN_TRAIN_CLIPS = 3;
+const TARGET_TRAIN_CLIPS = 5;
+
+function qaProjectClips(projectId: string): {
+  analyses: ReturnType<typeof analyzeClipFile>[];
+  acceptedCount: number;
+  linkedAccepted: number;
+  phraseCount: number;
 } {
   const clips = listClips(projectId);
+  const phrases = listPhrases(projectId);
   const store = openStore();
   const analyses = [];
   let acceptedCount = 0;
+  let linkedAccepted = 0;
   for (const clip of clips) {
     const phrase = clip.phrase_id
       ? (store
@@ -310,32 +317,128 @@ function autoProcessProject(projectId: string): {
         `UPDATE voice_clips SET qa_json = ?, accepted = ? WHERE id = ?`,
       )
       .run(JSON.stringify(qa), qa.accepted ? 1 : 0, clip.id);
-    if (qa.accepted) acceptedCount += 1;
+    if (qa.accepted) {
+      acceptedCount += 1;
+      if (clip.phrase_id) linkedAccepted += 1;
+    }
   }
+  return {
+    analyses,
+    acceptedCount,
+    linkedAccepted,
+    phraseCount: phrases.length,
+  };
+}
 
-  if (acceptedCount === 0) {
+export type VoiceTrainReport = {
+  ok: boolean;
+  stage: string;
+  phraseCount: number;
+  acceptedClips: number;
+  linkedAccepted: number;
+  coveragePct: number;
+  detail: string;
+};
+
+/** Train / rebuild local voice model from phrase↔audio corpus. */
+export function trainVoiceModel(projectId: string): {
+  project: VoiceProjectRow;
+  analysis: ReturnType<typeof analyzeClipFile>[];
+  voice: CustomVoiceRow | null;
+  report: VoiceTrainReport;
+} {
+  const cur = getVoiceProject(projectId);
+  if (!cur) throw new Error("Проект не найден");
+
+  touchProject(projectId, {
+    status: "training",
+    recommendation: "Обучение: QA клипов → сборка корпуса → регистрация модели…",
+  });
+
+  const qa = qaProjectClips(projectId);
+  const coveragePct =
+    qa.phraseCount > 0
+      ? Math.round((qa.linkedAccepted / qa.phraseCount) * 100)
+      : 0;
+
+  if (qa.acceptedCount === 0) {
     const project = touchProject(projectId, {
       status: "needs_data",
       recommendation:
-        "Нет принятых клипов. Загрузите более длинные/чистые записи (wav/webm).",
+        "Обучение невозможно: нет принятых клипов. Запишите или загрузите wav/webm к пронумерованным фразам.",
     });
-    return { project, analysis: analyses, voice: null };
+    return {
+      project,
+      analysis: qa.analyses,
+      voice: null,
+      report: {
+        ok: false,
+        stage: "needs_data",
+        phraseCount: qa.phraseCount,
+        acceptedClips: 0,
+        linkedAccepted: 0,
+        coveragePct: 0,
+        detail: project.recommendation ?? "Нет данных",
+      },
+    };
   }
 
-  // 15.6 local TTS pack (stub train): register custom voice + optional LLM profile
+  if (qa.acceptedCount < MIN_TRAIN_CLIPS) {
+    const project = touchProject(projectId, {
+      status: "ready_to_train",
+      recommendation: `Для обучения нужно минимум ${MIN_TRAIN_CLIPS} принятых клипов (сейчас ${qa.acceptedCount}). Добавьте записи к фразам 1…N.`,
+    });
+    return {
+      project,
+      analysis: qa.analyses,
+      voice: null,
+      report: {
+        ok: false,
+        stage: "ready_to_train",
+        phraseCount: qa.phraseCount,
+        acceptedClips: qa.acceptedCount,
+        linkedAccepted: qa.linkedAccepted,
+        coveragePct,
+        detail: project.recommendation ?? "Мало клипов",
+      },
+    };
+  }
+
+  // Local corpus-pack TTS: pack accepted clips into a custom voice for catalog
+  // synthesis (preview clips + Web Speech fallback until neural trainer ships).
   const project = getVoiceProject(projectId)!;
-  const voiceId = project.custom_voice_id ?? `mira-studio-${projectId.slice(0, 8)}`;
+  const store = openStore();
+  const voiceId =
+    project.custom_voice_id ?? `mira-studio-${projectId.slice(0, 8)}`;
   const refreshed = listClips(projectId);
   const preview =
     refreshed.find((c) => c.accepted === 1)?.file_path ??
     refreshed[0]?.file_path ??
     null;
-  const now = new Date().toISOString();
+  const stamp = new Date().toISOString();
+  const quality =
+    qa.acceptedCount >= TARGET_TRAIN_CLIPS && coveragePct >= 80
+      ? "high"
+      : qa.acceptedCount >= TARGET_TRAIN_CLIPS
+        ? "medium"
+        : "draft";
   const meta = {
-    engine: "local-corpus-pack",
-    note: "P9: corpus pack + Web Speech fallback for synthesis; neural train later",
-    acceptedClips: acceptedCount,
-    phraseCount: listPhrases(projectId).length,
+    engine: "mira-local-corpus-v1",
+    trainedAt: stamp,
+    quality,
+    acceptedClips: qa.acceptedCount,
+    linkedAccepted: qa.linkedAccepted,
+    phraseCount: qa.phraseCount,
+    coveragePct,
+    synthesis:
+      "Корпусный пакет: превью из принятых клипов; синтез новых фраз — Web Speech с профилем голоса до подключения neural trainer.",
+    curriculum: [
+      "1. Фразы (банк / свои)",
+      "2. Аудио 1…N к фразам",
+      "3. QA клипов",
+      "4. Сборка модели",
+      "5. Публикация в каталог",
+    ],
   };
   const existing = store
     .prepare(`SELECT id FROM custom_voices WHERE id = ?`)
@@ -352,7 +455,7 @@ function autoProcessProject(projectId: string): {
         project.lang,
         preview,
         JSON.stringify(meta),
-        now,
+        stamp,
         voiceId,
       );
   } else {
@@ -369,25 +472,28 @@ function autoProcessProject(projectId: string): {
         project.lang,
         preview,
         JSON.stringify(meta),
-        now,
-        now,
+        stamp,
+        stamp,
       );
   }
 
   const llmProfile = JSON.stringify({
     style: "calm-assistant",
     voiceId,
+    trainedQuality: quality,
     promptHint: `Отвечай в характере голоса «${project.name}»: спокойно, коротко, по делу.`,
   });
 
-  const needMore = acceptedCount < 5;
+  const needMore = qa.acceptedCount < TARGET_TRAIN_CLIPS || coveragePct < 80;
+  const detail = needMore
+    ? `Модель «${project.name}» обучена (${quality}). Для лучшего качества: ещё ${Math.max(0, TARGET_TRAIN_CLIPS - qa.acceptedCount)} клипов и привязка к фразам (покрытие ${coveragePct}%).`
+    : `Модель «${project.name}» обучена (${quality}). Голос в каталоге; можно донабирать фразы и переобучать.`;
+
   const updated = touchProject(projectId, {
     status: needMore ? "ready_partial" : "ready",
     custom_voice_id: voiceId,
     llm_profile: llmProfile,
-    recommendation: needMore
-      ? `Голос в каталоге. Для качества добавьте ещё ${5 - acceptedCount} фраз/записей (фонемы/словарь).`
-      : "Голос готов. Можно генерировать ещё фразы для роста словаря.",
+    recommendation: detail,
   });
 
   const voice = store
@@ -397,7 +503,49 @@ function autoProcessProject(projectId: string): {
     )
     .get(voiceId) as CustomVoiceRow;
 
-  return { project: updated, analysis: analyses, voice };
+  return {
+    project: updated,
+    analysis: qa.analyses,
+    voice,
+    report: {
+      ok: true,
+      stage: updated.status,
+      phraseCount: qa.phraseCount,
+      acceptedClips: qa.acceptedCount,
+      linkedAccepted: qa.linkedAccepted,
+      coveragePct,
+      detail,
+    },
+  };
+}
+
+/** After clip import: QA only; training is an explicit step. */
+function prepareCorpusAfterImport(projectId: string): {
+  project: VoiceProjectRow;
+  analysis: ReturnType<typeof analyzeClipFile>[];
+  voice: CustomVoiceRow | null;
+} {
+  const qa = qaProjectClips(projectId);
+  if (qa.acceptedCount === 0) {
+    const project = touchProject(projectId, {
+      status: "needs_data",
+      recommendation:
+        "Клип не прошёл QA. Запишите длиннее/чище (wav/webm) и привяжите к номеру фразы.",
+    });
+    return { project, analysis: qa.analyses, voice: null };
+  }
+  const coveragePct =
+    qa.phraseCount > 0
+      ? Math.round((qa.linkedAccepted / qa.phraseCount) * 100)
+      : 0;
+  const ready = qa.acceptedCount >= MIN_TRAIN_CLIPS;
+  const project = touchProject(projectId, {
+    status: ready ? "ready_to_train" : "collecting",
+    recommendation: ready
+      ? `Корпус готов к обучению: ${qa.acceptedCount} клипов, покрытие фраз ${coveragePct}%. Нажмите «Обучить модель».`
+      : `Собрано ${qa.acceptedCount}/${MIN_TRAIN_CLIPS} принятых клипов. Добавьте аудио к фразам 1…N, затем обучите модель.`,
+  });
+  return { project, analysis: qa.analyses, voice: null };
 }
 
 export function importClip(opts: {
@@ -407,7 +555,7 @@ export function importClip(opts: {
   originalName?: string;
 }): {
   clip: VoiceClipRow;
-  processed: ReturnType<typeof autoProcessProject>;
+  processed: ReturnType<typeof prepareCorpusAfterImport>;
 } {
   const project = getVoiceProject(opts.projectId);
   if (!project) throw new Error("Проект не найден");
@@ -455,8 +603,7 @@ export function importClip(opts: {
   }
 
   touchProject(opts.projectId, { status: "processing" });
-  // 15.5–15.6 auto after upload
-  const processed = autoProcessProject(opts.projectId);
+  const processed = prepareCorpusAfterImport(opts.projectId);
   return { clip, processed };
 }
 

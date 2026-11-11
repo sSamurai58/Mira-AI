@@ -85,6 +85,7 @@ import {
   importClipBytes,
   listCustomVoices,
   listVoiceProjects,
+  trainVoiceModel,
   updateCustomVoice,
   updateVoiceProject,
 } from "./voiceStudio/studio";
@@ -610,6 +611,9 @@ app.whenReady().then(() => {
   on(
     "mira:add-voice-phrase",
     (_e, projectId: string, text: string) => addCustomPhrase(projectId, text),
+  );
+  on("mira:train-voice-model", (_e, projectId: string) =>
+    trainVoiceModel(projectId),
   );
   on(
     "mira:generate-voice-phrases",
