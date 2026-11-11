@@ -229,23 +229,23 @@ export function WorkshopPage() {
   }
 
   return (
-    <div className="stack">
-      <div className="workshop-segments">
+    <div className="settings-layout workshop-layout">
+      <div className="settings-nav" aria-label="Разделы мастерской">
         {SEGMENTS.map((s) => (
           <button
             key={s.id}
             type="button"
-            className={`btn ${segment === s.id ? "btn-primary" : ""}`}
+            className={`nav-btn ${segment === s.id ? "active" : ""}`}
             onClick={() => setSegment(s.id)}
           >
-            {s.label}
+            <span className="nav-btn-label">{s.label}</span>
           </button>
         ))}
       </div>
 
+      <div className="panel stack workshop-panel">
       {segment === "skills" ? (
-        <div className="stack">
-          <div className="panel stack">
+        <>
             <div className="row">
               <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Скиллы</h2>
               <StubBadge label="P3 #9" />
@@ -299,7 +299,6 @@ export function WorkshopPage() {
                 </div>
               </div>
             ))}
-          </div>
 
           <form className="panel stack" onSubmit={(e) => void saveSkill(e)}>
             <strong>Создать / обновить скилл</strong>
@@ -371,12 +370,11 @@ export function WorkshopPage() {
               Сохранить skill
             </button>
           </form>
-        </div>
+        </>
       ) : null}
 
       {segment === "protocols" ? (
-        <div className="stack">
-          <div className="panel stack">
+        <>
             <div className="row">
               <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Протоколы</h2>
               <StubBadge label="P3 #10" />
@@ -419,7 +417,6 @@ export function WorkshopPage() {
                 {runLog}
               </pre>
             ) : null}
-          </div>
 
           <form className="panel stack" onSubmit={(e) => void saveProtocol(e)}>
             <strong>Создать / обновить протокол</strong>
@@ -480,59 +477,58 @@ export function WorkshopPage() {
               Сохранить md
             </button>
           </form>
-        </div>
+        </>
       ) : null}
 
       {segment === "voices" ? (
-        <div className="stack">
+        <>
           <VoiceStudioPanel onCatalogChanged={() => void refreshVoices()} />
-          <div className="panel stack">
-            <div className="row">
-              <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Каталог голосов</h2>
-              <StubBadge label="P2/P9 #11" />
-            </div>
-            {voices.length === 0 ? (
-              <p className="muted" style={{ margin: 0 }}>
-                Голоса не найдены в этой среде.
-              </p>
-            ) : (
-              voices.map((v) => (
-                <div key={v.id} className="panel voice-row">
-                  <div>
-                    <strong>{v.name}</strong>
-                    <div className="muted mono">
-                      {v.lang}
-                      {v.custom ? " · custom" : ""}
-                      {activeId === v.id ? " · active" : ""}
-                    </div>
-                  </div>
-                  <div className="row">
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={() => void preview(v.id)}
-                    >
-                      Превью
-                    </button>
-                    <button
-                      type="button"
-                      className={`btn ${activeId === v.id ? "btn-primary" : ""}`}
-                      onClick={() => selectVoice(v.id)}
-                    >
-                      Выбрать
-                    </button>
+          <div className="row">
+            <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Каталог голосов</h2>
+            <StubBadge label="P2/P9 #11" />
+          </div>
+          {voices.length === 0 ? (
+            <p className="muted" style={{ margin: 0 }}>
+              Голоса не найдены в этой среде.
+            </p>
+          ) : (
+            voices.map((v) => (
+              <div key={v.id} className="panel voice-row">
+                <div>
+                  <strong>{v.name}</strong>
+                  <div className="muted mono">
+                    {v.lang}
+                    {v.custom ? " · custom" : ""}
+                    {activeId === v.id ? " · active" : ""}
                   </div>
                 </div>
-              ))
-            )}
-          </div>
-        </div>
+                <div className="row">
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => void preview(v.id)}
+                  >
+                    Превью
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn ${activeId === v.id ? "btn-primary" : ""}`}
+                    onClick={() => selectVoice(v.id)}
+                  >
+                    Выбрать
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </>
       ) : null}
 
       {segment === "terminal" ? <TerminalView /> : null}
       {segment === "library" ? <LibraryPanel /> : null}
       {segment === "notes" ? <NotesFilesPanel /> : null}
 
+      </div>
     </div>
   );
 }
