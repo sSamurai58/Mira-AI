@@ -70,7 +70,7 @@
 | `skills` | Скиллы | Каталог / добавить; статус: в каталоге vs сейчас активен (on-demand) |
 | `protocols` | Протоколы | Панель: список, md-импорт, шаги, запуск, вкл/выкл |
 | `voices` | Голоса | Каталог, превью, выбор активного |
-| `voice_studio` | Студия | Проект голоса: фразы, запись, анализ, train TTS / LLM |
+| `voice_studio` | Студия | «Создать голос» → фразы → загрузка → авто-статус обработки → «ещё фраз» |
 | `messaging` | Мессенджеры | Подключённые аккаунты, чаты, лог исходящих |
 | `blender` | Blender | Статус связи с Blender, путь к проекту, активные Blender-skills |
 | `library` | Библиотека | Загрузка материалов, статусы разбора, выученное, связь со skills |
@@ -86,7 +86,7 @@
 | Skills | `skills` | Каталог, импорт; индикатор «активен сейчас» (не путать с «установлен») | `stub` |
 | Protocols Panel | `protocols` | CRUD протоколов, шаги, Run | `stub` |
 | Voices | `voices` | Список голосов, preview, select | `stub` |
-| Voice Studio | `voice_studio` | Phrase queue, record/upload, QA, train, publish to catalog | `stub` |
+| Voice Studio | `voice_studio` | Create → generate phrases → upload → auto-process progress → more phrases | `stub` |
 | Messaging | `messaging` | Аккаунты TG/WA/IG, чаты, история исходящих | `stub` |
 | Blender | `blender` | Connected scene, Blender-skills active badge | `stub` |
 | Library | `library` | Upload, analyze status, plan, learned units, propose skill | `stub` |
@@ -98,7 +98,7 @@
 - Пока нет ASR/TTS: PTT показывает `StubBadge` и toast «скоро», либо mock-пайплайн только в dev-флаге.
 - Не имитировать успешную озвучку без реального TTS (кроме явного demo-режима в MEMORY).
 
-Wireframe MVP:
+Wireframe MVP (ассистент):
 
 ```
 ┌─────────────────────────────┐
@@ -110,6 +110,24 @@ Wireframe MVP:
 │         [  говорить  ]      │
 ├─────────────────────────────┤
 │ Ассистент  История  …       │
+└─────────────────────────────┘
+```
+
+Wireframe Студия голоса (#15):
+
+```
+┌─────────────────────────────┐
+│  Голос «Мира-2»             │
+│  [ Создать новый голос ]    │
+│                             │
+│  Фразы: 40 новых · 120 всего│
+│  [ Сгенерировать фразы ]    │
+│  [ Загрузить записи ]       │
+│                             │
+│  Обработка: ███░ анализ OK  │
+│             ░░░░ train…     │
+│                             │
+│  [ Ещё фраз ]  [ Превью ]   │
 └─────────────────────────────┘
 ```
 
