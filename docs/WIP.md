@@ -36,6 +36,51 @@
 - Остатки: отдельная таблица vs расчёт из журнала операций?
 - ТабBar: низ (мобильный паттерн) или бок (десктоп)?
 
+### 2026-11-11 — Мысли: NousResearch/hermes-agent
+
+Источник: https://github.com/NousResearch/hermes-agent  
+Сайт/доки: https://hermes-agent.nousresearch.com  
+Лицензия: MIT · Python · Nous Research · слоган «The agent that grows with you».
+
+#### Что это
+
+Персональный self-improving AI-агент: один core на CLI/TUI, Desktop, web, ACP и messaging gateway.  
+Фишка — замкнутый learning loop: skills из опыта, самоулучшение skills, память, поиск по прошлым сессиям (SQLite FTS5), модель пользователя (Honcho).  
+Не привязан к ноутбуку: можно крутить на VPS/облаке и писать из Telegram и др.
+
+#### Возможности (кратко)
+
+- Провайдеры моделей без lock-in (Nous Portal, OpenRouter, OpenAI, свой endpoint и др.; `hermes model`)
+- TUI: multiline, slash-команды, стриминг tool-output, interrupt
+- Gateway: Telegram, Discord, Slack, WhatsApp, Signal (+ др. плагины) из одного процесса
+- Skills / plugins / MCP; совместимость с agentskills.io; импорт из OpenClaw/Claude Code/Codex/Cursor
+- Cron-автоматизации с доставкой на платформы
+- Subagents + RPC из Python-скриптов
+- Terminal backends: local, Docker, SSH, Modal, Daytona, Vercel Sandbox (+ плагины)
+- Research: batch trajectories для обучения tool-calling моделей
+- Nous Portal — подписка «модель + tool gateway» без россыпи ключей
+
+#### Минусы / риски
+
+- **Тяжёлый продукт:** огромный монорепо (CLI + gateway + desktop + web + PM + куча state-модулей); высокий порог входа и сопровождения
+- **Security model честный, но жёсткий:** единственная реальная изоляция от adversarial LLM — OS/контейнер; in-process allowlist/approval — эвристики. Default terminal = хост → агент ≈ права пользователя
+- **Стоимость и сложность ops:** нужен LLM API (или Portal), опционально песочницы/VPS; много ключей/платформ, если не брать Portal
+- **Python 3.14 как целевой** (compat шире, но тренд «новый питон») — трение на старых окружениях
+- **Шум вокруг репо:** очень высокий объём issues/звёзд — сигнал популярности, но и шум/темп изменений; следить за релизами осторожно
+- **Supply-chain чувствительность:** сами ужесточали exact pins после инцидента на PyPI; обновления не «поставил и забыл»
+- **Не наш доменный каркас:** это агент-платформа, не «депозит→счета→доля→вывод». Для Mira — скорее внешний инструмент/референс, не основа продукта
+
+#### Зачем нам смотреть
+
+- Референс: один процесс + SQLite sessions/FTS, узкий core + skills на краях, `.env` = только секреты / поведение в config
+- Возможный внешний помощник в разработке (не dependency приложения Mira)
+- Решение «берём / не берём / только учимся» — позже в `MEMORY.md`, отсюда убрать после решения
+
+Открытые вопросы для нас:
+
+- Нужен ли Hermes как daily driver для разработки Mira или достаточно Cursor?
+- Если пробовать — только в Docker/изоляции, не на голом хосте с прод-секретами
+
 ## Шаблон новой темы
 
 ```markdown
