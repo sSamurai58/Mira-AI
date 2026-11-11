@@ -8,6 +8,11 @@ import { HudPage } from "./pages/HudPage";
 import { MemoryPage } from "./pages/MemoryPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { WorkshopPage } from "./pages/WorkshopPage";
+import {
+  applyBgPattern,
+  loadStoredBgPatternId,
+  type BgPatternId,
+} from "./backgrounds";
 import { coreLevelRingPct, loadCoreLevel } from "./coreLevel";
 import {
   applyTheme,
@@ -128,6 +133,9 @@ export function App() {
     }
   }, []);
   const [themeId, setThemeId] = useState<ThemeId>(() => loadStoredThemeId());
+  const [bgPatternId, setBgPatternId] = useState<BgPatternId>(() =>
+    loadStoredBgPatternId(),
+  );
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [pendingConfirm, setPendingConfirm] =
     useState<MiraConfirmRequest | null>(null);
@@ -148,6 +156,10 @@ export function App() {
   useEffect(() => {
     applyTheme(themeId);
   }, [themeId]);
+
+  useEffect(() => {
+    applyBgPattern(bgPatternId);
+  }, [bgPatternId]);
 
   useEffect(() => installAutoGrowTextareas(), []);
 
@@ -378,6 +390,8 @@ export function App() {
             <SettingsPage
               themeId={themeId}
               onThemeChange={setThemeId}
+              bgPatternId={bgPatternId}
+              onBgPatternChange={setBgPatternId}
               healthText={healthText}
               onOpenDoctor={openDoctor}
             />
