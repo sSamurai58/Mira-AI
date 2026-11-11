@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { APP_NAME, APP_PHASE } from "../config";
 import { ConfirmModal } from "./components/ConfirmModal";
 import { ErrorBanner } from "./components/ErrorBanner";
@@ -11,7 +11,7 @@ import {
   loadStoredThemeId,
   type ThemeId,
 } from "./themes";
-import { nextVoiceState, type VoiceState } from "./voiceState";
+import type { VoiceState } from "./voiceState";
 
 type RootNav = "chat" | "memory" | "workshop" | "settings";
 
@@ -34,54 +34,49 @@ export function App() {
   const [themeId, setThemeId] = useState<ThemeId>(() => loadStoredThemeId());
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [showError, setShowError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [doctorOpen, setDoctorOpen] = useState(false);
   const [healthText, setHealthText] = useState("Проверка store…");
+  const [sessionId, setSessionId] = useState<string | null>(null);
 
   useEffect(() => {
     applyTheme(themeId);
   }, [themeId]);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadHealth() {
-      if (!window.mira) {
-        if (!cancelled) {
-          setHealthText(
-            "Renderer-only mode: SQLite IPC unavailable. Use Electron or `npm run db:check`.",
-          );
-        }
-        return;
-      }
-      try {
-        const health = await window.mira.getHealth();
-        if (!cancelled) {
-          setHealthText(JSON.stringify(health, null, 2));
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setHealthText(
-            err instanceof Error ? err.message : "health check failed",
-          );
-          setShowError(true);
-        }
-      }
+  const refreshHealth = useCallback(async () => {
+    if (!window.mira) {
+      setHealthText(
+        "Renderer-only mode: SQLite IPC unavailable. Use Electron or `npm run db:check`.",
+      );
+      return;
     }
-
-    void loadHealth();
-    return () => {
-      cancelled = true;
-    };
+    try {
+      const health = await window.mira.getHealth();
+      setHealthText(JSON.stringify(health, null, 2));
+      if (health.llmOk === false && health.llmReason) {
+        setErrorMessage(health.llmReason);
+      }
+    } catch (err) {
+      setHealthText(
+        err instanceof Error ? err.message : "health check failed",
+      );
+      setErrorMessage(
+        err instanceof Error ? err.message : "health check failed",
+      );
+    }
   }, []);
+
+  useEffect(() => {
+    void refreshHealth();
+  }, [refreshHealth]);
 
   const doctorBody = useMemo(
     () =>
       [
-        "Doctor (заготовка F13 / P0 stub)",
+        "Doctor (P1 / задел F13)",
         "",
         "• Mic: ещё не подключён (P2)",
-        "• API: ключи и провайдер — P1",
+        "• API: см. Настройки → API и модели / .env",
         "• Blender: интеграция — P10",
         "",
         healthText,
@@ -89,18 +84,18 @@ export function App() {
     [healthText],
   );
 
-  function handleThemeChange(id: ThemeId) {
-    setThemeId(id);
-  }
-
   function handleHoldPtt(down: boolean) {
     if (down) {
       setVoiceState("listening");
-      setShowError(false);
+      setErrorMessage(null);
       return;
     }
     setVoiceState("idle");
   }
+
+  const handleSessionChange = useCallback((id: string) => {
+    setSessionId(id);
+  }, []);
 
   return (
     <div className="app-shell">
@@ -131,22 +126,23 @@ export function App() {
             <button
               type="button"
               className="btn"
-              onClick={() => setShowError(true)}
+              onClick={() => setConfirmOpen(true)}
             >
-              Demo error
+              Demo confirm
             </button>
           </div>
         </header>
 
-        {showError ? (
+        {errorMessage ? (
           <ErrorBanner
-            message="Демо: сбой (mic/API). В P1/P2 здесь будут реальные причины."
+            message={errorMessage}
             onRetry={() => {
-              setShowError(false);
+              setErrorMessage(null);
               setVoiceState("idle");
+              void refreshHealth();
             }}
             onDoctor={() => setDoctorOpen(true)}
-            onDismiss={() => setShowError(false)}
+            onDismiss={() => setErrorMessage(null)}
           />
         ) : null}
 
@@ -154,17 +150,26 @@ export function App() {
           {nav === "chat" ? (
             <ChatPage
               voiceState={voiceState}
-              onCycleVoiceState={() => setVoiceState((s) => nextVoiceState(s))}
+              sessionId={sessionId}
+              onSessionChange={handleSessionChange}
+              onError={setErrorMessage}
+              onVoiceState={setVoiceState}
               onHoldPtt={handleHoldPtt}
-              onDemoConfirm={() => setConfirmOpen(true)}
             />
           ) : null}
-          {nav === "memory" ? <MemoryPage /> : null}
+          {nav === "memory" ? (
+            <MemoryPage
+              onOpenSession={(id) => {
+                setSessionId(id);
+                setNav("chat");
+              }}
+            />
+          ) : null}
           {nav === "workshop" ? <WorkshopPage /> : null}
           {nav === "settings" ? (
             <SettingsPage
               themeId={themeId}
-              onThemeChange={handleThemeChange}
+              onThemeChange={setThemeId}
               healthText={healthText}
             />
           ) : null}
@@ -174,7 +179,7 @@ export function App() {
       <ConfirmModal
         open={confirmOpen}
         title="Подтверждение действия"
-        body="Демо ConfirmModal (P0). Опасные действия и исходящие сообщения всегда требуют confirm до F12."
+        body="ConfirmModal (always до F12)."
         onCancel={() => setConfirmOpen(false)}
         onConfirm={() => setConfirmOpen(false)}
       />

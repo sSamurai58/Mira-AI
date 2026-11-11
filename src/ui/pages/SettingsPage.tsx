@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { THEMES, type ThemeId } from "../themes";
 import { StubBadge } from "../components/StubBadge";
 
@@ -26,6 +26,39 @@ export function SettingsPage({
   healthText,
 }: SettingsPageProps) {
   const [section, setSection] = useState<SectionId>("appearance");
+  const [cfgText, setCfgText] = useState("…");
+  const [testResult, setTestResult] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      if (!window.mira) {
+        if (!cancelled) setCfgText("IPC недоступен (откройте в Electron)");
+        return;
+      }
+      const cfg = await window.mira.getConfig();
+      if (!cancelled) setCfgText(JSON.stringify(cfg, null, 2));
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [section]);
+
+  async function handleTest() {
+    if (!window.mira) return;
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await window.mira.testLlm();
+      setTestResult(`${res.ok ? "OK" : "FAIL"} — ${res.detail}`);
+    } catch (err) {
+      setTestResult(err instanceof Error ? err.message : String(err));
+    } finally {
+      setTesting(false);
+    }
+  }
 
   return (
     <div className="settings-layout">
@@ -95,10 +128,31 @@ export function SettingsPage({
           />
         ) : null}
         {section === "api" ? (
-          <StubSection
-            title="API и модели"
-            body="Ключи только через .env. Подключение провайдеров — P1."
-          />
+          <>
+            <div className="row">
+              <h2 style={{ margin: 0, fontSize: "1.05rem" }}>API и модели</h2>
+              <StubBadge label="P1" />
+            </div>
+            <p className="muted" style={{ margin: 0 }}>
+              Ключи только в `.env` (`OPENAI_API_KEY`, опц. `OPENAI_BASE_URL`,
+              `LLM_PROVIDER=openai|mock`, `LLM_MODEL`). Без ключа работает{" "}
+              <strong>mock</strong>.
+            </p>
+            <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
+              {cfgText}
+            </pre>
+            <div className="row">
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={testing}
+                onClick={() => void handleTest()}
+              >
+                {testing ? "Проверка…" : "Тест соединения"}
+              </button>
+              {testResult ? <span className="chip">{testResult}</span> : null}
+            </div>
+          </>
         ) : null}
         {section === "integrations" ? (
           <StubSection
@@ -118,10 +172,10 @@ export function SettingsPage({
               <h2 style={{ margin: 0, fontSize: "1.05rem" }}>
                 Данные и приватность
               </h2>
-              <StubBadge label="P0 store" />
+              <StubBadge label="P1 store" />
             </div>
             <p className="muted" style={{ margin: 0 }}>
-              Backup/забыть — F11. Сейчас доступен health SQLite:
+              Backup/забыть — F11. Health:
             </p>
             <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
               {healthText}

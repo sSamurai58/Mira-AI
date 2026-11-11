@@ -12,17 +12,19 @@
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "db:check": "tsx scripts/db-check.ts",
+    "p1:smoke": "tsx scripts/p1-smoke.ts",
     "start": "npm run build && electron ."
   },
   "engines": {
     "node": ">=22"
   },
   "dependencies": {
+    "dotenv": "^18.0.10",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
-    "@types/node": "^22.15.3",
+    "@types/node": "^22.20.5",
     "@types/react": "^19.1.2",
     "@types/react-dom": "^19.1.2",
     "@vitejs/plugin-react": "^4.4.1",
