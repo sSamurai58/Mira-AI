@@ -12,6 +12,8 @@ out/
 .env.local
 data/*.db
 data/*.db-*
+data/*.db-shm
+data/*.db-wal
 !data/.gitkeep
 
 # logs / OS
