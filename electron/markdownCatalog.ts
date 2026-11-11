@@ -1,0 +1,193 @@
+import fs from "node:fs";
+import path from "node:path";
+
+export type FrontMatter = Record<string, string | boolean | string[]>;
+
+export type CatalogItem = {
+  id: string;
+  name: string;
+  description: string;
+  triggers: string[];
+  enabled: boolean;
+  body: string;
+  filePath: string;
+  relativePath: string;
+};
+
+function appRoot(): string {
+  return path.resolve(__dirname, "..");
+}
+
+export function resolveDataDir(...parts: string[]): string {
+  return path.join(appRoot(), "data", ...parts);
+}
+
+export function resolveSeedDir(...parts: string[]): string {
+  return path.join(appRoot(), "seed", ...parts);
+}
+
+export function parseFrontMatter(raw: string): {
+  meta: FrontMatter;
+  body: string;
+} {
+  if (!raw.startsWith("---")) {
+    return { meta: {}, body: raw.trim() };
+  }
+  const end = raw.indexOf("\n---", 3);
+  if (end === -1) return { meta: {}, body: raw.trim() };
+  const fm = raw.slice(3, end).trim();
+  const body = raw.slice(end + 4).trim();
+  const meta: FrontMatter = {};
+  for (const line of fm.split("\n")) {
+    const idx = line.indexOf(":");
+    if (idx === -1) continue;
+    const key = line.slice(0, idx).trim();
+    let value = line.slice(idx + 1).trim();
+    if (!key) continue;
+    if (value === "true" || value === "false") {
+      meta[key] = value === "true";
+      continue;
+    }
+    if (value.includes(",") && !value.startsWith("[")) {
+      meta[key] = value.split(",").map((s) => s.trim()).filter(Boolean);
+      continue;
+    }
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    meta[key] = value;
+  }
+  return { meta, body };
+}
+
+function asStringArray(value: FrontMatter[string] | undefined): string[] {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.map(String);
+  return String(value)
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+export function ensureSeededCatalog(
+  kind: "skills" | "protocols",
+): string {
+  const dest = resolveDataDir(kind);
+  fs.mkdirSync(dest, { recursive: true });
+  const seed = resolveSeedDir(kind);
+  if (!fs.existsSync(seed)) return dest;
+  for (const name of fs.readdirSync(seed)) {
+    if (!name.endsWith(".md")) continue;
+    const target = path.join(dest, name);
+    if (!fs.existsSync(target)) {
+      fs.copyFileSync(path.join(seed, name), target);
+    }
+  }
+  return dest;
+}
+
+export function loadMarkdownCatalog(
+  kind: "skills" | "protocols",
+): CatalogItem[] {
+  const dir = ensureSeededCatalog(kind);
+  const files = fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith(".md"))
+    .sort();
+  const items: CatalogItem[] = [];
+  for (const file of files) {
+    const filePath = path.join(dir, file);
+    const raw = fs.readFileSync(filePath, "utf8");
+    const { meta, body } = parseFrontMatter(raw);
+    const id =
+      String(meta.id ?? file.replace(/\.md$/i, "")).trim() ||
+      file.replace(/\.md$/i, "");
+    items.push({
+      id,
+      name: String(meta.name ?? id),
+      description: String(meta.description ?? ""),
+      triggers: asStringArray(meta.triggers).map((t) => t.toLowerCase()),
+      enabled: meta.enabled !== false,
+      body,
+      filePath,
+      relativePath: path.join("data", kind, file),
+    });
+  }
+  return items;
+}
+
+export function writeCatalogItem(
+  kind: "skills" | "protocols",
+  item: {
+    id: string;
+    name: string;
+    description: string;
+    triggers: string[];
+    enabled: boolean;
+    body: string;
+  },
+): CatalogItem {
+  const dir = ensureSeededCatalog(kind);
+  const file = `${item.id}.md`;
+  const filePath = path.join(dir, file);
+  const triggers = item.triggers.join(", ");
+  const raw = `---
+id: ${item.id}
+name: ${item.name}
+description: ${item.description}
+triggers: ${triggers}
+enabled: ${item.enabled ? "true" : "false"}
+---
+
+${item.body.trim()}
+`;
+  fs.writeFileSync(filePath, raw, "utf8");
+  return loadMarkdownCatalog(kind).find((x) => x.id === item.id)!;
+}
+
+export function setCatalogEnabled(
+  kind: "skills" | "protocols",
+  id: string,
+  enabled: boolean,
+): CatalogItem | null {
+  const items = loadMarkdownCatalog(kind);
+  const found = items.find((i) => i.id === id);
+  if (!found) return null;
+  return writeCatalogItem(kind, {
+    id: found.id,
+    name: found.name,
+    description: found.description,
+    triggers: found.triggers,
+    enabled,
+    body: found.body,
+  });
+}
+
+export function matchByTriggers(
+  text: string,
+  items: CatalogItem[],
+): CatalogItem[] {
+  const lower = text.toLowerCase();
+  return items.filter((item) => {
+    if (!item.enabled) return false;
+    return item.triggers.some((t) => t && lower.includes(t));
+  });
+}
+
+export function matchExplicitSkillCommand(text: string): string | null {
+  const m =
+    text.match(/(?:включи|активируй|use)\s+skill\s+([a-z0-9_-]+)/i) ||
+    text.match(/skill\s*:\s*([a-z0-9_-]+)/i);
+  return m?.[1]?.toLowerCase() ?? null;
+}
+
+export function matchExplicitProtocolCommand(text: string): string | null {
+  const m =
+    text.match(/(?:запусти|выполни|run)\s+протокол\s+([a-z0-9_-]+)/i) ||
+    text.match(/протокол\s*:\s*([a-z0-9_-]+)/i) ||
+    text.match(/\/([a-z0-9_-]+)/i);
+  return m?.[1]?.toLowerCase() ?? null;
+}

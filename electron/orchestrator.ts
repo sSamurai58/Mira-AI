@@ -1,6 +1,13 @@
 import { createLlmAdapter, type ChatMessage } from "./llm";
 import { loadConfig, validateLlmConfig } from "./config";
 import {
+  loadMarkdownCatalog,
+  matchByTriggers,
+  matchExplicitProtocolCommand,
+  matchExplicitSkillCommand,
+  type CatalogItem,
+} from "./markdownCatalog";
+import {
   addUtterance,
   createSession,
   getSession,
@@ -13,13 +20,24 @@ import {
 } from "./store";
 
 const SYSTEM_PROMPT =
-  "Ты Mira — локальный голосовой ИИ-помощник. Отвечай по делу на языке пользователя. Если даны фрагменты памяти, опирайся на них, когда уместно.";
+  "Ты Mira — локальный голосовой ИИ-помощник. Отвечай по делу на языке пользователя. Если даны фрагменты памяти, опирайся на них, когда уместно. Skills подключаются только по необходимости — не выдумывай, что все навыки активны.";
 
 export type ChatStreamEvent =
   | { type: "user"; utterance: UtteranceRow }
+  | {
+      type: "context";
+      skills: Array<{ id: string; name: string }>;
+      protocol: { id: string; name: string } | null;
+    }
   | { type: "assistant_start"; sessionId: string }
   | { type: "token"; text: string }
-  | { type: "assistant_done"; utterance: UtteranceRow; memoryUsed: MemoryHit[] }
+  | {
+      type: "assistant_done";
+      utterance: UtteranceRow;
+      memoryUsed: MemoryHit[];
+      skillsUsed: Array<{ id: string; name: string }>;
+      protocolUsed: { id: string; name: string } | null;
+    }
   | { type: "error"; message: string };
 
 function extractSearchQuery(userText: string): string | null {
@@ -32,7 +50,6 @@ function extractSearchQuery(userText: string): string | null {
   ];
   for (const re of patterns) {
     if (re.test(userText)) {
-      // Use meaningful words from the question as LIKE terms
       const words = userText
         .replace(/[^\p{L}\p{N}\s]/gu, " ")
         .split(/\s+/)
@@ -41,7 +58,6 @@ function extractSearchQuery(userText: string): string | null {
       return words.join(" ") || userText.slice(0, 48);
     }
   }
-  // Always try a light search on longer questions
   if (userText.length >= 24) {
     const words = userText
       .replace(/[^\p{L}\p{N}\s]/gu, " ")
@@ -67,10 +83,51 @@ function titleFromFirstMessage(text: string): string {
   return clean.length <= 48 ? clean : `${clean.slice(0, 45)}…`;
 }
 
+export function selectSkillsForTurn(text: string): CatalogItem[] {
+  const all = loadMarkdownCatalog("skills").filter((s) => s.enabled);
+  const explicit = matchExplicitSkillCommand(text);
+  if (explicit) {
+    const found = all.find((s) => s.id === explicit);
+    return found ? [found] : [];
+  }
+  // on-demand by triggers only — never all skills
+  return matchByTriggers(text, all).slice(0, 2);
+}
+
+export function selectProtocolForTurn(text: string): CatalogItem | null {
+  const all = loadMarkdownCatalog("protocols").filter((p) => p.enabled);
+  const explicit = matchExplicitProtocolCommand(text);
+  if (explicit) {
+    // /morning maps to morning-check if present
+    return (
+      all.find((p) => p.id === explicit) ||
+      all.find((p) => p.id.includes(explicit)) ||
+      all.find((p) => p.triggers.some((t) => t.includes(explicit))) ||
+      null
+    );
+  }
+  const matched = matchByTriggers(text, all);
+  return matched[0] ?? null;
+}
+
+function buildSkillsBlock(skills: CatalogItem[]): string | null {
+  if (!skills.length) return null;
+  const parts = skills.map(
+    (s) =>
+      `### Skill: ${s.name} (${s.id})\n${s.description}\n\n${s.body}`,
+  );
+  return `[Active skills — only these are in context]\n${parts.join("\n\n")}`;
+}
+
+function buildProtocolBlock(protocol: CatalogItem): string {
+  return `[Active protocol: ${protocol.name} (${protocol.id})]\nВыполни этот протокол сейчас.\n\n${protocol.body}`;
+}
+
 export async function sendChatMessage(
   input: {
     sessionId?: string | null;
     text: string;
+    forceProtocolId?: string | null;
   },
   emit: (event: ChatStreamEvent) => void,
   signal?: AbortSignal,
@@ -98,10 +155,31 @@ export async function sendChatMessage(
   const userUtterance = addUtterance(session.id, "user", text);
   emit({ type: "user", utterance: userUtterance });
 
-  if (isNew || session.title === "Первый диалог" || session.title === "Новый диалог") {
+  if (
+    isNew ||
+    session.title === "Первый диалог" ||
+    session.title === "Новый диалог"
+  ) {
     touchSession(session.id, titleFromFirstMessage(text));
     session = getSession(session.id) ?? session;
   }
+
+  const skills = selectSkillsForTurn(text);
+  let protocol: CatalogItem | null = null;
+  if (input.forceProtocolId) {
+    protocol =
+      loadMarkdownCatalog("protocols").find(
+        (p) => p.id === input.forceProtocolId && p.enabled,
+      ) ?? null;
+  } else {
+    protocol = selectProtocolForTurn(text);
+  }
+
+  emit({
+    type: "context",
+    skills: skills.map((s) => ({ id: s.id, name: s.name })),
+    protocol: protocol ? { id: protocol.id, name: protocol.name } : null,
+  });
 
   const history = listUtterances(session.id);
   const searchQ = extractSearchQuery(text);
@@ -109,17 +187,31 @@ export async function sendChatMessage(
     ? searchMemory(searchQ, { excludeSessionId: session.id, limit: 5 })
     : [];
   const memoryBlock = buildMemoryBlock(memoryHits);
+  const skillsBlock = buildSkillsBlock(skills);
 
   const messages: ChatMessage[] = [{ role: "system", content: SYSTEM_PROMPT }];
-  if (memoryBlock) {
-    messages.push({ role: "system", content: memoryBlock });
+  if (memoryBlock) messages.push({ role: "system", content: memoryBlock });
+  if (skillsBlock) messages.push({ role: "system", content: skillsBlock });
+  if (protocol) {
+    messages.push({ role: "system", content: buildProtocolBlock(protocol) });
   }
+
   for (const u of history) {
     if (u.role === "system") continue;
     messages.push({
       role: u.role === "assistant" ? "assistant" : "user",
       content: u.content,
     });
+  }
+
+  // Safety assertion for P3.6: never attach full catalog
+  const allSkillsCount = loadMarkdownCatalog("skills").length;
+  if (skills.length > 0 && skills.length >= allSkillsCount && allSkillsCount > 2) {
+    emit({
+      type: "error",
+      message: "Internal: refused to load all skills into context",
+    });
+    throw new Error("Refused to load all skills");
   }
 
   const adapter = createLlmAdapter(cfg);
@@ -157,6 +249,8 @@ export async function sendChatMessage(
     type: "assistant_done",
     utterance: assistantUtterance,
     memoryUsed: memoryHits,
+    skillsUsed: skills.map((s) => ({ id: s.id, name: s.name })),
+    protocolUsed: protocol ? { id: protocol.id, name: protocol.name } : null,
   });
 
   return getSession(session.id) ?? session;
@@ -164,4 +258,15 @@ export async function sendChatMessage(
 
 export function runMemorySearch(query: string, limit = 20): MemoryHit[] {
   return searchMemory(query, { limit });
+}
+
+export function inspectSkillSelection(text: string): {
+  selected: string[];
+  catalogSize: number;
+} {
+  const selected = selectSkillsForTurn(text).map((s) => s.id);
+  return {
+    selected,
+    catalogSize: loadMarkdownCatalog("skills").length,
+  };
 }

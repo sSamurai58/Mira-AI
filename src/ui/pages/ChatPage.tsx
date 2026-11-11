@@ -39,6 +39,7 @@ export function ChatPage({
   const [busy, setBusy] = useState(false);
   const [modelLabel, setModelLabel] = useState("…");
   const [memoryNote, setMemoryNote] = useState<string | null>(null);
+  const [contextNote, setContextNote] = useState<string | null>(null);
   const [interim, setInterim] = useState("");
   const [voices, setVoices] = useState<VoiceInfo[]>([]);
   const [activeVoiceId, setActiveVoiceIdState] = useState<string | null>(null);
@@ -105,6 +106,7 @@ export function ChatPage({
 
       setBusy(true);
       setMemoryNote(null);
+      setContextNote(null);
       onVoiceState("thinking");
       stopSpeaking();
 
@@ -184,6 +186,16 @@ export function ChatPage({
     return window.mira.onChatEvent(({ requestId, event }) => {
       if (requestIdRef.current && requestId !== requestIdRef.current) return;
 
+      if (event.type === "context") {
+        const skillPart = event.skills.length
+          ? `skills: ${event.skills.map((s) => s.id).join(", ")}`
+          : "skills: none";
+        const protoPart = event.protocol
+          ? `protocol: ${event.protocol.id}`
+          : "protocol: none";
+        setContextNote(`${skillPart} · ${protoPart}`);
+      }
+
       if (event.type === "token") {
         setBubbles((prev) => {
           const next = [...prev];
@@ -216,6 +228,13 @@ export function ChatPage({
             ? `Память: использовано фрагментов — ${event.memoryUsed.length}`
             : null,
         );
+        const skillPart = event.skillsUsed.length
+          ? `skills: ${event.skillsUsed.map((s) => s.id).join(", ")}`
+          : "skills: none";
+        const protoPart = event.protocolUsed
+          ? `protocol: ${event.protocolUsed.id}`
+          : "protocol: none";
+        setContextNote(`${skillPart} · ${protoPart}`);
         setBusy(false);
         requestIdRef.current = null;
         speakAssistant(event.utterance.content);
@@ -359,6 +378,7 @@ export function ChatPage({
         </p>
       )}
 
+      {contextNote ? <div className="chip">{contextNote}</div> : null}
       {memoryNote ? <div className="chip">{memoryNote}</div> : null}
       {interim ? (
         <div className="chip">

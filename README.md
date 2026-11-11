@@ -4,9 +4,9 @@
 
 ## Фаза сейчас
 
-**P2 — Голос:** PTT → Web Speech ASR → LLM → TTS; каталог системных голосов.  
-P1: текстовый диалог + LLM (`mock` / OpenAI-compatible) + память.  
-P0: Electron + React + TypeScript, 4 корня UI, темы.
+**P3 — Skills/Protocols:** md-каталог, on-demand skills, протоколы + Run.  
+**P2 — Голос:** PTT → Web Speech ASR → LLM → TTS.  
+**P1:** текст + LLM + память. **P0:** Electron/React shell.
 
 Дорожная карта: [`docs/WIP.md`](./docs/WIP.md).
 
@@ -18,9 +18,11 @@ npm install
 npm run db:check     # создаёт data/mira.db и bootstrap-сессию
 npm run p1:smoke     # headless: mock-чат + поиск памяти
 npm run p2:smoke     # headless: каталог голосов / engine status
+npm run p3:smoke     # headless: on-demand skills + protocol match
 npm run dev          # UI в браузере (без IPC)
-npm run dev:electron # UI + Electron + SQLite + LLM + голос
+npm run dev:electron # UI + Electron + SQLite + LLM + голос + skills
 ```
+
 
 
 Без `OPENAI_API_KEY` используется **mock**. Для живой модели:

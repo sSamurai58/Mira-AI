@@ -6,14 +6,14 @@
 
 | Поле | Значение |
 |------|----------|
-| Фаза | **P2 — Голос ✅** (ожидает подтверждения → **P3**) |
+| Фаза | **P3 — Skills/Protocols ✅** (ожидает подтверждения → **P4**) |
 | Продукт | Голосовой ИИ-помощник Mira (диалог, память, сеть, экран, браузер) |
-| Код | P0–P1 + Web Speech ASR/TTS, каталог голосов, PTT→чат→озвучка |
+| Код | P0–P2 + md skills/protocols, on-demand context, Workshop panel |
 | Предыдущее | Учебный TTS (`mira_tts`) удалён; не восстанавливаем как есть |
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
 | Дорожная карта | `WIP.md` § «План разработки» — фазы **P0→P11**, затем F* |
 
-**Сейчас:** P2 закрыт. После OK — **P3** (skills + протоколы).
+**Сейчас:** P3 закрыт. После OK — **P4** (интернет + confirm UX).
 
 ## Решения
 
@@ -53,6 +53,9 @@
 | 2026-11-11 | P1 MVP-0 готов | Стриминг чата, utterances в SQLite, поиск памяти, тест LLM в Настройках |
 | 2026-11-11 | ASR/TTS движок P2 | Web Speech API в Electron/Chromium; RU-голос по умолчанию если есть |
 | 2026-11-11 | P2 голос готов | PTT→ASR→LLM→TTS; каталог голосов; Стоп озвучки; Demo PTT fallback |
+| 2026-11-11 | Формат skills/protocols | Markdown + YAML frontmatter; seed в `seed/`, runtime в `data/` |
+| 2026-11-11 | Skills default off in context | В контекст только matched triggers / явная команда; не весь каталог |
+| 2026-11-11 | P3 готов | Demo code-helper + summarizer; protocol morning-check; Workshop CRUD/Run |
 | 2026-11-11 | Провайдеры Claude / Gemini / GPT — must | Без lock-in на одного вендора |
 
 ## Баги
@@ -83,6 +86,7 @@
 | 2026-11-11 | Завершён этап P0 (каркас приложения) |
 | 2026-11-11 | Завершён этап P1 (текст + LLM + память) |
 | 2026-11-11 | Завершён этап P2 (голос ASR/TTS + каталог) |
+| 2026-11-11 | Завершён этап P3 (skills + протоколы) |
 | 2026-11-11 | DESIGN: информационная архитектура, карта настроек |
 | 2026-11-11 | Подключены agent skills Emil Kowalski (design/animation) |
 | 2026-11-11 | Добавлен каталог 14 цветовых тем + референсы в docs/themes/ |

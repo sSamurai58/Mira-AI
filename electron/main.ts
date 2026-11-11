@@ -2,6 +2,12 @@ import { app, BrowserWindow, ipcMain } from "electron";
 import path from "node:path";
 import { getPublicConfig, loadConfig, validateLlmConfig } from "./config";
 import { createLlmAdapter } from "./llm";
+import {
+  ensureSeededCatalog,
+  loadMarkdownCatalog,
+  setCatalogEnabled,
+  writeCatalogItem,
+} from "./markdownCatalog";
 import { runMemorySearch, sendChatMessage } from "./orchestrator";
 import {
   closeStore,
@@ -53,18 +59,22 @@ app.whenReady().then(() => {
   loadConfig(true);
   openStore();
   ensureBootstrapSession();
+  ensureSeededCatalog("skills");
+  ensureSeededCatalog("protocols");
 
   ipcMain.handle("mira:get-health", () => {
     const health = getStoreHealth();
     const cfg = getPublicConfig();
     const validation = validateLlmConfig();
     return {
-      phase: "P2",
+      phase: "P3",
       databasePath: getDatabasePath(),
       ...health,
       llm: cfg,
       llmOk: validation.ok,
       llmReason: validation.reason ?? null,
+      skills: loadMarkdownCatalog("skills").length,
+      protocols: loadMarkdownCatalog("protocols").length,
     };
   });
 
@@ -100,7 +110,12 @@ app.whenReady().then(() => {
     "mira:send-chat",
     async (
       _e,
-      payload: { sessionId?: string | null; text: string; requestId: string },
+      payload: {
+        sessionId?: string | null;
+        text: string;
+        requestId: string;
+        forceProtocolId?: string | null;
+      },
     ) => {
       const requestId = payload.requestId || crypto.randomUUID();
       const controller = new AbortController();
@@ -108,7 +123,11 @@ app.whenReady().then(() => {
 
       try {
         const session = await sendChatMessage(
-          { sessionId: payload.sessionId, text: payload.text },
+          {
+            sessionId: payload.sessionId,
+            text: payload.text,
+            forceProtocolId: payload.forceProtocolId,
+          },
           (event) => {
             broadcast("mira:chat-event", { requestId, event });
           },
@@ -137,6 +156,35 @@ app.whenReady().then(() => {
     }
     return { ok: false };
   });
+
+  ipcMain.handle("mira:list-skills", () => loadMarkdownCatalog("skills"));
+  ipcMain.handle("mira:list-protocols", () => loadMarkdownCatalog("protocols"));
+
+  ipcMain.handle(
+    "mira:set-skill-enabled",
+    (_e, id: string, enabled: boolean) =>
+      setCatalogEnabled("skills", id, enabled),
+  );
+  ipcMain.handle(
+    "mira:set-protocol-enabled",
+    (_e, id: string, enabled: boolean) =>
+      setCatalogEnabled("protocols", id, enabled),
+  );
+
+  ipcMain.handle(
+    "mira:save-protocol",
+    (
+      _e,
+      item: {
+        id: string;
+        name: string;
+        description: string;
+        triggers: string[];
+        enabled: boolean;
+        body: string;
+      },
+    ) => writeCatalogItem("protocols", item),
+  );
 
   createWindow();
 

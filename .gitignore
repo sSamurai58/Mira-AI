@@ -14,6 +14,8 @@ data/*.db
 data/*.db-*
 data/*.db-shm
 data/*.db-wal
+data/skills/
+data/protocols/
 !data/.gitkeep
 
 # logs / OS

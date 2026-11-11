@@ -32,14 +32,32 @@ export type MiraMemoryHit = {
   created_at: string;
 };
 
+export type MiraCatalogItem = {
+  id: string;
+  name: string;
+  description: string;
+  triggers: string[];
+  enabled: boolean;
+  body: string;
+  filePath: string;
+  relativePath: string;
+};
+
 export type MiraChatEvent =
   | { type: "user"; utterance: MiraUtterance }
+  | {
+      type: "context";
+      skills: Array<{ id: string; name: string }>;
+      protocol: { id: string; name: string } | null;
+    }
   | { type: "assistant_start"; sessionId: string }
   | { type: "token"; text: string }
   | {
       type: "assistant_done";
       utterance: MiraUtterance;
       memoryUsed: MiraMemoryHit[];
+      skillsUsed: Array<{ id: string; name: string }>;
+      protocolUsed: { id: string; name: string } | null;
     }
   | { type: "error"; message: string };
 
@@ -63,10 +81,31 @@ contextBridge.exposeInMainWorld("mira", {
     sessionId?: string | null;
     text: string;
     requestId: string;
-  }): Promise<{ ok: boolean; sessionId?: string; error?: string; requestId: string }> =>
-    ipcRenderer.invoke("mira:send-chat", payload),
+    forceProtocolId?: string | null;
+  }): Promise<{
+    ok: boolean;
+    sessionId?: string;
+    error?: string;
+    requestId: string;
+  }> => ipcRenderer.invoke("mira:send-chat", payload),
   abortChat: (requestId: string) =>
     ipcRenderer.invoke("mira:abort-chat", requestId),
+  listSkills: (): Promise<MiraCatalogItem[]> =>
+    ipcRenderer.invoke("mira:list-skills"),
+  listProtocols: (): Promise<MiraCatalogItem[]> =>
+    ipcRenderer.invoke("mira:list-protocols"),
+  setSkillEnabled: (id: string, enabled: boolean) =>
+    ipcRenderer.invoke("mira:set-skill-enabled", id, enabled),
+  setProtocolEnabled: (id: string, enabled: boolean) =>
+    ipcRenderer.invoke("mira:set-protocol-enabled", id, enabled),
+  saveProtocol: (item: {
+    id: string;
+    name: string;
+    description: string;
+    triggers: string[];
+    enabled: boolean;
+    body: string;
+  }) => ipcRenderer.invoke("mira:save-protocol", item),
   onChatEvent: (
     handler: (payload: { requestId: string; event: MiraChatEvent }) => void,
   ) => {

@@ -53,14 +53,32 @@ type MiraMemoryHit = {
   created_at: string;
 };
 
+type MiraCatalogItem = {
+  id: string;
+  name: string;
+  description: string;
+  triggers: string[];
+  enabled: boolean;
+  body: string;
+  filePath: string;
+  relativePath: string;
+};
+
 type MiraChatEvent =
   | { type: "user"; utterance: MiraUtterance }
+  | {
+      type: "context";
+      skills: Array<{ id: string; name: string }>;
+      protocol: { id: string; name: string } | null;
+    }
   | { type: "assistant_start"; sessionId: string }
   | { type: "token"; text: string }
   | {
       type: "assistant_done";
       utterance: MiraUtterance;
       memoryUsed: MiraMemoryHit[];
+      skillsUsed: Array<{ id: string; name: string }>;
+      protocolUsed: { id: string; name: string } | null;
     }
   | { type: "error"; message: string };
 
@@ -74,6 +92,8 @@ type MiraHealth = {
   llm?: MiraPublicConfig;
   llmOk?: boolean;
   llmReason?: string | null;
+  skills?: number;
+  protocols?: number;
 };
 
 interface MiraBridge {
@@ -90,6 +110,7 @@ interface MiraBridge {
     sessionId?: string | null;
     text: string;
     requestId: string;
+    forceProtocolId?: string | null;
   }) => Promise<{
     ok: boolean;
     sessionId?: string;
@@ -97,6 +118,24 @@ interface MiraBridge {
     requestId: string;
   }>;
   abortChat: (requestId: string) => Promise<{ ok: boolean }>;
+  listSkills: () => Promise<MiraCatalogItem[]>;
+  listProtocols: () => Promise<MiraCatalogItem[]>;
+  setSkillEnabled: (
+    id: string,
+    enabled: boolean,
+  ) => Promise<MiraCatalogItem | null>;
+  setProtocolEnabled: (
+    id: string,
+    enabled: boolean,
+  ) => Promise<MiraCatalogItem | null>;
+  saveProtocol: (item: {
+    id: string;
+    name: string;
+    description: string;
+    triggers: string[];
+    enabled: boolean;
+    body: string;
+  }) => Promise<MiraCatalogItem>;
   onChatEvent: (
     handler: (payload: { requestId: string; event: MiraChatEvent }) => void,
   ) => () => void;
