@@ -35,6 +35,8 @@ jobs:
       - name: Build Windows packages
         env:
           LLM_PROVIDER: mock
+          # Avoid electron-builder CI auto-publish (needs GH_TOKEN; artifacts upload below).
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: npm run pack:win
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
@@ -45,3 +47,4 @@ jobs:
             release/Mira-*-windows-x64.exe
             release/latest.yml
           if-no-files-found: error
+          retention-days: 14
