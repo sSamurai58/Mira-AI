@@ -118,7 +118,7 @@ export function ChatPage({
   useEffect(() => {
     const sync = () => setHandsFree(getHandsFreePrefs());
     window.addEventListener("storage", sync);
-    const id = window.setInterval(sync, 800);
+    const id = window.setInterval(sync, 4000);
     return () => {
       window.removeEventListener("storage", sync);
       window.clearInterval(id);

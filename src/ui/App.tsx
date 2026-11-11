@@ -181,7 +181,7 @@ export function App() {
           ? prev
           : nextNav;
       });
-    }, 800);
+    }, 4000);
     return () => window.clearInterval(id);
   }, []);
 

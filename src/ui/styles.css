@@ -132,32 +132,11 @@ strong {
     var(--bg);
 }
 
+/* Soft static glows only — animated blur(90px) crushed Electron hover latency. */
 .atmosphere::before,
-.atmosphere::after {
-  content: "";
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(90px);
-  /* keep glow inside the clipped atmosphere layer */
-  will-change: transform;
-}
-
-.atmosphere::before {
-  width: 420px;
-  height: 420px;
-  left: 0;
-  top: 0;
-  background: color-mix(in srgb, var(--accent) 45%, transparent);
-  animation: drift-a 16s ease-in-out infinite alternate;
-}
-
-.atmosphere::after {
-  width: 420px;
-  height: 420px;
-  right: 0;
-  bottom: 0;
-  background: color-mix(in srgb, var(--success) 35%, transparent);
-  animation: drift-b 19s ease-in-out infinite alternate;
+.atmosphere::after,
+.atmosphere-mid::before {
+  content: none;
 }
 
 .atmosphere-mid {
@@ -167,19 +146,6 @@ strong {
   inset: 0;
   overflow: hidden;
   contain: paint;
-}
-
-.atmosphere-mid::before {
-  content: "";
-  position: absolute;
-  width: 420px;
-  height: 420px;
-  left: 32%;
-  top: 26%;
-  border-radius: 50%;
-  filter: blur(90px);
-  background: color-mix(in srgb, var(--border) 30%, transparent);
-  animation: drift-c 22s ease-in-out infinite alternate;
 }
 
 .atmosphere-grid {
@@ -245,7 +211,6 @@ strong {
     color-mix(in srgb, var(--bg-elevated) 62%, transparent)
   );
   box-shadow: inset 0 1px 0 rgba(204, 208, 207, 0.08);
-  backdrop-filter: blur(16px) saturate(1.1);
 }
 
 .brand-row {
@@ -273,7 +238,6 @@ strong {
   height: 30px;
   object-fit: contain;
   flex: 0 0 auto;
-  filter: drop-shadow(0 0 10px color-mix(in srgb, #e040fb 35%, transparent));
 }
 
 .brand-name {
@@ -305,8 +269,8 @@ strong {
   color: var(--text);
   cursor: pointer;
   transition:
-    background 160ms var(--ease-out),
-    transform 120ms var(--ease-press);
+    background 80ms var(--ease-out),
+    transform 80ms var(--ease-press);
 }
 
 .btn-new-chat:hover {
@@ -337,10 +301,10 @@ strong {
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition:
-    color 160ms var(--ease-out),
-    background 160ms var(--ease-out),
-    border-color 160ms var(--ease-out),
-    transform 120ms var(--ease-press);
+    color 70ms var(--ease-out),
+    background 70ms var(--ease-out),
+    border-color 70ms var(--ease-out),
+    transform 70ms var(--ease-press);
 }
 
 .nav-btn:hover {
@@ -573,7 +537,6 @@ strong {
   );
   /* No drop shadow between stacked blocks — only a light inner edge */
   box-shadow: inset 0 1px 0 rgba(204, 208, 207, 0.08);
-  backdrop-filter: blur(16px);
 }
 
 .hud-corners {
@@ -746,18 +709,14 @@ strong {
 .core-orb svg {
   display: block;
   overflow: hidden;
-  /* soft glow without expanding layout overflow */
-  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--accent) 20%, transparent));
 }
 
 .core-radar {
   transform-origin: 260px 260px;
-  animation: spin 5s linear infinite;
 }
 
 .core-halo {
   transform-origin: 260px 260px;
-  animation: halo 4s ease-out infinite;
 }
 
 .core-spin {
@@ -1829,7 +1788,6 @@ strong {
     color-mix(in srgb, var(--border) 30%, transparent),
     color-mix(in srgb, var(--bg-elevated) 50%, transparent)
   );
-  backdrop-filter: blur(16px);
 }
 
 .btn {
@@ -1841,8 +1799,8 @@ strong {
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition:
-    background 160ms var(--ease-out),
-    transform 120ms var(--ease-press);
+    background 80ms var(--ease-out),
+    transform 80ms var(--ease-press);
 }
 
 .btn:hover {
@@ -1987,8 +1945,7 @@ strong {
   z-index: 40;
   display: grid;
   place-items: center;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(6px);
+  background: rgba(0, 0, 0, 0.72);
   animation: fade-in 160ms var(--ease-out);
 }
 
@@ -2340,7 +2297,6 @@ select:disabled {
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, var(--text) 8%, transparent),
     0 16px 40px rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(18px) saturate(1.15);
   animation: select-pop 140ms var(--ease-out);
 }
 

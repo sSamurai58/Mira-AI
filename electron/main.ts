@@ -144,12 +144,13 @@ const isDev = process.env.MIRA_DEV === "1";
 const activeAborts = new Map<string, AbortController>();
 let calendarTick: NodeJS.Timeout | null = null;
 
-// Packaged Windows: avoid silent GPU hangs; pin taskbar identity.
+// Pin taskbar identity. GPU stays on — software rendering made the UI laggy.
+// Opt out only if needed: MIRA_DISABLE_GPU=1
 if (process.platform === "win32") {
   app.setAppUserModelId("ai.mira.desktop");
-  if (!isDev) {
-    app.disableHardwareAcceleration();
-  }
+}
+if (process.env.MIRA_DISABLE_GPU === "1") {
+  app.disableHardwareAcceleration();
 }
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();

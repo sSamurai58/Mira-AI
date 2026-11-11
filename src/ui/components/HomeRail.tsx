@@ -140,6 +140,7 @@ function useLiveLoad(voiceState: VoiceState) {
         (Math.random() - 0.5) * 6;
       const next = clamp(Math.round(wave + bias), 18, 96);
 
+      // One paint cycle: avoid 4 separate setStates every tick.
       setSeries((prev) => {
         const rolled = prev.length >= SAMPLE_COUNT ? prev.slice(1) : prev;
         return [...rolled, next];
@@ -156,7 +157,7 @@ function useLiveLoad(voiceState: VoiceState) {
         ),
       );
       if (frame % 2 === 0) setClock(formatClock());
-    }, 900);
+    }, 2500);
 
     return () => window.clearInterval(id);
   }, []);
