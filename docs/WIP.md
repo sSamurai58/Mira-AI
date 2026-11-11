@@ -51,12 +51,12 @@
 - Формат skills: совместимость с Agent Skills / папкой `SKILL.md` или свой манифест?
 - On-demand skills: эвристика/LLM-роутер vs только явная команда «включи skill X»?
 - Протоколы vs skills: один каталог с разными типами или раздельные `skills/` и `protocols/`?
-- Панель протоколов: отдельный таб или общая «Библиотека» со skills?
 - Голоса: пакет на диске / URL / клон с сэмплов — какой минимальный формат добавления?
 - Мессенджеры: официальные API / user-session / управление через UI клиента — что допустимо для MVP по каждому (TG, WA, IG)?
 - Порядок: сначала один мессенджер (какой?) или общий интерфейс + заглушки?
 - Blender: bpy/remote API vs управление UI через screen-control (#6–7) как fallback?
 - Набор стартовых Blender-skills: modeling / shading / animation / render — что в v1?
+- UI: desktop sidebar vs mobile bottom — один `AppShell` с адаптивом (см. DESIGN IA)
 
 ### 2026-11-11 — Чеклист PRD #14 (обучение по материалам)
 
