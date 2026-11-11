@@ -459,9 +459,9 @@ export function VoiceStudioPanel(props: {
               value={phraseId}
               options={[
                 { value: "", label: "— без привязки —" },
-                ...phrases.map((p) => ({
+                ...phrases.map((p, i) => ({
                   value: p.id,
-                  label: `${p.recorded ? "✓ " : ""}${p.text.slice(0, 72)}`,
+                  label: `${i + 1}. ${p.recorded ? "✓ " : ""}${p.text.slice(0, 68)}`,
                 })),
               ]}
               onChange={setPhraseId}
@@ -509,9 +509,9 @@ export function VoiceStudioPanel(props: {
                 Нажмите «Сгенерировать фразы» или добавьте свою
               </span>
             ) : (
-              phrases.slice(0, 10).map((p) => (
-                <div key={p.id} className="muted">
-                  {p.recorded ? "●" : "○"} {p.text}
+              phrases.map((p, i) => (
+                <div key={p.id} className="muted mono">
+                  {i + 1}. {p.recorded ? "✓" : "○"} {p.text}
                 </div>
               ))
             )}
