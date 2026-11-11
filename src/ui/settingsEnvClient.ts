@@ -23,7 +23,7 @@ const DEFAULTS: Record<string, string> = {
   SCREEN_ENABLED: "true",
   SCREEN_CONTROL_ENABLED: "false",
   BROWSER_ENABLED: "true",
-  BROWSER_PREFERRED: "chromium",
+  BROWSER_PREFERRED: "system",
   BROWSER_OPEN_CONFIRM: "true",
   MESSAGING_ENABLED: "true",
   MESSAGING_MODE: "dry-run",
