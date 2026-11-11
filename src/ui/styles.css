@@ -1201,6 +1201,33 @@ strong {
   display: block;
 }
 
+.load-card {
+  overflow: hidden;
+}
+
+.load-chart-live .load-line,
+.load-chart-live .load-area {
+  transition: d 700ms var(--ease-out);
+}
+
+.load-tip-dot {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: load-tip-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes load-tip-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    r: 4.5;
+  }
+  50% {
+    opacity: 0.55;
+    r: 6;
+  }
+}
+
 .chart-tip {
   font-family: var(--font-mono);
   font-size: 11px;

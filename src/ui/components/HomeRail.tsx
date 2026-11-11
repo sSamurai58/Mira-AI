@@ -1,3 +1,6 @@
+import { useEffect, useId, useRef, useState } from "react";
+import type { VoiceState } from "../voiceState";
+
 type JournalItem = {
   title: string;
   time: string;
@@ -32,21 +35,35 @@ const DEMO_JOURNAL: JournalItem[] = [
   },
 ];
 
+const SAMPLE_COUNT = 24;
+
 type HomeRailProps = {
   modelLabel: string;
   voiceNote?: string;
+  voiceState?: VoiceState;
 };
 
-/** Right column: resources · load · action journal (demo metrics). */
-export function HomeRail({ modelLabel, voiceNote }: HomeRailProps) {
+/** Right column: resources · live load · action journal. */
+export function HomeRail({
+  modelLabel,
+  voiceNote,
+  voiceState = "idle",
+}: HomeRailProps) {
+  const load = useLiveLoad(voiceState);
+
   return (
     <aside className="home-rail">
       <section className="glass-card">
         <h3 className="card-kicker">Ресурсы</h3>
         <div className="ring-row">
-          <Ring value={62} label="GPU" tone="accent" />
-          <Ring value={62} label="VRAM" sub="7,4 ГБ" tone="success" />
-          <Ring value={48} label="ОЗУ" tone="warning" />
+          <Ring value={load.gpu} label="GPU" tone="accent" />
+          <Ring
+            value={load.vramPct}
+            label="VRAM"
+            sub={`${load.vramGb.toFixed(1).replace(".", ",")} ГБ`}
+            tone="success"
+          />
+          <Ring value={load.ram} label="ОЗУ" tone="warning" />
         </div>
         <p className="mono tiny muted" style={{ margin: "12px 0 0" }}>
           модель · {modelLabel}
@@ -54,9 +71,9 @@ export function HomeRail({ modelLabel, voiceNote }: HomeRailProps) {
         </p>
       </section>
 
-      <section className="glass-card">
+      <section className="glass-card load-card">
         <h3 className="card-kicker">Нагрузка за час</h3>
-        <LoadChart />
+        <LoadChart points={load.series} current={load.gpu} clock={load.clock} />
       </section>
 
       <section className="glass-card journal-card">
@@ -85,6 +102,97 @@ export function HomeRail({ modelLabel, voiceNote }: HomeRailProps) {
   );
 }
 
+function voiceBias(state: VoiceState): number {
+  switch (state) {
+    case "listening":
+      return 12;
+    case "thinking":
+      return 28;
+    case "speaking":
+      return 18;
+    case "error":
+      return 8;
+    default:
+      return 0;
+  }
+}
+
+function useLiveLoad(voiceState: VoiceState) {
+  const [series, setSeries] = useState(() => seedSeries());
+  const [gpu, setGpu] = useState(() => series[series.length - 1] ?? 42);
+  const [ram, setRam] = useState(48);
+  const [vramGb, setVramGb] = useState(7.4);
+  const [clock, setClock] = useState(() => formatClock());
+  const phaseRef = useRef(Math.random() * Math.PI * 2);
+  const voiceRef = useRef(voiceState);
+  voiceRef.current = voiceState;
+
+  useEffect(() => {
+    let frame = 0;
+    const id = window.setInterval(() => {
+      frame += 1;
+      phaseRef.current += 0.18;
+      const bias = voiceBias(voiceRef.current);
+      const wave =
+        42 +
+        Math.sin(phaseRef.current) * 14 +
+        Math.sin(phaseRef.current * 2.3) * 7 +
+        (Math.random() - 0.5) * 6;
+      const next = clamp(Math.round(wave + bias), 18, 96);
+
+      setSeries((prev) => {
+        const rolled = prev.length >= SAMPLE_COUNT ? prev.slice(1) : prev;
+        return [...rolled, next];
+      });
+      setGpu(next);
+      setRam((r) =>
+        clamp(Math.round(r + (Math.random() - 0.48) * 3 + bias * 0.08), 28, 86),
+      );
+      setVramGb((v) =>
+        clamp(
+          Number((v + (Math.random() - 0.5) * 0.12 + bias * 0.004).toFixed(2)),
+          4.2,
+          11.6,
+        ),
+      );
+      if (frame % 2 === 0) setClock(formatClock());
+    }, 900);
+
+    return () => window.clearInterval(id);
+  }, []);
+
+  return {
+    series,
+    gpu,
+    ram,
+    vramGb,
+    vramPct: clamp(Math.round((vramGb / 12) * 100), 10, 100),
+    clock,
+  };
+}
+
+function seedSeries(): number[] {
+  const out: number[] = [];
+  let v = 40;
+  for (let i = 0; i < SAMPLE_COUNT; i++) {
+    v = clamp(v + (Math.random() - 0.42) * 10, 22, 78);
+    out.push(Math.round(v));
+  }
+  return out;
+}
+
+function formatClock(): string {
+  return new Date().toLocaleTimeString("ru-RU", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+function clamp(n: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, n));
+}
+
 function Ring({
   value,
   label,
@@ -111,7 +219,7 @@ function Ring({
           strokeWidth="5"
         />
         <circle
-          className="ring-arc"
+          className="ring-arc ring-arc-live"
           cx="32"
           cy="32"
           r={r}
@@ -121,6 +229,7 @@ function Ring({
           strokeLinecap="round"
           strokeDasharray={`${dash} ${c}`}
           transform="rotate(-90 32 32)"
+          style={{ transition: "stroke-dasharray 700ms var(--ease-out)" }}
         />
         <text
           x="32"
@@ -129,7 +238,7 @@ function Ring({
           className="ring-value"
           fill="var(--text)"
         >
-          {sub ? value : `${value}%`}
+          {sub ? `${value}` : `${value}%`}
         </text>
       </svg>
       <span className="mono tiny">{label}</span>
@@ -138,38 +247,54 @@ function Ring({
   );
 }
 
-function LoadChart() {
-  const points = [28, 36, 32, 48, 44, 55, 50, 62, 58, 70, 62];
+function LoadChart({
+  points,
+  current,
+  clock,
+}: {
+  points: number[];
+  current: number;
+  clock: string;
+}) {
+  const uid = useId().replace(/:/g, "");
+  const strokeId = `loadStroke-${uid}`;
+  const fillId = `loadFill-${uid}`;
   const w = 300;
   const h = 120;
-  const step = w / (points.length - 1);
-  const path = points
-    .map((p, i) => {
-      const x = i * step;
-      const y = h - (p / 100) * (h - 16) - 8;
-      return `${i === 0 ? "M" : "L"} ${x} ${y}`;
-    })
+  const n = Math.max(points.length, 2);
+  const step = w / (n - 1);
+
+  const coords = points.map((p, i) => {
+    const x = i * step;
+    const y = h - (p / 100) * (h - 16) - 8;
+    return { x, y, p };
+  });
+
+  const path = coords
+    .map((c, i) => `${i === 0 ? "M" : "L"} ${c.x.toFixed(1)} ${c.y.toFixed(1)}`)
     .join(" ");
   const area = `${path} L ${w} ${h} L 0 ${h} Z`;
-  const lastX = (points.length - 1) * step;
-  const lastY = h - (points[points.length - 1]! / 100) * (h - 16) - 8;
+  const last = coords[coords.length - 1] ?? { x: w, y: h / 2, p: current };
+  const tipW = 92;
+  const tipX = Math.min(Math.max(8, last.x - tipW + 8), w - tipW - 4);
+  const tipY = Math.max(6, last.y - 30);
 
   return (
     <svg
-      className="load-chart"
+      className="load-chart load-chart-live"
       viewBox={`0 0 ${w} ${h}`}
       width="100%"
       height="120"
       role="img"
-      aria-label="График нагрузки за час, примерные данные"
+      aria-label={`Нагрузка сейчас ${current} процентов, ${clock}`}
     >
       <defs>
-        <linearGradient id="loadStroke" x1="0%" y1="0%" x2="100%" y2="0%">
+        <linearGradient id={strokeId} x1="0%" y1="0%" x2="100%" y2="0%">
           <stop offset="0%" stopColor="var(--accent)" />
           <stop offset="55%" stopColor="var(--success)" />
           <stop offset="100%" stopColor="var(--warning)" />
         </linearGradient>
-        <linearGradient id="loadFill" x1="0%" y1="0%" x2="0%" y2="100%">
+        <linearGradient id={fillId} x1="0%" y1="0%" x2="0%" y2="100%">
           <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.35" />
           <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
         </linearGradient>
@@ -185,27 +310,39 @@ function LoadChart() {
           strokeWidth="1"
         />
       ))}
-      <path d={area} fill="url(#loadFill)" />
       <path
+        className="load-area"
+        d={area}
+        fill={`url(#${fillId})`}
+      />
+      <path
+        className="load-line"
         d={path}
         fill="none"
-        stroke="url(#loadStroke)"
+        stroke={`url(#${strokeId})`}
         strokeWidth="2.5"
         strokeLinejoin="round"
+        strokeLinecap="round"
       />
       <line
-        x1={lastX}
+        x1={last.x}
         y1="8"
-        x2={lastX}
+        x2={last.x}
         y2={h - 4}
         stroke="var(--text-muted)"
         strokeDasharray="3 4"
         strokeOpacity="0.7"
       />
-      <circle cx={lastX} cy={lastY} r="4" fill="var(--warning)" />
-      <g transform={`translate(${Math.max(8, lastX - 70)}, ${Math.max(8, lastY - 28)})`}>
+      <circle
+        className="load-tip-dot"
+        cx={last.x}
+        cy={last.y}
+        r="4.5"
+        fill="var(--warning)"
+      />
+      <g transform={`translate(${tipX}, ${tipY})`}>
         <rect
-          width="78"
+          width={tipW}
           height="22"
           rx="6"
           fill="var(--bg)"
@@ -213,7 +350,7 @@ function LoadChart() {
           strokeOpacity="0.45"
         />
         <text x="8" y="15" className="chart-tip" fill="var(--text-muted)">
-          сейчас · 62%
+          {clock.slice(0, 5)} · {current}%
         </text>
       </g>
     </svg>

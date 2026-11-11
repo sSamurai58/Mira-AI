@@ -814,7 +814,11 @@ export function ChatPage({
         </section>
       </div>
 
-      <HomeRail modelLabel={modelLabel} voiceNote={activeVoiceId ? "voice on" : "voice n/a"} />
+      <HomeRail
+        modelLabel={modelLabel}
+        voiceNote={activeVoiceId ? "voice on" : "voice n/a"}
+        voiceState={voiceState}
+      />
     </div>
   );
 }
