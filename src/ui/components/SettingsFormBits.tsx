@@ -93,9 +93,20 @@ export function SecretField(props: {
           placeholder={props.placeholder ?? "вставьте ключ…"}
           autoComplete="off"
           spellCheck={false}
-          onChange={(e) => props.onChange(e.target.value)}
-          onFocus={() => {
-            if (props.value.startsWith("••••")) props.onChange("");
+          onChange={(e) => {
+            const next = e.target.value;
+            // Masked placeholder: first real edit replaces the whole mask
+            // instead of appending into "••••xxxx" or wiping on focus+Save.
+            if (props.value.startsWith("••••") && !next.startsWith("••••")) {
+              props.onChange(next);
+              return;
+            }
+            if (props.value.startsWith("••••") && next.startsWith("••••")) {
+              const stripped = next.slice(props.value.length);
+              props.onChange(stripped);
+              return;
+            }
+            props.onChange(next);
           }}
         />
         <button

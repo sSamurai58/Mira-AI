@@ -61,7 +61,26 @@ export function SettingsApiSection() {
   async function handleSave(group: string, keys: string[]) {
     setSavingKey(group);
     const patch: Record<string, string> = {};
-    for (const key of keys) patch[key] = draft[key] ?? "";
+    for (const key of keys) {
+      const value = draft[key] ?? "";
+      // Secrets: empty / mask means "keep existing", never wipe via Save.
+      // Explicit delete goes through handleDeleteKey only.
+      if (
+        (key.endsWith("_API_KEY") || key === "TELEGRAM_BOT_TOKEN") &&
+        (!value.trim() || value.trim().startsWith("••••"))
+      ) {
+        continue;
+      }
+      patch[key] = value;
+    }
+    if (!Object.keys(patch).length) {
+      setNotes((prev) => ({
+        ...prev,
+        [group]: "Нечего сохранять (секрет без изменений)",
+      }));
+      setSavingKey(null);
+      return;
+    }
     const res = await saveSettingsEnv(patch);
     setSnap(res.snap);
     setDraft((prev) => ({ ...prev, ...res.snap.values }));
@@ -72,7 +91,7 @@ export function SettingsApiSection() {
   async function handleDeleteKey(group: string, secretKey: string) {
     setSavingKey(`del-${group}`);
     setDraft((prev) => ({ ...prev, [secretKey]: "" }));
-    const res = await saveSettingsEnv({ [secretKey]: "" });
+    const res = await saveSettingsEnv({ [secretKey]: "" }, { clearSecrets: true });
     setSnap(res.snap);
     setDraft((prev) => ({ ...prev, ...res.snap.values, [secretKey]: "" }));
     setNotes((prev) => ({
@@ -171,9 +190,9 @@ export function SettingsApiSection() {
         Ключи хранятся локально
         {snap.source === "electron"
           ? ` в \`.env\`${snap.envFile ? ` (${snap.envFile})` : ""}`
-          : " в браузере (demo) — в Electron попадут в `.env`"}
-        . Без ключа Mira работает в режиме mock. У каждого провайдера — свои
-        «Сохранить ключ» / «Удалить ключ».
+          : " в браузере (demo): публичные поля — localStorage, секреты — sessionStorage вкладки (не переживают закрытие вкладки); в Electron попадут в `.env`"}
+        . Без ключа Mira работает в режиме mock. «Сохранить ключ» не затирает
+        маску •••• — удаление только кнопкой «Удалить ключ».
       </p>
 
       <IntegCard

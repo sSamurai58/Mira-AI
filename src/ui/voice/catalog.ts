@@ -28,6 +28,9 @@ export function pickDefaultVoiceId(voices: VoiceInfo[]): string | null {
 export function getActiveVoiceId(voices: VoiceInfo[]): string | null {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (stored && voices.some((v) => v.id === stored)) return stored;
+  // Keep custom studio selection even if catalog list is still loading /
+  // caller only passed system voices — never silently clobber it.
+  if (stored && isCustomVoiceId(stored)) return stored;
   const fallback = pickDefaultVoiceId(voices);
   if (fallback) localStorage.setItem(STORAGE_KEY, fallback);
   return fallback;
@@ -35,6 +38,17 @@ export function getActiveVoiceId(voices: VoiceInfo[]): string | null {
 
 export function setActiveVoiceId(id: string): void {
   localStorage.setItem(STORAGE_KEY, id);
+}
+
+export function clearActiveVoiceId(matchId?: string | null): void {
+  const stored = localStorage.getItem(STORAGE_KEY);
+  if (!stored) return;
+  if (matchId && stored !== matchId) return;
+  localStorage.removeItem(STORAGE_KEY);
+}
+
+export function peekActiveVoiceId(): string | null {
+  return localStorage.getItem(STORAGE_KEY);
 }
 
 export function isCustomVoiceId(voiceId: string | null | undefined): boolean {

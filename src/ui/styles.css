@@ -1769,10 +1769,21 @@ strong {
 .workshop-layout > .settings-nav {
   position: sticky;
   top: 0;
+  z-index: 2;
+  align-self: start;
+  pointer-events: auto;
+}
+
+.workshop-layout > .settings-nav .nav-btn {
+  width: 100%;
+  position: relative;
+  z-index: 1;
 }
 
 .workshop-main {
   min-width: 0;
+  position: relative;
+  z-index: 0;
 }
 
 .voice-row {

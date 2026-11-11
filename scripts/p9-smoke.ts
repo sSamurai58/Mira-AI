@@ -53,12 +53,30 @@ async function main() {
     );
   }
 
+  // Unlinked-only corpus must not train
+  const unlinkedProject = createVoiceProject({ name: "Unlinked", lang: "ru-RU" });
+  for (let i = 0; i < 3; i++) {
+    importClip({
+      projectId: unlinkedProject.id,
+      sourcePath: sample,
+      phraseId: null,
+    });
+  }
+  const trainBlocked = trainVoiceModel(unlinkedProject.id);
+  assert.equal(
+    trainBlocked.report.ok,
+    false,
+    "train without phrases/links must fail",
+  );
+  assert.equal(trainBlocked.voice, null);
+
   const trained = trainVoiceModel(project.id);
   assert.ok(trained.report.ok, trained.report.detail);
   assert.ok(trained.voice, "custom voice not built");
   assert.ok(trained.project.custom_voice_id, "project missing custom_voice_id");
   assert.ok(trained.project.llm_profile, "llm profile missing");
   assert.ok(["ready", "ready_partial"].includes(trained.project.status));
+  assert.ok(trained.report.linkedAccepted >= 3);
 
   // retrain after another clip keeps stable voice id
   importClip({

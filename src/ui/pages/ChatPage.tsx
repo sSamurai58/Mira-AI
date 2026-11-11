@@ -7,8 +7,8 @@ import { ThemeSelect } from "../components/ThemeSelect";
 import { createAsrSession, isAsrAvailable } from "../voice/asr";
 import {
   getActiveVoiceId,
+  listCatalogVoices,
   setActiveVoiceId,
-  waitForVoices,
 } from "../voice/catalog";
 import { getVoiceEngineStatus } from "../voice/engineStatus";
 import {
@@ -104,7 +104,7 @@ export function ChatPage({
   useEffect(() => {
     let cancelled = false;
     async function bootVoices() {
-      const list = await waitForVoices();
+      const list = await listCatalogVoices();
       if (cancelled) return;
       setVoices(list);
       setActiveVoiceIdState(getActiveVoiceId(list));

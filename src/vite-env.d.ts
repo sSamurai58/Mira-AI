@@ -592,17 +592,21 @@ interface MiraBridge {
     name?: string;
     lang?: string;
   }) => Promise<MiraVoiceProject>;
-  deleteVoiceProject: (
-    id: string,
-  ) => Promise<{ ok: boolean; detail: string }>;
+  deleteVoiceProject: (id: string) => Promise<{
+    ok: boolean;
+    detail: string;
+    clearedVoiceId: string | null;
+  }>;
   updateCustomVoice: (payload: {
     id: string;
     name?: string;
     lang?: string;
   }) => Promise<MiraCustomVoice>;
-  deleteCustomVoice: (
-    id: string,
-  ) => Promise<{ ok: boolean; detail: string }>;
+  deleteCustomVoice: (id: string) => Promise<{
+    ok: boolean;
+    detail: string;
+    clearedVoiceId: string | null;
+  }>;
   addVoicePhrase: (
     projectId: string,
     text: string,
