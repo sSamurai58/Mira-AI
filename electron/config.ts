@@ -84,6 +84,25 @@ export function loadConfig(force = false): AppConfig {
               ? "mira-offline-stub"
               : "gpt-4o-mini";
 
+  const requestedModel = process.env.LLM_MODEL?.trim() || "";
+  const llmModel = (() => {
+    if (!requestedModel) return defaultModel;
+    const lower = requestedModel.toLowerCase();
+    // Don't send OpenAI model ids to xAI / Claude / Gemini (404)
+    if (provider === "grok" && !lower.startsWith("grok") && !lower.startsWith("xai")) {
+      return defaultModel;
+    }
+    if (provider === "claude" && !lower.startsWith("claude")) return defaultModel;
+    if (
+      provider === "gemini" &&
+      !lower.startsWith("gemini") &&
+      !lower.startsWith("models/")
+    ) {
+      return defaultModel;
+    }
+    return requestedModel;
+  })();
+
   const databasePath = ensureMiraDatabaseLayout(
     process.env.DATABASE_PATH?.trim()
       ? path.isAbsolute(process.env.DATABASE_PATH.trim())
@@ -95,7 +114,7 @@ export function loadConfig(force = false): AppConfig {
   cached = {
     databasePath,
     llmProvider: provider,
-    llmModel: process.env.LLM_MODEL?.trim() || defaultModel,
+    llmModel,
     openaiApiKey: process.env.OPENAI_API_KEY?.trim() || null,
     openaiBaseUrl: (
       process.env.OPENAI_BASE_URL?.trim() || "https://api.openai.com/v1"

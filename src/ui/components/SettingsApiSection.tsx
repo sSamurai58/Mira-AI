@@ -11,6 +11,7 @@ import {
   boolToEnv,
   isTruthyEnv,
   loadSettingsEnv,
+  modelForProvider,
   saveSettingsEnv,
   type SettingsEnvSnapshot,
 } from "../settingsEnvClient";
@@ -23,6 +24,15 @@ const PROVIDERS = [
   { id: "grok", label: "xAI Grok" },
   { id: "offline", label: "Offline" },
 ] as const;
+
+const PROVIDER_MODEL_HINT: Record<string, string> = {
+  grok: "grok-2-latest / grok-3",
+  openai: "gpt-4o-mini / gpt-4o",
+  claude: "claude-3-5-sonnet-latest",
+  gemini: "gemini-2.0-flash",
+  mock: "не используется",
+  offline: "локальный id модели",
+};
 
 export function SettingsApiSection() {
   const [snap, setSnap] = useState<SettingsEnvSnapshot | null>(null);
@@ -61,15 +71,72 @@ export function SettingsApiSection() {
   }
 
   async function handleTest() {
-    if (!window.mira?.testLlm) {
-      setTestResult("Тест доступен только в Electron");
-      return;
-    }
     setTesting(true);
     setTestResult(null);
     try {
-      const res = await window.mira.testLlm();
-      setTestResult(`${res.ok ? "OK" : "FAIL"} — ${res.detail}`);
+      if (window.mira?.testLlm) {
+        const res = await window.mira.testLlm();
+        setTestResult(`${res.ok ? "OK" : "FAIL"} — ${res.detail}`);
+        return;
+      }
+      // Browser demo: hit Vite LLM proxy with saved/typed key
+      const {
+        getRawBrowserSettings,
+        resolveBrowserLlmConfig,
+        SETTINGS_SECRET_KEYS,
+      } = await import("../settingsEnvClient");
+      const merged = { ...getRawBrowserSettings() };
+      for (const [key, value] of Object.entries(draft)) {
+        if (SETTINGS_SECRET_KEYS.has(key) && value.startsWith("••••")) continue;
+        merged[key] = value;
+      }
+      const cfg = resolveBrowserLlmConfig(merged);
+      if (cfg.provider === "mock") {
+        setTestResult("FAIL — нет ключа (выберите grok/openai и сохраните)");
+        return;
+      }
+      if (cfg.provider === "claude" || cfg.provider === "gemini") {
+        const res = await fetch(
+          cfg.provider === "claude"
+            ? `${cfg.baseUrl}/v1/messages`
+            : `${cfg.baseUrl}/v1beta/models/${encodeURIComponent(cfg.model)}:generateContent?key=${encodeURIComponent(cfg.apiKey)}`,
+          {
+            method: "POST",
+            headers:
+              cfg.provider === "claude"
+                ? {
+                    "x-api-key": cfg.apiKey,
+                    "anthropic-version": "2023-06-01",
+                    "content-type": "application/json",
+                    "anthropic-dangerous-direct-browser-access": "true",
+                  }
+                : { "Content-Type": "application/json" },
+            body: JSON.stringify(
+              cfg.provider === "claude"
+                ? {
+                    model: cfg.model,
+                    max_tokens: 16,
+                    messages: [{ role: "user", content: "ping" }],
+                  }
+                : { contents: [{ parts: [{ text: "ping" }] }] },
+            ),
+          },
+        );
+        setTestResult(
+          res.ok
+            ? `OK · ${cfg.label} (browser proxy)`
+            : `FAIL · HTTP ${res.status} — ${(await res.text()).slice(0, 160)}`,
+        );
+        return;
+      }
+      const res = await fetch(`${cfg.baseUrl}/models`, {
+        headers: { Authorization: `Bearer ${cfg.apiKey}` },
+      });
+      setTestResult(
+        res.ok
+          ? `OK · ${cfg.label} (browser proxy)`
+          : `FAIL · HTTP ${res.status} — ${(await res.text()).slice(0, 160)}`,
+      );
     } catch (err) {
       setTestResult(err instanceof Error ? err.message : String(err));
     } finally {
@@ -140,7 +207,14 @@ export function SettingsApiSection() {
         <Field label="Провайдер" hint="Переменная LLM_PROVIDER">
           <select
             value={provider}
-            onChange={(e) => setField("LLM_PROVIDER", e.target.value)}
+            onChange={(e) => {
+              const next = e.target.value;
+              setDraft((prev) => ({
+                ...prev,
+                LLM_PROVIDER: next,
+                LLM_MODEL: modelForProvider(next, prev.LLM_MODEL),
+              }));
+            }}
           >
             {PROVIDERS.map((p) => (
               <option key={p.id} value={p.id}>
@@ -149,11 +223,14 @@ export function SettingsApiSection() {
             ))}
           </select>
         </Field>
-        <Field label="Модель" hint="LLM_MODEL — например gpt-4o-mini, claude-3-5-sonnet">
+        <Field
+          label="Модель"
+          hint={`LLM_MODEL — для ${provider}: ${PROVIDER_MODEL_HINT[provider] ?? "см. документацию провайдера"}`}
+        >
           <input
             value={draft.LLM_MODEL ?? ""}
             onChange={(e) => setField("LLM_MODEL", e.target.value)}
-            placeholder="gpt-4o-mini"
+            placeholder={PROVIDER_MODEL_HINT[provider]?.split(" / ")[0] || "model-id"}
           />
         </Field>
         <ToggleRow

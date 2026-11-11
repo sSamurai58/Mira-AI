@@ -169,3 +169,147 @@ export function isTruthyEnv(value: string | undefined): boolean {
 export function boolToEnv(on: boolean): string {
   return on ? "true" : "false";
 }
+
+/** Unmasked browser-local settings (for demo LLM calls). */
+export function getRawBrowserSettings(): Record<string, string> {
+  return readLocal();
+}
+
+export type BrowserLlmConfig = {
+  provider: "openai" | "grok" | "claude" | "gemini" | "mock";
+  model: string;
+  apiKey: string;
+  /** Same-origin proxy path or absolute OpenAI-compatible base */
+  baseUrl: string;
+  label: string;
+};
+
+const DEFAULT_MODELS: Record<string, string> = {
+  grok: "grok-2-latest",
+  openai: "gpt-4o-mini",
+  claude: "claude-3-5-sonnet-latest",
+  gemini: "gemini-2.0-flash",
+};
+
+/** Pick a model that belongs to the provider (avoid gpt-* on xAI, etc.). */
+export function modelForProvider(
+  provider: string,
+  requested: string | undefined,
+): string {
+  const p = provider.trim().toLowerCase();
+  const fallback = DEFAULT_MODELS[p] || "gpt-4o-mini";
+  const model = (requested || "").trim();
+  if (!model) return fallback;
+
+  const lower = model.toLowerCase();
+  if (p === "grok") {
+    if (lower.startsWith("grok") || lower.startsWith("xai")) return model;
+    return fallback;
+  }
+  if (p === "openai") {
+    if (
+      lower.startsWith("gpt") ||
+      lower.startsWith("o1") ||
+      lower.startsWith("o3") ||
+      lower.startsWith("o4") ||
+      lower.includes("chatgpt")
+    ) {
+      return model;
+    }
+    // Custom OpenAI-compatible proxies may use any id — keep if not clearly foreign
+    if (
+      lower.startsWith("grok") ||
+      lower.startsWith("claude") ||
+      lower.startsWith("gemini")
+    ) {
+      return fallback;
+    }
+    return model;
+  }
+  if (p === "claude") {
+    if (lower.startsWith("claude")) return model;
+    return fallback;
+  }
+  if (p === "gemini") {
+    if (lower.startsWith("gemini") || lower.startsWith("models/")) return model;
+    return fallback;
+  }
+  return model || fallback;
+}
+
+/**
+ * Resolve which live model the browser demo can call.
+ * Uses Vite `/mira-llm/*` proxies to avoid CORS.
+ */
+export function resolveBrowserLlmConfig(
+  values: Record<string, string> = readLocal(),
+): BrowserLlmConfig {
+  let provider = (values.LLM_PROVIDER || "mock").trim().toLowerCase();
+  if (provider === "xai") provider = "grok";
+
+  const openaiKey = (values.OPENAI_API_KEY || "").trim();
+  const xaiKey = (values.XAI_API_KEY || "").trim();
+  const anthropicKey = (values.ANTHROPIC_API_KEY || "").trim();
+  const geminiKey = (values.GEMINI_API_KEY || "").trim();
+
+  // Auto-pick when provider left on mock but a key exists
+  if (provider === "mock" || provider === "offline" || !provider) {
+    if (xaiKey) provider = "grok";
+    else if (openaiKey) provider = "openai";
+    else if (anthropicKey) provider = "claude";
+    else if (geminiKey) provider = "gemini";
+  }
+
+  const requested = (values.LLM_MODEL || "").trim();
+
+  if (provider === "grok" && xaiKey) {
+    const model = modelForProvider("grok", requested);
+    return {
+      provider: "grok",
+      model,
+      apiKey: xaiKey,
+      baseUrl: "/mira-llm/xai",
+      label: `grok/${model}`,
+    };
+  }
+  if (provider === "openai" && openaiKey) {
+    const custom = (values.OPENAI_BASE_URL || "").trim();
+    const useProxy = !custom || custom.includes("api.openai.com");
+    const model = modelForProvider("openai", requested);
+    return {
+      provider: "openai",
+      model,
+      apiKey: openaiKey,
+      baseUrl: useProxy ? "/mira-llm/openai" : custom.replace(/\/$/, ""),
+      label: `openai/${model}`,
+    };
+  }
+  if (provider === "claude" && anthropicKey) {
+    const model = modelForProvider("claude", requested);
+    return {
+      provider: "claude",
+      model,
+      apiKey: anthropicKey,
+      baseUrl: "/mira-llm/anthropic",
+      label: `claude/${model}`,
+    };
+  }
+  if (provider === "gemini" && geminiKey) {
+    const model = modelForProvider("gemini", requested);
+    return {
+      provider: "gemini",
+      model,
+      apiKey: geminiKey,
+      baseUrl: "/mira-llm/gemini",
+      label: `gemini/${model}`,
+    };
+  }
+
+  return {
+    provider: "mock",
+    model: "mock",
+    apiKey: "",
+    baseUrl: "",
+    label: "browser-only",
+  };
+}
