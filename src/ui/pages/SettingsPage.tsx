@@ -7,6 +7,12 @@ import {
   waitForVoices,
 } from "../voice/catalog";
 import { getVoiceEngineStatus } from "../voice/engineStatus";
+import {
+  getHandsFreePrefs,
+  setHandsFreePrefs,
+  type HandsFreePrefs,
+  type WakeSensitivity,
+} from "../voice/handsFree";
 import { speakText, stopSpeaking } from "../voice/tts";
 import type { VoiceInfo } from "../voice/types";
 
@@ -44,6 +50,9 @@ export function SettingsPage({
   const [engineDetail, setEngineDetail] = useState("");
   const [autoSpeak, setAutoSpeak] = useState(
     () => localStorage.getItem("mira.autoSpeak") !== "0",
+  );
+  const [handsFree, setHandsFree] = useState<HandsFreePrefs>(() =>
+    getHandsFreePrefs(),
   );
 
   useEffect(() => {
@@ -155,7 +164,7 @@ export function SettingsPage({
           <>
             <div className="row">
               <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Голос и аудио</h2>
-              <StubBadge label="P2" />
+              <StubBadge label="F9" />
             </div>
             <p className="muted" style={{ margin: 0 }}>
               {engineDetail || "Определение движка…"}
@@ -171,6 +180,59 @@ export function SettingsPage({
                 }}
               />
               <span>Автоозвучка ответов</span>
+            </label>
+            <label className="row">
+              <input
+                type="checkbox"
+                checked={handsFree.enabled}
+                onChange={(e) =>
+                  setHandsFree(
+                    setHandsFreePrefs({ enabled: e.target.checked }),
+                  )
+                }
+              />
+              <span>Hands-free (wake-word без PTT)</span>
+            </label>
+            <label className="row">
+              <input
+                type="checkbox"
+                checked={handsFree.bargeIn}
+                onChange={(e) =>
+                  setHandsFree(
+                    setHandsFreePrefs({ bargeIn: e.target.checked }),
+                  )
+                }
+              />
+              <span>Barge-in: перебить озвучку → сразу слушать (Space)</span>
+            </label>
+            <label className="stack">
+              <span className="muted">Wake-фраза</span>
+              <input
+                value={handsFree.wakePhrase}
+                onChange={(e) =>
+                  setHandsFree(
+                    setHandsFreePrefs({ wakePhrase: e.target.value }),
+                  )
+                }
+                placeholder="мира"
+              />
+            </label>
+            <label className="stack">
+              <span className="muted">Чувствительность wake-word</span>
+              <select
+                value={handsFree.sensitivity}
+                onChange={(e) =>
+                  setHandsFree(
+                    setHandsFreePrefs({
+                      sensitivity: e.target.value as WakeSensitivity,
+                    }),
+                  )
+                }
+              >
+                <option value="strict">strict</option>
+                <option value="normal">normal</option>
+                <option value="loose">loose</option>
+              </select>
             </label>
             {voices.length === 0 ? (
               <p className="muted" style={{ margin: 0 }}>
@@ -207,7 +269,7 @@ export function SettingsPage({
               </label>
             )}
             <p className="muted" style={{ margin: 0 }}>
-              Wake-word / barge-in — F9. Устройства ввода ОС — системные.
+              Hands-free слушает wake-фразу в `idle`. Устройства ввода — системные.
             </p>
           </>
         ) : null}

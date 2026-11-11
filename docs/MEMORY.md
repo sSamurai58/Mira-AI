@@ -6,14 +6,14 @@
 
 | Поле | Значение |
 |------|----------|
-| Фаза | **F13 — Doctor / логи ✅** |
+| Фаза | **F9 — Wake-word / barge-in ✅** |
 | Продукт | Голосовой ИИ-помощник Mira (диалог, память, сеть, экран, TG, TTY, learn, voice, Blender) |
-| Код | P0–P11 + F11 + F13: doctor findings + app_logs / jsonl viewer |
+| Код | P0–P11 + F11 + F13 + F9: hands-free wake + Перебить/Space |
 | Предыдущее | Учебный TTS (`mira_tts`) удалён; не восстанавливаем как есть |
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
-| Дорожная карта | Must закрыт; F*: F11 ✅ → F13 ✅ → **F9** |
+| Дорожная карта | Must закрыт; приоритетные F*: F11 ✅ → F13 ✅ → F9 ✅ |
 
-**Сейчас:** F13 закрыт. После OK — **F9** (wake-word / barge-in).
+**Сейчас:** F9 закрыт. Следующие F* — по запросу (F12 confirm modes / F10 профили / …).
 
 ## Решения
 
@@ -85,6 +85,8 @@
 | 2026-11-11 | F11 готов | export/import + forget (memory/learned/library/voice/all); f11:smoke OK |
 | 2026-11-11 | Session logs F13 | SQLite `app_logs` + `data/logs/*.jsonl`; doctor показывает recentErrors |
 | 2026-11-11 | F13 готов | полный Doctor + log viewer; f13:smoke OK |
+| 2026-11-11 | F9 hands-free | Wake-фраза + sensitivity в localStorage; barge-in → listening |
+| 2026-11-11 | F9 готов | Chat «Перебить»/Space; Настройки → Голос; f9:smoke OK |
 
 ## Баги
 
@@ -125,6 +127,7 @@
 | 2026-11-11 | Завершён этап P11 (стабилизация must) |
 | 2026-11-11 | Завершён F11 (backup / забывать) |
 | 2026-11-11 | Завершён F13 (Doctor / логи) |
+| 2026-11-11 | Завершён F9 (wake-word / barge-in) |
 | 2026-11-11 | DESIGN: информационная архитектура, карта настроек |
 | 2026-11-11 | Подключены agent skills Emil Kowalski (design/animation) |
 | 2026-11-11 | Добавлен каталог 14 цветовых тем + референсы в docs/themes/ |

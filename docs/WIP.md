@@ -31,8 +31,8 @@ Future **F1–F13** — только после стабилизации must (�
 
 | Поле | Значение |
 |------|----------|
-| Текущая фаза | **F13 ✅** — Doctor + логи сессии |
-| Следующее действие | После OK: **F9** wake-word / barge-in |
+| Текущая фаза | **F9 ✅** — wake-word / barge-in |
+| Следующее действие | F* по запросу (рек.: F12 confirm / F10 профили) |
 | Запрещено сейчас | — (F* только по явному OK) |
 
 ### Стартовые допущения стека (подтвердить в P0 → MEMORY)
@@ -299,7 +299,7 @@ UX: **Создать → фразы → загрузить → Mira сама о�
 | F6 | Заметки Obsidian/Notion-like ↔ память #3/#14 | После P11 |
 | F7 | Музыка/медиа: плеер, плейлисты | После P11 |
 | F8 | Мультиязычность UI + ASR/TTS | После P11 |
-| F9 | Wake-word / hands-free + barge-in (перебить TTS) | После P11 (barge-in UI можно раньше в P2) |
+| F9 | Wake-word / hands-free + barge-in (перебить TTS) | ✅ hands-free wake + Перебить/Space; f9:smoke |
 | F10 | Профили: голос / память / ключи (scoped, не в git) | После P11 |
 | F11 | Backup/export/import + «забыть» память/библиотеку | ✅ mira-backup-v1; Настройки → Данные; f11:smoke |
 | F12 | Режим confirm: always / smart / dangerous-list | После P11; до этого always |

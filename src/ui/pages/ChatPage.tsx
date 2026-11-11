@@ -6,6 +6,12 @@ import {
   waitForVoices,
 } from "../voice/catalog";
 import { getVoiceEngineStatus } from "../voice/engineStatus";
+import {
+  getHandsFreePrefs,
+  matchWakeWord,
+  stripWakePhrase,
+  type HandsFreePrefs,
+} from "../voice/handsFree";
 import { speakText, stopSpeaking } from "../voice/tts";
 import type { VoiceInfo } from "../voice/types";
 import type { VoiceState } from "../voiceState";
@@ -44,19 +50,47 @@ export function ChatPage({
   const [voices, setVoices] = useState<VoiceInfo[]>([]);
   const [activeVoiceId, setActiveVoiceIdState] = useState<string | null>(null);
   const [engineNote, setEngineNote] = useState("");
+  const [handsFree, setHandsFree] = useState<HandsFreePrefs>(() =>
+    getHandsFreePrefs(),
+  );
+  const [wakeHint, setWakeHint] = useState<string | null>(null);
   const requestIdRef = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const asrRef = useRef<ReturnType<typeof createAsrSession> | null>(null);
+  const wakeRef = useRef<ReturnType<typeof createAsrSession> | null>(null);
   const sessionIdRef = useRef(sessionId);
   const sendTextRef = useRef<(text: string) => Promise<void>>(async () => undefined);
+  const voiceStateRef = useRef(voiceState);
+  const busyRef = useRef(busy);
+  const handsFreeRef = useRef(handsFree);
+  const startCommandListenRef = useRef<() => void>(() => undefined);
 
   useEffect(() => {
     sessionIdRef.current = sessionId;
   }, [sessionId]);
+  useEffect(() => {
+    voiceStateRef.current = voiceState;
+  }, [voiceState]);
+  useEffect(() => {
+    busyRef.current = busy;
+  }, [busy]);
+  useEffect(() => {
+    handsFreeRef.current = handsFree;
+  }, [handsFree]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [bubbles, busy, interim]);
+
+  useEffect(() => {
+    const sync = () => setHandsFree(getHandsFreePrefs());
+    window.addEventListener("storage", sync);
+    const id = window.setInterval(sync, 800);
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.clearInterval(id);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,6 +106,7 @@ export function ChatPage({
       cancelled = true;
       stopSpeaking();
       asrRef.current?.stop();
+      wakeRef.current?.stop();
     };
   }, []);
 
@@ -301,29 +336,119 @@ export function ChatPage({
     void sendText(text);
   }
 
+  function stopWakeListen() {
+    wakeRef.current?.stop();
+    wakeRef.current = null;
+    setWakeHint(null);
+  }
+
+  function startCommandListen() {
+    if (busyRef.current) return;
+    stopWakeListen();
+    stopSpeaking();
+    setInterim("");
+    onVoiceState("listening");
+
+    asrRef.current?.stop();
+    asrRef.current = createAsrSession({
+      onInterim: setInterim,
+      onFinal: (transcript) => {
+        setInterim("");
+        const prefs = handsFreeRef.current;
+        const cleaned = prefs.enabled
+          ? stripWakePhrase(transcript, prefs.wakePhrase)
+          : transcript;
+        const text = cleaned.trim() || transcript.trim();
+        void sendTextRef.current(text);
+      },
+      onError: (msg) => {
+        onError(msg);
+        onVoiceState("error");
+      },
+      onEnd: () => {
+        setInterim("");
+      },
+    });
+    asrRef.current.start();
+  }
+  startCommandListenRef.current = startCommandListen;
+
+  function startWakeListen() {
+    const prefs = handsFreeRef.current;
+    if (!prefs.enabled || !isAsrAvailable()) return;
+    if (busyRef.current) return;
+    if (
+      voiceStateRef.current === "listening" ||
+      voiceStateRef.current === "thinking" ||
+      voiceStateRef.current === "speaking"
+    ) {
+      return;
+    }
+
+    stopWakeListen();
+    setWakeHint(`Hands-free: скажите «${prefs.wakePhrase}»…`);
+    wakeRef.current = createAsrSession({
+      onInterim: (text) => {
+        setWakeHint(`Слышу: ${text}`);
+        if (
+          matchWakeWord(text, prefs.wakePhrase, prefs.sensitivity)
+        ) {
+          startCommandListenRef.current();
+        }
+      },
+      onFinal: (transcript) => {
+        if (
+          matchWakeWord(transcript, prefs.wakePhrase, prefs.sensitivity)
+        ) {
+          const rest = stripWakePhrase(transcript, prefs.wakePhrase).trim();
+          if (rest) {
+            stopWakeListen();
+            void sendTextRef.current(rest);
+          } else {
+            startCommandListenRef.current();
+          }
+        } else if (prefs.enabled && voiceStateRef.current === "idle") {
+          // restart continuous wake watch after utterance without wake
+          wakeRef.current?.stop();
+          window.setTimeout(() => startWakeListen(), 200);
+        }
+      },
+      onError: (msg) => {
+        if (msg !== "no-speech") setWakeHint(`Wake ASR: ${msg}`);
+      },
+      onEnd: () => {
+        if (
+          prefs.enabled &&
+          !busyRef.current &&
+          voiceStateRef.current === "idle"
+        ) {
+          window.setTimeout(() => startWakeListen(), 250);
+        }
+      },
+    });
+    wakeRef.current.start();
+  }
+
+  // Hands-free wake loop when idle
+  useEffect(() => {
+    if (!handsFree.enabled) {
+      stopWakeListen();
+      return;
+    }
+    if (voiceState === "idle" && !busy) {
+      startWakeListen();
+    } else if (voiceState !== "idle") {
+      // command/tts path owns mic; stop wake watcher
+      if (voiceState !== "listening") stopWakeListen();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional wake loop
+  }, [handsFree.enabled, handsFree.wakePhrase, handsFree.sensitivity, voiceState, busy]);
+
   function handlePtt(down: boolean) {
     if (busy) return;
 
     if (down) {
-      stopSpeaking();
-      setInterim("");
-      onVoiceState("listening");
-
-      asrRef.current = createAsrSession({
-        onInterim: setInterim,
-        onFinal: (transcript) => {
-          setInterim("");
-          void sendTextRef.current(transcript);
-        },
-        onError: (msg) => {
-          onError(msg);
-          onVoiceState("error");
-        },
-        onEnd: () => {
-          setInterim("");
-        },
-      });
-      asrRef.current.start();
+      startCommandListen();
       return;
     }
 
@@ -332,6 +457,7 @@ export function ChatPage({
 
   function handleDemoPtt() {
     if (busy) return;
+    stopWakeListen();
     stopSpeaking();
     onVoiceState("listening");
     window.setTimeout(() => {
@@ -339,10 +465,34 @@ export function ChatPage({
     }, 250);
   }
 
+  function handleBargeIn() {
+    if (!handsFree.bargeIn && voiceState !== "speaking") {
+      handleStopSpeak();
+      return;
+    }
+    stopSpeaking();
+    startCommandListen();
+  }
+
   function handleStopSpeak() {
     stopSpeaking();
     onVoiceState("idle");
   }
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.code !== "Space" || e.repeat) return;
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (voiceStateRef.current === "speaking" && handsFreeRef.current.bargeIn) {
+        e.preventDefault();
+        handleBargeIn();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleVoicePick(id: string) {
     setActiveVoiceId(id);
@@ -361,6 +511,11 @@ export function ChatPage({
         <span className="chip" title={engineNote}>
           voice <strong>{activeVoiceId ? "on" : "n/a"}</strong>
         </span>
+        {handsFree.enabled ? (
+          <span className="chip">
+            hands-free <strong>«{handsFree.wakePhrase}»</strong>
+          </span>
+        ) : null}
         <button type="button" className="btn" onClick={() => void handleNewChat()}>
           Новый диалог
         </button>
@@ -384,11 +539,22 @@ export function ChatPage({
           </button>
         ) : null}
         {voiceState === "speaking" ? (
-          <button type="button" className="btn btn-danger" onClick={handleStopSpeak}>
-            Стоп
-          </button>
+          <>
+            <button
+              type="button"
+              className="btn btn-danger"
+              onClick={handleBargeIn}
+              title="Стоп TTS и сразу слушать (Space)"
+            >
+              Перебить
+            </button>
+            <button type="button" className="btn" onClick={handleStopSpeak}>
+              Стоп
+            </button>
+          </>
         ) : null}
       </div>
+      {wakeHint ? <div className="chip">{wakeHint}</div> : null}
 
       {voices.length > 0 ? (
         <label className="row voice-select">
@@ -427,8 +593,8 @@ export function ChatPage({
       <div className="panel thread chat-thread">
         {bubbles.length === 0 ? (
           <p className="muted" style={{ margin: 0 }}>
-            Зажмите PTT и говорите — или напишите текст. Ответ озвучивается
-            автоматически.
+            Зажмите PTT, включите hands-free (Настройки → Голос) или напишите
+            текст. Во время озвучки — «Перебить» / Space.
           </p>
         ) : (
           bubbles.map((b) => (
