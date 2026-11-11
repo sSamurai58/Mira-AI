@@ -479,19 +479,23 @@ export async function sendChatMessage(
       getScreenPolicy().controlEnabled
     ) {
       const typed = parseTypeText(text);
-      if (typed && !parseClickCoords(text)) {
+      const coords = parseClickCoords(text);
+      if (typed && !coords) {
         const typedResult = await typeText(typed);
         desktopUsed = typedResult.ok
           ? `screen-type:${typedResult.mode}`
           : "screen-type-denied";
         desktopBlock = formatScreenBlock("type", typedResult);
-      } else {
-        const coords = parseClickCoords(text) ?? { x: 100, y: 100 };
+      } else if (coords) {
         const click = await clickAt(coords.x, coords.y);
         desktopUsed = click.ok
           ? `screen-click:${click.mode}`
           : "screen-click-denied";
         desktopBlock = formatScreenBlock("click", click);
+      } else {
+        desktopUsed = "screen-control-need-coords";
+        desktopBlock =
+          "[Экран: control]\nНужны явные координаты, например: «кликни 640, 360». Без координат клик не выполняется (защита от случайного клика по окну Mira).";
       }
     } else if (looksLikeBrowserOpenIntent(text) && getBrowserPolicy().enabled) {
       const url = extractOpenUrl(text);

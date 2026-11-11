@@ -233,7 +233,8 @@ export function SettingsIntegrationsSection() {
           <ol>
             <li>SCREEN_ENABLED — разрешить capture в `data/screenshots/`.</li>
             <li>
-              SCREEN_CONTROL_ENABLED — клик/ввод только после ConfirmModal.
+              SCREEN_CONTROL_ENABLED — клик/ввод только после ConfirmModal
+              (по умолчанию выкл.). Нужны координаты, например «кликни 640, 360».
             </li>
             <li>OS_PRIORITY — порядок платформ, например linux,windows,macos.</li>
           </ol>

@@ -3,6 +3,7 @@ import { APP_NAME, APP_PHASE } from "../config";
 import { installAutoGrowTextareas } from "./autoGrowTextareas";
 import { ConfirmModal } from "./components/ConfirmModal";
 import { ErrorBanner } from "./components/ErrorBanner";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ChatPage } from "./pages/ChatPage";
 import { HudPage } from "./pages/HudPage";
 import { MemoryPage } from "./pages/MemoryPage";
@@ -229,6 +230,15 @@ export function App() {
   }, [refreshHealth]);
 
   useEffect(() => {
+    if (!window.mira?.onConfirmDismiss) return;
+    return window.mira.onConfirmDismiss((payload) => {
+      setPendingConfirm((prev) =>
+        prev && payload?.id && prev.id === payload.id ? null : prev,
+      );
+    });
+  }, []);
+
+  useEffect(() => {
     if (!window.mira?.onConfirmRequest) return;
     return window.mira.onConfirmRequest((req) => {
       setPendingConfirm(req);
@@ -278,126 +288,130 @@ export function App() {
       <div className="atmosphere-mid" aria-hidden />
       <div className="atmosphere-grid" aria-hidden />
 
-      <aside className="nav">
-        <div className="brand-row">
-          <img
-            className="brand-logo"
-            src="./brand/mira-mark.svg"
-            width={28}
-            height={30}
-            alt=""
-            aria-hidden
-          />
-          <div className="brand-name">{APP_NAME}</div>
-          <div className="brand-phase">{APP_PHASE}</div>
-        </div>
-
-        <button
-          type="button"
-          className="btn-new-chat"
-          onClick={requestNewChat}
-        >
-          <span aria-hidden>+</span>
-          Новая беседа
-        </button>
-
-        <nav className="nav-list" aria-label="Основное">
-          {navLabels.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={`nav-btn ${nav === item.id ? "active" : ""}`}
-              data-tone={item.tone}
-              onClick={() => setNav(item.id)}
-            >
-              <NavIcon id={item.id} />
-              <span className="nav-btn-label">{item.label}</span>
-            </button>
-          ))}
-        </nav>
-
-        <div className="nav-spacer" />
-
-        <div className="core-level-card">
-          <div className="core-level-ring" aria-hidden>
-            <svg viewBox="0 0 56 56" width="56" height="56">
-              <circle
-                cx="28"
-                cy="28"
-                r="24"
-                fill="none"
-                stroke="var(--track)"
-                strokeWidth="4"
-              />
-              <circle
-                cx="28"
-                cy="28"
-                r="24"
-                fill="none"
-                stroke="var(--success)"
-                strokeWidth="4"
-                strokeLinecap="round"
-                strokeDasharray={`${ringDash} ${ringC}`}
-                transform="rotate(-90 28 28)"
-              />
-            </svg>
-            <span>{coreLevel}</span>
-          </div>
-          <div className="core-level-copy">
-            <strong>Уровень ядра</strong>
-            <span>1…∞ · растёт с Мирой</span>
-          </div>
-        </div>
-      </aside>
-
-      <div className="workspace">
-        {errorMessage ? (
-          <ErrorBanner
-            message={errorMessage}
-            onRetry={() => {
-              setErrorMessage(null);
-              setVoiceState("idle");
-              void refreshHealth();
-            }}
-            onDoctor={openDoctor}
-            onDismiss={() => setErrorMessage(null)}
-          />
-        ) : null}
-
-        <div className="workspace-body">
-          {nav === "home" || nav === "chat" ? (
-            <ChatPage
-              panel={nav === "home" ? "home" : "dialog"}
-              voiceState={voiceState}
-              sessionId={sessionId}
-              onSessionChange={handleSessionChange}
-              onError={setErrorMessage}
-              onVoiceState={setVoiceState}
-              autoSpeak={autoSpeak}
-              coreLevel={coreLevel}
+      <ErrorBoundary fallbackTitle="Навигация Mira сбойнула">
+        <aside className="nav">
+          <div className="brand-row">
+            <img
+              className="brand-logo"
+              src="./brand/mira-mark.svg"
+              width={28}
+              height={30}
+              alt=""
+              aria-hidden
             />
-          ) : null}
-          {nav === "memory" ? (
-            <MemoryPage
-              onOpenSession={(id) => {
-                setSessionId(id);
-                setNav("chat");
+            <div className="brand-name">{APP_NAME}</div>
+            <div className="brand-phase">{APP_PHASE}</div>
+          </div>
+
+          <button
+            type="button"
+            className="btn-new-chat"
+            onClick={requestNewChat}
+          >
+            <span aria-hidden>+</span>
+            Новая беседа
+          </button>
+
+          <nav className="nav-list" aria-label="Основное">
+            {navLabels.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`nav-btn ${nav === item.id ? "active" : ""}`}
+                data-tone={item.tone}
+                onClick={() => setNav(item.id)}
+              >
+                <NavIcon id={item.id} />
+                <span className="nav-btn-label">{item.label}</span>
+              </button>
+            ))}
+          </nav>
+
+          <div className="nav-spacer" />
+
+          <div className="core-level-card">
+            <div className="core-level-ring" aria-hidden>
+              <svg viewBox="0 0 56 56" width="56" height="56">
+                <circle
+                  cx="28"
+                  cy="28"
+                  r="24"
+                  fill="none"
+                  stroke="var(--track)"
+                  strokeWidth="4"
+                />
+                <circle
+                  cx="28"
+                  cy="28"
+                  r="24"
+                  fill="none"
+                  stroke="var(--success)"
+                  strokeWidth="4"
+                  strokeLinecap="round"
+                  strokeDasharray={`${ringDash} ${ringC}`}
+                  transform="rotate(-90 28 28)"
+                />
+              </svg>
+              <span>{coreLevel}</span>
+            </div>
+            <div className="core-level-copy">
+              <strong>Уровень ядра</strong>
+              <span>1…∞ · растёт с Мирой</span>
+            </div>
+          </div>
+        </aside>
+      </ErrorBoundary>
+
+      <ErrorBoundary fallbackTitle="Рабочая область Mira сбойнула">
+        <div className="workspace">
+          {errorMessage ? (
+            <ErrorBanner
+              message={errorMessage}
+              onRetry={() => {
+                setErrorMessage(null);
+                setVoiceState("idle");
+                void refreshHealth();
               }}
+              onDoctor={openDoctor}
+              onDismiss={() => setErrorMessage(null)}
             />
           ) : null}
-          {nav === "workshop" ? <WorkshopPage /> : null}
-          {nav === "settings" ? (
-            <SettingsPage
-              themeId={themeId}
-              onThemeChange={setThemeId}
-              bgPatternId={bgPatternId}
-              onBgPatternChange={setBgPatternId}
-              healthText={healthText}
-              onOpenDoctor={openDoctor}
-            />
-          ) : null}
+
+          <div className="workspace-body">
+            {nav === "home" || nav === "chat" ? (
+              <ChatPage
+                panel={nav === "home" ? "home" : "dialog"}
+                voiceState={voiceState}
+                sessionId={sessionId}
+                onSessionChange={handleSessionChange}
+                onError={setErrorMessage}
+                onVoiceState={setVoiceState}
+                autoSpeak={autoSpeak}
+                coreLevel={coreLevel}
+              />
+            ) : null}
+            {nav === "memory" ? (
+              <MemoryPage
+                onOpenSession={(id) => {
+                  setSessionId(id);
+                  setNav("chat");
+                }}
+              />
+            ) : null}
+            {nav === "workshop" ? <WorkshopPage /> : null}
+            {nav === "settings" ? (
+              <SettingsPage
+                themeId={themeId}
+                onThemeChange={setThemeId}
+                bgPatternId={bgPatternId}
+                onBgPatternChange={setBgPatternId}
+                healthText={healthText}
+                onOpenDoctor={openDoctor}
+              />
+            ) : null}
+          </div>
         </div>
-      </div>
+      </ErrorBoundary>
 
       <ConfirmModal
         open={Boolean(pendingConfirm)}

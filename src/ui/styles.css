@@ -103,16 +103,15 @@ strong {
   box-sizing: border-box;
   isolation: isolate;
   overflow: hidden;
-  contain: layout paint;
+  /* Avoid contain:paint — with GPU it can composite absolute atmosphere over nav/workspace (blank UI). */
 }
 
 .atmosphere {
   pointer-events: none;
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   overflow: hidden;
-  contain: paint;
   /* Flat theme fill only — no ambient glows; pattern lives on .atmosphere-grid */
   background: var(--bg);
 }
@@ -127,10 +126,9 @@ strong {
 .atmosphere-mid {
   pointer-events: none;
   position: absolute;
-  z-index: 0;
+  z-index: -1;
   inset: 0;
   overflow: hidden;
-  contain: paint;
 }
 
 /* Static atmosphere patterns — no glow; ink from --text-muted */
@@ -138,7 +136,7 @@ strong {
   pointer-events: none;
   position: absolute;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   overflow: hidden;
   opacity: 0.048;
   background-color: transparent;
@@ -251,6 +249,25 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   to {
     transform: translate(28px, -28px) scale(1.08);
   }
+}
+
+.ui-crash-panel {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+  padding: 28px;
+  border-radius: var(--radius);
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+  background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+  color: var(--text);
+}
+
+.ui-crash-panel h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
 }
 
 .nav,

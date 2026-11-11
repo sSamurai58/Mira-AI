@@ -553,6 +553,9 @@ interface MiraBridge {
     fields?: { skillId?: string; skillName?: string },
   ) => Promise<{ ok: boolean }>;
   onConfirmRequest: (handler: (req: MiraConfirmRequest) => void) => () => void;
+  onConfirmDismiss: (
+    handler: (payload: { id: string }) => void,
+  ) => () => void;
   onChatEvent: (
     handler: (payload: { requestId: string; event: MiraChatEvent }) => void,
   ) => () => void;
