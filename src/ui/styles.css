@@ -2045,12 +2045,33 @@ select:disabled {
   display: grid;
   grid-template-columns: minmax(180px, 220px) 1fr;
   gap: var(--gap);
+  align-items: stretch;
+  min-height: 0;
+  height: 100%;
+}
+
+/* Scroll only the content panel — keep left nav fixed */
+.workspace-body > .settings-layout {
+  overflow: hidden;
 }
 
 .settings-nav {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  align-self: start;
+  position: sticky;
+  top: 0;
+  max-height: 100%;
+  overflow: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.settings-nav::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 .theme-card {
@@ -2440,6 +2461,26 @@ select:disabled {
 
 .settings-layout > .panel.stack {
   gap: 16px;
+  min-height: 0;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--accent) 35%, transparent) transparent;
+}
+
+.settings-layout > .panel.stack::-webkit-scrollbar {
+  width: 8px;
+}
+
+.settings-layout > .panel.stack::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.settings-layout > .panel.stack::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 @media (max-width: 900px) {
