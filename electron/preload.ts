@@ -256,6 +256,7 @@ contextBridge.exposeInMainWorld("mira", {
     bytes: number[] | Uint8Array;
     fileName: string;
     title?: string;
+    extractedText?: string;
   }) => call("mira:import-library-bytes", payload),
   processLibraryItem: (id: string) => call("mira:process-library-item", id),
   proposeLibrarySkill: (id: string) => call("mira:propose-library-skill", id),

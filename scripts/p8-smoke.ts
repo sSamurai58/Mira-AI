@@ -42,14 +42,14 @@ async function main() {
     "library",
     "attention-notes.md",
   );
-  const item = importLibraryFile({
+  const item = await importLibraryFile({
     filePath: sample,
     title: "Внимание и фокус",
   });
   assert.equal(item.status, "new");
   assert.ok(item.extracted_text && item.extracted_text.length > 20);
 
-  const processed = processLibraryItem(item.id);
+  const processed = await processLibraryItem(item.id);
   assert.equal(processed.item.status, "ready");
   assert.ok(processed.units.length >= 4);
   assert.ok(processed.plan.length >= 3);
@@ -64,7 +64,7 @@ async function main() {
   assert.ok(found.length >= 1);
 
   // 14.8 reprocess bumps version
-  const again = processLibraryItem(item.id);
+  const again = await processLibraryItem(item.id);
   assert.equal(again.item.version, processed.item.version + 1);
 
   const skill = await proposeSkillFromItem(item.id);

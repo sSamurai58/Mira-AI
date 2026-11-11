@@ -18,6 +18,10 @@ import {
   type LearnedUnitRow,
   type LibraryItemRow,
 } from "../store";
+import {
+  extractPdfBuffer,
+  isReadablePdfText,
+} from "./pdfExtract";
 
 export type LibraryAnalysis = {
   theses: string[];
@@ -41,25 +45,13 @@ export function detectMediaType(filePath: string): string {
   return "unknown";
 }
 
-/** Decode PDF literal-string escapes (octal + common escapes). */
-function decodePdfLiteral(raw: string): string {
-  return raw
-    .replace(/\\([0-7]{1,3})/g, (_, oct: string) =>
-      String.fromCharCode(Number.parseInt(oct, 8) & 0xff),
-    )
-    .replace(/\\([nrtbf()\\])/g, (_, c: string) => {
-      if (c === "n") return "\n";
-      if (c === "r") return "\r";
-      if (c === "t") return "\t";
-      return c;
-    });
-}
-
 /**
  * Heuristic: does this look like human language (not raw PDF/binary noise)?
  * Exported for smoke tests.
  */
 export function isReadableHumanText(text: string): boolean {
+  // Reuse PDF gate (handles short title-page extracts too).
+  if (isReadablePdfText(text)) return true;
   const s = text.replace(/\s+/g, " ").trim();
   if (s.length < 24) return false;
   if (/^\[(pdf|epub|audio|video)\b/i.test(s)) return false;
@@ -71,51 +63,6 @@ export function isReadableHumanText(text: string): boolean {
   const noise =
     (s.match(/[^\s\wа-яА-ЯёЁ.,;:!?«»"'()\-–—%/+\-*=\[\]{}]/g) ?? []).length;
   return noise / s.length <= 0.18;
-}
-
-/** Best-effort PDF text: pull printable strings and (Tj)/(TJ) payloads. */
-function extractPdfText(buf: Buffer): string {
-  const latin = buf.toString("latin1");
-  const chunks: string[] = [];
-  const tjRe = /\((?:\\.|[^\\)]){1,500}\)(?:\s*Tj|\s*TJ)/g;
-  let m: RegExpExecArray | null;
-  while ((m = tjRe.exec(latin)) && chunks.length < 4000) {
-    const inner = decodePdfLiteral(
-      m[0].replace(/\)\s*T[jJ]$/, "").replace(/^\(/, ""),
-    );
-    if (inner.trim()) chunks.push(inner);
-  }
-  // Hex strings: <48656C6C6F>
-  const hexRe = /<([0-9A-Fa-f\s]{4,})>/g;
-  while ((m = hexRe.exec(latin)) && chunks.length < 4000) {
-    const hex = m[1].replace(/\s+/g, "");
-    if (hex.length % 2 !== 0) continue;
-    try {
-      const bytes = Buffer.from(hex, "hex");
-      const asUtf8 = bytes.toString("utf8");
-      if (isReadableHumanText(asUtf8)) chunks.push(asUtf8);
-      else {
-        const asLatin = bytes.toString("latin1");
-        if (isReadableHumanText(asLatin)) chunks.push(asLatin);
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-
-  const joined = chunks.join(" ").replace(/\s+/g, " ").trim();
-  if (chunks.length >= 3 && isReadableHumanText(joined)) return joined;
-
-  // Fallback: long printable runs — only keep readable ones
-  const runs = latin.match(/[\x20-\x7E\u00A0-\u00FF]{8,}/g) ?? [];
-  const filtered = runs
-    .filter((r) => !/^%PDF|endobj|stream|xref|trailer|obj\b/i.test(r))
-    .filter((r) => isReadableHumanText(r) || /[A-Za-zА-Яа-яЁё]{4,}/.test(r))
-    .slice(0, 800);
-  const fallback = filtered.join(" ").replace(/\s+/g, " ").trim();
-  if (isReadableHumanText(fallback)) return fallback;
-  if (isReadableHumanText(joined)) return joined;
-  return "";
 }
 
 function sidecarTranscript(filePath: string): string | null {
@@ -131,10 +78,10 @@ function sidecarTranscript(filePath: string): string | null {
   return null;
 }
 
-export function extractContent(
+export async function extractContent(
   filePath: string,
   mediaType: string,
-): { text: string; note: string } {
+): Promise<{ text: string; note: string }> {
   if (!fs.existsSync(filePath)) {
     throw new Error(`Файл не найден: ${filePath}`);
   }
@@ -145,11 +92,11 @@ export function extractContent(
   if (mediaType === "pdf") {
     try {
       const raw = fs.readFileSync(filePath);
-      const extracted = extractPdfText(raw);
-      if (extracted.length > 40 && isReadableHumanText(extracted)) {
+      const extracted = await extractPdfBuffer(raw);
+      if (extracted.text && isReadableHumanText(extracted.text)) {
         return {
-          text: extracted.slice(0, 50_000),
-          note: `pdf: извлечено ~${extracted.length} символов (best-effort stream parser)`,
+          text: extracted.text.slice(0, 50_000),
+          note: `pdf: ${extracted.note}`,
         };
       }
       const side = sidecarTranscript(filePath);
@@ -159,9 +106,15 @@ export function extractContent(
           note: "pdf: sidecar transcript (.md/.txt рядом)",
         };
       }
+      if (extracted.text && extracted.text.length > 40) {
+        return {
+          text: extracted.text.slice(0, 50_000),
+          note: `pdf: ${extracted.note} (низкая читаемость)`,
+        };
+      }
       return {
-        text: `[pdf] Файл «${path.basename(filePath)}» (${raw.length} байт) без читаемого текстового слоя (скан/сжатый поток). Это ещё не skill — положите рядом .md/.txt с тем же именем или вставьте текст вручную, затем «Разобрать» и «Предложить skill».`,
-        note: "pdf: unreadable / little text layer",
+        text: `[pdf] Файл «${path.basename(filePath)}» (${raw.length} байт) без читаемого текста. Попробованы pdf.js и OCR встроенных JPEG. Положите рядом .md/.txt или вставьте текст вручную, затем «Разобрать» и «Предложить skill».`,
+        note: extracted.note || "pdf: unreadable",
       };
     } catch {
       return { text: `[pdf] Не удалось извлечь`, note: "extract failed" };
@@ -305,10 +258,10 @@ function assertAllowedImportPath(absPath: string): void {
   }
 }
 
-export function importLibraryFile(opts: {
+export async function importLibraryFile(opts: {
   filePath: string;
   title?: string;
-}): LibraryItemRow {
+}): Promise<LibraryItemRow> {
   const abs = path.resolve(opts.filePath);
   assertAllowedImportPath(abs);
   if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
@@ -319,7 +272,7 @@ export function importLibraryFile(opts: {
   const destDir = libraryRoot();
   const dest = path.join(destDir, `${Date.now()}-${base}`);
   fs.copyFileSync(abs, dest);
-  const extracted = extractContent(dest, mediaType);
+  const extracted = await extractContent(dest, mediaType);
   return insertLibraryItem({
     title: opts.title?.trim() || base.replace(/\.[^.]+$/, ""),
     kind: mediaType === "text" ? "document" : mediaType,
@@ -352,11 +305,13 @@ export function importLibraryText(opts: {
 const MAX_LIBRARY_BYTES = 20_000_000;
 
 /** Import raw bytes from renderer file picker / chat attach. */
-export function importLibraryBytes(opts: {
+export async function importLibraryBytes(opts: {
   bytes: Uint8Array | Buffer;
   fileName: string;
   title?: string;
-}): LibraryItemRow {
+  /** Optional pre-extracted text from renderer (pdf.js / OCR). */
+  extractedText?: string;
+}): Promise<LibraryItemRow> {
   const buf = Buffer.from(opts.bytes);
   if (buf.byteLength < 1) throw new Error("Пустой файл");
   if (buf.byteLength > MAX_LIBRARY_BYTES) {
@@ -370,7 +325,11 @@ export function importLibraryBytes(opts: {
   const dest = path.join(destDir, `${Date.now()}-${safe}`);
   fs.writeFileSync(dest, buf);
   const mediaType = detectMediaType(dest);
-  const extracted = extractContent(dest, mediaType);
+  const pre = opts.extractedText?.trim() ?? "";
+  const extracted =
+    pre && isReadableHumanText(pre)
+      ? { text: pre.slice(0, 50_000), note: "client extract" }
+      : await extractContent(dest, mediaType);
   return insertLibraryItem({
     title: opts.title?.trim() || safe.replace(/\.[^.]+$/, ""),
     kind: mediaType === "text" ? "document" : mediaType,
@@ -429,20 +388,24 @@ function slugify(s: string): string {
   return slug || "material";
 }
 
-export function processLibraryItem(id: string): {
+export async function processLibraryItem(id: string): Promise<{
   item: LibraryItemRow;
   analysis: LibraryAnalysis;
   plan: string[];
   units: LearnedUnitRow[];
-} {
+}> {
   const item = getLibraryItem(id);
   if (!item) throw new Error(`Материал не найден: ${id}`);
 
   updateLibraryItem(id, { status: "processing" });
 
   let text = item.extracted_text ?? "";
-  if (!text && item.source_path) {
-    const extracted = extractContent(item.source_path, item.media_type);
+  // Re-extract PDFs so older mojibake imports get a second chance with pdf.js/OCR.
+  const shouldReextract =
+    Boolean(item.source_path) &&
+    (item.media_type === "pdf" || !text || !isReadableHumanText(text));
+  if (shouldReextract && item.source_path) {
+    const extracted = await extractContent(item.source_path, item.media_type);
     text = extracted.text;
     updateLibraryItem(id, { extractedText: text });
   }

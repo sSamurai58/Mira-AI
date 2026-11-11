@@ -94,27 +94,47 @@ export function LibraryPanel() {
     const names: string[] = [];
     try {
       for (const file of Array.from(list)) {
+        let clientText = "";
+        if (
+          file.type === "application/pdf" ||
+          /\.pdf$/i.test(file.name)
+        ) {
+          try {
+            const { extractPdfInBrowser } = await import("../library/pdfClient");
+            const pdf = await extractPdfInBrowser(file);
+            clientText = pdf.text;
+            if (pdf.note) {
+              setNote(`PDF «${file.name}»: ${pdf.note}`);
+            }
+          } catch (err) {
+            setNote(
+              err instanceof Error
+                ? err.message
+                : `PDF «${file.name}»: не удалось прочитать`,
+            );
+          }
+        } else if (
+          file.type.startsWith("text/") ||
+          /\.(md|txt|markdown|json|csv)$/i.test(file.name)
+        ) {
+          clientText = await file.text();
+        }
+
         if (window.mira?.importLibraryBytes) {
           const buf = new Uint8Array(await file.arrayBuffer());
           const item = await window.mira.importLibraryBytes({
             bytes: Array.from(buf),
             fileName: file.name,
             title: file.name.replace(/\.[^.]+$/, ""),
+            extractedText: clientText || undefined,
           });
           names.push(item.title);
           await selectItem(item.id);
         } else {
-          let extracted = "";
-          if (
-            file.type.startsWith("text/") ||
-            /\.(md|txt|markdown|json|csv)$/i.test(file.name)
-          ) {
-            extracted = await file.text();
-          }
           const item = localImportLibraryBytes({
             title: file.name.replace(/\.[^.]+$/, ""),
             fileName: file.name,
-            text: extracted || undefined,
+            text: clientText || undefined,
           });
           names.push(item.title);
           await selectItem(item.id);
@@ -184,10 +204,9 @@ export function LibraryPanel() {
           <span className="chip">P8</span>
         </div>
         <p className="muted" style={{ margin: 0 }}>
-          Добавьте текст или файлы (лучше md/txt; PDF только с текстовым слоем) →
-          «Разобрать» → появятся <em>выдержки</em> (тезисы/фразы). Это ещё не
-          skills. Skill создаётся кнопкой «Предложить skill» и лежит в Мастерская
-          → Skills (по умолчанию выключен).
+          Добавьте текст или файлы (md/txt/pdf…). PDF читается через pdf.js; сканы
+          — OCR (рус+eng). Затем «Разобрать» → <em>выдержки</em> (тезисы/фразы).
+          Skill — кнопкой «Предложить skill» → Мастерская → Skills.
           {!electron
             ? " Сейчас browser-demo: материалы в localStorage."
             : ""}

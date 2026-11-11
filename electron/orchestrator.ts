@@ -271,9 +271,9 @@ function buildUserContentWithAttachments(
   return { storedText, promptText, images };
 }
 
-function maybeImportAttachmentsToLibrary(
+async function maybeImportAttachmentsToLibrary(
   attachments: ChatAttachmentInput[],
-): string[] {
+): Promise<string[]> {
   const imported: string[] = [];
   for (const a of attachments) {
     try {
@@ -288,10 +288,11 @@ function maybeImportAttachmentsToLibrary(
       }
       if (a.dataBase64) {
         const bytes = Buffer.from(a.dataBase64, "base64");
-        const item = importLibraryBytes({
+        const item = await importLibraryBytes({
           bytes,
           fileName: a.name,
           title: a.name.replace(/\.[^.]+$/, "") || a.name,
+          extractedText: a.text,
         });
         imported.push(item.title);
       }
@@ -332,7 +333,7 @@ export async function sendChatMessage(
 
   let libraryNote: string | null = null;
   if (input.addToLibrary && attachments.length) {
-    const titles = maybeImportAttachmentsToLibrary(attachments);
+    const titles = await maybeImportAttachmentsToLibrary(attachments);
     if (titles.length) {
       libraryNote = `Добавлено в материалы обучения: ${titles.join(", ")}. Workshop → Обучение → «Разобрать».`;
     }

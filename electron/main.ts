@@ -663,12 +663,14 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
         bytes: number[] | Uint8Array;
         fileName: string;
         title?: string;
+        extractedText?: string;
       },
     ) =>
       importLibraryBytes({
         bytes: Uint8Array.from(payload.bytes),
         fileName: payload.fileName,
         title: payload.title,
+        extractedText: payload.extractedText,
       }),
     { privileged: true },
   );

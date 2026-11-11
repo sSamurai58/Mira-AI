@@ -580,6 +580,7 @@ interface MiraBridge {
     bytes: number[] | Uint8Array;
     fileName: string;
     title?: string;
+    extractedText?: string;
   }) => Promise<MiraLibraryItem>;
   processLibraryItem: (id: string) => Promise<{
     item: MiraLibraryItem;
