@@ -23,6 +23,7 @@ linux:
 win:
   target:
     - nsis
+  artifactName: Mira-Setup-${version}.${ext}
 mac:
   target:
     - dmg

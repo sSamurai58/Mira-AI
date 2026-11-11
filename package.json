@@ -3,6 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "description": "Mira — local voice AI assistant",
+  "author": "Mira",
   "main": "dist-electron/main.js",
   "repository": {
     "type": "git",
@@ -34,6 +35,7 @@
     "f-all:smoke": "tsx scripts/f-all-smoke.ts",
     "pack": "npm run build && electron-builder --config electron-builder.yml",
     "pack:dir": "npm run build && electron-builder --config electron-builder.yml --dir",
+    "pack:windows": "node Windows/scripts/build-installer.mjs",
     "release": "npm run build && electron-builder --config electron-builder.yml --publish always",
     "start": "npm run build && electron ."
   },

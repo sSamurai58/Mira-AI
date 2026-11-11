@@ -1,0 +1,42 @@
+appId: ai.mira.desktop
+productName: Mira
+copyright: Copyright © Mira
+directories:
+  output: Windows
+  buildResources: Windows/build
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+  - "!**/*.map"
+  - "!Windows/**"
+  # Native win32 rebuild is done on windows-latest CI. Linux cross-pack
+  # skips node-pty binaries — Mira terminal falls back to spawn.
+  - "!node_modules/node-pty/build/**"
+  - "!node_modules/node-pty/prebuilds/**"
+asar: true
+npmRebuild: false
+nodeGypRebuild: false
+extraMetadata:
+  main: dist-electron/main.js
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  artifactName: Mira-Setup-${version}.${ext}
+  # portable uses same pattern; electron-builder suffixes by target
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Mira
+  language: 1049
+  include: Windows/nsis/installer.nsh
+  license: Windows/nsis/license.txt
+portable:
+  artifactName: Mira-Portable-${version}.${ext}

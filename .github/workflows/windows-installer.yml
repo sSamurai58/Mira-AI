@@ -1,0 +1,44 @@
+name: Windows installer
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "Windows/**"
+      - "electron/**"
+      - "src/**"
+      - "package.json"
+      - "electron-builder.yml"
+      - "Windows/config/**"
+    branches:
+      - "cursor/windows-installer-*"
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  pack-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Build Windows installer
+        env:
+          LLM_PROVIDER: mock
+        run: npm run pack:windows
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mira-windows-installer
+          path: |
+            Windows/Mira-Setup-*.exe
+            Windows/Mira-Portable-*.exe
+            Windows/latest.yml
+          if-no-files-found: error
