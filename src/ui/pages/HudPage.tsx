@@ -81,7 +81,22 @@ export function HudPage() {
           alignItems: "baseline",
         }}
       >
-        <strong style={{ letterSpacing: "0.04em", fontSize: "1.15rem" }}>
+        <strong
+          style={{
+            letterSpacing: "0.04em",
+            fontSize: "1.15rem",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <img
+            src="/brand/mira-mark.svg"
+            width={18}
+            height={20}
+            alt=""
+            aria-hidden
+          />
           {APP_NAME}
         </strong>
         <span style={{ opacity: 0.75, fontSize: "0.8rem" }}>{voice}</span>
