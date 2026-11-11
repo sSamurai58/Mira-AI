@@ -281,37 +281,10 @@ export async function sendChatMessage(
   let addonUsed: string | null = null;
   let addonBlock: string | null = null;
 
-  // Prefer explicit tool intents over generic web when both match.
+  // Must tools first, then F* addons, then generic web — avoid calendar
+  // stealing «Напиши … в Telegram, что встреча…».
   try {
-    if (looksLikeNotesIntent(text)) {
-      const res = handleNotesFromChat(text);
-      addonUsed = res.used;
-      addonBlock = res.block;
-    } else if (looksLikeCalendarIntent(text)) {
-      const res = handleCalendarFromChat(text);
-      addonUsed = res.used;
-      addonBlock = res.block;
-    } else if (looksLikeFilesIntent(text)) {
-      const res = await handleFilesFromChat(text);
-      addonUsed = res.used;
-      addonBlock = res.block;
-    } else if (looksLikeMailIntent(text)) {
-      const res = await handleMailFromChat(text);
-      addonUsed = res.used;
-      addonBlock = res.block;
-    } else if (looksLikeMediaIntent(text)) {
-      const res = handleMediaFromChat(text);
-      addonUsed = res.used;
-      addonBlock = res.block;
-    } else if (looksLikeCameraIntent(text)) {
-      const res = await handleCameraFromChat(text);
-      addonUsed = res.used;
-      addonBlock = res.block;
-    } else if (looksLikeIotIntent(text)) {
-      const res = await handleIotFromChat(text);
-      addonUsed = res.used;
-      addonBlock = res.block;
-    } else if (looksLikeBlenderIntent(text) && getBlenderPolicy().enabled) {
+    if (looksLikeBlenderIntent(text) && getBlenderPolicy().enabled) {
       const job = await runDemoScene();
       blenderUsed = `blender:${job.task}:${job.mode}${job.ok ? "" : "-fail"}`;
       blenderBlock = formatBlenderBlock(job);
@@ -342,7 +315,36 @@ export async function sendChatMessage(
         messagingBlock =
           "[Мессенджер] Не удалось разобрать получателя/текст. Пример: «Напиши Ивану в Telegram, что встречу переносим».";
       }
+    } else if (looksLikeNotesIntent(text)) {
+      const res = handleNotesFromChat(text);
+      addonUsed = res.used;
+      addonBlock = res.block;
+    } else if (looksLikeCalendarIntent(text)) {
+      const res = handleCalendarFromChat(text);
+      addonUsed = res.used;
+      addonBlock = res.block;
+    } else if (looksLikeFilesIntent(text)) {
+      const res = await handleFilesFromChat(text);
+      addonUsed = res.used;
+      addonBlock = res.block;
+    } else if (looksLikeMailIntent(text)) {
+      const res = await handleMailFromChat(text);
+      addonUsed = res.used;
+      addonBlock = res.block;
+    } else if (looksLikeMediaIntent(text)) {
+      const res = handleMediaFromChat(text);
+      addonUsed = res.used;
+      addonBlock = res.block;
+    } else if (looksLikeCameraIntent(text)) {
+      const res = await handleCameraFromChat(text);
+      addonUsed = res.used;
+      addonBlock = res.block;
+    } else if (looksLikeIotIntent(text)) {
+      const res = await handleIotFromChat(text);
+      addonUsed = res.used;
+      addonBlock = res.block;
     } else if (looksLikeScreenSeeIntent(text) && getScreenPolicy().enabled) {
+
       const shot = await captureScreen();
       let visionNote: string | null = null;
       try {
