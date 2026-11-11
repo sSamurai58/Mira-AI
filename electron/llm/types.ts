@@ -1,8 +1,15 @@
 export type ChatRole = "system" | "user" | "assistant";
 
+export type ChatImagePart = {
+  mimeType: string;
+  dataBase64: string;
+};
+
 export type ChatMessage = {
   role: ChatRole;
   content: string;
+  /** Optional inline images for vision-capable providers. */
+  images?: ChatImagePart[];
 };
 
 export type StreamHandlers = {

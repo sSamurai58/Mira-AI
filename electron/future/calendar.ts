@@ -1,4 +1,5 @@
 import { openStore } from "../store";
+import { appendAppLog } from "../logging";
 
 export type CalendarEventRow = {
   id: string;
@@ -115,6 +116,85 @@ export function cancelTimer(id?: string): TimerRow | null {
     .run(row.id);
   return { ...row, status: "cancelled" };
 }
+
+export function markTimerDone(id: string): TimerRow | null {
+  const store = openStore();
+  const row = store
+    .prepare(`SELECT * FROM timers WHERE id = ?`)
+    .get(id) as TimerRow | undefined;
+  if (!row) return null;
+  store.prepare(`UPDATE timers SET status = 'done' WHERE id = ?`).run(id);
+  return { ...row, status: "done" };
+}
+
+async function showDesktopNotification(
+  title: string,
+  body: string,
+): Promise<boolean> {
+  try {
+    if (typeof process.versions.electron === "string") {
+      const { Notification } = await import("electron");
+      if (Notification.isSupported()) {
+        new Notification({ title, body }).show();
+        return true;
+      }
+    }
+  } catch {
+    // headless
+  }
+  return false;
+}
+
+/** Fire due timers / reminders; call from main poll. */
+export async function tickCalendarNotifications(): Promise<{
+  timers: number;
+  reminders: number;
+}> {
+  const store = openStore();
+  const now = new Date().toISOString();
+  const dueTimers = store
+    .prepare(
+      `SELECT * FROM timers WHERE status = 'running' AND ends_at <= ? LIMIT 20`,
+    )
+    .all(now) as TimerRow[];
+  let timers = 0;
+  for (const t of dueTimers) {
+    markTimerDone(t.id);
+    const shown = await showDesktopNotification(
+      "Mira · таймер",
+      `«${t.label}» завершён (${t.seconds}с)`,
+    );
+    appendAppLog({
+      level: "info",
+      category: "calendar",
+      message: `timer done ${t.id} notify=${shown}`,
+    });
+    timers += 1;
+  }
+
+  const dueEvents = store
+    .prepare(
+      `SELECT * FROM calendar_events
+       WHERE remind_at IS NOT NULL AND remind_at <= ? AND remind_at > ?
+       LIMIT 20`,
+    )
+    .all(now, new Date(Date.now() - 60_000).toISOString()) as CalendarEventRow[];
+  let reminders = 0;
+  for (const ev of dueEvents) {
+    const shown = await showDesktopNotification(
+      "Mira · напоминание",
+      `${ev.title} · ${ev.starts_at}`,
+    );
+    appendAppLog({
+      level: "info",
+      category: "calendar",
+      message: `reminder ${ev.id} notify=${shown}`,
+    });
+    reminders += 1;
+  }
+  return { timers, reminders };
+}
+
 
 function parseTimerSeconds(text: string): number | null {
   const m =

@@ -1,5 +1,5 @@
 /**
- * Smoke for remaining F* except F10: F1–F8 + F12.
+ * Smoke for F* pack: F1–F8 + F10 + F12 (F9/F11/F13 have dedicated smokes).
  */
 import assert from "node:assert/strict";
 import { loadConfig } from "../electron/config";
@@ -15,8 +15,10 @@ import { handleIotFromChat } from "../electron/future/iot";
 import { handleMailFromChat } from "../electron/future/mail";
 import { handleMediaFromChat } from "../electron/future/media";
 import { handleNotesFromChat, listNotes } from "../electron/future/notes";
+import { getActiveProfile, listProfiles } from "../electron/profiles";
 import { sendChatMessage } from "../electron/orchestrator";
 import { closeStore, openStore } from "../electron/store";
+
 
 loadConfig(true);
 process.env.LLM_PROVIDER = "mock";
@@ -64,6 +66,10 @@ async function main() {
   const iot = await handleIotFromChat("Включи свет");
   assert.ok(iot.used.startsWith("iot:"));
 
+  // F10 profiles
+  assert.ok(listProfiles().length >= 1);
+  assert.ok(getActiveProfile().id);
+
   // Dialog addon path + F8 is UI-only (lang prefs)
   let addonUsed: string | null = null;
   await sendChatMessage(
@@ -81,13 +87,26 @@ async function main() {
         f12: getConfirmPolicy().mode,
         notes: listNotes().length,
         addonUsed,
-        covered: ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8(ui)", "F12"],
-        skipped: ["F10"],
+        profiles: listProfiles().length,
+        covered: [
+          "F1",
+          "F2",
+          "F3",
+          "F4",
+          "F5",
+          "F6",
+          "F7",
+          "F8(ui)",
+          "F10",
+          "F12",
+        ],
+        skipped: [],
       },
       null,
       2,
     ),
   );
+
   closeStore();
 }
 

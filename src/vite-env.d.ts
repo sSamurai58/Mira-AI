@@ -22,12 +22,20 @@ interface SpeechRecognitionErrorEvent extends Event {
 }
 
 type MiraPublicConfig = {
-  llmProvider: "openai" | "mock";
+  llmProvider: "openai" | "claude" | "gemini" | "offline" | "mock";
   llmModel: string;
   hasOpenAiKey: boolean;
+  hasAnthropicKey?: boolean;
+  hasGeminiKey?: boolean;
   openaiBaseUrl: string;
   databasePath: string;
+  visionEnabled?: boolean;
+  activeProfileId?: string;
+  webEnabled?: boolean;
+  webAllowlist?: string;
+  webFetchConfirm?: boolean;
 };
+
 
 type MiraSession = {
   id: string;
@@ -715,7 +723,55 @@ interface MiraBridge {
   listMail: (folder?: string) => Promise<unknown[]>;
   getMediaStatus: () => Promise<unknown>;
   searchFiles: (query?: string) => Promise<string[]>;
+  listProfiles: () => Promise<
+    Array<{
+      id: string;
+      name: string;
+      voiceId: string | null;
+      llmProvider: string | null;
+      llmModel: string | null;
+      locale: "ru" | "en";
+      notes: string;
+      createdAt: string;
+      updatedAt: string;
+    }>
+  >;
+  getProfilesSnapshot: () => Promise<{
+    activeId: string;
+    profiles: unknown[];
+    path: string;
+    secretsNote: string;
+  }>;
+  getActiveProfile: () => Promise<{
+    id: string;
+    name: string;
+    voiceId: string | null;
+    llmProvider: string | null;
+    llmModel: string | null;
+    locale: "ru" | "en";
+    notes: string;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  setActiveProfile: (id: string) => Promise<unknown>;
+  upsertProfile: (payload: {
+    id?: string;
+    name: string;
+    voiceId?: string | null;
+    llmProvider?: string | null;
+    llmModel?: string | null;
+    locale?: "ru" | "en";
+    notes?: string;
+  }) => Promise<unknown>;
+  deleteProfile: (id: string) => Promise<{ ok: boolean; detail: string }>;
+  getHudPolicy: () => Promise<{
+    enabled: boolean;
+    alwaysOnTop: boolean;
+    open: boolean;
+  }>;
+  toggleHud: () => Promise<{ open: boolean }>;
 }
+
 
 interface Window {
   mira?: MiraBridge;

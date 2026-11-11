@@ -41,6 +41,8 @@ import {
   parseTypeText,
   typeText,
 } from "./tools/screen";
+import { describeScreenshot } from "./llm/vision";
+
 import {
   executeTerminalFromChat,
   extractTerminalCommand,
@@ -342,8 +344,18 @@ export async function sendChatMessage(
       }
     } else if (looksLikeScreenSeeIntent(text) && getScreenPolicy().enabled) {
       const shot = await captureScreen();
-      desktopUsed = "screen-capture";
-      desktopBlock = formatScreenBlock("capture", shot);
+      let visionNote: string | null = null;
+      try {
+        const vision = await describeScreenshot(shot.path);
+        visionNote = vision.text;
+        desktopUsed = `screen-capture:${vision.mode}`;
+      } catch (err) {
+        visionNote =
+          err instanceof Error ? err.message : "vision unavailable";
+        desktopUsed = "screen-capture";
+      }
+      desktopBlock = formatScreenBlock("capture", shot, visionNote);
+
     } else if (
       looksLikeScreenControlIntent(text) &&
       getScreenPolicy().controlEnabled

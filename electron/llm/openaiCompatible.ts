@@ -1,6 +1,27 @@
 import type { AppConfig } from "../config";
 import type { ChatMessage, LlmAdapter, StreamHandlers } from "./types";
 
+function toOpenAiMessages(messages: ChatMessage[]) {
+  return messages.map((m) => {
+    if (!m.images?.length) {
+      return { role: m.role, content: m.content };
+    }
+    const parts: Array<
+      | { type: "text"; text: string }
+      | { type: "image_url"; image_url: { url: string } }
+    > = [{ type: "text", text: m.content }];
+    for (const img of m.images) {
+      parts.push({
+        type: "image_url",
+        image_url: {
+          url: `data:${img.mimeType};base64,${img.dataBase64}`,
+        },
+      });
+    }
+    return { role: m.role, content: parts };
+  });
+}
+
 export function createOpenAiCompatibleAdapter(cfg: AppConfig): LlmAdapter {
   const model = cfg.llmModel;
   const baseUrl = cfg.openaiBaseUrl;
@@ -52,7 +73,7 @@ export function createOpenAiCompatibleAdapter(cfg: AppConfig): LlmAdapter {
           body: JSON.stringify({
             model,
             stream: true,
-            messages,
+            messages: toOpenAiMessages(messages),
           }),
           signal,
         });

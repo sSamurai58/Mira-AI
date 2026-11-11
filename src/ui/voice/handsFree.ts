@@ -27,6 +27,43 @@ export function normalizeSpeech(text: string): string {
     .trim();
 }
 
+/** Lightweight Levenshtein for short wake phrases. */
+function editDistance(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  const row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 0; i < a.length; i += 1) {
+    let prev = i;
+    row[0] = i + 1;
+    for (let j = 0; j < b.length; j += 1) {
+      const cur = row[j + 1];
+      const cost = a[i] === b[j] ? 0 : 1;
+      row[j + 1] = Math.min(row[j + 1] + 1, row[j] + 1, prev + cost);
+      prev = cur;
+    }
+  }
+  return row[b.length];
+}
+
+function fuzzyIncludes(haystack: string, needle: string, maxDist: number): boolean {
+  if (haystack.includes(needle)) return true;
+  if (needle.length < 3) return false;
+  const words = haystack.split(" ").filter(Boolean);
+  for (const w of words) {
+    if (Math.abs(w.length - needle.length) > maxDist) continue;
+    if (editDistance(w, needle) <= maxDist) return true;
+  }
+  // sliding window for multi-word phrase glued without spaces
+  if (!needle.includes(" ") && haystack.length >= needle.length) {
+    for (let i = 0; i <= haystack.length - needle.length; i += 1) {
+      const slice = haystack.slice(i, i + needle.length);
+      if (editDistance(slice, needle) <= maxDist) return true;
+    }
+  }
+  return false;
+}
+
 /** Pure wake-word matcher (testable without Web Speech). */
 export function matchWakeWord(
   transcript: string,
@@ -41,10 +78,17 @@ export function matchWakeWord(
   }
   if (sensitivity === "loose") {
     const words = p.split(" ").filter(Boolean);
-    return words.every((w) => t.includes(w));
+    const maxDist = Math.max(1, Math.floor(p.length / 5));
+    return words.every(
+      (w) => t.includes(w) || fuzzyIncludes(t, w, maxDist),
+    );
   }
-  return t.includes(p);
+  // normal: exact substring or 1-edit fuzzy on short wake words
+  if (t.includes(p)) return true;
+  const maxDist = p.length <= 5 ? 1 : p.length <= 8 ? 1 : 2;
+  return fuzzyIncludes(t, p, maxDist);
 }
+
 
 /** Strip leading wake phrase from a command transcript. */
 export function stripWakePhrase(

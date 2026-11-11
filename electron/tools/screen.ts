@@ -260,11 +260,16 @@ export async function typeText(text: string): Promise<ScreenTypeResult> {
 export function formatScreenBlock(
   kind: "capture" | "click" | "type",
   payload: ScreenCaptureResult | ScreenClickResult | ScreenTypeResult,
+  visionNote?: string | null,
 ): string {
   if (kind === "capture") {
     const c = payload as ScreenCaptureResult;
-    return `[Экран: capture]\nИсточник: ${c.sourceName}\nФайл: ${c.path}\nРазмер: ${c.width}×${c.height}\n${c.note}\nОпиши пользователю, что видно (файл локальный; пиксели модели не переданы в P5 stub — опирайся на метаданные и контекст диалога).`;
+    const vision =
+      visionNote?.trim() ||
+      "Опиши пользователю, что видно (vision недоступен — опирайся на метаданные).";
+    return `[Экран: capture]\nИсточник: ${c.sourceName}\nФайл: ${c.path}\nРазмер: ${c.width}×${c.height}\n${c.note}\n[Vision]\n${vision}`;
   }
+
   if (kind === "type") {
     const t = payload as ScreenTypeResult;
     return `[Экран: type ${t.mode}]\n«${t.text}» · ${t.detail}`;

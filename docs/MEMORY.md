@@ -6,14 +6,15 @@
 
 | Поле | Значение |
 |------|----------|
-| Фаза | **F* pack ✅** (все future кроме **F10**) |
+| Фаза | **Realize-all ✅** (P0–P11 + F1–F13 deepen) |
 | Продукт | Голосовой ИИ-помощник Mira |
-| Код | Must + F1–F9 + F11–F13 (F10 skipped) |
-| Предыдущее | Учебный TTS (`mira_tts`) удалён; не восстанавливаем как есть |
+| Код | Must + F1–F13 + Claude/Gemini/offline + vision + packaging/CI |
+| Предыдущее | F* pack без F10; затем «Реализуй все» |
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
-| Дорожная карта | Must закрыт; F10 профили — отложены по запросу |
+| Дорожная карта | Must + future F* закрыты (partial→done stubs where noted) |
 
-**Сейчас:** F1–F9, F11–F13 закрыты (partial). **F10 не делаем.**
+**Сейчас:** F10 профили, multi-LLM, vision screen, HUD, CI/pack — в коде.
+
 
 ## Решения
 
@@ -90,6 +91,9 @@
 | 2026-11-11 | F12 confirm modes | always / smart / dangerous-list + actionClass на tool confirms |
 | 2026-11-11 | F1–F8 pack | cameras/iot/calendar/mail/files/notes/media/i18n via chat+UI; F10 skipped |
 | 2026-11-11 | f-rest:smoke OK | покрытие F1–F8+F12 без F10 |
+| 2026-11-11 | Realize-all | Claude/Gemini/offline + vision + F10 profiles + HUD + CI/pack + WA/IG dry-run |
+| 2026-11-11 | f-all:smoke | deepenings smoke |
+
 
 ## Баги
 
@@ -132,6 +136,8 @@
 | 2026-11-11 | Завершён F13 (Doctor / логи) |
 | 2026-11-11 | Завершён F9 (wake-word / barge-in) |
 | 2026-11-11 | Завершён F* pack без F10 |
+| 2026-11-11 | «Реализуй все»: F10 + LLM/vision/HUD/CI |
+
 | 2026-11-11 | DESIGN: информационная архитектура, карта настроек |
 | 2026-11-11 | Подключены agent skills Emil Kowalski (design/animation) |
 | 2026-11-11 | Добавлен каталог 14 цветовых тем + референсы в docs/themes/ |

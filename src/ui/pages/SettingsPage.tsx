@@ -14,7 +14,14 @@ import {
   type WakeSensitivity,
 } from "../voice/handsFree";
 import { speakText, stopSpeaking } from "../voice/tts";
+import {
+  getActiveTtsEngine,
+  listTtsEngines,
+  setActiveTtsEngine,
+  type TtsEngineId,
+} from "../voice/ttsEngines";
 import type { VoiceInfo } from "../voice/types";
+
 
 const SECTIONS = [
   { id: "appearance", label: "Внешний вид" },
@@ -54,6 +61,10 @@ export function SettingsPage({
   const [handsFree, setHandsFree] = useState<HandsFreePrefs>(() =>
     getHandsFreePrefs(),
   );
+  const [ttsEngine, setTtsEngine] = useState<TtsEngineId>(() =>
+    getActiveTtsEngine(),
+  );
+
 
   useEffect(() => {
     let cancelled = false;
@@ -164,6 +175,27 @@ export function SettingsPage({
             <p className="muted" style={{ margin: 0 }}>
               {engineDetail || "Определение движка…"}
             </p>
+            <label className="stack">
+              <span className="muted">Движок TTS</span>
+              <select
+                value={ttsEngine}
+                onChange={(e) => {
+                  const id = e.target.value as TtsEngineId;
+                  setTtsEngine(setActiveTtsEngine(id));
+                  setEngineDetail(getVoiceEngineStatus().detail);
+                }}
+              >
+                {listTtsEngines().map((eng) => (
+                  <option key={eng.id} value={eng.id}>
+                    {eng.label}
+                    {eng.ready ? "" : " (stub)"}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
+              {listTtsEngines().find((e) => e.id === ttsEngine)?.detail}
+            </p>
             <label className="row">
               <input
                 type="checkbox"
@@ -176,6 +208,7 @@ export function SettingsPage({
               />
               <span>Автоозвучка ответов</span>
             </label>
+
             <label className="row">
               <input
                 type="checkbox"
@@ -276,8 +309,10 @@ export function SettingsPage({
             </div>
             <p className="muted" style={{ margin: 0 }}>
               Ключи только в `.env` (`OPENAI_API_KEY`, опц. `OPENAI_BASE_URL`,
-              `LLM_PROVIDER=openai|mock`, `LLM_MODEL`). Без ключа работает{" "}
-              <strong>mock</strong>.
+              `LLM_PROVIDER=openai|claude|gemini|offline|mock`, `LLM_MODEL`,
+              `ANTHROPIC_API_KEY` / `GEMINI_API_KEY`, `VISION_ENABLED`). Без ключа —{" "}
+              <strong>mock</strong> или <strong>offline</strong>.
+
             </p>
             <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
               {cfgText}
@@ -319,6 +354,12 @@ function GeneralSection() {
   );
   const [dangerous, setDangerous] = useState("");
   const [note, setNote] = useState<string | null>(null);
+  const [profiles, setProfiles] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
+  const [activeProfileId, setActiveProfileId] = useState<string>("");
+  const [newProfileName, setNewProfileName] = useState("");
+  const [hudOpen, setHudOpen] = useState(false);
 
   useEffect(() => {
     if (!window.mira?.getConfirmPolicy) return;
@@ -326,17 +367,28 @@ function GeneralSection() {
       setMode(p.mode);
       setDangerous(p.dangerousList.join(", "));
     });
+    void window.mira.getProfilesSnapshot?.().then((s) => {
+      setProfiles(
+        (s.profiles as Array<{ id: string; name: string }>).map((p) => ({
+          id: p.id,
+          name: p.name,
+        })),
+      );
+      setActiveProfileId(s.activeId);
+    });
+    void window.mira.getHudPolicy?.().then((h) => setHudOpen(h.open));
   }, []);
 
   return (
     <>
       <div className="row">
         <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Общие</h2>
-        <StubBadge label="F8/F12" />
+        <StubBadge label="F8/F10/F12" />
       </div>
       <p className="muted" style={{ margin: 0 }}>
-        F8 язык UI/ASR. F12 режим confirm. Профили (F10) — не в этом релизе.
+        F8 язык UI/ASR. F10 профили (ключи только в .env). F12 режим confirm. HUD.
       </p>
+
       <label className="stack">
         <span className="muted">Язык UI</span>
         <select
@@ -392,10 +444,80 @@ function GeneralSection() {
       >
         Сохранить confirm policy
       </button>
+
+      <div className="row">
+        <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Профили (F10)</h3>
+      </div>
+      <label className="stack">
+        <span className="muted">Активный профиль</span>
+        <select
+          value={activeProfileId}
+          onChange={(e) => {
+            const id = e.target.value;
+            setActiveProfileId(id);
+            if (!window.mira?.setActiveProfile) return;
+            void window.mira.setActiveProfile(id).then(() => {
+              setNote(`Активный профиль → ${id}`);
+            });
+          }}
+        >
+          {profiles.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="row">
+        <input
+          value={newProfileName}
+          onChange={(e) => setNewProfileName(e.target.value)}
+          placeholder="Имя нового профиля"
+        />
+        <button
+          type="button"
+          className="btn"
+          onClick={() => {
+            if (!window.mira?.upsertProfile || !newProfileName.trim()) return;
+            void window.mira
+              .upsertProfile({ name: newProfileName.trim() })
+              .then(async () => {
+                const s = await window.mira!.getProfilesSnapshot();
+                setProfiles(
+                  (s.profiles as Array<{ id: string; name: string }>).map(
+                    (p) => ({ id: p.id, name: p.name }),
+                  ),
+                );
+                setActiveProfileId(s.activeId);
+                setNewProfileName("");
+                setNote("Профиль создан (ключи API не копируются в JSON)");
+              });
+          }}
+        >
+          Добавить
+        </button>
+      </div>
+
+      <div className="row">
+        <button
+          type="button"
+          className="btn"
+          onClick={() => {
+            if (!window.mira?.toggleHud) return;
+            void window.mira.toggleHud().then((r) => {
+              setHudOpen(r.open);
+              setNote(r.open ? "HUD открыт" : "HUD закрыт");
+            });
+          }}
+        >
+          {hudOpen ? "Скрыть плавающий HUD" : "Показать плавающий HUD"}
+        </button>
+      </div>
       {note ? <p className="muted" style={{ margin: 0 }}>{note}</p> : null}
     </>
   );
 }
+
 
 function DataPrivacySection(props: {
   healthText: string;
@@ -986,7 +1108,8 @@ function IntegrationsSection() {
       <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Future addons</h3>
       <p className="muted" style={{ margin: 0 }}>
         F1 камеры · F2 IoT · F3 календарь/таймеры · F4 почта · F5 файлы · F7
-        медиа — через Диалог. F10 профили — вне scope.
+        медиа — через Диалог. F10 профили — в Общих.
+
       </p>
       <div className="row" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
         <button

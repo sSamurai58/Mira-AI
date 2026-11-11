@@ -1,12 +1,20 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 
 export type MiraPublicConfig = {
-  llmProvider: "openai" | "mock";
+  llmProvider: "openai" | "claude" | "gemini" | "offline" | "mock";
   llmModel: string;
   hasOpenAiKey: boolean;
+  hasAnthropicKey?: boolean;
+  hasGeminiKey?: boolean;
   openaiBaseUrl: string;
   databasePath: string;
+  visionEnabled?: boolean;
+  activeProfileId?: string;
+  webEnabled?: boolean;
+  webAllowlist?: string;
+  webFetchConfirm?: boolean;
 };
+
 
 export type MiraSession = {
   id: string;
@@ -284,8 +292,25 @@ contextBridge.exposeInMainWorld("mira", {
   listMail: (folder?: string) => call("mira:list-mail", folder),
   getMediaStatus: () => call("mira:get-media-status"),
   searchFiles: (query?: string) => call("mira:search-files", query),
+  listProfiles: () => call("mira:list-profiles"),
+  getProfilesSnapshot: () => call("mira:get-profiles-snapshot"),
+  getActiveProfile: () => call("mira:get-active-profile"),
+  setActiveProfile: (id: string) => call("mira:set-active-profile", id),
+  upsertProfile: (payload: {
+    id?: string;
+    name: string;
+    voiceId?: string | null;
+    llmProvider?: string | null;
+    llmModel?: string | null;
+    locale?: "ru" | "en";
+    notes?: string;
+  }) => call("mira:upsert-profile", payload),
+  deleteProfile: (id: string) => call("mira:delete-profile", id),
+  getHudPolicy: () => call("mira:get-hud-policy"),
+  toggleHud: () => call("mira:toggle-hud"),
   respondConfirm: (id: string, accepted: boolean) =>
     call("mira:confirm-response", id, accepted),
+
   onConfirmRequest: (handler: (req: MiraConfirmRequest) => void) => {
     const listener = (_event: IpcRendererEvent, req: MiraConfirmRequest) =>
       handler(req);

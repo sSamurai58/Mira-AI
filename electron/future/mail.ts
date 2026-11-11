@@ -23,8 +23,11 @@ export function getMailPolicy() {
         ? "live"
         : "dry-run",
     account: (process.env.MAIL_ACCOUNT ?? "").trim() || null,
+    smtpHost: (process.env.MAIL_SMTP_HOST ?? "").trim() || null,
+    imapHost: (process.env.MAIL_IMAP_HOST ?? "").trim() || null,
   };
 }
+
 
 export function seedDemoInbox(): void {
   const store = openStore();
@@ -77,8 +80,19 @@ export async function draftOrSendMail(input: {
     if (!ok) return { ok: false, detail: "Отправка отклонена", id: "" };
   }
   const id = crypto.randomUUID();
-  const status =
+  let status: string =
     input.send && policy.mode === "live" ? "sent-stub" : input.send ? "dry-run" : "draft";
+  let detail = `Письмо ${status} → ${input.to}`;
+
+  if (input.send && policy.mode === "live" && policy.smtpHost) {
+    // Live SMTP without extra deps: record intent + host; full nodemailer later.
+    status = "sent-queued";
+    detail = `SMTP queue stub → ${policy.smtpHost} · to=${input.to} (full transport later)`;
+  } else if (input.send && policy.mode === "live" && !policy.smtpHost) {
+    status = "sent-stub";
+    detail = `Live без MAIL_SMTP_HOST — stub sent → ${input.to}`;
+  }
+
   openStore()
     .prepare(
       `INSERT INTO mail_messages (id, folder, from_addr, subject, body, status, created_at)
@@ -96,9 +110,10 @@ export async function draftOrSendMail(input: {
   return {
     ok: true,
     id,
-    detail: `Письмо ${status} → ${input.to}`,
+    detail,
   };
 }
+
 
 export async function handleMailFromChat(text: string): Promise<{
   used: string;

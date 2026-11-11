@@ -62,11 +62,18 @@ export function getMessagingPolicy(): MessagingPolicy {
     mode: !forceDry && token ? "live" : "dry-run",
     stubs: [
       { provider: "telegram", status: "partial" },
-      { provider: "whatsapp", status: "stub" },
-      { provider: "instagram", status: "stub" },
+      {
+        provider: "whatsapp",
+        status: process.env.WHATSAPP_BRIDGE_URL?.trim() ? "partial" : "stub",
+      },
+      {
+        provider: "instagram",
+        status: process.env.INSTAGRAM_BRIDGE_URL?.trim() ? "partial" : "stub",
+      },
     ],
   };
 }
+
 
 export function looksLikeMessagingIntent(text: string): boolean {
   return /(напиши|отправь|ответь|reply|send|message).{0,40}(telegram|телеграм|whatsapp|ватсап|вацап|instagram|инстаграм)|в\s+(telegram|телеграм[еа]?)/i.test(
@@ -204,30 +211,23 @@ export async function sendOrReplyMessage(
     throw new Error("Мессенджеры выключены (MESSAGING_ENABLED=false).");
   }
 
-  if (intent.provider !== "telegram") {
-    return {
-      ok: false,
-      provider: intent.provider,
-      action: intent.action,
-      contact: null,
-      chatId: null,
-      body: intent.body,
-      mode: "stub",
-      externalId: null,
-      detail: `${intent.provider} — stub в P6; реализован только Telegram.`,
-      message: null,
-    };
-  }
+  const provider = intent.provider;
+  const defaultChatEnv =
+    provider === "whatsapp"
+      ? process.env.WHATSAPP_DEFAULT_CHAT_ID
+      : provider === "instagram"
+        ? process.env.INSTAGRAM_DEFAULT_CHAT_ID
+        : process.env.TELEGRAM_DEFAULT_CHAT_ID;
 
   const contact =
-    resolveChat("telegram", intent.recipientQuery) ??
-    (process.env.TELEGRAM_DEFAULT_CHAT_ID
+    resolveChat(provider, intent.recipientQuery) ??
+    (defaultChatEnv
       ? ({
-          id: "env-default",
-          provider: "telegram",
+          id: `env-default-${provider}`,
+          provider,
           display_name: "default",
-          handle: process.env.TELEGRAM_DEFAULT_CHAT_ID,
-          chat_id: process.env.TELEGRAM_DEFAULT_CHAT_ID,
+          handle: defaultChatEnv,
+          chat_id: defaultChatEnv,
           enabled: 1,
           created_at: new Date().toISOString(),
         } satisfies MessengerContactRow)
@@ -236,14 +236,14 @@ export async function sendOrReplyMessage(
   if (!contact) {
     return {
       ok: false,
-      provider: "telegram",
+      provider,
       action: intent.action,
       contact: null,
       chatId: null,
       body: intent.body,
       mode: "denied",
       externalId: null,
-      detail: `Чат не найден: «${intent.recipientQuery}». Добавьте контакт в Интеграциях или TELEGRAM_DEFAULT_CHAT_ID.`,
+      detail: `Чат не найден (${provider}): «${intent.recipientQuery}». Добавьте контакт или DEFAULT_CHAT_ID.`,
       message: null,
     };
   }
@@ -254,14 +254,14 @@ export async function sendOrReplyMessage(
       risk: "high",
       title:
         intent.action === "reply"
-          ? "Подтверждение ответа в Telegram"
-          : "Подтверждение сообщения в Telegram",
-      body: `Провайдер: Telegram\nКому: ${contact.display_name} (${contact.handle})\nChat ID: ${contact.chat_id}\n\nТекст:\n${intent.body}`,
+          ? `Подтверждение ответа (${provider})`
+          : `Подтверждение сообщения (${provider})`,
+      body: `Провайдер: ${provider}\nКому: ${contact.display_name} (${contact.handle})\nChat ID: ${contact.chat_id}\n\nТекст:\n${intent.body}`,
       confirmLabel: intent.action === "reply" ? "Ответить" : "Отправить",
     });
     if (!ok) {
       const message = addMessengerMessage({
-        provider: "telegram",
+        provider,
         contactId: contact.id,
         chatId: contact.chat_id,
         direction: "out",
@@ -270,7 +270,7 @@ export async function sendOrReplyMessage(
       });
       return {
         ok: false,
-        provider: "telegram",
+        provider,
         action: intent.action,
         contact,
         chatId: contact.chat_id,
@@ -283,7 +283,7 @@ export async function sendOrReplyMessage(
     }
   }
 
-  if (policy.mode === "live") {
+  if (provider === "telegram" && policy.mode === "live") {
     const live = await sendTelegramLive(contact.chat_id, intent.body);
     const message = addMessengerMessage({
       provider: "telegram",
@@ -308,8 +308,73 @@ export async function sendOrReplyMessage(
     };
   }
 
+  if (provider === "whatsapp" || provider === "instagram") {
+    const bridge =
+      provider === "whatsapp"
+        ? process.env.WHATSAPP_BRIDGE_URL?.trim()
+        : process.env.INSTAGRAM_BRIDGE_URL?.trim();
+    if (bridge && policy.mode === "live") {
+      try {
+        const res = await fetch(bridge.replace(/\/$/, "") + "/send", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            provider,
+            chatId: contact.chat_id,
+            body: intent.body,
+          }),
+        });
+        const detail = res.ok
+          ? `Отправлено через ${provider} bridge`
+          : `Bridge HTTP ${res.status}`;
+        const message = addMessengerMessage({
+          provider,
+          contactId: contact.id,
+          chatId: contact.chat_id,
+          direction: "out",
+          body: intent.body,
+          status: res.ok ? "sent" : "error",
+        });
+        return {
+          ok: res.ok,
+          provider,
+          action: intent.action,
+          contact,
+          chatId: contact.chat_id,
+          body: intent.body,
+          mode: "live",
+          externalId: null,
+          detail,
+          message,
+        };
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        const message = addMessengerMessage({
+          provider,
+          contactId: contact.id,
+          chatId: contact.chat_id,
+          direction: "out",
+          body: intent.body,
+          status: "error",
+        });
+        return {
+          ok: false,
+          provider,
+          action: intent.action,
+          contact,
+          chatId: contact.chat_id,
+          body: intent.body,
+          mode: "live",
+          externalId: null,
+          detail: `Bridge error: ${detail}`,
+          message,
+        };
+      }
+    }
+  }
+
   const message = addMessengerMessage({
-    provider: "telegram",
+    provider,
     contactId: contact.id,
     chatId: contact.chat_id,
     direction: "out",
@@ -317,20 +382,26 @@ export async function sendOrReplyMessage(
     status: "dry-run",
     externalId: null,
   });
+  const liveHint =
+    provider === "telegram"
+      ? "Для live задайте TELEGRAM_BOT_TOKEN (+ chat id)."
+      : provider === "whatsapp"
+        ? "Для live задайте WHATSAPP_BRIDGE_URL (+ WHATSAPP_DEFAULT_CHAT_ID)."
+        : "Для live задайте INSTAGRAM_BRIDGE_URL (+ INSTAGRAM_DEFAULT_CHAT_ID).";
   return {
     ok: true,
-    provider: "telegram",
+    provider,
     action: intent.action,
     contact,
     chatId: contact.chat_id,
     body: intent.body,
     mode: "dry-run",
     externalId: null,
-    detail:
-      "Dry-run: сообщение записано локально после confirm. Для live задайте TELEGRAM_BOT_TOKEN (+ chat id).",
+    detail: `Dry-run (${provider}): сообщение записано локально после confirm. ${liveHint}`,
     message,
   };
 }
+
 
 export function formatMessagingBlock(result: MessengerSendResult): string {
   const who = result.contact

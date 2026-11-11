@@ -28,8 +28,11 @@ export function listIotDevices(): IotDevice[] {
   const now = new Date().toISOString();
   for (const d of [
     { name: "Лампа гостиная", kind: "light", address: "wifi://lamp-1" },
+    { name: "Лампа кухня", kind: "light", address: "wifi://lamp-2" },
     { name: "Замок входная", kind: "lock", address: "wifi://lock-1" },
+    { name: "Реле розетка", kind: "relay", address: "wifi://relay-1" },
   ]) {
+
     store
       .prepare(
         `INSERT INTO iot_devices (id, name, kind, address, state, enabled, created_at)

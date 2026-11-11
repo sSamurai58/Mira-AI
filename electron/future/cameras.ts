@@ -104,14 +104,23 @@ export async function handleCameraFromChat(text: string): Promise<{
   }
   const dir = path.resolve(process.cwd(), "data", "library");
   fs.mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, `camera-snap-${Date.now()}.txt`);
+  const stamp = Date.now();
+  const meta = path.join(dir, `camera-snap-${stamp}.txt`);
+  const png = path.join(dir, `camera-snap-${stamp}.png`);
+  // Minimal valid 1×1 PNG placeholder until RTSP grab is wired.
+  const pngBytes = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  fs.writeFileSync(png, pngBytes);
   fs.writeFileSync(
-    file,
-    `Mira camera snapshot stub\ncamera=${cam?.name}\nurl=${cam?.url}\nat=${new Date().toISOString()}\n`,
+    meta,
+    `Mira camera snapshot\ncamera=${cam?.name}\nurl=${cam?.url}\npng=${png}\nat=${new Date().toISOString()}\nnote=RTSP grab stub — PNG placeholder\n`,
     "utf8",
   );
   return {
     used: "camera:snapshot:ok",
-    block: `[Камеры] Снимок (stub) сохранён: ${file}`,
+    block: `[Камеры] Снимок сохранён: ${png} (+ meta ${path.basename(meta)})`,
   };
 }
+

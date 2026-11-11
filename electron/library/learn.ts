@@ -41,6 +41,48 @@ export function detectMediaType(filePath: string): string {
   return "unknown";
 }
 
+/** Best-effort PDF text: pull printable strings and (Tj)/(TJ) payloads. */
+function extractPdfText(buf: Buffer): string {
+  const latin = buf.toString("latin1");
+  const chunks: string[] = [];
+  const tjRe = /\((?:\\.|[^\\)]){1,500}\)(?:\s*Tj|\s*TJ)/g;
+  let m: RegExpExecArray | null;
+  while ((m = tjRe.exec(latin)) && chunks.length < 4000) {
+    const inner = m[0]
+      .replace(/\)\s*T[jJ]$/, "")
+      .replace(/^\(/, "")
+      .replace(/\\([nrtbf()\\])/g, (_, c: string) => {
+        if (c === "n") return "\n";
+        if (c === "r") return "\r";
+        if (c === "t") return "\t";
+        return c;
+      });
+    if (inner.trim()) chunks.push(inner);
+  }
+  if (chunks.length >= 3) return chunks.join(" ").replace(/\s+/g, " ").trim();
+  // Fallback: long printable runs
+  const runs = latin.match(/[\x20-\x7E\u00A0-\u00FF]{6,}/g) ?? [];
+  return runs
+    .filter((r) => !/^%PDF|endobj|stream|xref|trailer/i.test(r))
+    .slice(0, 800)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function sidecarTranscript(filePath: string): string | null {
+  for (const ext of [".txt", ".md", ".transcript.txt", ".srt"]) {
+    const candidate = `${filePath}${ext}`;
+    const alt = filePath.replace(/\.[^.]+$/, ext);
+    for (const p of [candidate, alt]) {
+      if (fs.existsSync(p) && fs.statSync(p).isFile()) {
+        return fs.readFileSync(p, "utf8").slice(0, 50_000);
+      }
+    }
+  }
+  return null;
+}
+
 export function extractContent(
   filePath: string,
   mediaType: string,
@@ -52,37 +94,64 @@ export function extractContent(
     const text = fs.readFileSync(filePath, "utf8");
     return { text, note: "Текст прочитан напрямую" };
   }
-  if (mediaType === "pdf" || mediaType === "epub") {
-    // P8: lightweight stub — try utf8 read for text-like dumps; otherwise placeholder
+  if (mediaType === "pdf") {
     try {
       const raw = fs.readFileSync(filePath);
-      const asText = raw.toString("utf8");
-      if (/[\x00-\x08]/.test(asText.slice(0, 200))) {
+      const extracted = extractPdfText(raw);
+      if (extracted.length > 40) {
         return {
-          text: `[stub extract ${mediaType}] Файл ${path.basename(filePath)} принят. Полный парсер PDF/EPUB — later. Добавьте .md/.txt для полного разбора.`,
-          note: `${mediaType} extract stub`,
+          text: extracted.slice(0, 50_000),
+          note: `pdf: извлечено ~${extracted.length} символов (best-effort stream parser)`,
         };
       }
       return {
-        text: asText.slice(0, 50_000),
-        note: `${mediaType}: прочитан как текст (best-effort)`,
+        text: `[pdf] Файл ${path.basename(filePath)} (${raw.length} байт). Текстовый слой почти пуст — добавьте .md выжимку рядом.`,
+        note: "pdf: little text layer",
       };
     } catch {
+      return { text: `[pdf] Не удалось извлечь`, note: "extract failed" };
+    }
+  }
+  if (mediaType === "epub") {
+    try {
+      const raw = fs.readFileSync(filePath);
+      const asText = raw.toString("utf8");
+      const htmlish = asText
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (htmlish.length > 80) {
+        return {
+          text: htmlish.slice(0, 50_000),
+          note: "epub: best-effort utf8/html strip",
+        };
+      }
       return {
-        text: `[stub] Не удалось извлечь ${mediaType}`,
-        note: "extract failed",
+        text: `[epub] ${path.basename(filePath)} принят; полный ZIP/OPF парсер — later.`,
+        note: "epub extract stub",
       };
+    } catch {
+      return { text: `[epub] extract failed`, note: "extract failed" };
     }
   }
   if (mediaType === "audio" || mediaType === "video") {
+    const st = fs.statSync(filePath);
+    const side = sidecarTranscript(filePath);
+    if (side) {
+      return {
+        text: side,
+        note: `${mediaType}: sidecar transcript`,
+      };
+    }
     return {
-      text: `[stub transcript ${mediaType}] ${path.basename(filePath)}: транскрипт ASR — later. Метаданные сохранены; добавьте текстовую выжимку .md для обучения.`,
-      note: `${mediaType} transcript stub`,
+      text: `[${mediaType} meta] ${path.basename(filePath)} · ${Math.round(st.size / 1024)} КБ · mtime=${st.mtime.toISOString()}\nТранскрипт ASR: положите рядом .txt/.md/.srt с тем же именем.`,
+      note: `${mediaType} metadata + sidecar hint`,
     };
   }
   const text = fs.readFileSync(filePath, "utf8");
   return { text: text.slice(0, 50_000), note: "unknown → utf8 best-effort" };
 }
+
 
 export function analyzeText(text: string, title: string): LibraryAnalysis {
   const lines = text

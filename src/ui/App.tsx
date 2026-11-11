@@ -3,9 +3,11 @@ import { APP_NAME, APP_PHASE } from "../config";
 import { ConfirmModal } from "./components/ConfirmModal";
 import { ErrorBanner } from "./components/ErrorBanner";
 import { ChatPage } from "./pages/ChatPage";
+import { HudPage } from "./pages/HudPage";
 import { MemoryPage } from "./pages/MemoryPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { WorkshopPage } from "./pages/WorkshopPage";
+
 import {
   applyTheme,
   loadStoredThemeId,
@@ -32,6 +34,10 @@ function navItems(): { id: RootNav; label: string }[] {
 }
 
 export function App() {
+  const isHud =
+    typeof window !== "undefined" &&
+    (window.location.hash === "#/hud" || window.location.hash === "#hud");
+
   const [nav, setNav] = useState<RootNav>("chat");
   const [themeId, setThemeId] = useState<ThemeId>(() => loadStoredThemeId());
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
@@ -54,6 +60,15 @@ export function App() {
   useEffect(() => {
     applyTheme(themeId);
   }, [themeId]);
+
+  useEffect(() => {
+    localStorage.setItem("mira.voiceState", voiceState);
+  }, [voiceState]);
+
+  if (isHud) {
+    return <HudPage />;
+  }
+
 
   useEffect(() => {
     const onStorage = () => {

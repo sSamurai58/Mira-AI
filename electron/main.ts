@@ -106,16 +106,29 @@ import {
   listEvents,
   listTimers,
   startTimer,
+  tickCalendarNotifications,
 } from "./future/calendar";
 import { listCameras, upsertCamera } from "./future/cameras";
 import { listIotDevices } from "./future/iot";
 import { getMailPolicy, listMail } from "./future/mail";
 import { getMediaStatus } from "./future/media";
 import { searchFiles } from "./future/files";
+import {
+  deleteProfile,
+  getActiveProfile,
+  getProfilesSnapshot,
+  listProfiles,
+  setActiveProfile,
+  upsertProfile,
+} from "./profiles";
+import { getHudPolicy, isHudOpen, toggleHud } from "./hud";
 import fs from "node:fs";
+
 
 const isDev = process.env.MIRA_DEV === "1";
 const activeAborts = new Map<string, AbortController>();
+let calendarTick: NodeJS.Timeout | null = null;
+
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -657,7 +670,32 @@ app.whenReady().then(() => {
   on("mira:get-media-status", () => getMediaStatus());
   on("mira:search-files", (_e, query?: string) => searchFiles(query ?? "", 30));
 
+  on("mira:list-profiles", () => listProfiles());
+  on("mira:get-profiles-snapshot", () => getProfilesSnapshot());
+  on("mira:get-active-profile", () => getActiveProfile());
+  on("mira:set-active-profile", (_e, id: string) => setActiveProfile(id));
+  on(
+    "mira:upsert-profile",
+    (
+      _e,
+      payload: {
+        id?: string;
+        name: string;
+        voiceId?: string | null;
+        llmProvider?: string | null;
+        llmModel?: string | null;
+        locale?: "ru" | "en";
+        notes?: string;
+      },
+    ) => upsertProfile(payload),
+  );
+  on("mira:delete-profile", (_e, id: string) => deleteProfile(id));
+  on("mira:get-hud-policy", () => ({ ...getHudPolicy(), open: isHudOpen() }));
+  on("mira:toggle-hud", async () => toggleHud({ isDev }));
+
+
   on("mira:get-backup-status", () => getBackupStatus());
+
   on(
     "mira:export-backup",
     async (_e, opts?: { includeSecrets?: boolean }) => exportBackup(opts),
@@ -729,13 +767,22 @@ app.whenReady().then(() => {
 
   createWindow();
 
+  calendarTick = setInterval(() => {
+    void tickCalendarNotifications().catch(() => undefined);
+  }, 5_000);
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
 app.on("window-all-closed", () => {
+  if (calendarTick) {
+    clearInterval(calendarTick);
+    calendarTick = null;
+  }
   disposeAllTerminals();
   closeStore();
   if (process.platform !== "darwin") app.quit();
 });
+

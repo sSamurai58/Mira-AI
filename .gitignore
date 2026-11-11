@@ -22,7 +22,9 @@ data/voice-studio/
 data/blender/
 data/backups/
 data/logs/
+data/profiles/
 !data/.gitkeep
+
 
 # logs / OS
 *.log

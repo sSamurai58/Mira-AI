@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "cursor/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+        env:
+          LLM_PROVIDER: mock
+
+      - name: Smoke P1–P11
+        run: |
+          npm run p1:smoke
+          npm run p2:smoke
+          npm run p3:smoke
+          npm run p4:smoke
+          npm run p5:smoke
+          npm run p6:smoke
+          npm run p7:smoke
+          npm run p8:smoke
+          npm run p9:smoke
+          npm run p10:smoke
+          npm run p11:smoke
+        env:
+          LLM_PROVIDER: mock
+          DATABASE_PATH: ${{ runner.temp }}/mira-ci.db
+
+      - name: Smoke F*
+        run: |
+          npm run f11:smoke
+          npm run f13:smoke
+          npm run f9:smoke
+          npm run f-rest:smoke
+          npm run f-all:smoke
+        env:
+          LLM_PROVIDER: mock
+          DATABASE_PATH: ${{ runner.temp }}/mira-ci-f.db

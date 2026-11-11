@@ -1,8 +1,10 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { LibraryPanel } from "../components/LibraryPanel";
+import { NotesFilesPanel } from "../components/NotesFilesPanel";
 import { StubBadge } from "../components/StubBadge";
 import { TerminalView } from "../components/TerminalView";
 import { VoiceStudioPanel } from "../components/VoiceStudioPanel";
+
 import {
   getActiveVoiceId,
   isCustomVoiceId,
@@ -17,8 +19,10 @@ const SEGMENTS = [
   { id: "protocols", label: "Протоколы", phase: "P3" },
   { id: "voices", label: "Голоса", phase: "P9" },
   { id: "library", label: "Библиотека", phase: "P8" },
+  { id: "notes", label: "Заметки/файлы", phase: "F2/F5" },
   { id: "terminal", label: "Терминал", phase: "P7" },
 ] as const;
+
 
 type CatalogItem = MiraCatalogItem;
 
@@ -330,6 +334,8 @@ export function WorkshopPage() {
 
       {segment === "terminal" ? <TerminalView /> : null}
       {segment === "library" ? <LibraryPanel /> : null}
+      {segment === "notes" ? <NotesFilesPanel /> : null}
+
     </div>
   );
 }

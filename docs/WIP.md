@@ -31,9 +31,10 @@ Future **F1–F13** — только после стабилизации must (�
 
 | Поле | Значение |
 |------|----------|
-| Текущая фаза | **F* pack ✅** (кроме F10) |
-| Следующее действие | F10 профили — только по явному запросу |
-| Запрещено сейчас | F10 без запроса |
+| Текущая фаза | **Realize-all ✅** |
+| Следующее действие | Publish mira (private) — ждать подтверждения пользователя |
+| Запрещено сейчас | Republish без явного OK |
+
 
 ### Стартовые допущения стека (подтвердить в P0 → MEMORY)
 
@@ -300,7 +301,8 @@ UX: **Создать → фразы → загрузить → Mira сама о�
 | F7 | Музыка/медиа: плеер, плейлисты | ✅ local playlist stub play/pause/next |
 | F8 | Мультиязычность UI + ASR/TTS | ✅ ru/en UI + ASR lang pref |
 | F9 | Wake-word / hands-free + barge-in (перебить TTS) | ✅ hands-free wake + Перебить/Space; f9:smoke |
-| F10 | Профили: голос / память / ключи (scoped, не в git) | ⏸ skipped by request |
+| F10 | Профили: голос / память / ключи (scoped, не в git) | ✅ profiles.json + Settings |
+
 | F11 | Backup/export/import + «забыть» память/библиотеку | ✅ mira-backup-v1; Настройки → Данные; f11:smoke |
 | F12 | Режим confirm: always / smart / dangerous-list | ✅ policy + Settings → Общие |
 | F13 | Логи + Doctor (mic / API / Blender…) | ✅ Doctor F13 + app_logs/jsonl viewer; f13:smoke |

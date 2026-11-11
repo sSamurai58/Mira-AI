@@ -66,7 +66,8 @@ export function runDoctor(): DoctorReport {
         : llm.reason ?? "LLM config invalid",
       fix: llm.ok
         ? undefined
-        : "Проверьте OPENAI_API_KEY / LLM_PROVIDER в .env (Настройки → API и модели). Без ключа используйте LLM_PROVIDER=mock.",
+        : "Проверьте ключи / LLM_PROVIDER=openai|claude|gemini|offline|mock в .env (Настройки → API и модели).",
+
     }),
   );
 

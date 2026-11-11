@@ -1,0 +1,26 @@
+appId: ai.mira.desktop
+productName: Mira
+copyright: Copyright © Mira
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+  - "!**/*.map"
+asar: true
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Utility
+win:
+  target:
+    - nsis
+mac:
+  target:
+    - dmg
+  category: public.app-category.productivity
+extraMetadata:
+  main: dist-electron/main.js
