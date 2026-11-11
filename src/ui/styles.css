@@ -113,23 +113,8 @@ strong {
   z-index: 0;
   overflow: hidden;
   contain: paint;
-  background:
-    radial-gradient(
-      800px 540px at 45% 40%,
-      color-mix(in srgb, var(--accent) 16%, transparent),
-      transparent 60%
-    ),
-    radial-gradient(
-      640px 500px at 8% 6%,
-      color-mix(in srgb, var(--border) 32%, transparent),
-      transparent 55%
-    ),
-    radial-gradient(
-      560px 440px at 92% 88%,
-      color-mix(in srgb, var(--success) 20%, transparent),
-      transparent 55%
-    ),
-    var(--bg);
+  /* Flat theme fill only — no ambient glows; pattern lives on .atmosphere-grid */
+  background: var(--bg);
 }
 
 /* Soft static glows only — animated blur(90px) crushed Electron hover latency. */
@@ -155,7 +140,7 @@ strong {
   inset: 0;
   z-index: 0;
   overflow: hidden;
-  opacity: 0.055;
+  opacity: 0.048;
   background-color: transparent;
   background-repeat: repeat;
 }
@@ -2204,7 +2189,7 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
 
 .theme-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
   gap: 12px;
 }
 
@@ -2733,55 +2718,138 @@ select:disabled {
   gap: 6px;
 }
 
+.appearance-stack {
+  display: grid;
+  gap: 22px;
+}
+
+.appearance-block-head {
+  display: grid;
+  gap: 6px;
+}
+
+.appearance-check {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 22px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--accent-fg);
+  background: var(--accent);
+  line-height: 1;
+}
+
 .theme-card {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 14px;
-  border-radius: var(--radius-sm);
-  border: 1px solid color-mix(in srgb, var(--text-muted) 16%, transparent);
-  background: var(--inset);
+  position: relative;
+  display: grid;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 18%, transparent);
+  background: color-mix(in srgb, var(--bg-elevated) 72%, transparent);
   color: inherit;
   cursor: pointer;
   text-align: left;
+  transition:
+    border-color 160ms var(--ease-out),
+    transform 160ms var(--ease-out),
+    background 160ms var(--ease-out);
+}
+
+.theme-card:hover {
+  border-color: color-mix(in srgb, var(--text-muted) 36%, transparent);
+  transform: translateY(-1px);
 }
 
 .theme-card.active {
-  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 65%, transparent);
+  background: color-mix(in srgb, var(--bg-elevated) 88%, var(--accent) 6%);
+}
+
+.theme-card-ribbon {
+  display: block;
+  height: 44px;
+  width: 100%;
+}
+
+.theme-card-body {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px 14px;
+}
+
+.theme-card-body strong {
+  font-size: 0.92rem;
+  letter-spacing: 0.01em;
+}
+
+.theme-card-body .mono {
+  font-size: 0.72rem;
 }
 
 .bg-pattern-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(156px, 1fr));
+  gap: 12px;
 }
 
 .bg-pattern-card {
+  position: relative;
   display: grid;
-  gap: 8px;
-  padding: 10px;
-  border-radius: var(--radius-sm);
-  border: 1px solid color-mix(in srgb, var(--text-muted) 22%, transparent);
-  background: color-mix(in srgb, var(--bg-elevated) 55%, transparent);
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 18%, transparent);
+  background: color-mix(in srgb, var(--bg-elevated) 72%, transparent);
   color: inherit;
   cursor: pointer;
   text-align: left;
+  transition:
+    border-color 160ms var(--ease-out),
+    transform 160ms var(--ease-out),
+    background 160ms var(--ease-out);
+}
+
+.bg-pattern-card:hover {
+  border-color: color-mix(in srgb, var(--text-muted) 36%, transparent);
+  transform: translateY(-1px);
 }
 
 .bg-pattern-card.active {
-  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 65%, transparent);
+  background: color-mix(in srgb, var(--bg-elevated) 88%, var(--accent) 6%);
 }
 
 .bg-pattern-preview {
   display: block;
-  height: 56px;
-  border-radius: 8px;
-  border: 1px solid color-mix(in srgb, var(--text-muted) 18%, transparent);
+  height: 88px;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--text-muted) 14%, transparent);
+  border-radius: 0;
   background-color: var(--bg);
   background-repeat: repeat;
   opacity: 1;
+}
+
+.bg-pattern-meta {
+  display: grid;
+  gap: 3px;
+  padding: 11px 12px 13px;
+}
+
+.bg-pattern-meta strong {
+  font-size: 0.9rem;
+}
+
+.bg-pattern-meta .mono {
+  font-size: 0.7rem;
 }
 
 .bg-pattern-preview[data-bg-preview="fine-grid"] {
