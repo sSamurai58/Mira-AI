@@ -1,57 +1,94 @@
-/** WebGL holographic core — particle shells that evolve with Mira level (1…∞). */
+/**
+ * Plasma / filament holographic core for Mira.
+ * Visual target: turbulent dual-tone energy sphere (cyan + warm),
+ * constantly in motion, denser with level 1…∞. Colors from theme tokens.
+ */
 
 import { normalizeCoreLevel } from "../coreLevel";
 
 export type CoreVoice = "idle" | "listening" | "thinking" | "speaking";
 
 export type CorePalette = {
-  accent: [number, number, number];
-  success: [number, number, number];
-  warning: [number, number, number];
+  /** Cool filament (theme accent / success mix) */
+  cool: [number, number, number];
+  /** Warm filament (theme warning / accent mix) */
+  warm: [number, number, number];
+  /** Hot nucleus highlight */
   glow: [number, number, number];
 };
 
-type LayerKind = "shell" | "ring" | "ribbon" | "heart" | "filaments";
+type Band = "cool" | "warm" | "glow";
 
 type Layer = {
-  kind: LayerKind;
-  minLevel: number;
   positions: Float32Array;
   phases: Float32Array;
+  seeds: Float32Array;
   count: number;
   spin: number;
-  tilt: number;
+  tiltX: number;
+  tiltZ: number;
   size: number;
-  color: keyof CorePalette;
+  band: Band;
+  turbulence: number;
+  minLevel: number;
 };
 
 const VERT = `#version 300 es
 precision highp float;
 layout(location=0) in vec3 aPos;
 layout(location=1) in float aPhase;
+layout(location=2) in float aSeed;
 uniform mat4 uViewProj;
 uniform mat4 uModel;
 uniform float uTime;
 uniform float uPulse;
 uniform float uJitter;
 uniform float uPointScale;
+uniform float uTurbulence;
 out float vAlpha;
 out float vHot;
+out float vBandMix;
+
+float hash(float n){ return fract(sin(n)*43758.5453123); }
+
 void main(){
-  float t = uTime * (0.35 + aPhase * 0.55) + aPhase * 6.28318;
+  float t = uTime;
+  float s = aSeed * 6.28318;
+  // multi-frequency plasma curl (living filaments)
+  float turb = uTurbulence * uJitter;
   vec3 p = aPos;
-  // soft living drift
-  p.x += sin(t * 1.7 + aPos.y * 4.0) * 0.012 * uJitter;
-  p.y += cos(t * 1.3 + aPos.z * 3.0) * 0.012 * uJitter;
-  p.z += sin(t * 1.1 + aPos.x * 5.0) * 0.012 * uJitter;
-  p *= (1.0 + uPulse * 0.04);
+  float r0 = length(p);
+  vec3 nrm = r0 > 1e-4 ? p / r0 : vec3(0.0, 1.0, 0.0);
+
+  float w1 = sin(t * 1.9 + s + p.y * 7.0) * cos(t * 1.1 + p.z * 5.0);
+  float w2 = cos(t * 2.7 + s * 1.7 + p.x * 6.0);
+  float w3 = sin(t * 3.4 + s * 0.6 + p.z * 8.0 + p.x * 3.0);
+  vec3 drift = nrm * (w1 * 0.045)
+    + vec3(w2, w3, -w1) * 0.055
+    + vec3(
+        sin(t * 4.1 + s),
+        cos(t * 3.6 + s * 1.3),
+        sin(t * 2.2 + s * 2.1)
+      ) * 0.02;
+  p += drift * turb;
+
+  // radial breath
+  float breath = 1.0 + uPulse * 0.06 + sin(t * 2.2 + s) * 0.012 * turb;
+  p *= breath;
+
   vec4 world = uModel * vec4(p, 1.0);
   gl_Position = uViewProj * world;
-  float depth = clamp(0.55 + world.z * 0.35, 0.25, 1.0);
-  float sz = uPointScale * mix(1.4, 3.8, aPhase) * depth;
-  gl_PointSize = max(1.2, sz);
-  vAlpha = mix(0.25, 0.95, aPhase) * depth;
-  vHot = aPhase;
+
+  float depth = clamp(0.42 + world.z * 0.4, 0.2, 1.0);
+  float hot = smoothstep(0.15, 0.0, r0) * 0.85 + aPhase * 0.35;
+  float sz = uPointScale * mix(1.1, 4.6, hot) * depth;
+  // outer wisps slightly larger / softer
+  sz *= mix(1.0, 1.35, smoothstep(0.9, 1.45, r0));
+  gl_PointSize = max(1.0, sz);
+
+  vAlpha = mix(0.22, 0.95, aPhase) * depth * mix(0.55, 1.0, hot);
+  vHot = clamp(hot + hash(aSeed + t * 0.01) * 0.08, 0.0, 1.0);
+  vBandMix = aPhase;
 }
 `;
 
@@ -61,95 +98,322 @@ uniform vec3 uColor;
 uniform float uGain;
 in float vAlpha;
 in float vHot;
+in float vBandMix;
 out vec4 outColor;
 void main(){
   vec2 c = gl_PointCoord * 2.0 - 1.0;
   float d = length(c);
   if (d > 1.0) discard;
-  float core = smoothstep(1.0, 0.0, d);
-  float bloom = pow(core, 1.6);
-  float a = bloom * vAlpha * uGain;
-  vec3 col = mix(uColor, vec3(1.0), vHot * 0.35);
+  float core = exp(-d * d * 3.2);
+  float bloom = pow(smoothstep(1.0, 0.0, d), 1.35);
+  float a = (core * 0.85 + bloom * 0.55) * vAlpha * uGain;
+  vec3 col = mix(uColor, vec3(1.0), vHot * 0.55);
+  col = mix(col, uColor * 1.15, vBandMix * 0.25);
   outColor = vec4(col * a, a);
 }
 `;
 
 function budget(base: number, level: number, softCap: number): number {
-  // log growth so level 100 stays interactive
-  const scale = 1 + Math.log2(1 + Math.max(0, level - 1)) * 0.55;
-  return Math.min(softCap, Math.max(8, Math.floor(base * scale)));
+  const scale = 1 + Math.log2(1 + Math.max(0, level - 1)) * 0.62;
+  return Math.min(softCap, Math.max(12, Math.floor(base * scale)));
 }
 
-function fibSphere(count: number, radius: number): Float32Array {
-  const out = new Float32Array(count * 3);
-  const golden = Math.PI * (3 - Math.sqrt(5));
-  for (let i = 0; i < count; i++) {
-    const y = 1 - (i / Math.max(1, count - 1)) * 2;
-    const r = Math.sqrt(Math.max(0, 1 - y * y));
-    const theta = golden * i;
-    out[i * 3] = Math.cos(theta) * r * radius;
-    out[i * 3 + 1] = y * radius;
-    out[i * 3 + 2] = Math.sin(theta) * r * radius;
+function rand(seed: number): number {
+  const x = Math.sin(seed * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+/** Noisy arc from near-center toward outer shell — plasma filament strand. */
+function filamentStrand(
+  points: number,
+  radius: number,
+  seed: number,
+  chaos: number,
+): { pos: Float32Array; phase: Float32Array; seeds: Float32Array } {
+  const pos = new Float32Array(points * 3);
+  const phase = new Float32Array(points);
+  const seeds = new Float32Array(points);
+
+  const ax = rand(seed) * Math.PI * 2;
+  const ay = Math.acos(2 * rand(seed + 1) - 1);
+  let dir: [number, number, number] = [
+    Math.sin(ay) * Math.cos(ax),
+    Math.cos(ay),
+    Math.sin(ay) * Math.sin(ax),
+  ];
+  let px = dir[0] * 0.06;
+  let py = dir[1] * 0.06;
+  let pz = dir[2] * 0.06;
+
+  for (let i = 0; i < points; i++) {
+    const t = i / Math.max(1, points - 1);
+    // wander direction with chaos
+    const jx = (rand(seed + i * 3.1) - 0.5) * chaos;
+    const jy = (rand(seed + i * 5.7) - 0.5) * chaos;
+    const jz = (rand(seed + i * 9.3) - 0.5) * chaos;
+    dir = [
+      dir[0] * 0.82 + jx + (rand(seed + i) - 0.5) * 0.08,
+      dir[1] * 0.82 + jy + (rand(seed + i + 0.2) - 0.5) * 0.08,
+      dir[2] * 0.82 + jz + (rand(seed + i + 0.4) - 0.5) * 0.08,
+    ];
+    const len = Math.hypot(dir[0], dir[1], dir[2]) || 1;
+    dir = [dir[0] / len, dir[1] / len, dir[2] / len];
+    const step = (radius * 0.92) / points;
+    px += dir[0] * step;
+    py += dir[1] * step;
+    pz += dir[2] * step;
+    // soft spherical attraction so strands stay ball-shaped
+    const r = Math.hypot(px, py, pz) || 1;
+    const targetR = 0.08 + t * radius;
+    const pull = (targetR - r) * 0.35;
+    px += (px / r) * pull;
+    py += (py / r) * pull;
+    pz += (pz / r) * pull;
+
+    pos[i * 3] = px;
+    pos[i * 3 + 1] = py;
+    pos[i * 3 + 2] = pz;
+    phase[i] = 0.25 + (1 - t) * 0.65 + rand(seed + i * 0.17) * 0.15;
+    seeds[i] = rand(seed + i * 0.37);
   }
-  return out;
+  return { pos, phase, seeds };
 }
 
-function ringPoints(
+function packStrands(
+  strandCount: number,
+  pointsPer: number,
+  radius: number,
+  chaos: number,
+  seed0: number,
+): { positions: Float32Array; phases: Float32Array; seeds: Float32Array } {
+  const count = strandCount * pointsPer;
+  const positions = new Float32Array(count * 3);
+  const phases = new Float32Array(count);
+  const seeds = new Float32Array(count);
+  let o = 0;
+  for (let s = 0; s < strandCount; s++) {
+    const strand = filamentStrand(
+      pointsPer,
+      radius * (0.75 + rand(seed0 + s) * 0.35),
+      seed0 + s * 19.17,
+      chaos,
+    );
+    positions.set(strand.pos, o * 3);
+    phases.set(strand.phase, o);
+    seeds.set(strand.seeds, o);
+    o += pointsPer;
+  }
+  return { positions, phases, seeds };
+}
+
+function nucleusCloud(
   count: number,
   radius: number,
-  wobble = 0,
-): Float32Array {
-  const out = new Float32Array(count * 3);
+  seed0: number,
+): { positions: Float32Array; phases: Float32Array; seeds: Float32Array } {
+  const positions = new Float32Array(count * 3);
+  const phases = new Float32Array(count);
+  const seeds = new Float32Array(count);
   for (let i = 0; i < count; i++) {
-    const a = (i / count) * Math.PI * 2;
-    const rr = radius + Math.sin(a * 5) * wobble;
-    out[i * 3] = Math.cos(a) * rr;
-    out[i * 3 + 1] = Math.sin(a * 2) * wobble * 0.35;
-    out[i * 3 + 2] = Math.sin(a) * rr;
+    const u = rand(seed0 + i);
+    const v = rand(seed0 + i + 0.5);
+    const w = rand(seed0 + i + 1.1);
+    const a = u * Math.PI * 2;
+    const b = Math.acos(2 * v - 1);
+    const r = radius * Math.pow(w, 0.45);
+    positions[i * 3] = Math.sin(b) * Math.cos(a) * r;
+    positions[i * 3 + 1] = Math.cos(b) * r;
+    positions[i * 3 + 2] = Math.sin(b) * Math.sin(a) * r;
+    phases[i] = 0.7 + rand(seed0 + i * 2) * 0.3;
+    seeds[i] = rand(seed0 + i * 3);
   }
-  return out;
+  return { positions, phases, seeds };
 }
 
-function ribbonPoints(
+function sparkShell(
   count: number,
   radius: number,
-  waves: number,
-  amp: number,
-): Float32Array {
-  const out = new Float32Array(count * 3);
+  seed0: number,
+): { positions: Float32Array; phases: Float32Array; seeds: Float32Array } {
+  const positions = new Float32Array(count * 3);
+  const phases = new Float32Array(count);
+  const seeds = new Float32Array(count);
   for (let i = 0; i < count; i++) {
-    const t = i / count;
-    const a = t * Math.PI * 2;
-    const y = Math.sin(a * waves) * amp;
-    const rr = radius + Math.cos(a * waves) * amp * 0.35;
-    out[i * 3] = Math.cos(a) * rr;
-    out[i * 3 + 1] = y;
-    out[i * 3 + 2] = Math.sin(a) * rr;
+    const a = rand(seed0 + i) * Math.PI * 2;
+    const b = Math.acos(2 * rand(seed0 + i + 0.3) - 1);
+    const r = radius * (0.92 + rand(seed0 + i + 0.7) * 0.18);
+    positions[i * 3] = Math.sin(b) * Math.cos(a) * r;
+    positions[i * 3 + 1] = Math.cos(b) * r;
+    positions[i * 3 + 2] = Math.sin(b) * Math.sin(a) * r;
+    phases[i] = 0.35 + rand(seed0 + i * 1.7) * 0.4;
+    seeds[i] = rand(seed0 + i * 4.2);
   }
-  return out;
+  return { positions, phases, seeds };
 }
 
-function filamentPoints(count: number, radius: number): Float32Array {
-  const out = new Float32Array(count * 3);
-  for (let i = 0; i < count; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const b = Math.acos(2 * Math.random() - 1);
-    const r = radius * (0.35 + Math.random() * 0.65);
-    // slight clustering toward arcs
-    const swirl = Math.sin(a * 3.0) * 0.08;
-    out[i * 3] = Math.sin(b) * Math.cos(a) * r;
-    out[i * 3 + 1] = Math.cos(b) * r + swirl;
-    out[i * 3 + 2] = Math.sin(b) * Math.sin(a) * r;
-  }
-  return out;
-}
+function buildLayers(level: number): Layer[] {
+  const lv = normalizeCoreLevel(level);
+  const layers: Layer[] = [];
+  const chaos = 0.55 + Math.min(1.2, Math.log2(1 + lv) * 0.28);
 
-function phasesFor(count: number, bias = 0.5): Float32Array {
-  const out = new Float32Array(count);
-  for (let i = 0; i < count; i++) {
-    out[i] = Math.min(1, Math.max(0, bias + (Math.random() - 0.5) * 0.7));
+  // Always: bright nucleus
+  {
+    const n = nucleusCloud(budget(280, lv, 900), 0.22, 11.1);
+    layers.push({
+      ...n,
+      count: n.phases.length,
+      spin: 0.35,
+      tiltX: 0.2,
+      tiltZ: 0.1,
+      size: 2.8,
+      band: "glow",
+      turbulence: 0.65,
+      minLevel: 1,
+    });
   }
-  return out;
+
+  // Warm inner filaments
+  {
+    const strands = budget(28, lv, 90);
+    const pts = budget(22, lv, 48);
+    const pack = packStrands(strands, pts, 0.85, chaos, 3.3);
+    layers.push({
+      ...pack,
+      count: pack.phases.length,
+      spin: 0.42,
+      tiltX: 0.55,
+      tiltZ: -0.25,
+      size: 1.7,
+      band: "warm",
+      turbulence: 1.15,
+      minLevel: 1,
+    });
+  }
+
+  // Cool mid shell filaments
+  {
+    const strands = budget(22, lv, 80);
+    const pts = budget(20, lv, 44);
+    const pack = packStrands(strands, pts, 1.05, chaos * 0.95, 7.7);
+    layers.push({
+      ...pack,
+      count: pack.phases.length,
+      spin: -0.33,
+      tiltX: -0.4,
+      tiltZ: 0.7,
+      size: 1.55,
+      band: "cool",
+      turbulence: 1.05,
+      minLevel: 1,
+    });
+  }
+
+  if (lv >= 2) {
+    const pack = packStrands(
+      budget(18, lv, 70),
+      budget(18, lv, 40),
+      1.15,
+      chaos * 1.05,
+      13.2,
+    );
+    layers.push({
+      ...pack,
+      count: pack.phases.length,
+      spin: 0.28,
+      tiltX: 0.9,
+      tiltZ: 0.35,
+      size: 1.4,
+      band: "warm",
+      turbulence: 1.2,
+      minLevel: 2,
+    });
+  }
+
+  if (lv >= 3) {
+    const pack = packStrands(
+      budget(24, lv, 85),
+      budget(24, lv, 52),
+      1.25,
+      chaos * 1.15,
+      21.5,
+    );
+    layers.push({
+      ...pack,
+      count: pack.phases.length,
+      spin: -0.48,
+      tiltX: -0.75,
+      tiltZ: -0.55,
+      size: 1.35,
+      band: "cool",
+      turbulence: 1.35,
+      minLevel: 3,
+    });
+  }
+
+  if (lv >= 4) {
+    const sparks = sparkShell(budget(400, lv, 1400), 1.38, 31);
+    layers.push({
+      ...sparks,
+      count: sparks.phases.length,
+      spin: 0.18,
+      tiltX: 0.3,
+      tiltZ: 0.5,
+      size: 1.25,
+      band: "warm",
+      turbulence: 0.9,
+      minLevel: 4,
+    });
+  }
+
+  if (lv >= 5) {
+    const pack = packStrands(
+      budget(30, lv, 100),
+      budget(26, lv, 56),
+      1.42,
+      chaos * 1.25,
+      44.4,
+    );
+    layers.push({
+      ...pack,
+      count: pack.phases.length,
+      spin: 0.55,
+      tiltX: 1.1,
+      tiltZ: -0.9,
+      size: 1.3,
+      band: "cool",
+      turbulence: 1.45,
+      minLevel: 5,
+    });
+  }
+
+  // Beyond 5 — keep adding filament shells (capped tiers)
+  if (lv >= 6) {
+    const tiers = Math.min(10, lv - 5);
+    for (let i = 0; i < tiers; i++) {
+      const tier = 6 + i;
+      if (lv < tier) break;
+      const pack = packStrands(
+        budget(12 + i * 2, lv, 55),
+        budget(16, lv, 36),
+        1.2 + i * 0.08,
+        chaos * (1.1 + i * 0.04),
+        55 + i * 9.1,
+      );
+      layers.push({
+        ...pack,
+        count: pack.phases.length,
+        spin: (i % 2 === 0 ? 0.25 : -0.3) * (1 + i * 0.03),
+        tiltX: 0.4 + i * 0.15,
+        tiltZ: -0.3 - i * 0.1,
+        size: 1.15,
+        band: i % 2 === 0 ? "warm" : "cool",
+        turbulence: 1.2 + i * 0.05,
+        minLevel: tier,
+      });
+    }
+  }
+
+  return layers.filter((l) => l.minLevel <= lv);
 }
 
 function compile(
@@ -264,18 +528,16 @@ function mat4Multiply(out: Float32Array, a: Float32Array, b: Float32Array): void
   out.set(o);
 }
 
-function mat4FromEulerYXZ(
+function mat4FromEuler(
   out: Float32Array,
   ax: number,
   ay: number,
   az: number,
-  spin: number,
 ): void {
-  // model = Ry(ay+spin) * Rx(ax) * Rz(az)
   const cx = Math.cos(ax);
   const sx = Math.sin(ax);
-  const cy = Math.cos(ay + spin);
-  const sy = Math.sin(ay + spin);
+  const cy = Math.cos(ay);
+  const sy = Math.sin(ay);
   const cz = Math.cos(az);
   const sz = Math.sin(az);
   out[0] = cy * cz + sy * sx * sz;
@@ -294,226 +556,6 @@ function mat4FromEulerYXZ(
   out[13] = 0;
   out[14] = 0;
   out[15] = 1;
-}
-
-function buildLayers(level: number): Layer[] {
-  const lv = normalizeCoreLevel(level);
-  const layers: Layer[] = [];
-  const colors: Array<keyof CorePalette> = [
-    "accent",
-    "success",
-    "warning",
-    "glow",
-  ];
-
-  // L1 — heart + sparse shell (density grows forever)
-  const heart = fibSphere(budget(lv >= 4 ? 180 : 120, lv, 420), 0.18);
-  layers.push({
-    kind: "heart",
-    minLevel: 1,
-    positions: heart,
-    phases: phasesFor(heart.length / 3, 0.85),
-    count: heart.length / 3,
-    spin: 0.55 + Math.min(0.4, lv * 0.01),
-    tilt: 0.2,
-    size: 2.4,
-    color: "glow",
-  });
-  const shell1 = fibSphere(budget(240, lv, 900), 0.55);
-  layers.push({
-    kind: "shell",
-    minLevel: 1,
-    positions: shell1,
-    phases: phasesFor(shell1.length / 3, 0.45),
-    count: shell1.length / 3,
-    spin: 0.22,
-    tilt: 0.35,
-    size: 1.6,
-    color: "accent",
-  });
-  const ring1 = ringPoints(budget(160, lv, 480), 0.72, 0.02);
-  layers.push({
-    kind: "ring",
-    minLevel: 1,
-    positions: ring1,
-    phases: phasesFor(ring1.length / 3, 0.55),
-    count: ring1.length / 3,
-    spin: -0.18,
-    tilt: 1.1,
-    size: 1.5,
-    color: "accent",
-  });
-
-  if (lv >= 2) {
-    const shell2 = fibSphere(budget(420, lv, 1200), 0.78);
-    layers.push({
-      kind: "shell",
-      minLevel: 2,
-      positions: shell2,
-      phases: phasesFor(shell2.length / 3, 0.4),
-      count: shell2.length / 3,
-      spin: -0.28,
-      tilt: -0.55,
-      size: 1.35,
-      color: "success",
-    });
-    const ticks = ringPoints(budget(96, lv, 280), 0.92, 0);
-    layers.push({
-      kind: "ring",
-      minLevel: 2,
-      positions: ticks,
-      phases: phasesFor(ticks.length / 3, 0.7),
-      count: ticks.length / 3,
-      spin: 0.4,
-      tilt: 0.15,
-      size: 1.8,
-      color: "accent",
-    });
-  }
-
-  if (lv >= 3) {
-    const waves = 5 + Math.min(10, Math.floor(lv / 3));
-    const ribbon = ribbonPoints(budget(720, lv, 1800), 0.88, waves, 0.14);
-    layers.push({
-      kind: "ribbon",
-      minLevel: 3,
-      positions: ribbon,
-      phases: phasesFor(ribbon.length / 3, 0.6),
-      count: ribbon.length / 3,
-      spin: 0.5,
-      tilt: 0.8,
-      size: 1.7,
-      color: "accent",
-    });
-    const shell3 = fibSphere(budget(560, lv, 1400), 1.05);
-    layers.push({
-      kind: "shell",
-      minLevel: 3,
-      positions: shell3,
-      phases: phasesFor(shell3.length / 3, 0.35),
-      count: shell3.length / 3,
-      spin: -0.16,
-      tilt: 0.9,
-      size: 1.2,
-      color: "warning",
-    });
-  }
-
-  if (lv >= 4) {
-    const ringA = ringPoints(budget(220, lv, 600), 1.18, 0.03);
-    const ringB = ringPoints(budget(200, lv, 560), 1.28, 0.05);
-    layers.push({
-      kind: "ring",
-      minLevel: 4,
-      positions: ringA,
-      phases: phasesFor(ringA.length / 3, 0.5),
-      count: ringA.length / 3,
-      spin: 0.65,
-      tilt: 0.4,
-      size: 1.4,
-      color: "warning",
-    });
-    layers.push({
-      kind: "ring",
-      minLevel: 4,
-      positions: ringB,
-      phases: phasesFor(ringB.length / 3, 0.45),
-      count: ringB.length / 3,
-      spin: -0.42,
-      tilt: -0.7,
-      size: 1.3,
-      color: "accent",
-    });
-    const cloud = fibSphere(budget(900, lv, 2000), 1.35);
-    layers.push({
-      kind: "shell",
-      minLevel: 4,
-      positions: cloud,
-      phases: phasesFor(cloud.length / 3, 0.3),
-      count: cloud.length / 3,
-      spin: 0.12,
-      tilt: 0.25,
-      size: 1.05,
-      color: "accent",
-    });
-  }
-
-  if (lv >= 5) {
-    const filaments = filamentPoints(budget(1200, lv, 2800), 1.45);
-    layers.push({
-      kind: "filaments",
-      minLevel: 5,
-      positions: filaments,
-      phases: phasesFor(filaments.length / 3, 0.55),
-      count: filaments.length / 3,
-      spin: 0.33,
-      tilt: 1.2,
-      size: 1.15,
-      color: "success",
-    });
-    const ribbon2 = ribbonPoints(
-      budget(900, lv, 2000),
-      1.22,
-      8 + Math.min(12, Math.floor(lv / 4)),
-      0.18,
-    );
-    layers.push({
-      kind: "ribbon",
-      minLevel: 5,
-      positions: ribbon2,
-      phases: phasesFor(ribbon2.length / 3, 0.65),
-      count: ribbon2.length / 3,
-      spin: -0.55,
-      tilt: -1.0,
-      size: 1.5,
-      color: "warning",
-    });
-  }
-
-  // Beyond 5 — keep evolving: extra shells / orbits every level (soft-capped count)
-  if (lv >= 6) {
-    const extraTiers = Math.min(8, lv - 5);
-    for (let i = 0; i < extraTiers; i++) {
-      const tier = 6 + i;
-      if (lv < tier) break;
-      const radius = 1.5 + i * 0.12;
-      const shell = fibSphere(
-        budget(280 + i * 40, lv, 900),
-        radius,
-      );
-      layers.push({
-        kind: "shell",
-        minLevel: tier,
-        positions: shell,
-        phases: phasesFor(shell.length / 3, 0.28),
-        count: shell.length / 3,
-        spin: (i % 2 === 0 ? 0.14 : -0.17) * (1 + i * 0.05),
-        tilt: 0.3 + i * 0.18,
-        size: 1.0,
-        color: colors[i % colors.length],
-      });
-      if (i % 2 === 0) {
-        const orbit = ringPoints(
-          budget(140 + i * 20, lv, 420),
-          radius + 0.08,
-          0.02 + i * 0.005,
-        );
-        layers.push({
-          kind: "ring",
-          minLevel: tier,
-          positions: orbit,
-          phases: phasesFor(orbit.length / 3, 0.5),
-          count: orbit.length / 3,
-          spin: (i % 2 === 0 ? 0.5 : -0.45) * (1 + i * 0.04),
-          tilt: -0.5 - i * 0.12,
-          size: 1.2,
-          color: colors[(i + 1) % colors.length],
-        });
-      }
-    }
-  }
-
-  return layers.filter((l) => l.minLevel <= lv);
 }
 
 export type CoreHandle = {
@@ -561,6 +603,7 @@ export function createCoreWebgl(
   const uPulse = gl.getUniformLocation(prog, "uPulse");
   const uJitter = gl.getUniformLocation(prog, "uJitter");
   const uPointScale = gl.getUniformLocation(prog, "uPointScale");
+  const uTurbulence = gl.getUniformLocation(prog, "uTurbulence");
   const uColor = gl.getUniformLocation(prog, "uColor");
   const uGain = gl.getUniformLocation(prog, "uGain");
 
@@ -568,6 +611,7 @@ export function createCoreWebgl(
     vao: WebGLVertexArrayObject;
     posBuf: WebGLBuffer;
     phaseBuf: WebGLBuffer;
+    seedBuf: WebGLBuffer;
   };
 
   function uploadLayers(src: Layer[]): GpuLayer[] {
@@ -584,8 +628,13 @@ export function createCoreWebgl(
       gl!.bufferData(gl!.ARRAY_BUFFER, layer.phases, gl!.STATIC_DRAW);
       gl!.enableVertexAttribArray(1);
       gl!.vertexAttribPointer(1, 1, gl!.FLOAT, false, 0, 0);
+      const seedBuf = gl!.createBuffer()!;
+      gl!.bindBuffer(gl!.ARRAY_BUFFER, seedBuf);
+      gl!.bufferData(gl!.ARRAY_BUFFER, layer.seeds, gl!.STATIC_DRAW);
+      gl!.enableVertexAttribArray(2);
+      gl!.vertexAttribPointer(2, 1, gl!.FLOAT, false, 0, 0);
       gl!.bindVertexArray(null);
-      return { ...layer, vao, posBuf, phaseBuf };
+      return { ...layer, vao, posBuf, phaseBuf, seedBuf };
     });
   }
 
@@ -611,6 +660,7 @@ export function createCoreWebgl(
     for (const layer of gpu) {
       gl!.deleteBuffer(layer.posBuf);
       gl!.deleteBuffer(layer.phaseBuf);
+      gl!.deleteBuffer(layer.seedBuf);
       gl!.deleteVertexArray(layer.vao);
     }
     layers = buildLayers(level);
@@ -623,27 +673,27 @@ export function createCoreWebgl(
     resize();
     const t = (now - start) / 1000;
 
-    let pulse = 0.35 + Math.sin(t * 1.6) * 0.35;
-    let jitter = 0.55;
+    let pulse = 0.4 + Math.sin(t * 1.7) * 0.35;
+    let jitter = 0.85;
     let speed = 1;
-    let gain = 1;
+    let gain = 1.05;
     if (voice === "listening") {
-      pulse = 0.7 + Math.sin(t * 3.2) * 0.5;
-      jitter = 0.8;
+      pulse = 0.75 + Math.sin(t * 3.4) * 0.45;
+      jitter = 1.05;
     } else if (voice === "thinking") {
-      pulse = 0.5 + Math.sin(t * 7.5) * 0.35;
-      jitter = 1.6;
-      speed = 1.8;
+      pulse = 0.55 + Math.sin(t * 8.2) * 0.4;
+      jitter = 1.55;
+      speed = 1.7;
     } else if (voice === "speaking") {
-      pulse = 0.85 + Math.sin(t * 5.2) * 0.45;
-      jitter = 1.1;
-      speed = 1.45;
-      gain = 1.2;
+      pulse = 0.9 + Math.sin(t * 5.5) * 0.4;
+      jitter = 1.25;
+      speed = 1.4;
+      gain = 1.25;
     }
 
     const aspect = canvas.width / Math.max(1, canvas.height);
-    mat4Perspective(proj, (42 * Math.PI) / 180, aspect, 0.1, 20);
-    mat4LookAt(view, [0, 0.15, 3.35], [0, 0, 0], [0, 1, 0]);
+    mat4Perspective(proj, (40 * Math.PI) / 180, aspect, 0.1, 20);
+    mat4LookAt(view, [0, 0.08, 3.15], [0, 0, 0], [0, 1, 0]);
     mat4Multiply(viewProj, proj, view);
 
     gl!.disable(gl!.DEPTH_TEST);
@@ -657,20 +707,24 @@ export function createCoreWebgl(
     gl!.uniform1f(uTime, t * speed);
     gl!.uniform1f(uPulse, pulse);
     gl!.uniform1f(uJitter, jitter);
-    const pointScale = (canvas.height / 420) * 2.2;
-    gl!.uniform1f(uPointScale, pointScale);
+    gl!.uniform1f(uPointScale, (canvas.height / 400) * 2.35);
     gl!.uniform1f(uGain, gain);
 
     for (const layer of gpu) {
-      mat4FromEulerYXZ(
+      mat4FromEuler(
         model,
-        layer.tilt * 0.35,
+        layer.tiltX * 0.35 + Math.sin(t * 0.15) * 0.08,
         t * layer.spin * speed,
-        layer.tilt * 0.15,
-        t * layer.spin * 0.35 * speed,
+        layer.tiltZ * 0.35,
       );
       gl!.uniformMatrix4fv(uModel, false, model);
-      const rgb = palette[layer.color];
+      gl!.uniform1f(uTurbulence, layer.turbulence);
+      const rgb =
+        layer.band === "cool"
+          ? palette.cool
+          : layer.band === "warm"
+            ? palette.warm
+            : palette.glow;
       gl!.uniform3f(uColor, rgb[0], rgb[1], rgb[2]);
       gl!.bindVertexArray(layer.vao);
       gl!.drawArrays(gl!.POINTS, 0, layer.count);
@@ -701,6 +755,7 @@ export function createCoreWebgl(
       for (const layer of gpu) {
         gl.deleteBuffer(layer.posBuf);
         gl.deleteBuffer(layer.phaseBuf);
+        gl.deleteBuffer(layer.seedBuf);
         gl.deleteVertexArray(layer.vao);
       }
       gl.deleteProgram(prog);
@@ -733,19 +788,37 @@ export function parseCssRgb(raw: string): [number, number, number] {
   return [0.35, 0.75, 1];
 }
 
+function mixRgb(
+  a: [number, number, number],
+  b: [number, number, number],
+  t: number,
+): [number, number, number] {
+  return [
+    a[0] + (b[0] - a[0]) * t,
+    a[1] + (b[1] - a[1]) * t,
+    a[2] + (b[2] - a[2]) * t,
+  ];
+}
+
+function lift(rgb: [number, number, number], amount: number): [number, number, number] {
+  return [
+    Math.min(1, rgb[0] * (1 - amount) + amount),
+    Math.min(1, rgb[1] * (1 - amount) + amount),
+    Math.min(1, rgb[2] * (1 - amount) + amount),
+  ];
+}
+
+/** Cool/warm plasma bands derived from active theme tokens. */
 export function paletteFromElement(el: Element): CorePalette {
   const cs = getComputedStyle(el);
   const accent = parseCssRgb(cs.getPropertyValue("--accent") || "#5ad0ff");
   const success = parseCssRgb(cs.getPropertyValue("--success") || "#5dffb1");
   const warning = parseCssRgb(cs.getPropertyValue("--warning") || "#ffb45c");
+  const cool = lift(mixRgb(accent, success, 0.35), 0.12);
+  const warm = lift(mixRgb(warning, accent, 0.25), 0.08);
   return {
-    accent,
-    success,
-    warning,
-    glow: [
-      Math.min(1, accent[0] * 0.45 + 0.55),
-      Math.min(1, accent[1] * 0.45 + 0.55),
-      Math.min(1, accent[2] * 0.45 + 0.55),
-    ],
+    cool,
+    warm,
+    glow: lift(mixRgb(warm, cool, 0.35), 0.55),
   };
 }
