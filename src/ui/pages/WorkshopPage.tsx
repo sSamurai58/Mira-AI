@@ -534,11 +534,13 @@ export function WorkshopPage() {
           />
           <div className="panel stack">
             <div className="row">
-              <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Каталог голосов</h2>
+              <h2 style={{ margin: 0, fontSize: "1.05rem" }}>
+                Каталог голосовых моделей
+              </h2>
               <StubBadge label="P2/P9 #11" />
             </div>
             <p className="muted" style={{ margin: 0 }}>
-              Свои голоса — настройка и удаление. Системные — превью / выбор /
+              Свои модели — настройка и удаление. Системные — превью / выбор /
               скрыть из списка.
             </p>
             {voiceNote ? (
@@ -548,7 +550,7 @@ export function WorkshopPage() {
             ) : null}
             {voices.length === 0 ? (
               <p className="muted" style={{ margin: 0 }}>
-                Голоса не найдены в этой среде.
+                Модели не найдены в этой среде.
               </p>
             ) : (
               voices.map((v) => (
