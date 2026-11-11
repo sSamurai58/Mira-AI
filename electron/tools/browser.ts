@@ -117,6 +117,11 @@ export function readChromiumHistory(limit = 20): BrowserVisitRow[] {
   const local = searchBrowserVisits("", limit);
   if (local.length) return local;
 
+  const systemHistory =
+    (process.env.BROWSER_SYSTEM_HISTORY ?? "false").trim().toLowerCase() ===
+    "true";
+  if (!systemHistory) return [];
+
   for (const histPath of candidates) {
     if (!fs.existsSync(histPath)) continue;
     try {

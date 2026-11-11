@@ -145,11 +145,37 @@ export function buildLearnPlan(
   ];
 }
 
+function assertAllowedImportPath(absPath: string): void {
+  const allowedRoots = [
+    libraryRoot(),
+    path.resolve(process.cwd(), "seed"),
+    path.resolve(process.cwd(), "seed", "library"),
+    path.resolve(process.cwd(), "data", "library"),
+  ].map((p) => path.resolve(p));
+  const resolved = path.resolve(absPath);
+  const ok = allowedRoots.some(
+    (root) => resolved === root || resolved.startsWith(root + path.sep),
+  );
+  if (!ok) {
+    throw new Error(
+      "Импорт разрешён только из seed/ или data/library (path allowlist).",
+    );
+  }
+  // Block obvious traversal after resolve
+  if (resolved.includes("..")) {
+    throw new Error("Некорректный путь импорта");
+  }
+}
+
 export function importLibraryFile(opts: {
   filePath: string;
   title?: string;
 }): LibraryItemRow {
   const abs = path.resolve(opts.filePath);
+  assertAllowedImportPath(abs);
+  if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
+    throw new Error(`Файл не найден: ${path.basename(abs)}`);
+  }
   const mediaType = detectMediaType(abs);
   const base = path.basename(abs);
   const destDir = libraryRoot();

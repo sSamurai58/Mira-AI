@@ -33,7 +33,6 @@ import {
   killTerminal,
   listTerminalSessions,
   resizeTerminal,
-  runCommandInTerminal,
   setTerminalCwd,
   setTerminalHandlers,
   writeTerminal,
@@ -50,13 +49,12 @@ import {
   sendOrReplyMessage,
 } from "./tools/messaging";
 import { captureScreen, getScreenPolicy } from "./tools/screen";
-import { getTerminalPolicy, isDangerousTerminalCommand } from "./tools/terminal";
+import { executeTerminalFromChat, getTerminalPolicy } from "./tools/terminal";
 import { getWebPolicy, webSearch } from "./tools/web";
 import {
   closeStore,
   createSession,
   ensureBootstrapSession,
-  getDatabasePath,
   getSession,
   getStoreHealth,
   listMessengerContacts,
@@ -66,6 +64,7 @@ import {
   openStore,
   upsertMessengerContact,
 } from "./store";
+import { authed, desktopToolsEnabled, initIpcSecurity } from "./ipcSecurity";
 
 const isDev = process.env.MIRA_DEV === "1";
 const activeAborts = new Map<string, AbortController>();
@@ -102,6 +101,7 @@ function broadcast(channel: string, payload: unknown): void {
 }
 
 app.whenReady().then(() => {
+  initIpcSecurity();
   loadConfig(true);
   wireConfirmBridge();
   openStore();
@@ -118,14 +118,31 @@ app.whenReady().then(() => {
     },
   });
 
-  ipcMain.handle("mira:get-health", () => {
+
+  const on = (
+    channel: string,
+    fn: (...args: any[]) => unknown,
+    opts?: { privileged?: boolean },
+  ) => {
+    ipcMain.handle(channel, authed(fn as any, opts));
+  };
+
+  on("mira:get-health", () => {
     const health = getStoreHealth();
     const cfg = getPublicConfig();
     const validation = validateLlmConfig();
     return {
       phase: "P8",
-      databasePath: getDatabasePath(),
-      ...health,
+      databasePath: "<local-sqlite>",
+      ok: health.ok,
+      path: "<local-sqlite>",
+      sessions: health.sessions,
+      utterances: health.utterances,
+      browserVisits: health.browserVisits,
+      messengerContacts: health.messengerContacts,
+      messengerMessages: health.messengerMessages,
+      libraryItems: health.libraryItems,
+      learnedUnits: health.learnedUnits,
       llm: cfg,
       llmOk: validation.ok,
       llmReason: validation.reason ?? null,
@@ -138,28 +155,24 @@ app.whenReady().then(() => {
       terminal: getTerminalPolicy(),
       terminalSessions: listTerminalSessions().length,
       library: listLibraryItems(5).length,
+      desktopTools: desktopToolsEnabled(),
     };
   });
 
-  ipcMain.handle("mira:get-config", () => getPublicConfig());
-
-  ipcMain.handle("mira:list-sessions", () => listSessions());
-
-  ipcMain.handle("mira:create-session", (_e, title?: string) =>
+  on("mira:get-config", () => getPublicConfig());
+  on("mira:list-sessions", () => listSessions());
+  on("mira:create-session", (_e, title?: string) =>
     createSession(title || "Новый диалог"),
   );
-
-  ipcMain.handle("mira:get-session", (_e, sessionId: string) => {
+  on("mira:get-session", (_e, sessionId: string) => {
     const session = getSession(sessionId);
     if (!session) return null;
     return { session, utterances: listUtterances(sessionId) };
   });
-
-  ipcMain.handle("mira:search-memory", (_e, query: string) =>
+  on("mira:search-memory", (_e, query: string) =>
     runMemorySearch(query ?? "", 20),
   );
-
-  ipcMain.handle("mira:test-llm", async () => {
+  on("mira:test-llm", async () => {
     const cfg = loadConfig(true);
     const validation = validateLlmConfig(cfg);
     if (!validation.ok) {
@@ -169,7 +182,7 @@ app.whenReady().then(() => {
     return adapter.testConnection();
   });
 
-  ipcMain.handle(
+  on(
     "mira:send-chat",
     async (
       _e,
@@ -183,7 +196,6 @@ app.whenReady().then(() => {
       const requestId = payload.requestId || crypto.randomUUID();
       const controller = new AbortController();
       activeAborts.set(requestId, controller);
-
       try {
         const session = await sendChatMessage(
           {
@@ -210,7 +222,7 @@ app.whenReady().then(() => {
     },
   );
 
-  ipcMain.handle("mira:abort-chat", (_e, requestId: string) => {
+  on("mira:abort-chat", (_e, requestId: string) => {
     const c = activeAborts.get(requestId);
     if (c) {
       c.abort();
@@ -220,21 +232,15 @@ app.whenReady().then(() => {
     return { ok: false };
   });
 
-  ipcMain.handle("mira:list-skills", () => loadMarkdownCatalog("skills"));
-  ipcMain.handle("mira:list-protocols", () => loadMarkdownCatalog("protocols"));
-
-  ipcMain.handle(
-    "mira:set-skill-enabled",
-    (_e, id: string, enabled: boolean) =>
-      setCatalogEnabled("skills", id, enabled),
+  on("mira:list-skills", () => loadMarkdownCatalog("skills"));
+  on("mira:list-protocols", () => loadMarkdownCatalog("protocols"));
+  on("mira:set-skill-enabled", (_e, id: string, enabled: boolean) =>
+    setCatalogEnabled("skills", id, enabled),
   );
-  ipcMain.handle(
-    "mira:set-protocol-enabled",
-    (_e, id: string, enabled: boolean) =>
-      setCatalogEnabled("protocols", id, enabled),
+  on("mira:set-protocol-enabled", (_e, id: string, enabled: boolean) =>
+    setCatalogEnabled("protocols", id, enabled),
   );
-
-  ipcMain.handle(
+  on(
     "mira:save-protocol",
     (
       _e,
@@ -249,18 +255,14 @@ app.whenReady().then(() => {
     ) => writeCatalogItem("protocols", item),
   );
 
-  ipcMain.handle("mira:get-web-policy", () => getWebPolicy());
-  ipcMain.handle("mira:get-screen-policy", () => getScreenPolicy());
-  ipcMain.handle("mira:get-browser-policy", () => getBrowserPolicy());
+  on("mira:get-web-policy", () => getWebPolicy());
+  on("mira:get-screen-policy", () => getScreenPolicy());
+  on("mira:get-browser-policy", () => getBrowserPolicy());
 
-  ipcMain.handle("mira:test-web", async (_e, query?: string) => {
+  on("mira:test-web", async (_e, query?: string) => {
     try {
       const hits = await webSearch(query?.trim() || "Mira AI assistant");
-      return {
-        ok: true,
-        detail: `web.search OK · hits=${hits.length}`,
-        hits,
-      };
+      return { ok: true, detail: `web.search OK · hits=${hits.length}`, hits };
     } catch (err) {
       return {
         ok: false,
@@ -270,59 +272,62 @@ app.whenReady().then(() => {
     }
   });
 
-  ipcMain.handle("mira:test-screen", async () => {
-    try {
-      const shot = await captureScreen();
-      return {
-        ok: shot.ok,
-        detail: shot.note,
-        path: shot.path,
-      };
-    } catch (err) {
-      return {
-        ok: false,
-        detail: err instanceof Error ? err.message : String(err),
-        path: null,
-      };
-    }
+  on(
+    "mira:test-screen",
+    async () => {
+      try {
+        const shot = await captureScreen();
+        return { ok: shot.ok, detail: shot.note, path: shot.path };
+      } catch (err) {
+        return {
+          ok: false,
+          detail: err instanceof Error ? err.message : String(err),
+          path: null,
+        };
+      }
+    },
+    { privileged: true },
+  );
+
+  on(
+    "mira:test-browser-open",
+    async (_e, url?: string) => {
+      try {
+        const target = (url?.trim() || "https://example.com").replace(/[),.]+$/, "");
+        const opened = await openBrowserUrl(target);
+        return { ok: opened.ok, detail: opened.detail, url: opened.url };
+      } catch (err) {
+        return {
+          ok: false,
+          detail: err instanceof Error ? err.message : String(err),
+          url: null,
+        };
+      }
+    },
+    { privileged: true },
+  );
+
+  on(
+    "mira:search-browser-history",
+    (_e, query?: string) => searchHistory(query ?? "", 20),
+    { privileged: true },
+  );
+
+  on("mira:get-messaging-policy", () => getMessagingPolicy());
+  on("mira:get-messaging-status", () => getMessagingStatusSnapshot(), {
+    privileged: true,
   });
-
-  ipcMain.handle("mira:test-browser-open", async (_e, url?: string) => {
-    try {
-      const target = (url?.trim() || "https://example.com").replace(
-        /[),.]+$/,
-        "",
-      );
-      const opened = await openBrowserUrl(target);
-      return {
-        ok: opened.ok,
-        detail: opened.detail,
-        url: opened.url,
-      };
-    } catch (err) {
-      return {
-        ok: false,
-        detail: err instanceof Error ? err.message : String(err),
-        url: null,
-      };
-    }
-  });
-
-  ipcMain.handle("mira:search-browser-history", (_e, query?: string) =>
-    searchHistory(query ?? "", 20),
+  on(
+    "mira:list-messenger-contacts",
+    (_e, provider?: string) => listMessengerContacts(provider),
+    { privileged: true },
   );
-
-  ipcMain.handle("mira:get-messaging-policy", () => getMessagingPolicy());
-  ipcMain.handle("mira:get-messaging-status", () =>
-    getMessagingStatusSnapshot(),
+  on(
+    "mira:list-messenger-messages",
+    (_e, limit?: number) => listMessengerMessages(limit ?? 20),
+    { privileged: true },
   );
-  ipcMain.handle("mira:list-messenger-contacts", (_e, provider?: string) =>
-    listMessengerContacts(provider),
-  );
-  ipcMain.handle("mira:list-messenger-messages", (_e, limit?: number) =>
-    listMessengerMessages(limit ?? 20),
-  );
-  ipcMain.handle(
+  on(
     "mira:upsert-messenger-contact",
     (
       _e,
@@ -335,9 +340,9 @@ app.whenReady().then(() => {
         enabled?: boolean;
       },
     ) => upsertMessengerContact(item),
+    { privileged: true },
   );
-
-  ipcMain.handle(
+  on(
     "mira:test-messaging-send",
     async (
       _e,
@@ -356,11 +361,7 @@ app.whenReady().then(() => {
           };
         }
         const result = await sendOrReplyMessage(intent);
-        return {
-          ok: result.ok,
-          detail: result.detail,
-          result,
-        };
+        return { ok: result.ok, detail: result.detail, result };
       } catch (err) {
         return {
           ok: false,
@@ -369,52 +370,69 @@ app.whenReady().then(() => {
         };
       }
     },
+    { privileged: true },
   );
 
-  ipcMain.handle("mira:get-terminal-policy", () => getTerminalPolicy());
-  ipcMain.handle("mira:get-terminal-prefs", () => getTerminalPrefs());
-  ipcMain.handle("mira:list-terminal-sessions", () => listTerminalSessions());
-  ipcMain.handle(
+  on("mira:get-terminal-policy", () => getTerminalPolicy());
+  on("mira:get-terminal-prefs", () => getTerminalPrefs());
+  on("mira:list-terminal-sessions", () => listTerminalSessions(), {
+    privileged: true,
+  });
+  on(
     "mira:create-terminal-session",
     (_e, opts?: { title?: string; cwd?: string; cols?: number; rows?: number }) =>
       createTerminalSession(opts),
+    { privileged: true },
   );
-  ipcMain.handle("mira:ensure-terminal", () => ensureDefaultTerminal());
-  ipcMain.handle("mira:get-terminal-session", (_e, id: string) =>
-    getTerminalSession(id),
+  on("mira:ensure-terminal", () => ensureDefaultTerminal(), { privileged: true });
+  on(
+    "mira:get-terminal-session",
+    (_e, id: string) => getTerminalSession(id),
+    { privileged: true },
   );
-  ipcMain.handle("mira:write-terminal", (_e, id: string, data: string) =>
-    writeTerminal(id, data),
+  on(
+    "mira:write-terminal",
+    (_e, id: string, data: string) => writeTerminal(id, data),
+    { privileged: true },
   );
-  ipcMain.handle(
+  on(
     "mira:resize-terminal",
     (_e, id: string, cols: number, rows: number) =>
       resizeTerminal(id, cols, rows),
+    { privileged: true },
   );
-  ipcMain.handle("mira:kill-terminal", (_e, id: string) => killTerminal(id));
-  ipcMain.handle("mira:clear-terminal", (_e, id: string) =>
-    clearTerminalHistory(id),
+  on("mira:kill-terminal", (_e, id: string) => killTerminal(id), {
+    privileged: true,
+  });
+  on("mira:clear-terminal", (_e, id: string) => clearTerminalHistory(id), {
+    privileged: true,
+  });
+  on("mira:get-terminal-history", (_e, id: string) => getTerminalHistory(id), {
+    privileged: true,
+  });
+  on(
+    "mira:set-terminal-cwd",
+    (_e, id: string, cwd: string) => setTerminalCwd(id, cwd),
+    { privileged: true },
   );
-  ipcMain.handle("mira:get-terminal-history", (_e, id: string) =>
-    getTerminalHistory(id),
-  );
-  ipcMain.handle("mira:set-terminal-cwd", (_e, id: string, cwd: string) =>
-    setTerminalCwd(id, cwd),
-  );
-  ipcMain.handle(
+  on(
     "mira:run-terminal-command",
-    async (_e, command: string, sessionId?: string | null) => {
+    async (_e, command: string, _sessionId?: string | null) => {
       try {
-        const dangerous = isDangerousTerminalCommand(command);
-        const result = await runCommandInTerminal(command, {
-          sessionId,
-          waitMs: 5000,
-        });
-        return { ok: true, dangerous, ...result };
+        const result = await executeTerminalFromChat(String(command ?? ""));
+        return {
+          ok: result.ok,
+          dangerous: result.dangerous,
+          sessionId: result.sessionId,
+          output: result.output,
+          backend: null,
+          detail: result.detail,
+          mode: result.mode,
+        };
       } catch (err) {
         return {
           ok: false,
-          dangerous: isDangerousTerminalCommand(command),
+          dangerous: false,
           detail: err instanceof Error ? err.message : String(err),
           sessionId: null,
           output: "",
@@ -422,36 +440,36 @@ app.whenReady().then(() => {
         };
       }
     },
+    { privileged: true },
   );
 
-  ipcMain.handle("mira:list-library-items", () => listLibraryItems());
-  ipcMain.handle("mira:get-library-item", (_e, id: string) => getLibraryItem(id));
-  ipcMain.handle("mira:get-library-snapshot", () => getLibrarySnapshot());
-  ipcMain.handle(
+  on("mira:list-library-items", () => listLibraryItems());
+  on("mira:get-library-item", (_e, id: string) => getLibraryItem(id));
+  on("mira:get-library-snapshot", () => getLibrarySnapshot());
+  on(
     "mira:import-library-file",
     (_e, filePath: string, title?: string) =>
       importLibraryFile({ filePath, title }),
+    { privileged: true },
   );
-  ipcMain.handle(
+  on(
     "mira:import-library-text",
     (_e, payload: { title: string; text: string; fileName?: string }) =>
       importLibraryText(payload),
   );
-  ipcMain.handle("mira:process-library-item", (_e, id: string) =>
-    processLibraryItem(id),
-  );
-  ipcMain.handle("mira:propose-library-skill", async (_e, id: string) =>
+  on("mira:process-library-item", (_e, id: string) => processLibraryItem(id));
+  on("mira:propose-library-skill", async (_e, id: string) =>
     proposeSkillFromItem(id),
   );
-  ipcMain.handle("mira:list-learned-units", (_e, libraryItemId?: string) =>
+  on("mira:list-learned-units", (_e, libraryItemId?: string) =>
     listLearnedUnits(
       libraryItemId ? { libraryItemId, limit: 50 } : { limit: 50 },
     ),
   );
-  ipcMain.handle("mira:search-learned-units", (_e, query?: string) =>
+  on("mira:search-learned-units", (_e, query?: string) =>
     searchLearnedUnits(query ?? "", 20),
   );
-  ipcMain.handle("mira:get-learn-plan", (_e, libraryItemId: string) =>
+  on("mira:get-learn-plan", (_e, libraryItemId: string) =>
     getLearnPlan(libraryItemId),
   );
 

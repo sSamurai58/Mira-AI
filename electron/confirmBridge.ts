@@ -1,4 +1,5 @@
 import { BrowserWindow, ipcMain } from "electron";
+import { assertIpcAuth } from "./ipcSecurity";
 
 export type ConfirmRequest = {
   id: string;
@@ -17,13 +18,17 @@ let wired = false;
 export function wireConfirmBridge(): void {
   if (wired) return;
   wired = true;
-  ipcMain.handle("mira:confirm-response", (_e, id: string, accepted: boolean) => {
-    const p = pending.get(id);
-    if (!p) return { ok: false };
-    pending.delete(id);
-    p.resolve(Boolean(accepted));
-    return { ok: true };
-  });
+  ipcMain.handle(
+    "mira:confirm-response",
+    (event, token: unknown, id: string, accepted: boolean) => {
+      assertIpcAuth(event, token);
+      const p = pending.get(id);
+      if (!p) return { ok: false };
+      pending.delete(id);
+      p.resolve(Boolean(accepted));
+      return { ok: true };
+    },
+  );
 }
 
 export function requestUserConfirm(

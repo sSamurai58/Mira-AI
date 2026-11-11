@@ -72,6 +72,7 @@
 | 2026-11-11 | P7 готов | 16.1–16.8 happy-path; p7:smoke OK |
 | 2026-11-11 | Library/learn P8 | txt/md extract+analyze; PDF/AV stub; learned_units; skill confirm |
 | 2026-11-11 | P8 готов | 14.1–14.9 happy-path; p8:smoke OK |
+| 2026-11-11 | Publish security harden | IPC token+sender gate; terminal confirm; path allowlist; SSRF guard; owner_id sessions; redact health paths; system browser history off by default |
 
 ## Баги
 

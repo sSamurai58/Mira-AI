@@ -1,4 +1,6 @@
 import { loadConfig } from "../config";
+import dns from "node:dns/promises";
+import net from "node:net";
 
 export type WebSearchHit = {
   title: string;
@@ -16,7 +18,7 @@ export type WebFetchResult = {
 
 export type WebPolicy = {
   enabled: boolean;
-  allowlist: string[]; // hostnames; empty or ["*"] = allow all (still confirm fetch if required)
+  allowlist: string[]; // hostnames; ["*"] only for search helpers — fetch still blocks private IPs
   requireConfirmForFetch: boolean;
 };
 
@@ -24,7 +26,8 @@ export function getWebPolicy(): WebPolicy {
   const cfg = loadConfig();
   const enabled =
     (process.env.WEB_ENABLED ?? "true").trim().toLowerCase() !== "false";
-  const raw = (process.env.WEB_ALLOWLIST ?? "*").trim();
+  // Fetch allowlist defaults to duckduckgo + example; "*" remains possible but SSRF guard still applies.
+  const raw = (process.env.WEB_ALLOWLIST ?? "duckduckgo.com,api.duckduckgo.com").trim();
   const allowlist = raw
     .split(",")
     .map((s) => s.trim().toLowerCase())
@@ -41,6 +44,62 @@ function hostAllowed(hostname: string, allowlist: string[]): boolean {
   return allowlist.some(
     (rule) => host === rule || host.endsWith(`.${rule}`),
   );
+}
+
+function isPrivateIp(ip: string): boolean {
+  const normalized = ip.replace(/^\[|\]$/g, "");
+  if (normalized === "::1" || normalized === "0.0.0.0") return true;
+  if (normalized.startsWith("fc") || normalized.startsWith("fd") || normalized.startsWith("fe80")) {
+    return true;
+  }
+  const parts = normalized.split(".").map(Number);
+  if (parts.length === 4 && parts.every((n) => Number.isInteger(n))) {
+    const [a, b] = parts;
+    if (a === 10 || a === 127 || a === 0) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
+  }
+  return false;
+}
+
+const BLOCKED_HOSTNAMES = new Set([
+  "localhost",
+  "metadata.google.internal",
+  "metadata",
+  "instance-data",
+]);
+
+export async function assertSafeFetchUrl(targetUrl: string): Promise<URL> {
+  let parsed: URL;
+  try {
+    parsed = new URL(targetUrl);
+  } catch {
+    throw new Error(`Некорректный URL: ${targetUrl}`);
+  }
+  if (!["http:", "https:"].includes(parsed.protocol)) {
+    throw new Error("Разрешены только http/https");
+  }
+  const host = parsed.hostname.toLowerCase();
+  if (BLOCKED_HOSTNAMES.has(host) || host.endsWith(".localhost") || host.endsWith(".local")) {
+    throw new Error(`Хост ${host} запрещён (SSRF guard)`);
+  }
+  if (net.isIP(host)) {
+    if (isPrivateIp(host)) {
+      throw new Error(`IP ${host} запрещён (SSRF guard)`);
+    }
+  } else {
+    const records = await dns.lookup(host, { all: true, verbatim: true });
+    for (const rec of records) {
+      if (isPrivateIp(rec.address)) {
+        throw new Error(
+          `Хост ${host} резолвится в приватный адрес ${rec.address} (SSRF guard)`,
+        );
+      }
+    }
+  }
+  return parsed;
 }
 
 export function looksLikeWebIntent(text: string): boolean {
@@ -77,6 +136,7 @@ export async function webSearch(
   if (!q) return [];
 
   const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(q)}&format=json&no_html=1&skip_disambig=1`;
+  await assertSafeFetchUrl(url);
   const res = await fetch(url, {
     signal,
     headers: { Accept: "application/json" },
@@ -138,15 +198,7 @@ export async function webFetch(
   if (!policy.enabled) {
     throw new Error("Интернет-инструменты выключены (WEB_ENABLED=false).");
   }
-  let parsed: URL;
-  try {
-    parsed = new URL(targetUrl);
-  } catch {
-    throw new Error(`Некорректный URL: ${targetUrl}`);
-  }
-  if (!["http:", "https:"].includes(parsed.protocol)) {
-    throw new Error("Разрешены только http/https");
-  }
+  const parsed = await assertSafeFetchUrl(targetUrl);
   if (!hostAllowed(parsed.hostname, policy.allowlist)) {
     throw new Error(
       `Хост ${parsed.hostname} не в WEB_ALLOWLIST (${policy.allowlist.join(", ")})`,
@@ -155,12 +207,11 @@ export async function webFetch(
 
   const res = await fetch(parsed.toString(), {
     signal,
-    redirect: "follow",
+    redirect: "error",
     headers: { "User-Agent": "MiraAssistant/0.0.1 (+local)" },
   });
   const contentType = res.headers.get("content-type") || "";
   let text = await res.text();
-  // strip tags lightly for HTML
   if (contentType.includes("html")) {
     text = text
       .replace(/<script[\s\S]*?<\/script>/gi, " ")

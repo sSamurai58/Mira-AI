@@ -1,10 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { getOwnerId } from "./owner";
 
 export type SessionRow = {
   id: string;
   title: string;
+  owner_id: string;
   created_at: string;
   updated_at: string;
 };
@@ -115,6 +117,7 @@ export function openStore(): DatabaseSync {
     CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
+      owner_id TEXT NOT NULL DEFAULT 'local',
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
@@ -199,6 +202,11 @@ export function openStore(): DatabaseSync {
     );
   `);
 
+  try {
+    db.exec(`ALTER TABLE sessions ADD COLUMN owner_id TEXT NOT NULL DEFAULT 'local'`);
+  } catch {
+    // column already exists
+  }
   ensureMessengerSeeds(db);
   return db;
 }
@@ -261,23 +269,27 @@ function ensureMessengerSeeds(store: DatabaseSync): void {
 
 export function listSessions(limit = 50): SessionRow[] {
   const store = openStore();
+  const owner = getOwnerId();
   return store
     .prepare(
-      `SELECT id, title, created_at, updated_at
+      `SELECT id, title, owner_id, created_at, updated_at
        FROM sessions
+       WHERE owner_id = ?
        ORDER BY updated_at DESC
        LIMIT ?`,
     )
-    .all(limit) as SessionRow[];
+    .all(owner, limit) as SessionRow[];
 }
 
 export function getSession(id: string): SessionRow | null {
   const store = openStore();
+  const owner = getOwnerId();
   const row = store
     .prepare(
-      `SELECT id, title, created_at, updated_at FROM sessions WHERE id = ?`,
+      `SELECT id, title, owner_id, created_at, updated_at
+       FROM sessions WHERE id = ? AND owner_id = ?`,
     )
-    .get(id) as SessionRow | undefined;
+    .get(id, owner) as SessionRow | undefined;
   return row ?? null;
 }
 
@@ -287,15 +299,16 @@ export function createSession(title = "Новый диалог"): SessionRow {
   const row: SessionRow = {
     id: crypto.randomUUID(),
     title,
+    owner_id: getOwnerId(),
     created_at: now,
     updated_at: now,
   };
   store
     .prepare(
-      `INSERT INTO sessions (id, title, created_at, updated_at)
-       VALUES (?, ?, ?, ?)`,
+      `INSERT INTO sessions (id, title, owner_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?)`,
     )
-    .run(row.id, row.title, row.created_at, row.updated_at);
+    .run(row.id, row.title, row.owner_id, row.created_at, row.updated_at);
   return row;
 }
 
@@ -317,14 +330,16 @@ export function touchSession(id: string, title?: string): void {
 
 export function ensureBootstrapSession(): SessionRow {
   const store = openStore();
+  const owner = getOwnerId();
   const existing = store
     .prepare(
-      `SELECT id, title, created_at, updated_at
+      `SELECT id, title, owner_id, created_at, updated_at
        FROM sessions
+       WHERE owner_id = ?
        ORDER BY created_at ASC
        LIMIT 1`,
     )
-    .get() as SessionRow | undefined;
+    .get(owner) as SessionRow | undefined;
 
   if (existing) return existing;
   return createSession("Первый диалог");
@@ -376,6 +391,7 @@ export function searchMemory(
   const limit = opts?.limit ?? 6;
   const like = `%${q.replace(/[%_]/g, "")}%`;
 
+  const owner = getOwnerId();
   if (opts?.excludeSessionId) {
     return store
       .prepare(
@@ -383,11 +399,11 @@ export function searchMemory(
                 u.role, u.content, u.created_at
          FROM utterances u
          JOIN sessions s ON s.id = u.session_id
-         WHERE u.content LIKE ? AND u.session_id != ?
+         WHERE s.owner_id = ? AND u.content LIKE ? AND u.session_id != ?
          ORDER BY u.created_at DESC
          LIMIT ?`,
       )
-      .all(like, opts.excludeSessionId, limit) as MemoryHit[];
+      .all(owner, like, opts.excludeSessionId, limit) as MemoryHit[];
   }
 
   return store
@@ -396,11 +412,11 @@ export function searchMemory(
               u.role, u.content, u.created_at
        FROM utterances u
        JOIN sessions s ON s.id = u.session_id
-       WHERE u.content LIKE ?
+       WHERE s.owner_id = ? AND u.content LIKE ?
        ORDER BY u.created_at DESC
        LIMIT ?`,
     )
-    .all(like, limit) as MemoryHit[];
+    .all(owner, like, limit) as MemoryHit[];
 }
 
 export function addBrowserVisit(
