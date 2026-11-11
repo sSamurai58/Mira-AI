@@ -139,8 +139,6 @@ import {
   upsertProfile,
 } from "./profiles";
 import { getHudPolicy, isHudOpen, toggleHud } from "./hud";
-import fs from "node:fs";
-
 
 const isDev = process.env.MIRA_DEV === "1";
 const activeAborts = new Map<string, AbortController>();
