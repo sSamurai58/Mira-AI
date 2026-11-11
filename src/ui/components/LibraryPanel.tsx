@@ -9,6 +9,10 @@ import {
   type LocalLearnedUnit,
   type LocalLibraryItem,
 } from "../library/libraryLocal";
+import {
+  displayLearnedContent,
+  learnedKindLabel,
+} from "../library/learnedLabels";
 
 type LibraryItem = MiraLibraryItem | LocalLibraryItem;
 type LearnedUnit = MiraLearnedUnit | LocalLearnedUnit;
@@ -180,9 +184,10 @@ export function LibraryPanel() {
           <span className="chip">P8</span>
         </div>
         <p className="muted" style={{ margin: 0 }}>
-          Добавьте текст или файлы (md/txt/pdf/аудио…) → «Разобрать» → тезисы и
-          план попадают в память. В Диалоге можно прикрепить файл и отметить «В
-          материалы обучения».
+          Добавьте текст или файлы (лучше md/txt; PDF только с текстовым слоем) →
+          «Разобрать» → появятся <em>выдержки</em> (тезисы/фразы). Это ещё не
+          skills. Skill создаётся кнопкой «Предложить skill» и лежит в Мастерская
+          → Skills (по умолчанию выключен).
           {!electron
             ? " Сейчас browser-demo: материалы в localStorage."
             : ""}
@@ -321,19 +326,40 @@ export function LibraryPanel() {
             <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
               {planText || "—"}
             </pre>
-            <strong>Выученное</strong>
+            {activeId &&
+            items.find((i) => i.id === activeId && "skill_id" in i && i.skill_id) ? (
+              <p className="muted" style={{ margin: 0 }}>
+                Skill уже создан:{" "}
+                <code className="mono">
+                  {
+                    (
+                      items.find((i) => i.id === activeId) as {
+                        skill_id?: string | null;
+                      }
+                    )?.skill_id
+                  }
+                </code>{" "}
+                — смотрите Мастерская → Skills.
+              </p>
+            ) : null}
+            <strong>Выдержки из материала</strong>
+            <p className="muted" style={{ margin: 0, fontSize: "0.82rem" }}>
+              Тезисы и фразы — конспект для памяти, не каталог skills.
+            </p>
             {units.length === 0 ? (
               <p className="muted" style={{ margin: 0 }}>
                 После разбора появятся тезисы/фразы/стиль.
               </p>
             ) : (
               units.slice(0, 12).map((u) => (
-                <div key={u.id} className="panel">
+                <div key={u.id} className="panel learned-unit-card">
                   <div className="row">
-                    <span className="chip">{u.kind}</span>
+                    <span className="chip">{learnedKindLabel(u.kind)}</span>
                     <span className="muted mono">{u.source_ref}</span>
                   </div>
-                  <div>{u.content}</div>
+                  <div className="learned-unit-body">
+                    {displayLearnedContent(u.content)}
+                  </div>
                 </div>
               ))
             )}

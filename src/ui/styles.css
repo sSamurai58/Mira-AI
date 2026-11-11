@@ -2877,6 +2877,19 @@ select:disabled {
   }
 }
 
+.learned-unit-card {
+  display: grid;
+  gap: 8px;
+}
+
+.learned-unit-body {
+  color: var(--text);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

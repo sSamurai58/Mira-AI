@@ -41,6 +41,38 @@ export function detectMediaType(filePath: string): string {
   return "unknown";
 }
 
+/** Decode PDF literal-string escapes (octal + common escapes). */
+function decodePdfLiteral(raw: string): string {
+  return raw
+    .replace(/\\([0-7]{1,3})/g, (_, oct: string) =>
+      String.fromCharCode(Number.parseInt(oct, 8) & 0xff),
+    )
+    .replace(/\\([nrtbf()\\])/g, (_, c: string) => {
+      if (c === "n") return "\n";
+      if (c === "r") return "\r";
+      if (c === "t") return "\t";
+      return c;
+    });
+}
+
+/**
+ * Heuristic: does this look like human language (not raw PDF/binary noise)?
+ * Exported for smoke tests.
+ */
+export function isReadableHumanText(text: string): boolean {
+  const s = text.replace(/\s+/g, " ").trim();
+  if (s.length < 24) return false;
+  if (/^\[(pdf|epub|audio|video)\b/i.test(s)) return false;
+  const words = s.match(/[A-Za-zА-Яа-яЁё]{3,}/g) ?? [];
+  const wordChars = words.join("").length;
+  const letters = (s.match(/[A-Za-zА-Яа-яЁё]/g) ?? []).length;
+  if (letters / s.length < 0.4) return false;
+  if (wordChars / s.length < 0.32) return false;
+  const noise =
+    (s.match(/[^\s\wа-яА-ЯёЁ.,;:!?«»"'()\-–—%/+\-*=\[\]{}]/g) ?? []).length;
+  return noise / s.length <= 0.18;
+}
+
 /** Best-effort PDF text: pull printable strings and (Tj)/(TJ) payloads. */
 function extractPdfText(buf: Buffer): string {
   const latin = buf.toString("latin1");
@@ -48,26 +80,42 @@ function extractPdfText(buf: Buffer): string {
   const tjRe = /\((?:\\.|[^\\)]){1,500}\)(?:\s*Tj|\s*TJ)/g;
   let m: RegExpExecArray | null;
   while ((m = tjRe.exec(latin)) && chunks.length < 4000) {
-    const inner = m[0]
-      .replace(/\)\s*T[jJ]$/, "")
-      .replace(/^\(/, "")
-      .replace(/\\([nrtbf()\\])/g, (_, c: string) => {
-        if (c === "n") return "\n";
-        if (c === "r") return "\r";
-        if (c === "t") return "\t";
-        return c;
-      });
+    const inner = decodePdfLiteral(
+      m[0].replace(/\)\s*T[jJ]$/, "").replace(/^\(/, ""),
+    );
     if (inner.trim()) chunks.push(inner);
   }
-  if (chunks.length >= 3) return chunks.join(" ").replace(/\s+/g, " ").trim();
-  // Fallback: long printable runs
-  const runs = latin.match(/[\x20-\x7E\u00A0-\u00FF]{6,}/g) ?? [];
-  return runs
-    .filter((r) => !/^%PDF|endobj|stream|xref|trailer/i.test(r))
-    .slice(0, 800)
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim();
+  // Hex strings: <48656C6C6F>
+  const hexRe = /<([0-9A-Fa-f\s]{4,})>/g;
+  while ((m = hexRe.exec(latin)) && chunks.length < 4000) {
+    const hex = m[1].replace(/\s+/g, "");
+    if (hex.length % 2 !== 0) continue;
+    try {
+      const bytes = Buffer.from(hex, "hex");
+      const asUtf8 = bytes.toString("utf8");
+      if (isReadableHumanText(asUtf8)) chunks.push(asUtf8);
+      else {
+        const asLatin = bytes.toString("latin1");
+        if (isReadableHumanText(asLatin)) chunks.push(asLatin);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const joined = chunks.join(" ").replace(/\s+/g, " ").trim();
+  if (chunks.length >= 3 && isReadableHumanText(joined)) return joined;
+
+  // Fallback: long printable runs — only keep readable ones
+  const runs = latin.match(/[\x20-\x7E\u00A0-\u00FF]{8,}/g) ?? [];
+  const filtered = runs
+    .filter((r) => !/^%PDF|endobj|stream|xref|trailer|obj\b/i.test(r))
+    .filter((r) => isReadableHumanText(r) || /[A-Za-zА-Яа-яЁё]{4,}/.test(r))
+    .slice(0, 800);
+  const fallback = filtered.join(" ").replace(/\s+/g, " ").trim();
+  if (isReadableHumanText(fallback)) return fallback;
+  if (isReadableHumanText(joined)) return joined;
+  return "";
 }
 
 function sidecarTranscript(filePath: string): string | null {
@@ -98,15 +146,22 @@ export function extractContent(
     try {
       const raw = fs.readFileSync(filePath);
       const extracted = extractPdfText(raw);
-      if (extracted.length > 40) {
+      if (extracted.length > 40 && isReadableHumanText(extracted)) {
         return {
           text: extracted.slice(0, 50_000),
           note: `pdf: извлечено ~${extracted.length} символов (best-effort stream parser)`,
         };
       }
+      const side = sidecarTranscript(filePath);
+      if (side && isReadableHumanText(side)) {
+        return {
+          text: side.slice(0, 50_000),
+          note: "pdf: sidecar transcript (.md/.txt рядом)",
+        };
+      }
       return {
-        text: `[pdf] Файл ${path.basename(filePath)} (${raw.length} байт). Текстовый слой почти пуст — добавьте .md выжимку рядом.`,
-        note: "pdf: little text layer",
+        text: `[pdf] Файл «${path.basename(filePath)}» (${raw.length} байт) без читаемого текстового слоя (скан/сжатый поток). Это ещё не skill — положите рядом .md/.txt с тем же именем или вставьте текст вручную, затем «Разобрать» и «Предложить skill».`,
+        note: "pdf: unreadable / little text layer",
       };
     } catch {
       return { text: `[pdf] Не удалось извлечь`, note: "extract failed" };
@@ -154,18 +209,33 @@ export function extractContent(
 
 
 export function analyzeText(text: string, title: string): LibraryAnalysis {
+  if (!isReadableHumanText(text)) {
+    return {
+      theses: [
+        `Не удалось разобрать «${title}»: нет читаемого текста. Добавьте .md/.txt или вставьте текст вручную — тезисы/фразы ниже не являются skill.`,
+      ],
+      phrases: [],
+      styleNotes: [],
+      logicMoves: [],
+      terms: [],
+    };
+  }
+
   const lines = text
     .split(/\r?\n/)
     .map((l) => l.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((l) => isReadableHumanText(l) || l.length < 80);
   const headings = lines
     .filter((l) => /^#{1,3}\s+/.test(l) || /^[A-ZА-ЯЁ][^.]{8,60}$/.test(l))
     .slice(0, 12)
-    .map((l) => l.replace(/^#+\s*/, ""));
+    .map((l) => l.replace(/^#+\s*/, ""))
+    .filter((l) => isReadableHumanText(l) || /[A-Za-zА-Яа-яЁё]{4,}/.test(l));
   const sentences = text
     .split(/(?<=[.!?…])\s+/)
     .map((s) => s.trim())
-    .filter((s) => s.length > 40 && s.length < 240);
+    .filter((s) => s.length > 40 && s.length < 240)
+    .filter((s) => isReadableHumanText(s));
   const theses = (headings.length ? headings : sentences.slice(0, 8)).slice(
     0,
     8,
@@ -184,9 +254,7 @@ export function analyzeText(text: string, title: string): LibraryAnalysis {
     theses: theses.length
       ? theses
       : [`Материал «${title}»: основные идеи требуют ручного уточнения`],
-    phrases: phraseCandidates.length
-      ? phraseCandidates
-      : [`Ключевая формулировка из «${title}»`],
+    phrases: phraseCandidates,
     styleNotes: [
       text.length > 2000 ? "Развёрнутый didactic тон" : "Краткий конспектный тон",
       /мы |давайте |давай /i.test(text)
@@ -380,55 +448,76 @@ export function processLibraryItem(id: string): {
   }
 
   const analysis = analyzeText(text, item.title);
-  const plan = buildLearnPlan(item.title, analysis);
+  const readable = isReadableHumanText(text);
+  const plan = readable
+    ? buildLearnPlan(item.title, analysis)
+    : [
+        `Добавить читаемый текст к «${item.title}» (.md/.txt рядом или вставка)`,
+        "Нажать «Разобрать» ещё раз",
+        "Затем «Предложить skill» — skill появится в Мастерская → Skills",
+      ];
   upsertLearnPlan(id, plan);
 
   // 14.8 incremental: replace learned units for this item, bump version
   deleteLearnedUnitsForItem(id);
   const units: LearnedUnitRow[] = [];
-  for (const thesis of analysis.theses) {
+
+  if (!readable) {
     units.push(
       addLearnedUnit({
         libraryItemId: id,
-        kind: "thesis",
-        title: `Тезис · ${item.title}`,
-        content: thesis,
+        kind: "note",
+        title: `Нужен текст · ${item.title}`,
+        content:
+          "PDF/файл не дал читаемого текста. Выдержки ниже — не skills. Добавьте .md/.txt или вставьте текст, снова «Разобрать», потом «Предложить skill».",
         sourceRef: item.title,
       }),
     );
-  }
-  for (const phrase of analysis.phrases.slice(0, 6)) {
-    units.push(
-      addLearnedUnit({
-        libraryItemId: id,
-        kind: "phrase",
-        title: `Фраза · ${item.title}`,
-        content: phrase,
-        sourceRef: item.title,
-      }),
-    );
-  }
-  for (const style of analysis.styleNotes) {
-    units.push(
-      addLearnedUnit({
-        libraryItemId: id,
-        kind: "style",
-        title: `Стиль · ${item.title}`,
-        content: style,
-        sourceRef: item.title,
-      }),
-    );
-  }
-  for (const logic of analysis.logicMoves) {
-    units.push(
-      addLearnedUnit({
-        libraryItemId: id,
-        kind: "logic",
-        title: `Логика · ${item.title}`,
-        content: logic,
-        sourceRef: item.title,
-      }),
-    );
+  } else {
+    for (const thesis of analysis.theses) {
+      units.push(
+        addLearnedUnit({
+          libraryItemId: id,
+          kind: "thesis",
+          title: `Тезис · ${item.title}`,
+          content: thesis,
+          sourceRef: item.title,
+        }),
+      );
+    }
+    for (const phrase of analysis.phrases.slice(0, 6)) {
+      units.push(
+        addLearnedUnit({
+          libraryItemId: id,
+          kind: "phrase",
+          title: `Фраза · ${item.title}`,
+          content: phrase,
+          sourceRef: item.title,
+        }),
+      );
+    }
+    for (const style of analysis.styleNotes) {
+      units.push(
+        addLearnedUnit({
+          libraryItemId: id,
+          kind: "style",
+          title: `Стиль · ${item.title}`,
+          content: style,
+          sourceRef: item.title,
+        }),
+      );
+    }
+    for (const logic of analysis.logicMoves) {
+      units.push(
+        addLearnedUnit({
+          libraryItemId: id,
+          kind: "logic",
+          title: `Логика · ${item.title}`,
+          content: logic,
+          sourceRef: item.title,
+        }),
+      );
+    }
   }
 
   const updated = updateLibraryItem(id, {
@@ -497,6 +586,14 @@ export async function proposeSkillFromItem(id: string): Promise<{
   if (!item) return { ok: false, detail: "Материал не найден", skillId: null };
   if (item.status !== "ready") {
     return { ok: false, detail: "Сначала выполните разбор материала", skillId: null };
+  }
+  if (!isReadableHumanText(item.extracted_text ?? "")) {
+    return {
+      ok: false,
+      detail:
+        "Нет читаемого текста для skill. Тезисы/фразы из битого PDF — не skills. Добавьте .md/.txt или вставьте текст, снова «Разобрать».",
+      skillId: null,
+    };
   }
   const analysis = item.analysis_json
     ? (JSON.parse(item.analysis_json) as LibraryAnalysis)

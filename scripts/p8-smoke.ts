@@ -3,6 +3,7 @@ import path from "node:path";
 import { loadConfig } from "../electron/config";
 import {
   importLibraryFile,
+  isReadableHumanText,
   looksLikeLibraryLearnIntent,
   processLibraryItem,
   proposeSkillFromItem,
@@ -23,6 +24,16 @@ assert.equal(
   true,
 );
 assert.equal(looksLikeLibraryLearnIntent("привет"), false);
+assert.equal(
+  isReadableHumanText(
+    "Главный тезис: внимание — это навык, а не черта характера.",
+  ),
+  true,
+);
+assert.equal(
+  isReadableHumanText("Õ± 5èüúa7nQáxE) 4@ $•vå*R.Ìì¼ÇÜÀÚ O7'm±ð .0EÛ¦ÒA"),
+  false,
+);
 
 async function main() {
   const sample = path.resolve(
