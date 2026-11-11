@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Mira AI crystal mark">
+  <title>Mira AI - Crystal mark</title>
+  <rect width="512" height="512" fill="#f4f1ea"/>
+  <defs>
+    <linearGradient id="gGlow" x1="0.15" y1="1" x2="0.95" y2="0.1">
+      <stop offset="0%" stop-color="#2a0845"/>
+      <stop offset="30%" stop-color="#6a1b9a"/>
+      <stop offset="60%" stop-color="#c51162"/>
+      <stop offset="85%" stop-color="#e040fb"/>
+      <stop offset="100%" stop-color="#ff80ab"/>
+    </linearGradient>
+    <radialGradient id="gFloor" cx="58%" cy="72%" r="28%">
+      <stop offset="0%" stop-color="#e040fb" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#e040fb" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="gShade" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#000" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <!-- floor -->
+  <ellipse cx="268" cy="390" rx="118" ry="28" fill="url(#gShade)"/>
+  <ellipse cx="292" cy="382" rx="90" ry="24" fill="url(#gFloor)"/>
+  <g transform="translate(156 118) scale(1.05)">
+    <!-- dark facets -->
+    <polygon points="100,8 148,42 118,78 72,52" fill="#1a1a1c"/>
+    <polygon points="100,8 72,52 58,28" fill="#2c2c30"/>
+    <polygon points="100,8 148,42 162,18" fill="#3a3a40"/>
+    <polygon points="72,52 118,78 96,118 48,92" fill="#121214"/>
+    <polygon points="118,78 148,42 168,72 138,108" fill="#26262b"/>
+    <polygon points="48,92 96,118 78,158 28,128" fill="#0e0e10"/>
+    <polygon points="96,118 138,108 128,152 78,158" fill="#1f1f24"/>
+    <polygon points="138,108 168,72 178,112 148,148" fill="#2a2a30"/>
+    <polygon points="28,128 78,158 62,198 12,162" fill="#161618"/>
+    <polygon points="78,158 128,152 112,198 62,198" fill="#222228"/>
+    <polygon points="12,162 62,198 48,228 8,198" fill="#0a0a0c"/>
+    <polygon points="62,198 112,198 98,236 48,228" fill="#1c1c20"/>
+    <polygon points="58,28 72,52 48,92 28,128 18,88 36,48" fill="#303036"/>
+    <polygon points="148,42 162,18 188,48 178,88 168,72" fill="#404048"/>
+    <!-- glowing facets (lower-right) -->
+    <polygon points="128,152 148,148 168,178 138,198" fill="url(#gGlow)"/>
+    <polygon points="148,148 178,112 198,148 168,178" fill="#9c27b0"/>
+    <polygon points="112,198 128,152 138,198 120,228" fill="#7b1fa2"/>
+    <polygon points="138,198 168,178 188,208 152,232" fill="url(#gGlow)" opacity="0.95"/>
+    <polygon points="168,178 198,148 208,188 188,208" fill="#e040fb"/>
+    <polygon points="120,228 138,198 152,232 128,248" fill="#4a148c"/>
+    <polygon points="152,232 188,208 198,238 164,252" fill="#ff4081"/>
+    <polygon points="98,236 112,198 120,228 108,252" fill="#2d0a40"/>
+  </g>
+</svg>

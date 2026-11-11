@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Shared crystal facet geometry for Mira AI logo family -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="miraGlow" x1="30%" y1="90%" x2="85%" y2="20%">
+      <stop offset="0%" stop-color="#3b0a6e"/>
+      <stop offset="35%" stop-color="#7b1fa2"/>
+      <stop offset="65%" stop-color="#d500f9"/>
+      <stop offset="100%" stop-color="#ff5ec8"/>
+    </linearGradient>
+    <radialGradient id="miraFloorGlow" cx="62%" cy="78%" r="35%">
+      <stop offset="0%" stop-color="#d500f9" stop-opacity="0.45"/>
+      <stop offset="55%" stop-color="#7b1fa2" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#7b1fa2" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="miraShadow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#000" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+</svg>
