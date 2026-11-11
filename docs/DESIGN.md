@@ -72,6 +72,7 @@
 | `voices` | Голоса | Каталог, превью, выбор активного, добавить новый |
 | `messaging` | Мессенджеры | Подключённые аккаунты, чаты, лог исходящих |
 | `blender` | Blender | Статус связи с Blender, путь к проекту, активные Blender-skills |
+| `library` | Библиотека | Загрузка материалов, статусы разбора, выученное, связь со skills |
 | `settings` | Настройки | Микрофон, LLM-провайдер, разрешения экрана/браузера/мессенджеров |
 
 ## Экраны
@@ -86,6 +87,7 @@
 | Voices | `voices` | Список голосов, preview, add, select | `stub` |
 | Messaging | `messaging` | Аккаунты TG/WA/IG, чаты, история исходящих | `stub` |
 | Blender | `blender` | Connected scene, Blender-skills active badge | `stub` |
+| Library | `library` | Upload, analyze status, plan, learned units, propose skill | `stub` |
 | Settings | `settings` | LLM, экран/браузер/мессенджеры, пути | `stub` |
 | Confirm action | modal | Подтверждение экрана/браузера/отправки сообщения | `planned` |
 

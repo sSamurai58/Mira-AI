@@ -10,7 +10,7 @@
 3. **Сменные адаптеры** — LLM (Claude / Gemini / GPT…), ASR, TTS без lock-in.
 4. **Инструменты по команде** — интернет, экран, браузер вызываются явно из диалога.
 5. **Явные stubs** — незавершённое в `PRD.md` / `DESIGN.md`.
-6. **Обязательный scope** — возможности 1–13 из `PRD.md` (в т.ч. Blender 3D).
+6. **Обязательный scope** — возможности 1–14 из `PRD.md` (в т.ч. обучение по материалам).
 
 ## Один процесс
 
@@ -30,8 +30,12 @@
 │                    │                                           │
 │             ┌──────▼──────┐     ┌─────────────┐  ┌───────────┐ │
 │             │ SQLite store│     │   Skills    │  │ Protocols │ │
-│             └─────────────┘     └─────────────┘  └───────────┘ │
-│                                   PRD #9            PRD #10    │
+│             └──────┬──────┘     └─────────────┘  └───────────┘ │
+│                    │              PRD #9            PRD #10    │
+│             ┌──────▼──────┐                                    │
+│             │  Library +  │  upload → analyze → plan → memory  │
+│             │  learn (#14)│  → optional skill draft            │
+│             └─────────────┘                                    │
 └────────────────────────────────────────────────────────────────┘
 ```
 
@@ -55,6 +59,9 @@
 | `sessions` | Сессии диалога |
 | `utterances` | Реплики user/assistant + время |
 | `memory_index` | Поиск по истории (FTS или аналог) |
+| `library_items` | Загруженные материалы (#14): тип, путь, статус разбора |
+| `learned_units` | Выученное: фразы, тезисы, логика, стиль; link на `library_items` |
+| `learn_plans` | Планы освоения по материалу (14.4) |
 | `providers` / settings | Выбранный LLM/TTS/голос (без секретов) |
 | `voices` | Записи каталога голосов (id, путь/провайдер, активный) |
 | `meta` | Версия схемы |
@@ -77,6 +84,8 @@
 | `tools.messaging` | TG / WhatsApp / Instagram…: send, reply, resolve chat | Отправка без команды/confirm |
 | `tools.blender` | Доступ к Blender: сцена, ops, скрипты | Работа без on-demand Blender-skills там, где они нужны |
 | `skills` | Каталог: add; **activate/deactivate on-demand**; load только активных | Держать все skills всегда в промпте; вызов OS в обход tools |
+| `library` | Загрузка материалов, статусы разбора (14.1, 14.9) | Тихое удаление выученного без UI |
+| `learn` | Анализ, план, запись `learned_units`, черновик skill (14.2–14.8) | Автопубликация skill без confirm |
 | `protocols` | Последовательности шагов; md + Панель CRUD/run | Тихие действия без команды пользователя |
 | `store` | SQLite, миграции | Правила диалога |
 | `config` | `.env`, выбор провайдеров | Секреты в UI/логах |
@@ -107,6 +116,8 @@
 │   ├── tts/
 │   ├── voices/         # catalog + add/select (PRD #11)
 │   ├── memory/
+│   ├── library/        # uploads + media index (PRD #14)
+│   ├── learn/          # analyze, plan, extract, skill draft
 │   ├── skills/         # user skills (Cursor/Claude-like)
 │   ├── protocols/      # command sequences (md + Panel)
 │   ├── tools/          # web, screen, browser, messaging, blender
@@ -120,7 +131,7 @@
 
 ## На будущее (не в must)
 
-Модули появятся после PRD **F1/F2**, не раньше стабилизации 1–13:
+Модули появятся после PRD **F1/F2**, не раньше стабилизации 1–14:
 
 | Модуль | PRD | Назначение |
 |--------|-----|------------|
