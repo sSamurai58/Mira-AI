@@ -5,6 +5,7 @@ import { ToggleRow } from "../components/SettingsFormBits";
 import { SettingsIntegrationsSection } from "../components/SettingsIntegrationsSection";
 import { SettingsUpdatesSection } from "../components/SettingsUpdatesSection";
 import { ThemeSelect } from "../components/ThemeSelect";
+import { BG_PATTERNS, type BgPatternId } from "../backgrounds";
 import { THEMES, type ThemeId } from "../themes";
 import {
   getActiveVoiceId,
@@ -44,6 +45,8 @@ type SectionId = (typeof SECTIONS)[number]["id"];
 type SettingsPageProps = {
   themeId: ThemeId;
   onThemeChange: (id: ThemeId) => void;
+  bgPatternId: BgPatternId;
+  onBgPatternChange: (id: BgPatternId) => void;
   healthText: string;
   onOpenDoctor?: () => void;
 };
@@ -51,6 +54,8 @@ type SettingsPageProps = {
 export function SettingsPage({
   themeId,
   onThemeChange,
+  bgPatternId,
+  onBgPatternChange,
   healthText,
   onOpenDoctor,
 }: SettingsPageProps) {
@@ -141,6 +146,33 @@ export function SettingsPage({
                     />
                   </div>
                   <span className="mono muted">{theme.id}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="row" style={{ marginTop: 8 }}>
+              <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Фон · узор</h2>
+              <StubBadge label="STATIC" />
+            </div>
+            <p className="muted" style={{ margin: 0 }}>
+              Статичный паттерн без свечений. Цвета берутся из темы.
+            </p>
+            <div className="bg-pattern-grid">
+              {BG_PATTERNS.map((pat) => (
+                <button
+                  key={pat.id}
+                  type="button"
+                  className={`bg-pattern-card ${bgPatternId === pat.id ? "active" : ""}`}
+                  onClick={() => onBgPatternChange(pat.id)}
+                  aria-pressed={bgPatternId === pat.id}
+                >
+                  <span
+                    className="bg-pattern-preview"
+                    data-bg-preview={pat.id}
+                    aria-hidden
+                  />
+                  <strong>{pat.label}</strong>
+                  <span className="mono muted">{pat.id}</span>
                 </button>
               ))}
             </div>
