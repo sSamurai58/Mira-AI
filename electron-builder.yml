@@ -49,14 +49,21 @@ win:
   artifactName: Mira-${version}-windows-x64.${ext}
   icon: build/icon.ico
 nsis:
-  oneClick: false
-  allowToChangeInstallationDirectory: true
+  # oneClick + per-user: updates run with /S (no wizard). Assisted multi-page
+  # installer was showing "для кого установить" on every quitAndInstall(false).
+  oneClick: true
+  perMachine: false
+  allowToChangeInstallationDirectory: false
+  allowElevation: true
   createDesktopShortcut: always
   createStartMenuShortcut: true
   shortcutName: Mira
   language: 1049
   include: build/nsis/installer.nsh
+  # License only for first interactive install; silent /S updates skip UI.
   license: build/nsis/license.txt
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
 mac:
   target:
     - dmg
