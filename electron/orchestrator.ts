@@ -20,9 +20,12 @@ import {
 import {
   extractLearnQuery,
   formatLearnedBlock,
+  importLibraryBytes,
+  importLibraryText,
   looksLikeLibraryLearnIntent,
   searchLearnedUnits,
 } from "./library/learn";
+import type { ChatImagePart } from "./llm/types";
 import {
   formatMessagingBlock,
   getMessagingPolicy,
@@ -214,19 +217,116 @@ function buildProtocolBlock(protocol: CatalogItem): string {
   return `[Active protocol: ${protocol.name} (${protocol.id})]\nВыполни этот протокол сейчас.\n\n${protocol.body}`;
 }
 
+export type ChatAttachmentInput = {
+  name: string;
+  mimeType: string;
+  size: number;
+  kind: string;
+  text?: string;
+  dataBase64?: string;
+};
+
+function buildUserContentWithAttachments(
+  text: string,
+  attachments: ChatAttachmentInput[],
+): { storedText: string; promptText: string; images: ChatImagePart[] } {
+  const trimmed = text.trim();
+  const images: ChatImagePart[] = [];
+  if (!attachments.length) {
+    return { storedText: trimmed, promptText: trimmed, images };
+  }
+  const lines: string[] = [];
+  if (trimmed) lines.push(trimmed);
+  else lines.push("Смотри прикреплённые файлы.");
+  lines.push("");
+  lines.push(`[Вложения: ${attachments.length}]`);
+  for (const a of attachments) {
+    lines.push(`--- файл: ${a.name} (${a.kind}, ${a.size} B) ---`);
+    if (a.kind === "image" && a.dataBase64) {
+      images.push({
+        mimeType: a.mimeType || "image/png",
+        dataBase64: a.dataBase64,
+      });
+      lines.push("(изображение передано модели через vision)");
+    } else if (a.text?.trim()) {
+      lines.push(a.text.trim().slice(0, 40_000));
+    } else {
+      lines.push(`(содержимое «${a.name}» не извлечено в текст)`);
+    }
+  }
+  const promptText = lines.join("\n");
+  const names = attachments.map((a) => a.name).join(", ");
+  const storedText = trimmed
+    ? `${trimmed}\n\n[вложения: ${names}]`
+    : `[вложения: ${names}]`;
+  return { storedText, promptText, images };
+}
+
+function maybeImportAttachmentsToLibrary(
+  attachments: ChatAttachmentInput[],
+): string[] {
+  const imported: string[] = [];
+  for (const a of attachments) {
+    try {
+      if (a.kind === "text" && a.text?.trim()) {
+        const item = importLibraryText({
+          title: a.name.replace(/\.[^.]+$/, "") || a.name,
+          text: a.text,
+          fileName: a.name,
+        });
+        imported.push(item.title);
+        continue;
+      }
+      if (a.dataBase64) {
+        const bytes = Buffer.from(a.dataBase64, "base64");
+        const item = importLibraryBytes({
+          bytes,
+          fileName: a.name,
+          title: a.name.replace(/\.[^.]+$/, "") || a.name,
+        });
+        imported.push(item.title);
+      }
+    } catch (err) {
+      appendAppLog({
+        level: "warn",
+        category: "library",
+        message: err instanceof Error ? err.message : String(err),
+        meta: { file: a.name },
+      });
+    }
+  }
+  return imported;
+}
+
 export async function sendChatMessage(
   input: {
     sessionId?: string | null;
     text: string;
     forceProtocolId?: string | null;
+    attachments?: ChatAttachmentInput[];
+    addToLibrary?: boolean;
   },
   emit: (event: ChatStreamEvent) => void,
   signal?: AbortSignal,
 ): Promise<SessionRow> {
-  const text = input.text.trim();
-  if (!text) {
+  const attachments = input.attachments ?? [];
+  const rawText = input.text.trim();
+  if (!rawText && !attachments.length) {
     emit({ type: "error", message: "Пустое сообщение" });
     throw new Error("Пустое сообщение");
+  }
+
+  const { storedText, promptText, images } = buildUserContentWithAttachments(
+    rawText,
+    attachments,
+  );
+
+  let libraryNote: string | null = null;
+  if (input.addToLibrary && attachments.length) {
+    const titles = maybeImportAttachmentsToLibrary(attachments);
+    if (titles.length) {
+      libraryNote = `Добавлено в материалы обучения: ${titles.join(", ")}. Workshop → Обучение → «Разобрать».`;
+    }
   }
 
   const cfg = loadConfig();
@@ -240,10 +340,10 @@ export async function sendChatMessage(
     (input.sessionId ? getSession(input.sessionId) : null) ?? null;
   const isNew = !session;
   if (!session) {
-    session = createSession(titleFromFirstMessage(text));
+    session = createSession(titleFromFirstMessage(storedText));
   }
 
-  const userUtterance = addUtterance(session.id, "user", text);
+  const userUtterance = addUtterance(session.id, "user", storedText);
   emit({ type: "user", utterance: userUtterance });
 
   if (
@@ -251,12 +351,13 @@ export async function sendChatMessage(
     session.title === "Первый диалог" ||
     session.title === "Новый диалог"
   ) {
-    touchSession(session.id, titleFromFirstMessage(text));
+    touchSession(session.id, titleFromFirstMessage(storedText));
     session = getSession(session.id) ?? session;
   }
 
-  const skills = selectSkillsForTurn(text);
+  const skills = selectSkillsForTurn(promptText);
   let protocol: CatalogItem | null = null;
+  const text = promptText;
   if (input.forceProtocolId) {
     protocol =
       loadMarkdownCatalog("protocols").find(
@@ -501,9 +602,20 @@ export async function sendChatMessage(
 
   for (const u of history) {
     if (u.role === "system") continue;
+    const isLastUser =
+      u.id === userUtterance.id && u.role === "user" && images.length > 0;
     messages.push({
       role: u.role === "assistant" ? "assistant" : "user",
-      content: u.content,
+      // Use full prompt text (with attachment bodies) for the latest user turn.
+      content: isLastUser || u.id === userUtterance.id ? promptText : u.content,
+      images: isLastUser ? images : undefined,
+    });
+  }
+
+  if (libraryNote) {
+    messages.push({
+      role: "system",
+      content: `[Библиотека обучения] ${libraryNote}`,
     });
   }
 

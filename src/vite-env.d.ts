@@ -305,6 +305,15 @@ interface MiraBridge {
     text: string;
     requestId: string;
     forceProtocolId?: string | null;
+    attachments?: Array<{
+      name: string;
+      mimeType: string;
+      size: number;
+      kind: string;
+      text?: string;
+      dataBase64?: string;
+    }>;
+    addToLibrary?: boolean;
   }) => Promise<{
     ok: boolean;
     sessionId?: string;
@@ -553,6 +562,11 @@ interface MiraBridge {
     title: string;
     text: string;
     fileName?: string;
+  }) => Promise<MiraLibraryItem>;
+  importLibraryBytes: (payload: {
+    bytes: number[] | Uint8Array;
+    fileName: string;
+    title?: string;
   }) => Promise<MiraLibraryItem>;
   processLibraryItem: (id: string) => Promise<{
     item: MiraLibraryItem;

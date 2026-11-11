@@ -14,6 +14,7 @@ import {
   getLearnPlan,
   getLibraryItem,
   getLibrarySnapshot,
+  importLibraryBytes,
   importLibraryFile,
   importLibraryText,
   listLearnedUnits,
@@ -278,6 +279,15 @@ app.whenReady().then(() => {
         text: string;
         requestId: string;
         forceProtocolId?: string | null;
+        attachments?: Array<{
+          name: string;
+          mimeType: string;
+          size: number;
+          kind: string;
+          text?: string;
+          dataBase64?: string;
+        }>;
+        addToLibrary?: boolean;
       },
     ) => {
       const requestId = payload.requestId || crypto.randomUUID();
@@ -289,6 +299,8 @@ app.whenReady().then(() => {
             sessionId: payload.sessionId,
             text: payload.text,
             forceProtocolId: payload.forceProtocolId,
+            attachments: payload.attachments,
+            addToLibrary: payload.addToLibrary,
           },
           (event) => {
             broadcast("mira:chat-event", { requestId, event });
@@ -560,6 +572,23 @@ app.whenReady().then(() => {
     "mira:import-library-text",
     (_e, payload: { title: string; text: string; fileName?: string }) =>
       importLibraryText(payload),
+  );
+  on(
+    "mira:import-library-bytes",
+    (
+      _e,
+      payload: {
+        bytes: number[] | Uint8Array;
+        fileName: string;
+        title?: string;
+      },
+    ) =>
+      importLibraryBytes({
+        bytes: Uint8Array.from(payload.bytes),
+        fileName: payload.fileName,
+        title: payload.title,
+      }),
+    { privileged: true },
   );
   on("mira:process-library-item", (_e, id: string) => processLibraryItem(id));
   on("mira:propose-library-skill", async (_e, id: string) =>
