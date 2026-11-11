@@ -4,13 +4,14 @@
   "private": true,
   "description": "Mira — local voice AI assistant",
   "main": "dist-electron/main.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sSamurai58/Mira-AI.git"
+  },
   "scripts": {
     "dev": "vite",
     "dev:electron": "concurrently -k \"vite\" \"wait-on http://127.0.0.1:5173 && npm run electron:dev\"",
     "electron:dev": "tsc -p tsconfig.electron.json && cross-env MIRA_DEV=1 ELECTRON_OZONE_PLATFORM_HINT=x11 electron . --use-gl=angle --use-angle=swiftshader --remote-debugging-port=9223",
-
-
-
     "build": "tsc -p tsconfig.app.json --noEmit && vite build && tsc -p tsconfig.electron.json",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
@@ -33,9 +34,9 @@
     "f-all:smoke": "tsx scripts/f-all-smoke.ts",
     "pack": "npm run build && electron-builder --config electron-builder.yml",
     "pack:dir": "npm run build && electron-builder --config electron-builder.yml --dir",
+    "release": "npm run build && electron-builder --config electron-builder.yml --publish always",
     "start": "npm run build && electron ."
   },
-
   "engines": {
     "node": ">=22"
   },
@@ -43,6 +44,7 @@
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "dotenv": "^18.0.10",
+    "electron-updater": "^6.8.11",
     "node-pty": "^1.1.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
@@ -62,4 +64,3 @@
     "wait-on": "^8.0.3"
   }
 }
-

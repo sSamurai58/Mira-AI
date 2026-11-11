@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { StubBadge } from "../components/StubBadge";
 import { SettingsApiSection } from "../components/SettingsApiSection";
 import { SettingsIntegrationsSection } from "../components/SettingsIntegrationsSection";
+import { SettingsUpdatesSection } from "../components/SettingsUpdatesSection";
 import { ThemeSelect } from "../components/ThemeSelect";
 import { THEMES, type ThemeId } from "../themes";
 import {
@@ -34,6 +35,7 @@ const SECTIONS = [
   { id: "integrations", label: "Интеграции" },
   { id: "terminal", label: "Терминал" },
   { id: "data", label: "Данные и приватность" },
+  { id: "updates", label: "Обновления" },
 ] as const;
 
 type SectionId = (typeof SECTIONS)[number]["id"];
@@ -58,6 +60,7 @@ export function SettingsPage({
     if (hash.includes("voice")) return "voice";
     if (hash.includes("terminal")) return "terminal";
     if (hash.includes("data")) return "data";
+    if (hash.includes("updates")) return "updates";
     if (hash.includes("general")) return "general";
     return "appearance";
   });
@@ -286,6 +289,7 @@ export function SettingsPage({
             onOpenDoctor={onOpenDoctor}
           />
         ) : null}
+        {section === "updates" ? <SettingsUpdatesSection /> : null}
       </div>
     </div>
   );

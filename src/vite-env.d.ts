@@ -256,6 +256,26 @@ type MiraHealth = {
   };
 };
 
+type MiraUpdateStatus = {
+  channel:
+    | "idle"
+    | "checking"
+    | "available"
+    | "not-available"
+    | "downloading"
+    | "downloaded"
+    | "error"
+    | string;
+  currentVersion: string;
+  availableVersion: string | null;
+  progress: number | null;
+  detail: string;
+  canCheck: boolean;
+  canDownload: boolean;
+  canInstall: boolean;
+  packaged: boolean;
+};
+
 interface MiraBridge {
   getHealth: () => Promise<MiraHealth>;
   getConfig: () => Promise<MiraPublicConfig>;
@@ -514,6 +534,11 @@ interface MiraBridge {
   onTerminalExit: (
     handler: (payload: { sessionId: string; exitCode: number }) => void,
   ) => () => void;
+  getUpdateStatus: () => Promise<MiraUpdateStatus>;
+  checkForUpdates: () => Promise<MiraUpdateStatus>;
+  downloadUpdate: () => Promise<MiraUpdateStatus>;
+  quitAndInstall: () => Promise<{ ok: boolean; detail: string }>;
+  onUpdateEvent: (handler: (status: MiraUpdateStatus) => void) => () => void;
   listLibraryItems: () => Promise<MiraLibraryItem[]>;
   getLibraryItem: (id: string) => Promise<MiraLibraryItem | null>;
   getLibrarySnapshot: () => Promise<{

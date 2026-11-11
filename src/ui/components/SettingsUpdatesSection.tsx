@@ -1,0 +1,215 @@
+import { useEffect, useState } from "react";
+import { StubBadge } from "./StubBadge";
+import { IntegCard } from "./SettingsFormBits";
+
+const DEMO_STATUS: MiraUpdateStatus = {
+  channel: "idle",
+  currentVersion: "0.0.1-demo",
+  availableVersion: null,
+  progress: null,
+  detail:
+    "Browser-demo: обновления работают в установленном Electron-приложении через GitHub Releases.",
+  canCheck: false,
+  canDownload: false,
+  canInstall: false,
+  packaged: false,
+};
+
+export function SettingsUpdatesSection() {
+  const [status, setStatus] = useState<MiraUpdateStatus>(DEMO_STATUS);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+
+    async function boot() {
+      if (!window.mira?.getUpdateStatus) {
+        setStatus(DEMO_STATUS);
+        return;
+      }
+      try {
+        const st = await window.mira.getUpdateStatus();
+        if (!cancelled) setStatus(st);
+      } catch {
+        if (!cancelled) {
+          setStatus({
+            ...DEMO_STATUS,
+            detail: "Не удалось получить статус обновлений",
+          });
+        }
+      }
+      unsub = window.mira.onUpdateEvent?.((next) => {
+        if (!cancelled) setStatus(next);
+      });
+    }
+
+    void boot();
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
+  }, []);
+
+  async function check() {
+    if (!window.mira?.checkForUpdates) return;
+    setBusy("check");
+    setNote(null);
+    try {
+      const st = await window.mira.checkForUpdates();
+      setStatus(st);
+      setNote(st.detail);
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function download() {
+    if (!window.mira?.downloadUpdate) return;
+    setBusy("download");
+    setNote(null);
+    try {
+      const st = await window.mira.downloadUpdate();
+      setStatus(st);
+      setNote(st.detail);
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function install() {
+    if (!window.mira?.quitAndInstall) return;
+    setBusy("install");
+    setNote(null);
+    try {
+      const res = await window.mira.quitAndInstall();
+      setNote(res.detail);
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const channelLabel: Record<string, string> = {
+    idle: "ожидание",
+    checking: "проверка…",
+    available: "есть обновление",
+    "not-available": "актуально",
+    downloading: "скачивание…",
+    downloaded: "готово к установке",
+    error: "ошибка",
+  };
+
+  return (
+    <>
+      <div className="row">
+        <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Обновления</h2>
+        <StubBadge label="RELEASE" />
+      </div>
+      <p className="muted" style={{ margin: 0 }}>
+        Разработка — в GitHub. Релизы публикуются тегом `v*`; установленная Mira
+        качает билд с GitHub Releases по кнопке ниже.
+      </p>
+
+      <IntegCard
+        kicker="electron-updater"
+        title="GitHub Releases"
+        purpose="Проверка, скачивание и установка новой версии без ручной переустановки."
+        howto={
+          <ol>
+            <li>
+              Bump версии в `package.json`, тег `vX.Y.Z`, push — CI собирает
+              установщики.
+            </li>
+            <li>В установленном приложении: «Проверить обновления».</li>
+            <li>Скачать → «Обновить и перезапустить».</li>
+          </ol>
+        }
+        footer={
+          <div className="integ-actions">
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={busy !== null || !status.canCheck}
+              onClick={() => void check()}
+            >
+              {busy === "check" ? "Проверка…" : "Проверить обновления"}
+            </button>
+            <button
+              type="button"
+              className="btn"
+              disabled={busy !== null || !status.canDownload}
+              onClick={() => void download()}
+            >
+              {busy === "download" ? "Скачивание…" : "Скачать"}
+            </button>
+            <button
+              type="button"
+              className="btn"
+              disabled={busy !== null || !status.canInstall}
+              onClick={() => void install()}
+            >
+              {busy === "install" ? "Перезапуск…" : "Обновить и перезапустить"}
+            </button>
+            {note ? <span className="chip">{note}</span> : null}
+          </div>
+        }
+      >
+        <div className="integ-grid-2">
+          <div className="settings-field">
+            <span className="settings-field-label">Текущая версия</span>
+            <p className="mono" style={{ margin: 0 }}>
+              {status.currentVersion}
+            </p>
+          </div>
+          <div className="settings-field">
+            <span className="settings-field-label">Доступная</span>
+            <p className="mono" style={{ margin: 0 }}>
+              {status.availableVersion || "—"}
+            </p>
+          </div>
+        </div>
+        <div className="settings-field">
+          <span className="settings-field-label">Статус</span>
+          <p style={{ margin: 0 }}>
+            <span
+              className={`integ-status ${
+                status.channel === "available" ||
+                status.channel === "downloaded"
+                  ? "on"
+                  : ""
+              }`}
+            >
+              {channelLabel[status.channel] || status.channel}
+            </span>{" "}
+            <span className="muted">{status.detail}</span>
+          </p>
+        </div>
+        {status.progress != null ? (
+          <div className="settings-field">
+            <span className="settings-field-label">Прогресс</span>
+            <div className="update-progress">
+              <div
+                className="update-progress-bar"
+                style={{ width: `${Math.max(0, Math.min(100, status.progress))}%` }}
+              />
+            </div>
+            <span className="settings-field-hint">{status.progress}%</span>
+          </div>
+        ) : null}
+        {!status.packaged ? (
+          <p className="integ-banner">
+            Сейчас не packaged-сборка. Кнопки активируются после `npm run pack` /
+            установки Mira с GitHub Releases.
+          </p>
+        ) : null}
+      </IntegCard>
+    </>
+  );
+}
