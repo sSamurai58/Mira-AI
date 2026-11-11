@@ -35,7 +35,8 @@
     "f-all:smoke": "tsx scripts/f-all-smoke.ts",
     "pack": "npm run build && electron-builder --config electron-builder.yml",
     "pack:dir": "npm run build && electron-builder --config electron-builder.yml --dir",
-    "pack:windows": "node Windows/scripts/build-installer.mjs",
+    "pack:win": "npm run build && electron-builder --win --x64 --config electron-builder.yml",
+    "pack:windows": "npm run pack:win",
     "release": "npm run build && electron-builder --config electron-builder.yml --publish always",
     "start": "npm run build && electron ."
   },

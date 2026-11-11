@@ -7,16 +7,6 @@ dist-electron/
 release/
 out/
 
-# Windows packer intermediates (keep README / config / scripts / installers)
-Windows/win-unpacked/
-Windows/*.exe.blockmap
-Windows/builder-effective-config.yaml
-Windows/builder-debug.yml
-Windows/*.nsis.7z
-!Windows/Mira-Setup-*.exe
-!Windows/Mira-Portable-*.exe
-!Windows/latest.yml
-
 # env / local data
 .env
 .env.local

@@ -11,6 +11,10 @@ files:
   - package.json
   - "!**/*.map"
 asar: true
+# Skip native rebuild so Linux can produce Windows zip; on windows-latest
+# CI, node-pty still uses prebuilds / spawn fallback when needed.
+npmRebuild: false
+nodeGypRebuild: false
 extraResources:
   - from: build/icon.png
     to: icon.png
@@ -29,9 +33,24 @@ linux:
   icon: build/icon.png
 win:
   target:
-    - nsis
-  artifactName: Mira-Setup-${version}.${ext}
+    # Zip is the supported Windows package (no Wine NSIS CRC issues).
+    - target: zip
+      arch:
+        - x64
+    - target: nsis
+      arch:
+        - x64
+  artifactName: Mira-${version}-windows-x64.${ext}
   icon: build/icon.ico
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Mira
+  language: 1049
+  include: build/nsis/installer.nsh
+  license: build/nsis/license.txt
 mac:
   target:
     - dmg
@@ -39,4 +58,3 @@ mac:
   icon: build/icon.png
 extraMetadata:
   main: dist-electron/main.js
-
