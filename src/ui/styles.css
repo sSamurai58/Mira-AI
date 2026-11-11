@@ -439,15 +439,6 @@ strong {
   overflow: hidden;
 }
 
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex: 0 0 auto;
-  flex-wrap: nowrap;
-}
-
 .pill-row {
   display: flex;
   flex-wrap: wrap;
