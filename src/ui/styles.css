@@ -2026,7 +2026,13 @@ strong {
 .catalog-edit-modal {
   display: grid;
   gap: 10px;
-  max-height: min(90vh, 720px);
+  width: min(640px, calc(100vw - 40px));
+  max-height: min(92vh, 860px);
+  overflow: auto;
+}
+
+.modal:has(.auto-grow-textarea) {
+  max-height: min(92vh, 860px);
   overflow: auto;
 }
 
@@ -2194,8 +2200,17 @@ select {
 
 textarea:not(.rainbow-field textarea) {
   min-height: 96px;
-  resize: vertical;
+  max-height: min(70vh, 560px);
+  resize: none;
+  overflow-x: hidden;
+  overflow-y: hidden;
   line-height: 1.45;
+  /* Chromium / Electron: grow with content; JS sync backs this up */
+  field-sizing: content;
+}
+
+textarea.auto-grow-textarea {
+  field-sizing: content;
 }
 
 input:not([type])::placeholder,

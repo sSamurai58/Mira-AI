@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { APP_NAME, APP_PHASE } from "../config";
+import { installAutoGrowTextareas } from "./autoGrowTextareas";
 import { ConfirmModal } from "./components/ConfirmModal";
 import { ErrorBanner } from "./components/ErrorBanner";
 import { ChatPage } from "./pages/ChatPage";
@@ -147,6 +148,8 @@ export function App() {
   useEffect(() => {
     applyTheme(themeId);
   }, [themeId]);
+
+  useEffect(() => installAutoGrowTextareas(), []);
 
   useEffect(() => {
     localStorage.setItem("mira.voiceState", voiceState);
