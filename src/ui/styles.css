@@ -1161,13 +1161,20 @@ strong {
   flex: 0 0 auto;
 }
 
-/* Smooth accent ring — mask keeps 1px thickness, no jagged conic edges */
+/* Accent ring: outer/inner radii stay concentric (outer − ring) */
 .rainbow-field {
+  --composer-h: 50px;
+  --composer-ring: 1.5px;
+  --composer-r-outer: calc(var(--composer-h) / 2);
+  --composer-r-inner: calc(var(--composer-r-outer) - var(--composer-ring));
   position: relative;
   isolation: isolate;
   flex: 1;
-  border-radius: 999px;
-  padding: 0;
+  min-width: 0;
+  height: var(--composer-h);
+  box-sizing: border-box;
+  border-radius: var(--composer-r-outer);
+  padding: var(--composer-ring);
   background: transparent;
 }
 
@@ -1175,8 +1182,8 @@ strong {
   content: "";
   position: absolute;
   inset: 0;
-  border-radius: inherit;
-  padding: 1px;
+  border-radius: var(--composer-r-outer);
+  padding: var(--composer-ring);
   background: linear-gradient(
     120deg,
     color-mix(in srgb, var(--accent) 78%, #fff),
@@ -1198,8 +1205,13 @@ strong {
   z-index: 1;
 }
 
+.rainbow-field:focus-within {
+  --composer-ring: 2px;
+  --composer-r-inner: calc(var(--composer-r-outer) - var(--composer-ring));
+}
+
 .rainbow-field:focus-within::before {
-  padding: 1.5px;
+  padding: var(--composer-ring);
   background: linear-gradient(
     120deg,
     color-mix(in srgb, var(--accent) 95%, #fff),
@@ -1224,17 +1236,20 @@ strong {
   position: relative;
   z-index: 0;
   display: block;
+  box-sizing: border-box;
   width: 100%;
-  height: 50px;
+  height: 100%;
+  margin: 0;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--composer-r-inner);
   background: color-mix(in srgb, var(--bg) 82%, #05080c);
   color: var(--text);
-  padding: 0 22px;
+  padding: 0 20px;
   resize: none;
   outline: none;
-  line-height: 50px;
+  line-height: calc(var(--composer-h) - 2 * var(--composer-ring));
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 5%, transparent);
+  appearance: none;
 }
 
 .mic-btn {
@@ -1838,17 +1853,29 @@ select:disabled {
   box-shadow: none;
 }
 
-/* Keep chat composer field distinct from global input chrome */
+/* Re-assert after global form chrome so radii stay concentric with the ring */
 .rainbow-field input,
 .rainbow-field textarea {
+  appearance: none;
   width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0 20px;
   border: 0;
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 5%, transparent);
+  border-radius: var(--composer-r-inner);
   background: color-mix(in srgb, var(--bg) 82%, #05080c);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 5%, transparent);
+  line-height: calc(var(--composer-h) - 2 * var(--composer-ring));
+  outline: none;
 }
 
+.rainbow-field input:hover,
+.rainbow-field textarea:hover,
 .rainbow-field input:focus,
 .rainbow-field textarea:focus {
+  border: 0;
+  border-radius: var(--composer-r-inner);
+  background: color-mix(in srgb, var(--bg) 82%, #05080c);
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 5%, transparent);
 }
 
