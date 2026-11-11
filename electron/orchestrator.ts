@@ -18,6 +18,12 @@ import {
   searchHistory,
 } from "./tools/browser";
 import {
+  extractLearnQuery,
+  formatLearnedBlock,
+  looksLikeLibraryLearnIntent,
+  searchLearnedUnits,
+} from "./library/learn";
+import {
   formatMessagingBlock,
   getMessagingPolicy,
   looksLikeMessagingIntent,
@@ -63,7 +69,7 @@ import {
 } from "./store";
 
 const SYSTEM_PROMPT =
-  "Ты Mira — локальный голосовой ИИ-помощник. Отвечай по делу на языке пользователя. Если даны фрагменты памяти, интернет-данные, снимок экрана, история браузера, мессенджер или вывод терминала — опирайся на них. Skills подключаются только по необходимости.";
+  "Ты Mira — локальный голосовой ИИ-помощник. Отвечай по делу на языке пользователя. Если даны фрагменты памяти, выученное из библиотеки, интернет-данные, снимок экрана, история браузера, мессенджер или вывод терминала — опирайся на них. Skills подключаются только по необходимости.";
 
 export type ChatStreamEvent =
   | { type: "user"; utterance: UtteranceRow }
@@ -75,6 +81,7 @@ export type ChatStreamEvent =
       desktop?: string | null;
       messaging?: string | null;
       terminal?: string | null;
+      learned?: string | null;
     }
   | { type: "assistant_start"; sessionId: string }
   | { type: "token"; text: string }
@@ -88,6 +95,7 @@ export type ChatStreamEvent =
       desktopUsed: string | null;
       messagingUsed: string | null;
       terminalUsed: string | null;
+      learnedUsed: string | null;
     }
   | { type: "error"; message: string };
 
@@ -234,10 +242,17 @@ export async function sendChatMessage(
   let messagingBlock: string | null = null;
   let terminalUsed: string | null = null;
   let terminalBlock: string | null = null;
+  let learnedUsed: string | null = null;
+  let learnedBlock: string | null = null;
 
   // Prefer explicit tool intents over generic web when both match.
   try {
-    if (looksLikeTerminalIntent(text) && getTerminalPolicy().enabled) {
+    if (looksLikeLibraryLearnIntent(text)) {
+      const q = extractLearnQuery(text) || text;
+      const units = searchLearnedUnits(q, 8);
+      learnedUsed = units.length ? `learned:${units.length}` : "learned:none";
+      learnedBlock = formatLearnedBlock(units);
+    } else if (looksLikeTerminalIntent(text) && getTerminalPolicy().enabled) {
       const cmd = extractTerminalCommand(text);
       if (cmd) {
         const ran = await executeTerminalFromChat(cmd);
@@ -326,9 +341,17 @@ export async function sendChatMessage(
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    if (!webUsed && !desktopUsed && !messagingUsed && !terminalUsed) {
+    if (
+      !webUsed &&
+      !desktopUsed &&
+      !messagingUsed &&
+      !terminalUsed &&
+      !learnedUsed
+    ) {
       webUsed = "error";
       webBlock = `[Инструменты: ошибка] ${message}`;
+    } else if (learnedUsed) {
+      learnedBlock = `${learnedBlock ?? ""}\n[Ошибка] ${message}`;
     } else if (terminalUsed) {
       terminalBlock = `${terminalBlock ?? ""}\n[Ошибка] ${message}`;
     } else if (messagingUsed) {
@@ -348,6 +371,7 @@ export async function sendChatMessage(
     desktop: desktopUsed,
     messaging: messagingUsed,
     terminal: terminalUsed,
+    learned: learnedUsed,
   });
 
   const history = listUtterances(session.id);
@@ -368,6 +392,7 @@ export async function sendChatMessage(
   if (desktopBlock) messages.push({ role: "system", content: desktopBlock });
   if (messagingBlock) messages.push({ role: "system", content: messagingBlock });
   if (terminalBlock) messages.push({ role: "system", content: terminalBlock });
+  if (learnedBlock) messages.push({ role: "system", content: learnedBlock });
 
   for (const u of history) {
     if (u.role === "system") continue;
@@ -428,6 +453,7 @@ export async function sendChatMessage(
     desktopUsed,
     messagingUsed,
     terminalUsed,
+    learnedUsed,
   });
 
   return getSession(session.id) ?? session;

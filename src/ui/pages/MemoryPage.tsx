@@ -35,6 +35,8 @@ export function MemoryPage({ onOpenSession }: MemoryPageProps) {
   const [utterances, setUtterances] = useState<Utterance[]>([]);
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<MemoryHit[]>([]);
+  const [learned, setLearned] = useState<MiraLearnedUnit[]>([]);
+  const [learnedQuery, setLearnedQuery] = useState("");
   const [note, setNote] = useState("Загрузка…");
 
   async function refreshSessions() {
@@ -45,8 +47,12 @@ export function MemoryPage({ onOpenSession }: MemoryPageProps) {
       setSessions([]);
       return;
     }
-    const rows = await window.mira.listSessions();
+    const [rows, units] = await Promise.all([
+      window.mira.listSessions(),
+      window.mira.listLearnedUnits(),
+    ]);
     setSessions(rows);
+    setLearned(units);
     setNote(
       rows.length
         ? "Сессии из SQLite. Откройте чат или найдите «о чём говорили»."
@@ -123,6 +129,47 @@ export function MemoryPage({ onOpenSession }: MemoryPageProps) {
             ))}
           </div>
         ) : null}
+
+        <div className="stack">
+          <div className="row">
+            <strong>Выученное (#14)</strong>
+            <span className="chip">P8</span>
+          </div>
+          <form
+            className="composer"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!window.mira) return;
+              void window.mira
+                .searchLearnedUnits(learnedQuery.trim())
+                .then(setLearned);
+            }}
+          >
+            <input
+              value={learnedQuery}
+              onChange={(e) => setLearnedQuery(e.target.value)}
+              placeholder="Поиск по выученному…"
+            />
+            <button type="submit" className="btn">
+              Найти
+            </button>
+          </form>
+          {learned.length === 0 ? (
+            <p className="muted" style={{ margin: 0 }}>
+              Пока нет единиц. Загрузите материал в Мастерская → Библиотека.
+            </p>
+          ) : (
+            learned.slice(0, 12).map((u) => (
+              <div key={u.id} className="panel">
+                <div className="row">
+                  <span className="chip">{u.kind}</span>
+                  <span className="muted mono">{u.source_ref}</span>
+                </div>
+                <div>{u.content.slice(0, 240)}</div>
+              </div>
+            ))
+          )}
+        </div>
       </div>
 
       <div className="memory-split">

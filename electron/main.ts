@@ -9,6 +9,18 @@ import {
   setCatalogEnabled,
   writeCatalogItem,
 } from "./markdownCatalog";
+import {
+  getLearnPlan,
+  getLibraryItem,
+  getLibrarySnapshot,
+  importLibraryFile,
+  importLibraryText,
+  listLearnedUnits,
+  listLibraryItems,
+  processLibraryItem,
+  proposeSkillFromItem,
+  searchLearnedUnits,
+} from "./library/learn";
 import { runMemorySearch, sendChatMessage } from "./orchestrator";
 import {
   clearTerminalHistory,
@@ -111,7 +123,7 @@ app.whenReady().then(() => {
     const cfg = getPublicConfig();
     const validation = validateLlmConfig();
     return {
-      phase: "P7",
+      phase: "P8",
       databasePath: getDatabasePath(),
       ...health,
       llm: cfg,
@@ -125,6 +137,7 @@ app.whenReady().then(() => {
       messaging: getMessagingPolicy(),
       terminal: getTerminalPolicy(),
       terminalSessions: listTerminalSessions().length,
+      library: listLibraryItems(5).length,
     };
   });
 
@@ -409,6 +422,37 @@ app.whenReady().then(() => {
         };
       }
     },
+  );
+
+  ipcMain.handle("mira:list-library-items", () => listLibraryItems());
+  ipcMain.handle("mira:get-library-item", (_e, id: string) => getLibraryItem(id));
+  ipcMain.handle("mira:get-library-snapshot", () => getLibrarySnapshot());
+  ipcMain.handle(
+    "mira:import-library-file",
+    (_e, filePath: string, title?: string) =>
+      importLibraryFile({ filePath, title }),
+  );
+  ipcMain.handle(
+    "mira:import-library-text",
+    (_e, payload: { title: string; text: string; fileName?: string }) =>
+      importLibraryText(payload),
+  );
+  ipcMain.handle("mira:process-library-item", (_e, id: string) =>
+    processLibraryItem(id),
+  );
+  ipcMain.handle("mira:propose-library-skill", async (_e, id: string) =>
+    proposeSkillFromItem(id),
+  );
+  ipcMain.handle("mira:list-learned-units", (_e, libraryItemId?: string) =>
+    listLearnedUnits(
+      libraryItemId ? { libraryItemId, limit: 50 } : { limit: 50 },
+    ),
+  );
+  ipcMain.handle("mira:search-learned-units", (_e, query?: string) =>
+    searchLearnedUnits(query ?? "", 20),
+  );
+  ipcMain.handle("mira:get-learn-plan", (_e, libraryItemId: string) =>
+    getLearnPlan(libraryItemId),
   );
 
   createWindow();

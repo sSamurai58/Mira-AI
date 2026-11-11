@@ -81,6 +81,7 @@ type MiraChatEvent =
       desktop?: string | null;
       messaging?: string | null;
       terminal?: string | null;
+      learned?: string | null;
     }
   | { type: "assistant_start"; sessionId: string }
   | { type: "token"; text: string }
@@ -94,8 +95,34 @@ type MiraChatEvent =
       desktopUsed: string | null;
       messagingUsed: string | null;
       terminalUsed: string | null;
+      learnedUsed: string | null;
     }
   | { type: "error"; message: string };
+
+type MiraLibraryItem = {
+  id: string;
+  title: string;
+  kind: string;
+  source_path: string;
+  status: string;
+  media_type: string;
+  extracted_text: string | null;
+  analysis_json: string | null;
+  skill_id: string | null;
+  version: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type MiraLearnedUnit = {
+  id: string;
+  library_item_id: string;
+  kind: string;
+  title: string;
+  content: string;
+  source_ref: string;
+  created_at: string;
+};
 
 type MiraTerminalSession = {
   id: string;
@@ -380,6 +407,41 @@ interface MiraBridge {
   onTerminalExit: (
     handler: (payload: { sessionId: string; exitCode: number }) => void,
   ) => () => void;
+  listLibraryItems: () => Promise<MiraLibraryItem[]>;
+  getLibraryItem: (id: string) => Promise<MiraLibraryItem | null>;
+  getLibrarySnapshot: () => Promise<{
+    items: MiraLibraryItem[];
+    learned: MiraLearnedUnit[];
+  }>;
+  importLibraryFile: (
+    filePath: string,
+    title?: string,
+  ) => Promise<MiraLibraryItem>;
+  importLibraryText: (payload: {
+    title: string;
+    text: string;
+    fileName?: string;
+  }) => Promise<MiraLibraryItem>;
+  processLibraryItem: (id: string) => Promise<{
+    item: MiraLibraryItem;
+    analysis: unknown;
+    plan: string[];
+    units: MiraLearnedUnit[];
+  }>;
+  proposeLibrarySkill: (
+    id: string,
+  ) => Promise<{ ok: boolean; detail: string; skillId: string | null }>;
+  listLearnedUnits: (libraryItemId?: string) => Promise<MiraLearnedUnit[]>;
+  searchLearnedUnits: (query?: string) => Promise<MiraLearnedUnit[]>;
+  getLearnPlan: (
+    libraryItemId: string,
+  ) => Promise<{
+    id: string;
+    library_item_id: string;
+    steps_json: string;
+    created_at: string;
+    updated_at: string;
+  } | null>;
 }
 
 interface Window {

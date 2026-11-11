@@ -166,7 +166,7 @@
 | 11 | Голоса | `partial` | P2: каталог системных TTS + выбор; импорт/студия — P9 |
 | 12 | Мессенджеры | `partial` | P6: Telegram send/reply + confirm; WA/IG stubs |
 | 13 | Blender 3D | `planned` | Полный доступ к Blender + Blender-skills on-demand |
-| 14 | Обучение по материалам | `planned` | Задачи 14.1–14.9; библиотека + анализ + память + опц. skill |
+| 14 | Обучение по материалам | `partial` | P8: library→analyze→learned_units→dialog; skill confirm; PDF/AV stub |
 | 15 | Студия голоса | `planned` | UX-цикл + 15.1–15.9; автообработка после загрузки; рост словаря |
 | 16 | Терминал | `partial` | P7: xterm + node-pty multi-session; dialog commands + confirm; prefs |
 

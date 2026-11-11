@@ -56,6 +56,39 @@ export type MessengerMessageRow = {
   created_at: string;
 };
 
+export type LibraryItemRow = {
+  id: string;
+  title: string;
+  kind: string;
+  source_path: string;
+  status: string;
+  media_type: string;
+  extracted_text: string | null;
+  analysis_json: string | null;
+  skill_id: string | null;
+  version: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type LearnedUnitRow = {
+  id: string;
+  library_item_id: string;
+  kind: string;
+  title: string;
+  content: string;
+  source_ref: string;
+  created_at: string;
+};
+
+export type LearnPlanRow = {
+  id: string;
+  library_item_id: string;
+  steps_json: string;
+  created_at: string;
+  updated_at: string;
+};
+
 let db: DatabaseSync | null = null;
 
 function resolveDatabasePath(): string {
@@ -128,6 +161,42 @@ export function openStore(): DatabaseSync {
     );
     CREATE INDEX IF NOT EXISTS idx_messenger_messages_created
       ON messenger_messages(created_at DESC);
+    CREATE TABLE IF NOT EXISTS library_items (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      source_path TEXT NOT NULL,
+      status TEXT NOT NULL,
+      media_type TEXT NOT NULL,
+      extracted_text TEXT,
+      analysis_json TEXT,
+      skill_id TEXT,
+      version INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_library_items_updated
+      ON library_items(updated_at DESC);
+    CREATE TABLE IF NOT EXISTS learned_units (
+      id TEXT PRIMARY KEY,
+      library_item_id TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      source_ref TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (library_item_id) REFERENCES library_items(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_learned_units_item
+      ON learned_units(library_item_id, created_at DESC);
+    CREATE TABLE IF NOT EXISTS learn_plans (
+      id TEXT PRIMARY KEY,
+      library_item_id TEXT NOT NULL UNIQUE,
+      steps_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (library_item_id) REFERENCES library_items(id)
+    );
   `);
 
   ensureMessengerSeeds(db);
@@ -559,6 +628,287 @@ export function listMessengerMessages(limit = 20): MessengerMessageRow[] {
     .all(limit) as MessengerMessageRow[];
 }
 
+const LIBRARY_SELECT = `SELECT id, title, kind, source_path, status, media_type,
+  extracted_text, analysis_json, skill_id, version, created_at, updated_at
+  FROM library_items`;
+
+export function listLibraryItems(limit = 100): LibraryItemRow[] {
+  const store = openStore();
+  return store
+    .prepare(`${LIBRARY_SELECT} ORDER BY updated_at DESC LIMIT ?`)
+    .all(limit) as LibraryItemRow[];
+}
+
+export function getLibraryItem(id: string): LibraryItemRow | null {
+  const store = openStore();
+  return (
+    (store.prepare(`${LIBRARY_SELECT} WHERE id = ?`).get(id) as
+      | LibraryItemRow
+      | undefined) ?? null
+  );
+}
+
+export function insertLibraryItem(input: {
+  id?: string;
+  title: string;
+  kind: string;
+  sourcePath: string;
+  status?: string;
+  mediaType: string;
+  extractedText?: string | null;
+}): LibraryItemRow {
+  const store = openStore();
+  const now = new Date().toISOString();
+  const row: LibraryItemRow = {
+    id: input.id ?? crypto.randomUUID(),
+    title: input.title,
+    kind: input.kind,
+    source_path: input.sourcePath,
+    status: input.status ?? "new",
+    media_type: input.mediaType,
+    extracted_text: input.extractedText ?? null,
+    analysis_json: null,
+    skill_id: null,
+    version: 1,
+    created_at: now,
+    updated_at: now,
+  };
+  store
+    .prepare(
+      `INSERT INTO library_items
+        (id, title, kind, source_path, status, media_type, extracted_text,
+         analysis_json, skill_id, version, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      row.id,
+      row.title,
+      row.kind,
+      row.source_path,
+      row.status,
+      row.media_type,
+      row.extracted_text,
+      row.analysis_json,
+      row.skill_id,
+      row.version,
+      row.created_at,
+      row.updated_at,
+    );
+  return row;
+}
+
+export function updateLibraryItem(
+  id: string,
+  patch: Partial<{
+    title: string;
+    status: string;
+    extractedText: string | null;
+    analysisJson: string | null;
+    skillId: string | null;
+    version: number;
+  }>,
+): LibraryItemRow | null {
+  const store = openStore();
+  const current = getLibraryItem(id);
+  if (!current) return null;
+  const next: LibraryItemRow = {
+    ...current,
+    title: patch.title ?? current.title,
+    status: patch.status ?? current.status,
+    extracted_text:
+      patch.extractedText !== undefined
+        ? patch.extractedText
+        : current.extracted_text,
+    analysis_json:
+      patch.analysisJson !== undefined
+        ? patch.analysisJson
+        : current.analysis_json,
+    skill_id: patch.skillId !== undefined ? patch.skillId : current.skill_id,
+    version: patch.version ?? current.version,
+    updated_at: new Date().toISOString(),
+  };
+  store
+    .prepare(
+      `UPDATE library_items
+       SET title = ?, status = ?, extracted_text = ?, analysis_json = ?,
+           skill_id = ?, version = ?, updated_at = ?
+       WHERE id = ?`,
+    )
+    .run(
+      next.title,
+      next.status,
+      next.extracted_text,
+      next.analysis_json,
+      next.skill_id,
+      next.version,
+      next.updated_at,
+      id,
+    );
+  return next;
+}
+
+export function deleteLearnedUnitsForItem(libraryItemId: string): void {
+  const store = openStore();
+  store
+    .prepare(`DELETE FROM learned_units WHERE library_item_id = ?`)
+    .run(libraryItemId);
+}
+
+export function addLearnedUnit(input: {
+  libraryItemId: string;
+  kind: string;
+  title: string;
+  content: string;
+  sourceRef: string;
+}): LearnedUnitRow {
+  const store = openStore();
+  const row: LearnedUnitRow = {
+    id: crypto.randomUUID(),
+    library_item_id: input.libraryItemId,
+    kind: input.kind,
+    title: input.title,
+    content: input.content,
+    source_ref: input.sourceRef,
+    created_at: new Date().toISOString(),
+  };
+  store
+    .prepare(
+      `INSERT INTO learned_units
+        (id, library_item_id, kind, title, content, source_ref, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      row.id,
+      row.library_item_id,
+      row.kind,
+      row.title,
+      row.content,
+      row.source_ref,
+      row.created_at,
+    );
+  return row;
+}
+
+export function listLearnedUnits(opts?: {
+  libraryItemId?: string;
+  limit?: number;
+}): LearnedUnitRow[] {
+  const store = openStore();
+  const limit = opts?.limit ?? 50;
+  if (opts?.libraryItemId) {
+    return store
+      .prepare(
+        `SELECT id, library_item_id, kind, title, content, source_ref, created_at
+         FROM learned_units
+         WHERE library_item_id = ?
+         ORDER BY created_at DESC
+         LIMIT ?`,
+      )
+      .all(opts.libraryItemId, limit) as LearnedUnitRow[];
+  }
+  return store
+    .prepare(
+      `SELECT id, library_item_id, kind, title, content, source_ref, created_at
+       FROM learned_units
+       ORDER BY created_at DESC
+       LIMIT ?`,
+    )
+    .all(limit) as LearnedUnitRow[];
+}
+
+export function searchLearnedUnits(
+  query: string,
+  limit = 8,
+): LearnedUnitRow[] {
+  const q = query.trim();
+  if (!q) return listLearnedUnits({ limit });
+  const store = openStore();
+  const tokens = q
+    .split(/\s+/)
+    .map((t) => t.replace(/[%_]/g, "").replace(/[.,!?:;]+$/g, ""))
+    .filter((t) => t.length >= 3)
+    .slice(0, 6);
+  if (!tokens.length) {
+    const like = `%${q.replace(/[%_]/g, "")}%`;
+    return store
+      .prepare(
+        `SELECT id, library_item_id, kind, title, content, source_ref, created_at
+         FROM learned_units
+         WHERE title LIKE ? OR content LIKE ? OR source_ref LIKE ?
+         ORDER BY created_at DESC
+         LIMIT ?`,
+      )
+      .all(like, like, like, limit) as LearnedUnitRow[];
+  }
+
+  const scored = new Map<string, LearnedUnitRow>();
+  for (const token of tokens) {
+    const like = `%${token}%`;
+    const rows = store
+      .prepare(
+        `SELECT id, library_item_id, kind, title, content, source_ref, created_at
+         FROM learned_units
+         WHERE title LIKE ? OR content LIKE ? OR source_ref LIKE ?
+         ORDER BY created_at DESC
+         LIMIT ?`,
+      )
+      .all(like, like, like, limit) as LearnedUnitRow[];
+    for (const row of rows) scored.set(row.id, row);
+  }
+  return [...scored.values()].slice(0, limit);
+}
+
+export function upsertLearnPlan(
+  libraryItemId: string,
+  steps: string[],
+): LearnPlanRow {
+  const store = openStore();
+  const now = new Date().toISOString();
+  const existing = store
+    .prepare(`SELECT id FROM learn_plans WHERE library_item_id = ?`)
+    .get(libraryItemId) as { id: string } | undefined;
+  const stepsJson = JSON.stringify(steps);
+  if (existing) {
+    store
+      .prepare(
+        `UPDATE learn_plans SET steps_json = ?, updated_at = ? WHERE id = ?`,
+      )
+      .run(stepsJson, now, existing.id);
+    return store
+      .prepare(
+        `SELECT id, library_item_id, steps_json, created_at, updated_at
+         FROM learn_plans WHERE id = ?`,
+      )
+      .get(existing.id) as LearnPlanRow;
+  }
+  const row: LearnPlanRow = {
+    id: crypto.randomUUID(),
+    library_item_id: libraryItemId,
+    steps_json: stepsJson,
+    created_at: now,
+    updated_at: now,
+  };
+  store
+    .prepare(
+      `INSERT INTO learn_plans (id, library_item_id, steps_json, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?)`,
+    )
+    .run(row.id, row.library_item_id, row.steps_json, row.created_at, row.updated_at);
+  return row;
+}
+
+export function getLearnPlan(libraryItemId: string): LearnPlanRow | null {
+  const store = openStore();
+  return (
+    (store
+      .prepare(
+        `SELECT id, library_item_id, steps_json, created_at, updated_at
+         FROM learn_plans WHERE library_item_id = ?`,
+      )
+      .get(libraryItemId) as LearnPlanRow | undefined) ?? null
+  );
+}
+
 export function getStoreHealth(): {
   ok: boolean;
   path: string;
@@ -567,6 +917,8 @@ export function getStoreHealth(): {
   browserVisits: number;
   messengerContacts: number;
   messengerMessages: number;
+  libraryItems: number;
+  learnedUnits: number;
 } {
   const store = openStore();
   const sessions = (
@@ -590,6 +942,16 @@ export function getStoreHealth(): {
       c: number;
     }
   ).c;
+  const libraryItems = (
+    store.prepare(`SELECT COUNT(*) AS c FROM library_items`).get() as {
+      c: number;
+    }
+  ).c;
+  const learnedUnits = (
+    store.prepare(`SELECT COUNT(*) AS c FROM learned_units`).get() as {
+      c: number;
+    }
+  ).c;
 
   return {
     ok: true,
@@ -599,6 +961,8 @@ export function getStoreHealth(): {
     browserVisits,
     messengerContacts,
     messengerMessages,
+    libraryItems,
+    learnedUnits,
   };
 }
 

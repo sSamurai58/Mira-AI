@@ -203,8 +203,11 @@ export function ChatPage({
         const termPart = event.terminal
           ? `term: ${event.terminal}`
           : "term: none";
+        const learnedPart = event.learned
+          ? `learned: ${event.learned}`
+          : "learned: none";
         setContextNote(
-          `${skillPart} · ${protoPart} · ${webPart} · ${desktopPart} · ${msgPart} · ${termPart}`,
+          `${skillPart} · ${protoPart} · ${webPart} · ${desktopPart} · ${msgPart} · ${termPart} · ${learnedPart}`,
         );
       }
 
@@ -256,8 +259,11 @@ export function ChatPage({
         const termPart = event.terminalUsed
           ? `term: ${event.terminalUsed}`
           : "term: none";
+        const learnedPart = event.learnedUsed
+          ? `learned: ${event.learnedUsed}`
+          : "learned: none";
         setContextNote(
-          `${skillPart} · ${protoPart} · ${webPart} · ${desktopPart} · ${msgPart} · ${termPart}`,
+          `${skillPart} · ${protoPart} · ${webPart} · ${desktopPart} · ${msgPart} · ${termPart} · ${learnedPart}`,
         );
         setBusy(false);
         requestIdRef.current = null;

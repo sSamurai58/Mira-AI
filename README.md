@@ -1,11 +1,11 @@
 # Mira
 
-Локальный голосовой ИИ-помощник. Источник правды по продукту — [`docs/`](./docs/).
+Локальный голосовой ИИ-помощник. Источник правды — [`docs/`](./docs/).
 
 ## Фаза сейчас
 
-**P7 — Терминал:** xterm + node-pty в Мастерской; команды из Диалога + confirm.  
-**P6 — Мессенджеры** · **P5 — Экран/браузер** · **P4 — Web** · **P3–P0**.
+**P8 — Библиотека / обучение:** upload → анализ → `learned_units` → диалог; skill после confirm.  
+**P7 — Терминал** · **P6 — TG** · **P5 — экран/браузер** · **P4–P0**.
 
 Дорожная карта: [`docs/WIP.md`](./docs/WIP.md).
 
@@ -14,20 +14,17 @@
 ```bash
 cp .env.example .env
 npm install
-npm run db:check
-npm run p7:smoke
+npm run p8:smoke
 npm run dev:electron
 ```
 
-Smokes: `p1`…`p7`. Без `OPENAI_API_KEY` — **mock**.
-
-Live Telegram: `TELEGRAM_BOT_TOKEN` + chat id.  
-Terminal prefs: `TERMINAL_SHELL`, `TERMINAL_CWD`, `TERMINAL_FONT_SIZE`.
+Smokes: `p1`…`p8`. Без API-ключа — mock LLM.
 
 ## Структура
 
-- `electron/` — main/preload, store, tools, `terminal/`
-- `src/ui/` — AppShell + TerminalView (xterm)
+- `electron/library/` — import/extract/analyze/plan/skill
+- `electron/terminal/` — PTY
+- `src/ui/` — AppShell, LibraryPanel, TerminalView
 - `docs/` — PRD, DESIGN, RULES, MEMORY, WIP
 
 Секреты только в `.env`.

@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { LibraryPanel } from "../components/LibraryPanel";
 import { StubBadge } from "../components/StubBadge";
 import { TerminalView } from "../components/TerminalView";
 import {
@@ -22,7 +23,6 @@ type CatalogItem = MiraCatalogItem;
 export function WorkshopPage() {
   const [segment, setSegment] =
     useState<(typeof SEGMENTS)[number]["id"]>("skills");
-  const active = SEGMENTS.find((s) => s.id === segment)!;
   const [voices, setVoices] = useState<VoiceInfo[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [skills, setSkills] = useState<CatalogItem[]>([]);
@@ -302,18 +302,7 @@ export function WorkshopPage() {
       ) : null}
 
       {segment === "terminal" ? <TerminalView /> : null}
-
-      {segment === "library" ? (
-        <div className="panel stack">
-          <div className="row">
-            <h2 style={{ margin: 0, fontSize: "1.05rem" }}>{active.label}</h2>
-            <StubBadge label={active.phase} />
-          </div>
-          <p className="muted" style={{ margin: 0 }}>
-            Сегмент-навигация. Логика — в фазе {active.phase}.
-          </p>
-        </div>
-      ) : null}
+      {segment === "library" ? <LibraryPanel /> : null}
     </div>
   );
 }

@@ -60,6 +60,7 @@ export type MiraChatEvent =
       desktop?: string | null;
       messaging?: string | null;
       terminal?: string | null;
+      learned?: string | null;
     }
   | { type: "assistant_start"; sessionId: string }
   | { type: "token"; text: string }
@@ -73,6 +74,7 @@ export type MiraChatEvent =
       desktopUsed: string | null;
       messagingUsed: string | null;
       terminalUsed: string | null;
+      learnedUsed: string | null;
     }
   | { type: "error"; message: string };
 
@@ -188,6 +190,26 @@ contextBridge.exposeInMainWorld("mira", {
     ipcRenderer.invoke("mira:set-terminal-cwd", id, cwd),
   runTerminalCommand: (command: string, sessionId?: string | null) =>
     ipcRenderer.invoke("mira:run-terminal-command", command, sessionId),
+  listLibraryItems: () => ipcRenderer.invoke("mira:list-library-items"),
+  getLibraryItem: (id: string) => ipcRenderer.invoke("mira:get-library-item", id),
+  getLibrarySnapshot: () => ipcRenderer.invoke("mira:get-library-snapshot"),
+  importLibraryFile: (filePath: string, title?: string) =>
+    ipcRenderer.invoke("mira:import-library-file", filePath, title),
+  importLibraryText: (payload: {
+    title: string;
+    text: string;
+    fileName?: string;
+  }) => ipcRenderer.invoke("mira:import-library-text", payload),
+  processLibraryItem: (id: string) =>
+    ipcRenderer.invoke("mira:process-library-item", id),
+  proposeLibrarySkill: (id: string) =>
+    ipcRenderer.invoke("mira:propose-library-skill", id),
+  listLearnedUnits: (libraryItemId?: string) =>
+    ipcRenderer.invoke("mira:list-learned-units", libraryItemId),
+  searchLearnedUnits: (query?: string) =>
+    ipcRenderer.invoke("mira:search-learned-units", query),
+  getLearnPlan: (libraryItemId: string) =>
+    ipcRenderer.invoke("mira:get-learn-plan", libraryItemId),
   respondConfirm: (id: string, accepted: boolean) =>
     ipcRenderer.invoke("mira:confirm-response", id, accepted),
   onConfirmRequest: (handler: (req: MiraConfirmRequest) => void) => {
