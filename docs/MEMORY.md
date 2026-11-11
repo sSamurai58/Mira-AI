@@ -6,14 +6,14 @@
 
 | Поле | Значение |
 |------|----------|
-| Фаза | **P3 — Skills/Protocols ✅** (ожидает подтверждения → **P4**) |
+| Фаза | **P4 — Интернет + confirm ✅** (ожидает подтверждения → **P5**) |
 | Продукт | Голосовой ИИ-помощник Mira (диалог, память, сеть, экран, браузер) |
-| Код | P0–P2 + md skills/protocols, on-demand context, Workshop panel |
+| Код | P0–P3 + web.search/fetch, ConfirmBridge, Integrations test |
 | Предыдущее | Учебный TTS (`mira_tts`) удалён; не восстанавливаем как есть |
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
 | Дорожная карта | `WIP.md` § «План разработки» — фазы **P0→P11**, затем F* |
 
-**Сейчас:** P3 закрыт. После OK — **P4** (интернет + confirm UX).
+**Сейчас:** P4 закрыт. После OK — **P5** (экран + браузер).
 
 ## Решения
 
@@ -56,6 +56,9 @@
 | 2026-11-11 | Формат skills/protocols | Markdown + YAML frontmatter; seed в `seed/`, runtime в `data/` |
 | 2026-11-11 | Skills default off in context | В контекст только matched triggers / явная команда; не весь каталог |
 | 2026-11-11 | P3 готов | Demo code-helper + summarizer; protocol morning-check; Workshop CRUD/Run |
+| 2026-11-11 | Web tools P4 | DuckDuckGo search + fetch; WEB_* env; confirm на fetch |
+| 2026-11-11 | ConfirmBridge | IPC confirm-request/response для опасных исходящих действий |
+| 2026-11-11 | P4 готов | web.search в диалоге; тест в Интеграциях; p4:smoke OK |
 | 2026-11-11 | Провайдеры Claude / Gemini / GPT — must | Без lock-in на одного вендора |
 
 ## Баги
@@ -87,6 +90,7 @@
 | 2026-11-11 | Завершён этап P1 (текст + LLM + память) |
 | 2026-11-11 | Завершён этап P2 (голос ASR/TTS + каталог) |
 | 2026-11-11 | Завершён этап P3 (skills + протоколы) |
+| 2026-11-11 | Завершён этап P4 (интернет + confirm) |
 | 2026-11-11 | DESIGN: информационная архитектура, карта настроек |
 | 2026-11-11 | Подключены agent skills Emil Kowalski (design/animation) |
 | 2026-11-11 | Добавлен каталог 14 цветовых тем + референсы в docs/themes/ |

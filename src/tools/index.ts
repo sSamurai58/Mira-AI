@@ -1,2 +1,3 @@
-/** Tool surface: web, screen, browser, messaging, blender — P4+. */
-export const toolsStatus = "stub" as const;
+/** Tool surface — P4+ web; later screen/browser/messaging/blender. */
+export const toolsStatus = "partial" as const;
+export const webTools = ["web.search", "web.fetch"] as const;

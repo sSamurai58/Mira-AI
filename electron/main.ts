@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain } from "electron";
 import path from "node:path";
 import { getPublicConfig, loadConfig, validateLlmConfig } from "./config";
+import { wireConfirmBridge } from "./confirmBridge";
 import { createLlmAdapter } from "./llm";
 import {
   ensureSeededCatalog,
@@ -9,6 +10,7 @@ import {
   writeCatalogItem,
 } from "./markdownCatalog";
 import { runMemorySearch, sendChatMessage } from "./orchestrator";
+import { getWebPolicy, webSearch } from "./tools/web";
 import {
   closeStore,
   createSession,
@@ -57,6 +59,7 @@ function broadcast(channel: string, payload: unknown): void {
 
 app.whenReady().then(() => {
   loadConfig(true);
+  wireConfirmBridge();
   openStore();
   ensureBootstrapSession();
   ensureSeededCatalog("skills");
@@ -67,7 +70,7 @@ app.whenReady().then(() => {
     const cfg = getPublicConfig();
     const validation = validateLlmConfig();
     return {
-      phase: "P3",
+      phase: "P4",
       databasePath: getDatabasePath(),
       ...health,
       llm: cfg,
@@ -75,6 +78,7 @@ app.whenReady().then(() => {
       llmReason: validation.reason ?? null,
       skills: loadMarkdownCatalog("skills").length,
       protocols: loadMarkdownCatalog("protocols").length,
+      web: getWebPolicy(),
     };
   });
 
@@ -185,6 +189,25 @@ app.whenReady().then(() => {
       },
     ) => writeCatalogItem("protocols", item),
   );
+
+  ipcMain.handle("mira:get-web-policy", () => getWebPolicy());
+
+  ipcMain.handle("mira:test-web", async (_e, query?: string) => {
+    try {
+      const hits = await webSearch(query?.trim() || "Mira AI assistant");
+      return {
+        ok: true,
+        detail: `web.search OK · hits=${hits.length}`,
+        hits,
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        detail: err instanceof Error ? err.message : String(err),
+        hits: [],
+      };
+    }
+  });
 
   createWindow();
 

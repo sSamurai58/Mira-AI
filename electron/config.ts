@@ -73,6 +73,9 @@ export function getPublicConfig(): {
   hasOpenAiKey: boolean;
   openaiBaseUrl: string;
   databasePath: string;
+  webEnabled: boolean;
+  webAllowlist: string;
+  webFetchConfirm: boolean;
 } {
   const cfg = loadConfig();
   return {
@@ -81,6 +84,10 @@ export function getPublicConfig(): {
     hasOpenAiKey: Boolean(cfg.openaiApiKey),
     openaiBaseUrl: cfg.openaiBaseUrl,
     databasePath: cfg.databasePath,
+    webEnabled: (process.env.WEB_ENABLED ?? "true").trim().toLowerCase() !== "false",
+    webAllowlist: (process.env.WEB_ALLOWLIST ?? "*").trim(),
+    webFetchConfirm:
+      (process.env.WEB_FETCH_CONFIRM ?? "true").trim().toLowerCase() !== "false",
   };
 }
 

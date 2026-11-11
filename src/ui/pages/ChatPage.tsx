@@ -193,7 +193,8 @@ export function ChatPage({
         const protoPart = event.protocol
           ? `protocol: ${event.protocol.id}`
           : "protocol: none";
-        setContextNote(`${skillPart} · ${protoPart}`);
+        const webPart = event.web ? `web: ${event.web}` : "web: none";
+        setContextNote(`${skillPart} · ${protoPart} · ${webPart}`);
       }
 
       if (event.type === "token") {
@@ -234,7 +235,8 @@ export function ChatPage({
         const protoPart = event.protocolUsed
           ? `protocol: ${event.protocolUsed.id}`
           : "protocol: none";
-        setContextNote(`${skillPart} · ${protoPart}`);
+        const webPart = event.webUsed ? `web: ${event.webUsed}` : "web: none";
+        setContextNote(`${skillPart} · ${protoPart} · ${webPart}`);
         setBusy(false);
         requestIdRef.current = null;
         speakAssistant(event.utterance.content);

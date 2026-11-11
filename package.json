@@ -15,6 +15,7 @@
     "p1:smoke": "tsx scripts/p1-smoke.ts",
     "p2:smoke": "tsx scripts/p2-smoke.ts",
     "p3:smoke": "tsx scripts/p3-smoke.ts",
+    "p4:smoke": "tsx scripts/p4-smoke.ts",
     "start": "npm run build && electron ."
   },
   "engines": {

@@ -43,12 +43,20 @@ export type MiraCatalogItem = {
   relativePath: string;
 };
 
+export type MiraConfirmRequest = {
+  id: string;
+  title: string;
+  body: string;
+  confirmLabel?: string;
+};
+
 export type MiraChatEvent =
   | { type: "user"; utterance: MiraUtterance }
   | {
       type: "context";
       skills: Array<{ id: string; name: string }>;
       protocol: { id: string; name: string } | null;
+      web?: string | null;
     }
   | { type: "assistant_start"; sessionId: string }
   | { type: "token"; text: string }
@@ -58,6 +66,7 @@ export type MiraChatEvent =
       memoryUsed: MiraMemoryHit[];
       skillsUsed: Array<{ id: string; name: string }>;
       protocolUsed: { id: string; name: string } | null;
+      webUsed: string | null;
     }
   | { type: "error"; message: string };
 
@@ -106,6 +115,16 @@ contextBridge.exposeInMainWorld("mira", {
     enabled: boolean;
     body: string;
   }) => ipcRenderer.invoke("mira:save-protocol", item),
+  getWebPolicy: () => ipcRenderer.invoke("mira:get-web-policy"),
+  testWeb: (query?: string) => ipcRenderer.invoke("mira:test-web", query),
+  respondConfirm: (id: string, accepted: boolean) =>
+    ipcRenderer.invoke("mira:confirm-response", id, accepted),
+  onConfirmRequest: (handler: (req: MiraConfirmRequest) => void) => {
+    const listener = (_event: IpcRendererEvent, req: MiraConfirmRequest) =>
+      handler(req);
+    ipcRenderer.on("mira:confirm-request", listener);
+    return () => ipcRenderer.removeListener("mira:confirm-request", listener);
+  },
   onChatEvent: (
     handler: (payload: { requestId: string; event: MiraChatEvent }) => void,
   ) => {

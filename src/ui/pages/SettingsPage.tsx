@@ -237,10 +237,7 @@ export function SettingsPage({
           </>
         ) : null}
         {section === "integrations" ? (
-          <StubSection
-            title="Интеграции"
-            body="Экран, браузер, мессенджеры, Blender, интернет — отдельные фазы после MVP."
-          />
+          <IntegrationsSection />
         ) : null}
         {section === "terminal" ? (
           <StubSection
@@ -278,6 +275,67 @@ function StubSection({ title, body }: { title: string; body: string }) {
       </div>
       <p className="muted" style={{ margin: 0 }}>
         {body}
+      </p>
+    </>
+  );
+}
+
+function IntegrationsSection() {
+  const [policyText, setPolicyText] = useState("…");
+  const [test, setTest] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      if (!window.mira) {
+        if (!cancelled) setPolicyText("IPC недоступен");
+        return;
+      }
+      const policy = await window.mira.getWebPolicy();
+      if (!cancelled) setPolicyText(JSON.stringify(policy, null, 2));
+    }
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <>
+      <div className="row">
+        <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Интеграции</h2>
+        <StubBadge label="P4 web" />
+      </div>
+      <p className="muted" style={{ margin: 0 }}>
+        Интернет (#4): `WEB_ENABLED`, `WEB_ALLOWLIST`, `WEB_FETCH_CONFIRM` в
+        `.env`. Fetch URL всегда через ConfirmModal (always до F12).
+      </p>
+      <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
+        {policyText}
+      </pre>
+      <div className="row">
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={busy}
+          onClick={() => {
+            if (!window.mira) return;
+            setBusy(true);
+            void window.mira
+              .testWeb("weather Moscow")
+              .then((res) => {
+                setTest(`${res.ok ? "OK" : "FAIL"} — ${res.detail}`);
+              })
+              .finally(() => setBusy(false));
+          }}
+        >
+          Тест web.search
+        </button>
+        {test ? <span className="chip">{test}</span> : null}
+      </div>
+      <p className="muted" style={{ margin: 0 }}>
+        Экран / браузер / мессенджеры / Blender — следующие фазы.
       </p>
     </>
   );

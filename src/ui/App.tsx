@@ -35,6 +35,8 @@ export function App() {
   const [themeId, setThemeId] = useState<ThemeId>(() => loadStoredThemeId());
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingConfirm, setPendingConfirm] =
+    useState<MiraConfirmRequest | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [doctorOpen, setDoctorOpen] = useState(false);
   const [healthText, setHealthText] = useState("Проверка store…");
@@ -93,6 +95,13 @@ export function App() {
   useEffect(() => {
     void refreshHealth();
   }, [refreshHealth]);
+
+  useEffect(() => {
+    if (!window.mira?.onConfirmRequest) return;
+    return window.mira.onConfirmRequest((req) => {
+      setPendingConfirm(req);
+    });
+  }, []);
 
   const doctorBody = useMemo(
     () =>
@@ -198,6 +207,25 @@ export function App() {
         body="ConfirmModal (always до F12)."
         onCancel={() => setConfirmOpen(false)}
         onConfirm={() => setConfirmOpen(false)}
+      />
+
+      <ConfirmModal
+        open={Boolean(pendingConfirm)}
+        title={pendingConfirm?.title ?? "Подтверждение"}
+        body={pendingConfirm?.body ?? ""}
+        confirmLabel={pendingConfirm?.confirmLabel ?? "Подтвердить"}
+        onCancel={() => {
+          if (pendingConfirm && window.mira) {
+            void window.mira.respondConfirm(pendingConfirm.id, false);
+          }
+          setPendingConfirm(null);
+        }}
+        onConfirm={() => {
+          if (pendingConfirm && window.mira) {
+            void window.mira.respondConfirm(pendingConfirm.id, true);
+          }
+          setPendingConfirm(null);
+        }}
       />
 
       <ConfirmModal

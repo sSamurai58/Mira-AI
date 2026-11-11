@@ -64,12 +64,20 @@ type MiraCatalogItem = {
   relativePath: string;
 };
 
+type MiraConfirmRequest = {
+  id: string;
+  title: string;
+  body: string;
+  confirmLabel?: string;
+};
+
 type MiraChatEvent =
   | { type: "user"; utterance: MiraUtterance }
   | {
       type: "context";
       skills: Array<{ id: string; name: string }>;
       protocol: { id: string; name: string } | null;
+      web?: string | null;
     }
   | { type: "assistant_start"; sessionId: string }
   | { type: "token"; text: string }
@@ -79,6 +87,7 @@ type MiraChatEvent =
       memoryUsed: MiraMemoryHit[];
       skillsUsed: Array<{ id: string; name: string }>;
       protocolUsed: { id: string; name: string } | null;
+      webUsed: string | null;
     }
   | { type: "error"; message: string };
 
@@ -136,6 +145,19 @@ interface MiraBridge {
     enabled: boolean;
     body: string;
   }) => Promise<MiraCatalogItem>;
+  getWebPolicy: () => Promise<{
+    enabled: boolean;
+    allowlist: string[];
+    requireConfirmForFetch: boolean;
+  }>;
+  testWeb: (
+    query?: string,
+  ) => Promise<{ ok: boolean; detail: string; hits: unknown[] }>;
+  respondConfirm: (
+    id: string,
+    accepted: boolean,
+  ) => Promise<{ ok: boolean }>;
+  onConfirmRequest: (handler: (req: MiraConfirmRequest) => void) => () => void;
   onChatEvent: (
     handler: (payload: { requestId: string; event: MiraChatEvent }) => void,
   ) => () => void;

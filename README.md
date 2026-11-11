@@ -4,9 +4,9 @@
 
 ## Фаза сейчас
 
+**P4 — Web:** `web.search` / `web.fetch`, allowlist, confirm на fetch.  
 **P3 — Skills/Protocols:** md-каталог, on-demand skills, протоколы + Run.  
-**P2 — Голос:** PTT → Web Speech ASR → LLM → TTS.  
-**P1:** текст + LLM + память. **P0:** Electron/React shell.
+**P2 — Голос** · **P1 — чат/память** · **P0 — shell**.
 
 Дорожная карта: [`docs/WIP.md`](./docs/WIP.md).
 
@@ -19,9 +19,11 @@ npm run db:check     # создаёт data/mira.db и bootstrap-сессию
 npm run p1:smoke     # headless: mock-чат + поиск памяти
 npm run p2:smoke     # headless: каталог голосов / engine status
 npm run p3:smoke     # headless: on-demand skills + protocol match
+npm run p4:smoke     # headless: DuckDuckGo search + chat webUsed
 npm run dev          # UI в браузере (без IPC)
-npm run dev:electron # UI + Electron + SQLite + LLM + голос + skills
+npm run dev:electron # полный локальный контур
 ```
+
 
 
 

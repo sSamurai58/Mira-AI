@@ -40,12 +40,22 @@ export function createMockAdapter(model = "mock-mira"): LlmAdapter {
         const memoryHint = messages.find((m) =>
           m.content.startsWith("[Память из прошлых разговоров]"),
         );
+        const webHint = messages.find((m) =>
+          m.content.startsWith("[Интернет:"),
+        );
+        const skillHint = messages.find((m) =>
+          m.content.startsWith("[Active skills"),
+        );
         const reply = [
-          "Это ответ mock-модели (P1 без API-ключа).",
+          "Это ответ mock-модели (без API-ключа).",
           lastUser ? `Вы сказали: «${lastUser.slice(0, 240)}»` : "",
           memoryHint
             ? "В контекст подтянуты фрагменты из памяти."
             : "Дополнительных фрагментов памяти не найдено.",
+          webHint
+            ? `Учтены интернет-данные: ${webHint.content.slice(0, 280)}…`
+            : "Интернет-инструменты для этого хода не вызывались.",
+          skillHint ? "Активны skills on-demand." : "Skills в контексте нет.",
           "Подключите OPENAI_API_KEY и LLM_PROVIDER=openai для живой модели.",
         ]
           .filter(Boolean)

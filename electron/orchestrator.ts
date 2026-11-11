@@ -7,6 +7,15 @@ import {
   matchExplicitSkillCommand,
   type CatalogItem,
 } from "./markdownCatalog";
+import { requestUserConfirm } from "./confirmBridge";
+import {
+  extractSearchQueryFromText,
+  formatWebBlock,
+  getWebPolicy,
+  looksLikeWebIntent,
+  webFetch,
+  webSearch,
+} from "./tools/web";
 import {
   addUtterance,
   createSession,
@@ -20,7 +29,7 @@ import {
 } from "./store";
 
 const SYSTEM_PROMPT =
-  "Ты Mira — локальный голосовой ИИ-помощник. Отвечай по делу на языке пользователя. Если даны фрагменты памяти, опирайся на них, когда уместно. Skills подключаются только по необходимости — не выдумывай, что все навыки активны.";
+  "Ты Mira — локальный голосовой ИИ-помощник. Отвечай по делу на языке пользователя. Если даны фрагменты памяти или интернет-данные, опирайся на них. Skills подключаются только по необходимости — не выдумывай, что все навыки активны.";
 
 export type ChatStreamEvent =
   | { type: "user"; utterance: UtteranceRow }
@@ -28,6 +37,7 @@ export type ChatStreamEvent =
       type: "context";
       skills: Array<{ id: string; name: string }>;
       protocol: { id: string; name: string } | null;
+      web?: string | null;
     }
   | { type: "assistant_start"; sessionId: string }
   | { type: "token"; text: string }
@@ -37,6 +47,7 @@ export type ChatStreamEvent =
       memoryUsed: MemoryHit[];
       skillsUsed: Array<{ id: string; name: string }>;
       protocolUsed: { id: string; name: string } | null;
+      webUsed: string | null;
     }
   | { type: "error"; message: string };
 
@@ -175,10 +186,55 @@ export async function sendChatMessage(
     protocol = selectProtocolForTurn(text);
   }
 
+  let webUsed: string | null = null;
+  let webBlock: string | null = null;
+  try {
+    if (looksLikeWebIntent(text) && getWebPolicy().enabled) {
+      const q = extractSearchQueryFromText(text);
+      const urlMatch = text.match(/https?:\/\/\S+/i)?.[0];
+      if (urlMatch) {
+        const policy = getWebPolicy();
+        if (policy.requireConfirmForFetch) {
+          const ok = await requestUserConfirm({
+            title: "Подтверждение web.fetch",
+            body: `Mira хочет загрузить страницу:\n${urlMatch}\n\nРазрешить исходящий запрос?`,
+            confirmLabel: "Загрузить",
+          });
+          if (!ok) {
+            webUsed = "fetch-denied";
+            webBlock =
+              "[Интернет: web.fetch отклонён пользователем — ответь без содержимого URL]";
+          }
+        }
+        if (webUsed !== "fetch-denied") {
+          const fetched = await webFetch(urlMatch, signal);
+          webUsed = "fetch";
+          webBlock = formatWebBlock("fetch", fetched);
+        }
+      } else {
+        const hits = await webSearch(q, signal);
+        webUsed = "search";
+        webBlock = formatWebBlock("search", hits);
+      }
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    webUsed = "error";
+    webBlock = `[Интернет: ошибка] ${message}`;
+    emit({
+      type: "context",
+      skills: skills.map((s) => ({ id: s.id, name: s.name })),
+      protocol: protocol ? { id: protocol.id, name: protocol.name } : null,
+      web: webUsed,
+    });
+    // continue chat with error note in context rather than hard-fail
+  }
+
   emit({
     type: "context",
     skills: skills.map((s) => ({ id: s.id, name: s.name })),
     protocol: protocol ? { id: protocol.id, name: protocol.name } : null,
+    web: webUsed,
   });
 
   const history = listUtterances(session.id);
@@ -195,6 +251,7 @@ export async function sendChatMessage(
   if (protocol) {
     messages.push({ role: "system", content: buildProtocolBlock(protocol) });
   }
+  if (webBlock) messages.push({ role: "system", content: webBlock });
 
   for (const u of history) {
     if (u.role === "system") continue;
@@ -251,6 +308,7 @@ export async function sendChatMessage(
     memoryUsed: memoryHits,
     skillsUsed: skills.map((s) => ({ id: s.id, name: s.name })),
     protocolUsed: protocol ? { id: protocol.id, name: protocol.name } : null,
+    webUsed,
   });
 
   return getSession(session.id) ?? session;
