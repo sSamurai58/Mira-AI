@@ -15,24 +15,21 @@ import {
   formatDoctorView,
   mergeDoctorReport,
 } from "./doctor/formatDoctorReport";
+import { getUiLang, t } from "./i18n";
 import { getVoiceEngineStatus } from "./voice/engineStatus";
 import type { VoiceState } from "./voiceState";
 
 type RootNav = "chat" | "memory" | "workshop" | "settings";
 
-const NAV: { id: RootNav; label: string }[] = [
-  { id: "chat", label: "Диалог" },
-  { id: "memory", label: "Память" },
-  { id: "workshop", label: "Мастерская" },
-  { id: "settings", label: "Настройки" },
-];
-
-const TITLES: Record<RootNav, string> = {
-  chat: "Диалог",
-  memory: "Память",
-  workshop: "Мастерская",
-  settings: "Настройки",
-};
+function navItems(): { id: RootNav; label: string }[] {
+  const lang = getUiLang();
+  return [
+    { id: "chat", label: t("chat", lang) },
+    { id: "memory", label: t("memory", lang) },
+    { id: "workshop", label: t("workshop", lang) },
+    { id: "settings", label: t("settings", lang) },
+  ];
+}
 
 export function App() {
   const [nav, setNav] = useState<RootNav>("chat");
@@ -49,6 +46,10 @@ export function App() {
   const [autoSpeak, setAutoSpeak] = useState(
     () => localStorage.getItem("mira.autoSpeak") !== "0",
   );
+  const [navLabels, setNavLabels] = useState(() => navItems());
+  const titles = Object.fromEntries(
+    navLabels.map((n) => [n.id, n.label]),
+  ) as Record<RootNav, string>;
 
   useEffect(() => {
     applyTheme(themeId);
@@ -57,16 +58,24 @@ export function App() {
   useEffect(() => {
     const onStorage = () => {
       setAutoSpeak(localStorage.getItem("mira.autoSpeak") !== "0");
+      setNavLabels(navItems());
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  // Keep autoSpeak in sync when changed from Settings in same window
+  // Keep autoSpeak / i18n in sync when changed from Settings in same window
   useEffect(() => {
     const id = window.setInterval(() => {
       const next = localStorage.getItem("mira.autoSpeak") !== "0";
       setAutoSpeak((prev) => (prev === next ? prev : next));
+      setNavLabels((prev) => {
+        const nextNav = navItems();
+        return prev.map((p) => p.label).join() ===
+          nextNav.map((p) => p.label).join()
+          ? prev
+          : nextNav;
+      });
     }, 800);
     return () => window.clearInterval(id);
   }, []);
@@ -143,7 +152,7 @@ export function App() {
           <div className="brand-name">{APP_NAME}</div>
           <div className="brand-phase">phase {APP_PHASE}</div>
         </div>
-        {NAV.map((item) => (
+        {navLabels.map((item) => (
           <button
             key={item.id}
             type="button"
@@ -157,7 +166,7 @@ export function App() {
 
       <main className="main">
         <header className="main-header">
-          <h1>{TITLES[nav]}</h1>
+          <h1>{titles[nav]}</h1>
           <div className="row">
             <span className="chip">
               state <strong>{voiceState}</strong>

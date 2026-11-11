@@ -300,8 +300,11 @@ export function ChatPage({
         const blenderPart = event.blenderUsed
           ? `blender: ${event.blenderUsed}`
           : "blender: none";
+        const addonPart = event.addonUsed
+          ? `addon: ${event.addonUsed}`
+          : "addon: none";
         setContextNote(
-          `${skillPart} · ${protoPart} · ${webPart} · ${desktopPart} · ${msgPart} · ${termPart} · ${learnedPart} · ${blenderPart}`,
+          `${skillPart} · ${protoPart} · ${webPart} · ${desktopPart} · ${msgPart} · ${termPart} · ${learnedPart} · ${blenderPart} · ${addonPart}`,
         );
         setBusy(false);
         requestIdRef.current = null;

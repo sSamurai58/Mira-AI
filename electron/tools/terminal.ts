@@ -76,6 +76,8 @@ export async function executeTerminalFromChat(command: string): Promise<{
     // Always confirm for dialog-driven commands in P7 (always until F12),
     // and additionally emphasize dangerous ones.
     const ok = await requestUserConfirm({
+      actionClass: "terminal",
+      risk: dangerous ? "high" : "low",
       title: dangerous
         ? "Опасная команда в терминале"
         : "Выполнить в терминале",

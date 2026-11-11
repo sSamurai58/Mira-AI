@@ -6,14 +6,14 @@
 
 | Поле | Значение |
 |------|----------|
-| Фаза | **F9 — Wake-word / barge-in ✅** |
-| Продукт | Голосовой ИИ-помощник Mira (диалог, память, сеть, экран, TG, TTY, learn, voice, Blender) |
-| Код | P0–P11 + F11 + F13 + F9: hands-free wake + Перебить/Space |
+| Фаза | **F* pack ✅** (все future кроме **F10**) |
+| Продукт | Голосовой ИИ-помощник Mira |
+| Код | Must + F1–F9 + F11–F13 (F10 skipped) |
 | Предыдущее | Учебный TTS (`mira_tts`) удалён; не восстанавливаем как есть |
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
-| Дорожная карта | Must закрыт; приоритетные F*: F11 ✅ → F13 ✅ → F9 ✅ |
+| Дорожная карта | Must закрыт; F10 профили — отложены по запросу |
 
-**Сейчас:** F9 закрыт. Следующие F* — по запросу (F12 confirm modes / F10 профили / …).
+**Сейчас:** F1–F9, F11–F13 закрыты (partial). **F10 не делаем.**
 
 ## Решения
 
@@ -87,6 +87,9 @@
 | 2026-11-11 | F13 готов | полный Doctor + log viewer; f13:smoke OK |
 | 2026-11-11 | F9 hands-free | Wake-фраза + sensitivity в localStorage; barge-in → listening |
 | 2026-11-11 | F9 готов | Chat «Перебить»/Space; Настройки → Голос; f9:smoke OK |
+| 2026-11-11 | F12 confirm modes | always / smart / dangerous-list + actionClass на tool confirms |
+| 2026-11-11 | F1–F8 pack | cameras/iot/calendar/mail/files/notes/media/i18n via chat+UI; F10 skipped |
+| 2026-11-11 | f-rest:smoke OK | покрытие F1–F8+F12 без F10 |
 
 ## Баги
 
@@ -128,6 +131,7 @@
 | 2026-11-11 | Завершён F11 (backup / забывать) |
 | 2026-11-11 | Завершён F13 (Doctor / логи) |
 | 2026-11-11 | Завершён F9 (wake-word / barge-in) |
+| 2026-11-11 | Завершён F* pack без F10 |
 | 2026-11-11 | DESIGN: информационная архитектура, карта настроек |
 | 2026-11-11 | Подключены agent skills Emil Kowalski (design/animation) |
 | 2026-11-11 | Добавлен каталог 14 цветовых тем + референсы в docs/themes/ |

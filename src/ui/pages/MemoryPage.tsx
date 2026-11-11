@@ -37,6 +37,10 @@ export function MemoryPage({ onOpenSession }: MemoryPageProps) {
   const [hits, setHits] = useState<MemoryHit[]>([]);
   const [learned, setLearned] = useState<MiraLearnedUnit[]>([]);
   const [learnedQuery, setLearnedQuery] = useState("");
+  const [notes, setNotes] = useState<
+    Array<{ id: string; title: string; body: string }>
+  >([]);
+  const [noteDraft, setNoteDraft] = useState("");
   const [note, setNote] = useState("Загрузка…");
 
   async function refreshSessions() {
@@ -47,12 +51,14 @@ export function MemoryPage({ onOpenSession }: MemoryPageProps) {
       setSessions([]);
       return;
     }
-    const [rows, units] = await Promise.all([
+    const [rows, units, noteRows] = await Promise.all([
       window.mira.listSessions(),
       window.mira.listLearnedUnits(),
+      window.mira.listNotes?.(20) ?? Promise.resolve([]),
     ]);
     setSessions(rows);
     setLearned(units);
+    setNotes(noteRows.map((n) => ({ id: n.id, title: n.title, body: n.body })));
     setNote(
       rows.length
         ? "Сессии из SQLite. Откройте чат или найдите «о чём говорили»."
@@ -129,6 +135,41 @@ export function MemoryPage({ onOpenSession }: MemoryPageProps) {
             ))}
           </div>
         ) : null}
+
+        <div className="stack">
+          <div className="row">
+            <strong>Заметки (F6)</strong>
+            <span className="chip">F6</span>
+          </div>
+          <form
+            className="composer"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!window.mira || !noteDraft.trim()) return;
+              void window.mira
+                .upsertNote({ title: noteDraft.slice(0, 48), body: noteDraft })
+                .then(() => {
+                  setNoteDraft("");
+                  return refreshSessions();
+                });
+            }}
+          >
+            <input
+              value={noteDraft}
+              onChange={(e) => setNoteDraft(e.target.value)}
+              placeholder="Новая заметка…"
+            />
+            <button type="submit" className="btn">
+              Сохранить
+            </button>
+          </form>
+          {notes.slice(0, 8).map((n) => (
+            <div key={n.id} className="panel">
+              <strong>{n.title}</strong>
+              <div className="muted">{n.body.slice(0, 180)}</div>
+            </div>
+          ))}
+        </div>
 
         <div className="stack">
           <div className="row">

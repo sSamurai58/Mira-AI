@@ -35,7 +35,11 @@ export function createAsrSession(handlers: AsrHandlers) {
   }
 
   const recognition = new Ctor();
-  recognition.lang = "ru-RU";
+  recognition.lang =
+    (typeof localStorage !== "undefined" &&
+      localStorage.getItem("mira.uiLang") === "en" &&
+      "en-US") ||
+    "ru-RU";
   recognition.interimResults = true;
   recognition.continuous = true;
 

@@ -68,6 +68,8 @@ export async function openBrowserUrl(url: string): Promise<BrowserOpenResult> {
 
   if (policy.requireConfirmOpen) {
     const ok = await requestUserConfirm({
+      actionClass: "browser",
+      risk: "low",
       title: "Открыть в браузере",
       body: `Mira откроет URL во внешнем браузере:\n${url}`,
       confirmLabel: "Открыть",

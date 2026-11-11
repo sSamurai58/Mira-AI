@@ -123,6 +123,8 @@ export async function exportBackup(opts?: {
   const includeSecrets = Boolean(opts?.includeSecrets);
   if (includeSecrets) {
     const ok = await requestUserConfirm({
+      actionClass: "backup",
+      risk: "high",
       title: "Экспорт с секретами",
       body: "В пакет попадёт копия .env (API-ключи). Продолжить?",
       confirmLabel: "Включить секреты",
@@ -231,6 +233,8 @@ export async function importBackup(packagePath: string): Promise<{
   }
 
   const ok = await requestUserConfirm({
+    actionClass: "backup",
+    risk: "high",
     title: "Импорт backup",
     body: `Заменить локальные данные пакетом «${path.basename(abs)}»?\nЧасти: ${manifest.parts.join(", ")}\nТекущая БД/библиотека будут перезаписаны. Рекомендуется сначала сделать export.`,
     confirmLabel: "Импортировать",
@@ -303,6 +307,8 @@ export async function forgetData(scope: ForgetScope): Promise<{
   };
 
   const ok = await requestUserConfirm({
+    actionClass: "forget",
+    risk: "high",
     title: "Забыть данные",
     body: `Необратимо очистить: ${labels[scope]}.\nСделайте backup (export), если данные ещё нужны.\nПродолжить без восстановления?`,
     confirmLabel: "Забыть",

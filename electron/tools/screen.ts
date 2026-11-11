@@ -175,6 +175,8 @@ export async function clickAt(
   }
 
   const ok = await requestUserConfirm({
+    actionClass: "screen",
+    risk: "high",
     title: "Подтверждение контроля экрана",
     body: `Mira хочет выполнить клик по координатам (${x}, ${y}).\nРазрешить?`,
     confirmLabel: "Кликнуть",
@@ -221,6 +223,8 @@ export async function typeText(text: string): Promise<ScreenTypeResult> {
   }
 
   const ok = await requestUserConfirm({
+    actionClass: "screen",
+    risk: "high",
     title: "Подтверждение ввода с клавиатуры",
     body: `Mira хочет ввести текст:\n«${text.slice(0, 200)}»\nРазрешить?`,
     confirmLabel: "Ввести",

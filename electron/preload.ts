@@ -62,6 +62,7 @@ export type MiraChatEvent =
       terminal?: string | null;
       learned?: string | null;
       blender?: string | null;
+      addon?: string | null;
     }
   | { type: "assistant_start"; sessionId: string }
   | { type: "token"; text: string }
@@ -77,6 +78,7 @@ export type MiraChatEvent =
       terminalUsed: string | null;
       learnedUsed: string | null;
       blenderUsed: string | null;
+      addonUsed: string | null;
     }
   | { type: "error"; message: string };
 
@@ -245,6 +247,43 @@ contextBridge.exposeInMainWorld("mira", {
   forgetData: (
     scope: "memory" | "learned" | "library" | "voice-studio" | "all",
   ) => call("mira:forget-data", scope),
+  getConfirmPolicy: () => call("mira:get-confirm-policy"),
+  setConfirmPolicy: (payload: {
+    mode?: "always" | "smart" | "dangerous-list";
+    dangerousList?: string[];
+  }) => call("mira:set-confirm-policy", payload),
+  listNotes: (limit?: number) => call("mira:list-notes", limit),
+  searchNotes: (query?: string) => call("mira:search-notes", query),
+  upsertNote: (payload: {
+    id?: string;
+    title: string;
+    body: string;
+    tags?: string;
+    sessionId?: string | null;
+  }) => call("mira:upsert-note", payload),
+  listCalendarEvents: () => call("mira:list-calendar-events"),
+  listTimers: () => call("mira:list-timers"),
+  createCalendarEvent: (payload: {
+    title: string;
+    startsAt: string;
+    endsAt?: string | null;
+    remindAt?: string | null;
+  }) => call("mira:create-calendar-event", payload),
+  startTimer: (label: string, seconds: number) =>
+    call("mira:start-timer", label, seconds),
+  cancelTimer: (id?: string) => call("mira:cancel-timer", id),
+  listCameras: () => call("mira:list-cameras"),
+  upsertCamera: (payload: {
+    id?: string;
+    name: string;
+    url: string;
+    enabled?: boolean;
+  }) => call("mira:upsert-camera", payload),
+  listIotDevices: () => call("mira:list-iot-devices"),
+  getMailPolicy: () => call("mira:get-mail-policy"),
+  listMail: (folder?: string) => call("mira:list-mail", folder),
+  getMediaStatus: () => call("mira:get-media-status"),
+  searchFiles: (query?: string) => call("mira:search-files", query),
   respondConfirm: (id: string, accepted: boolean) =>
     call("mira:confirm-response", id, accepted),
   onConfirmRequest: (handler: (req: MiraConfirmRequest) => void) => {

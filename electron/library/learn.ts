@@ -378,6 +378,8 @@ export async function proposeSkillFromItem(id: string): Promise<{
   ].join("\n");
 
   const ok = await requestUserConfirm({
+    actionClass: "skill",
+    risk: "low",
     title: "Создать skill из материала?",
     body: `Будет создан skill «${skillId}» (default off) из «${item.title}».\n\nПодтвердите создание в каталоге #9.`,
     confirmLabel: "Создать skill",

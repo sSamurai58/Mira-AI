@@ -1,4 +1,9 @@
 import { BrowserWindow, ipcMain } from "electron";
+import {
+  shouldRequestConfirm,
+  type ConfirmClass,
+  type ConfirmRisk,
+} from "./confirmPolicy";
 import { assertIpcAuth } from "./ipcSecurity";
 
 export type ConfirmRequest = {
@@ -32,7 +37,11 @@ export function wireConfirmBridge(): void {
 }
 
 export function requestUserConfirm(
-  req: Omit<ConfirmRequest, "id"> & { id?: string },
+  req: Omit<ConfirmRequest, "id"> & {
+    id?: string;
+    actionClass?: ConfirmClass;
+    risk?: ConfirmRisk;
+  },
   timeoutMs = 120_000,
 ): Promise<boolean> {
   const auto = (process.env.MIRA_CONFIRM_AUTO ?? "").trim().toLowerCase();
@@ -41,6 +50,12 @@ export function requestUserConfirm(
   }
   if (auto === "deny" || auto === "0" || auto === "false") {
     return Promise.resolve(false);
+  }
+
+  const actionClass = req.actionClass ?? "backup";
+  const risk = req.risk ?? "high";
+  if (!shouldRequestConfirm(actionClass, risk)) {
+    return Promise.resolve(true);
   }
 
   const id = req.id ?? crypto.randomUUID();
@@ -53,7 +68,6 @@ export function requestUserConfirm(
 
   const windows = BrowserWindow.getAllWindows();
   if (windows.length === 0) {
-    // Headless/smoke without UI: deny rather than hang until timeout.
     return Promise.resolve(false);
   }
 

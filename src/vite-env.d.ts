@@ -83,6 +83,7 @@ type MiraChatEvent =
       terminal?: string | null;
       learned?: string | null;
       blender?: string | null;
+      addon?: string | null;
     }
   | { type: "assistant_start"; sessionId: string }
   | { type: "token"; text: string }
@@ -98,6 +99,7 @@ type MiraChatEvent =
       terminalUsed: string | null;
       learnedUsed: string | null;
       blenderUsed: string | null;
+      addonUsed: string | null;
     }
   | { type: "error"; message: string };
 
@@ -639,6 +641,80 @@ interface MiraBridge {
     detail: string;
     deleted: Record<string, number>;
   }>;
+  getConfirmPolicy: () => Promise<{
+    mode: "always" | "smart" | "dangerous-list";
+    dangerousList: string[];
+  }>;
+  setConfirmPolicy: (payload: {
+    mode?: "always" | "smart" | "dangerous-list";
+    dangerousList?: string[];
+  }) => Promise<{
+    mode: "always" | "smart" | "dangerous-list";
+    dangerousList: string[];
+  }>;
+  listNotes: (limit?: number) => Promise<
+    Array<{
+      id: string;
+      title: string;
+      body: string;
+      tags: string | null;
+      session_id: string | null;
+      created_at: string;
+      updated_at: string;
+    }>
+  >;
+  searchNotes: (query?: string) => Promise<
+    Array<{
+      id: string;
+      title: string;
+      body: string;
+      tags: string | null;
+      session_id: string | null;
+      created_at: string;
+      updated_at: string;
+    }>
+  >;
+  upsertNote: (payload: {
+    id?: string;
+    title: string;
+    body: string;
+    tags?: string;
+    sessionId?: string | null;
+  }) => Promise<{
+    id: string;
+    title: string;
+    body: string;
+    tags: string | null;
+    session_id: string | null;
+    created_at: string;
+    updated_at: string;
+  }>;
+  listCalendarEvents: () => Promise<unknown[]>;
+  listTimers: () => Promise<unknown[]>;
+  createCalendarEvent: (payload: {
+    title: string;
+    startsAt: string;
+    endsAt?: string | null;
+    remindAt?: string | null;
+  }) => Promise<unknown>;
+  startTimer: (label: string, seconds: number) => Promise<unknown>;
+  cancelTimer: (id?: string) => Promise<unknown>;
+  listCameras: () => Promise<unknown[]>;
+  upsertCamera: (payload: {
+    id?: string;
+    name: string;
+    url: string;
+    enabled?: boolean;
+  }) => Promise<unknown>;
+  listIotDevices: () => Promise<unknown[]>;
+  getMailPolicy: () => Promise<{
+    enabled: boolean;
+    mode: string;
+    account: string | null;
+  }>;
+  listMail: (folder?: string) => Promise<unknown[]>;
+  getMediaStatus: () => Promise<unknown>;
+  searchFiles: (query?: string) => Promise<string[]>;
 }
 
 interface Window {

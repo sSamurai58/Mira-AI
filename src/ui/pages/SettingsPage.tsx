@@ -154,12 +154,7 @@ export function SettingsPage({
           </>
         ) : null}
 
-        {section === "general" ? (
-          <StubSection
-            title="Общие"
-            body="Язык UI (F8), профили (F10), режим confirm (F12). Сейчас confirm = always."
-          />
-        ) : null}
+        {section === "general" ? <GeneralSection /> : null}
         {section === "voice" ? (
           <>
             <div className="row">
@@ -312,6 +307,93 @@ export function SettingsPage({
         ) : null}
       </div>
     </div>
+  );
+}
+
+function GeneralSection() {
+  const [lang, setLang] = useState(() =>
+    localStorage.getItem("mira.uiLang") === "en" ? "en" : "ru",
+  );
+  const [mode, setMode] = useState<"always" | "smart" | "dangerous-list">(
+    "always",
+  );
+  const [dangerous, setDangerous] = useState("");
+  const [note, setNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!window.mira?.getConfirmPolicy) return;
+    void window.mira.getConfirmPolicy().then((p) => {
+      setMode(p.mode);
+      setDangerous(p.dangerousList.join(", "));
+    });
+  }, []);
+
+  return (
+    <>
+      <div className="row">
+        <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Общие</h2>
+        <StubBadge label="F8/F12" />
+      </div>
+      <p className="muted" style={{ margin: 0 }}>
+        F8 язык UI/ASR. F12 режим confirm. Профили (F10) — не в этом релизе.
+      </p>
+      <label className="stack">
+        <span className="muted">Язык UI</span>
+        <select
+          value={lang}
+          onChange={(e) => {
+            const v = e.target.value === "en" ? "en" : "ru";
+            setLang(v);
+            localStorage.setItem("mira.uiLang", v);
+            setNote(`UI lang → ${v} (перезагрузка nav при следующем открытии)`);
+          }}
+        >
+          <option value="ru">Русский</option>
+          <option value="en">English</option>
+        </select>
+      </label>
+      <label className="stack">
+        <span className="muted">Режим подтверждений (F12)</span>
+        <select
+          value={mode}
+          onChange={(e) =>
+            setMode(e.target.value as "always" | "smart" | "dangerous-list")
+          }
+        >
+          <option value="always">always</option>
+          <option value="smart">smart</option>
+          <option value="dangerous-list">dangerous-list</option>
+        </select>
+      </label>
+      <label className="stack">
+        <span className="muted">Dangerous classes (csv)</span>
+        <input
+          value={dangerous}
+          onChange={(e) => setDangerous(e.target.value)}
+        />
+      </label>
+      <button
+        type="button"
+        className="btn btn-primary"
+        onClick={() => {
+          if (!window.mira) return;
+          void window.mira
+            .setConfirmPolicy({
+              mode,
+              dangerousList: dangerous
+                .split(",")
+                .map((s) => s.trim())
+                .filter(Boolean),
+            })
+            .then((p) =>
+              setNote(`Confirm policy: ${p.mode} · ${p.dangerousList.join(",")}`),
+            );
+        }}
+      >
+        Сохранить confirm policy
+      </button>
+      {note ? <p className="muted" style={{ margin: 0 }}>{note}</p> : null}
+    </>
   );
 }
 
@@ -641,20 +723,6 @@ function TerminalSettingsSection() {
   );
 }
 
-function StubSection({ title, body }: { title: string; body: string }) {
-  return (
-    <>
-      <div className="row">
-        <h2 style={{ margin: 0, fontSize: "1.05rem" }}>{title}</h2>
-        <StubBadge />
-      </div>
-      <p className="muted" style={{ margin: 0 }}>
-        {body}
-      </p>
-    </>
-  );
-}
-
 function IntegrationsSection() {
   const [webPolicy, setWebPolicy] = useState("…");
   const [screenPolicy, setScreenPolicy] = useState("…");
@@ -914,6 +982,38 @@ function IntegrationsSection() {
       <p className="muted" style={{ margin: 0 }}>
         WhatsApp / Instagram — интерфейс-заглушки (без отправки).
       </p>
+
+      <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Future addons</h3>
+      <p className="muted" style={{ margin: 0 }}>
+        F1 камеры · F2 IoT · F3 календарь/таймеры · F4 почта · F5 файлы · F7
+        медиа — через Диалог. F10 профили — вне scope.
+      </p>
+      <div className="row" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
+        <button
+          type="button"
+          className="btn"
+          disabled={busy !== null}
+          onClick={() => {
+            if (!window.mira) return;
+            setBusy("future");
+            void Promise.all([
+              window.mira.listCameras(),
+              window.mira.listIotDevices(),
+              window.mira.getMailPolicy(),
+              window.mira.getMediaStatus(),
+              window.mira.listCalendarEvents(),
+            ])
+              .then(([cams, iot, mail, media, events]) => {
+                setBlenderTest(
+                  `cams=${(cams as unknown[]).length} iot=${(iot as unknown[]).length} mail=${(mail as { mode: string }).mode} media=${JSON.stringify(media).slice(0, 80)} events=${(events as unknown[]).length}`,
+                );
+              })
+              .finally(() => setBusy(null));
+          }}
+        >
+          Статус F1/F2/F3/F4/F7
+        </button>
+      </div>
 
       <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Blender (#13)</h3>
       <p className="muted" style={{ margin: 0 }}>

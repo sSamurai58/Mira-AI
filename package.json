@@ -26,6 +26,7 @@
     "f11:smoke": "tsx scripts/f11-smoke.ts",
     "f13:smoke": "tsx scripts/f13-smoke.ts",
     "f9:smoke": "tsx scripts/f9-smoke.ts",
+    "f-rest:smoke": "tsx scripts/f-rest-smoke.ts",
     "start": "npm run build && electron ."
   },
   "engines": {

@@ -31,9 +31,9 @@ Future **F1–F13** — только после стабилизации must (�
 
 | Поле | Значение |
 |------|----------|
-| Текущая фаза | **F9 ✅** — wake-word / barge-in |
-| Следующее действие | F* по запросу (рек.: F12 confirm / F10 профили) |
-| Запрещено сейчас | — (F* только по явному OK) |
+| Текущая фаза | **F* pack ✅** (кроме F10) |
+| Следующее действие | F10 профили — только по явному запросу |
+| Запрещено сейчас | F10 без запроса |
 
 ### Стартовые допущения стека (подтвердить в P0 → MEMORY)
 
@@ -291,18 +291,18 @@ UX: **Создать → фразы → загрузить → Mira сама о�
 
 | # | Тема | Не делать в коде must |
 |---|------|------------------------|
-| F1 | Камеры: connect, PTZ/zoom по команде, запись → библиотека Mira | После P11 |
-| F2 | Wi‑Fi / умная техника и фурнитура | После P11 |
-| F3 | Календарь / напоминания / таймеры голосом | После P11 |
-| F4 | Почта: читать + черновик/ответ (как мессенджеры, confirm) | После P11 |
-| F5 | Файловый менеджер: открыть / найти на диске | После P11 |
-| F6 | Заметки Obsidian/Notion-like ↔ память #3/#14 | После P11 |
-| F7 | Музыка/медиа: плеер, плейлисты | После P11 |
-| F8 | Мультиязычность UI + ASR/TTS | После P11 |
+| F1 | Камеры: connect, PTZ/zoom по команде, запись → библиотека Mira | ✅ stub registry + snapshot/PTZ dry-run |
+| F2 | Wi‑Fi / умная техника и фурнитура | ✅ device registry + on/off confirm dry-run |
+| F3 | Календарь / напоминания / таймеры голосом | ✅ events + timers from chat |
+| F4 | Почта: читать + черновик/ответ (как мессенджеры, confirm) | ✅ local inbox stub + draft/send confirm |
+| F5 | Файловый менеджер: открыть / найти на диске | ✅ search/open under workspace allowlist |
+| F6 | Заметки Obsidian/Notion-like ↔ память #3/#14 | ✅ notes CRUD + Memory UI |
+| F7 | Музыка/медиа: плеер, плейлисты | ✅ local playlist stub play/pause/next |
+| F8 | Мультиязычность UI + ASR/TTS | ✅ ru/en UI + ASR lang pref |
 | F9 | Wake-word / hands-free + barge-in (перебить TTS) | ✅ hands-free wake + Перебить/Space; f9:smoke |
-| F10 | Профили: голос / память / ключи (scoped, не в git) | После P11 |
+| F10 | Профили: голос / память / ключи (scoped, не в git) | ⏸ skipped by request |
 | F11 | Backup/export/import + «забыть» память/библиотеку | ✅ mira-backup-v1; Настройки → Данные; f11:smoke |
-| F12 | Режим confirm: always / smart / dangerous-list | После P11; до этого always |
+| F12 | Режим confirm: always / smart / dangerous-list | ✅ policy + Settings → Общие |
 | F13 | Логи + Doctor (mic / API / Blender…) | ✅ Doctor F13 + app_logs/jsonl viewer; f13:smoke |
 
 Открытые вопросы F* — см. предыдущие итерации; поднимать при входе в конкретный F#.

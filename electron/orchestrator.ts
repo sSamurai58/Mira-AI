@@ -75,6 +75,13 @@ import {
   type UtteranceRow,
 } from "./store";
 import { appendAppLog } from "./logging";
+import { handleCalendarFromChat, looksLikeCalendarIntent } from "./future/calendar";
+import { handleCameraFromChat, looksLikeCameraIntent } from "./future/cameras";
+import { handleFilesFromChat, looksLikeFilesIntent } from "./future/files";
+import { handleIotFromChat, looksLikeIotIntent } from "./future/iot";
+import { handleMailFromChat, looksLikeMailIntent } from "./future/mail";
+import { handleMediaFromChat, looksLikeMediaIntent } from "./future/media";
+import { handleNotesFromChat, looksLikeNotesIntent } from "./future/notes";
 
 const SYSTEM_PROMPT =
   "Ты Mira — локальный голосовой ИИ-помощник. Отвечай по делу на языке пользователя. Если даны фрагменты памяти, выученное из библиотеки, интернет-данные, снимок экрана, история браузера, мессенджер, вывод терминала или результат Blender — опирайся на них. Skills подключаются только по необходимости.";
@@ -91,6 +98,7 @@ export type ChatStreamEvent =
       terminal?: string | null;
       learned?: string | null;
       blender?: string | null;
+      addon?: string | null;
     }
   | { type: "assistant_start"; sessionId: string }
   | { type: "token"; text: string }
@@ -106,6 +114,7 @@ export type ChatStreamEvent =
       terminalUsed: string | null;
       learnedUsed: string | null;
       blenderUsed: string | null;
+      addonUsed: string | null;
     }
   | { type: "error"; message: string };
 
@@ -267,10 +276,40 @@ export async function sendChatMessage(
   let learnedBlock: string | null = null;
   let blenderUsed: string | null = null;
   let blenderBlock: string | null = null;
+  let addonUsed: string | null = null;
+  let addonBlock: string | null = null;
 
   // Prefer explicit tool intents over generic web when both match.
   try {
-    if (looksLikeBlenderIntent(text) && getBlenderPolicy().enabled) {
+    if (looksLikeNotesIntent(text)) {
+      const res = handleNotesFromChat(text);
+      addonUsed = res.used;
+      addonBlock = res.block;
+    } else if (looksLikeCalendarIntent(text)) {
+      const res = handleCalendarFromChat(text);
+      addonUsed = res.used;
+      addonBlock = res.block;
+    } else if (looksLikeFilesIntent(text)) {
+      const res = await handleFilesFromChat(text);
+      addonUsed = res.used;
+      addonBlock = res.block;
+    } else if (looksLikeMailIntent(text)) {
+      const res = await handleMailFromChat(text);
+      addonUsed = res.used;
+      addonBlock = res.block;
+    } else if (looksLikeMediaIntent(text)) {
+      const res = handleMediaFromChat(text);
+      addonUsed = res.used;
+      addonBlock = res.block;
+    } else if (looksLikeCameraIntent(text)) {
+      const res = await handleCameraFromChat(text);
+      addonUsed = res.used;
+      addonBlock = res.block;
+    } else if (looksLikeIotIntent(text)) {
+      const res = await handleIotFromChat(text);
+      addonUsed = res.used;
+      addonBlock = res.block;
+    } else if (looksLikeBlenderIntent(text) && getBlenderPolicy().enabled) {
       const job = await runDemoScene();
       blenderUsed = `blender:${job.task}:${job.mode}${job.ok ? "" : "-fail"}`;
       blenderBlock = formatBlenderBlock(job);
@@ -345,6 +384,8 @@ export async function sendChatMessage(
         const policy = getWebPolicy();
         if (policy.requireConfirmForFetch) {
           const ok = await requestUserConfirm({
+            actionClass: "web-fetch",
+            risk: "low",
             title: "Подтверждение web.fetch",
             body: `Mira хочет загрузить страницу:\n${urlMatch}\n\nРазрешить исходящий запрос?`,
             confirmLabel: "Загрузить",
@@ -387,10 +428,13 @@ export async function sendChatMessage(
       !messagingUsed &&
       !terminalUsed &&
       !learnedUsed &&
-      !blenderUsed
+      !blenderUsed &&
+      !addonUsed
     ) {
       webUsed = "error";
       webBlock = `[Инструменты: ошибка] ${message}`;
+    } else if (addonUsed) {
+      addonBlock = `${addonBlock ?? ""}\n[Ошибка] ${message}`;
     } else if (blenderUsed) {
       blenderBlock = `${blenderBlock ?? ""}\n[Ошибка] ${message}`;
     } else if (learnedUsed) {
@@ -416,6 +460,7 @@ export async function sendChatMessage(
     terminal: terminalUsed,
     learned: learnedUsed,
     blender: blenderUsed,
+    addon: addonUsed,
   });
 
   const history = listUtterances(session.id);
@@ -438,6 +483,7 @@ export async function sendChatMessage(
   if (terminalBlock) messages.push({ role: "system", content: terminalBlock });
   if (learnedBlock) messages.push({ role: "system", content: learnedBlock });
   if (blenderBlock) messages.push({ role: "system", content: blenderBlock });
+  if (addonBlock) messages.push({ role: "system", content: addonBlock });
 
   for (const u of history) {
     if (u.role === "system") continue;
@@ -500,6 +546,7 @@ export async function sendChatMessage(
     terminalUsed,
     learnedUsed,
     blenderUsed,
+    addonUsed,
   });
 
   return getSession(session.id) ?? session;

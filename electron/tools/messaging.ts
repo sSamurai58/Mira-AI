@@ -250,6 +250,8 @@ export async function sendOrReplyMessage(
 
   if (policy.requireConfirm) {
     const ok = await requestUserConfirm({
+      actionClass: "messaging",
+      risk: "high",
       title:
         intent.action === "reply"
           ? "Подтверждение ответа в Telegram"

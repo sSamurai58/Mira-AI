@@ -93,6 +93,25 @@ import {
   readLogFileTail,
   type LogLevel,
 } from "./logging";
+import {
+  getConfirmPolicy,
+  setConfirmPolicyEnv,
+  type ConfirmClass,
+  type ConfirmMode,
+} from "./confirmPolicy";
+import { listNotes, searchNotes, upsertNote } from "./future/notes";
+import {
+  cancelTimer,
+  createEvent,
+  listEvents,
+  listTimers,
+  startTimer,
+} from "./future/calendar";
+import { listCameras, upsertCamera } from "./future/cameras";
+import { listIotDevices } from "./future/iot";
+import { getMailPolicy, listMail } from "./future/mail";
+import { getMediaStatus } from "./future/media";
+import { searchFiles } from "./future/files";
 import fs from "node:fs";
 
 const isDev = process.env.MIRA_DEV === "1";
@@ -161,7 +180,8 @@ app.whenReady().then(() => {
     const cfg = getPublicConfig();
     const validation = validateLlmConfig();
     return {
-      phase: "F13",
+      phase: "F*",
+      confirm: getConfirmPolicy(),
       databasePath: "<local-sqlite>",
       ok: health.ok,
       path: "<local-sqlite>",
@@ -576,6 +596,67 @@ app.whenReady().then(() => {
     { privileged: true },
   );
   on("mira:clear-app-logs", () => clearAppLogs(), { privileged: true });
+  on("mira:get-confirm-policy", () => getConfirmPolicy());
+  on(
+    "mira:set-confirm-policy",
+    (
+      _e,
+      payload: { mode?: ConfirmMode; dangerousList?: ConfirmClass[] },
+    ) => {
+      setConfirmPolicyEnv(payload);
+      return getConfirmPolicy();
+    },
+  );
+  on("mira:list-notes", (_e, limit?: number) => listNotes(limit ?? 50));
+  on("mira:search-notes", (_e, query?: string) =>
+    searchNotes(query ?? "", 20),
+  );
+  on(
+    "mira:upsert-note",
+    (
+      _e,
+      payload: {
+        id?: string;
+        title: string;
+        body: string;
+        tags?: string;
+        sessionId?: string | null;
+      },
+    ) => upsertNote(payload),
+  );
+  on("mira:list-calendar-events", () => listEvents());
+  on("mira:list-timers", () => listTimers());
+  on(
+    "mira:create-calendar-event",
+    (
+      _e,
+      payload: {
+        title: string;
+        startsAt: string;
+        endsAt?: string | null;
+        remindAt?: string | null;
+      },
+    ) => createEvent(payload),
+  );
+  on(
+    "mira:start-timer",
+    (_e, label: string, seconds: number) => startTimer(label, seconds),
+  );
+  on("mira:cancel-timer", (_e, id?: string) => cancelTimer(id));
+  on("mira:list-cameras", () => listCameras());
+  on(
+    "mira:upsert-camera",
+    (
+      _e,
+      payload: { id?: string; name: string; url: string; enabled?: boolean },
+    ) => upsertCamera(payload),
+  );
+  on("mira:list-iot-devices", () => listIotDevices());
+  on("mira:get-mail-policy", () => getMailPolicy());
+  on("mira:list-mail", (_e, folder?: string) => listMail(folder ?? "inbox"));
+  on("mira:get-media-status", () => getMediaStatus());
+  on("mira:search-files", (_e, query?: string) => searchFiles(query ?? "", 30));
+
   on("mira:get-backup-status", () => getBackupStatus());
   on(
     "mira:export-backup",

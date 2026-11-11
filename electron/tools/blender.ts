@@ -199,6 +199,8 @@ export async function runDemoScene(opts?: {
 
   if (policy.requireConfirm) {
     const ok = await requestUserConfirm({
+      actionClass: "blender",
+      risk: "low",
       title: "Запуск Blender",
       body: `Mira выполнит bpy-скрипт демо-сцены (куб + свет + камера) через:\n${policy.binaryPath}\n\nРезультат: ${outputBlend}`,
       confirmLabel: "Запустить",
