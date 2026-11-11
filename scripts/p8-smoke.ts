@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { loadConfig } from "../electron/config";
 import {
+  deleteLibraryMaterial,
   importLibraryFile,
   isReadableHumanText,
   looksLikeLibraryLearnIntent,
@@ -9,6 +10,7 @@ import {
   proposeSkillFromItem,
   searchLearnedUnits,
 } from "../electron/library/learn";
+import { getLibraryItem } from "../electron/store";
 import { loadMarkdownCatalog } from "../electron/markdownCatalog";
 import { sendChatMessage } from "../electron/orchestrator";
 import { closeStore, getLearnPlan, listLearnedUnits, openStore } from "../electron/store";
@@ -88,6 +90,14 @@ async function main() {
   assert.ok(learnedUsed && learnedUsed.startsWith("learned:"));
   assert.notEqual(learnedUsed, "learned:none");
 
+  const doomed = await importLibraryFile({
+    filePath: sample,
+    title: "Временный материал для удаления",
+  });
+  const del = deleteLibraryMaterial(doomed.id);
+  assert.equal(del.ok, true);
+  assert.equal(getLibraryItem(doomed.id), null);
+
   console.log(
     JSON.stringify(
       {
@@ -98,6 +108,7 @@ async function main() {
         units: units.length,
         skillId: skill.skillId,
         chatLearned: learnedUsed,
+        deleted: del.deletedId,
       },
       null,
       2,

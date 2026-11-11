@@ -12,6 +12,7 @@ import {
   writeCatalogItem,
 } from "./markdownCatalog";
 import {
+  deleteLibraryMaterial,
   getLearnPlan,
   getLibraryItem,
   getLibrarySnapshot,
@@ -675,6 +676,11 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
     { privileged: true },
   );
   on("mira:process-library-item", (_e, id: string) => processLibraryItem(id));
+  on(
+    "mira:delete-library-item",
+    (_e, id: string) => deleteLibraryMaterial(id),
+    { privileged: true },
+  );
   on("mira:propose-library-skill", async (_e, id: string) =>
     proposeSkillFromItem(id),
   );

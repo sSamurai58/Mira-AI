@@ -878,6 +878,24 @@ export function deleteLearnedUnitsForItem(libraryItemId: string): void {
     .run(libraryItemId);
 }
 
+export function deleteLearnPlanForItem(libraryItemId: string): void {
+  const store = openStore();
+  store
+    .prepare(`DELETE FROM learn_plans WHERE library_item_id = ?`)
+    .run(libraryItemId);
+}
+
+/** Remove library row + related units/plan. Returns the deleted row (for file cleanup). */
+export function deleteLibraryItem(id: string): LibraryItemRow | null {
+  const store = openStore();
+  const current = getLibraryItem(id);
+  if (!current) return null;
+  deleteLearnedUnitsForItem(id);
+  deleteLearnPlanForItem(id);
+  store.prepare(`DELETE FROM library_items WHERE id = ?`).run(id);
+  return current;
+}
+
 export function addLearnedUnit(input: {
   libraryItemId: string;
   kind: string;

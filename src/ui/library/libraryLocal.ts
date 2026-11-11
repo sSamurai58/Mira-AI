@@ -105,6 +105,27 @@ export function localListLearnedUnits(libraryItemId?: string): LocalLearnedUnit[
   return units.filter((u) => u.library_item_id === libraryItemId);
 }
 
+export function localDeleteLibraryItem(id: string): {
+  ok: boolean;
+  detail: string;
+  deletedId: string | null;
+} {
+  const store = read();
+  const item = store.items.find((i) => i.id === id);
+  if (!item) {
+    return { ok: false, detail: "Материал не найден", deletedId: null };
+  }
+  store.items = store.items.filter((i) => i.id !== id);
+  store.units = store.units.filter((u) => u.library_item_id !== id);
+  delete store.plans[id];
+  write(store);
+  return {
+    ok: true,
+    detail: `Удалено «${item.title}»`,
+    deletedId: item.id,
+  };
+}
+
 export function localGetLearnPlan(libraryItemId: string): string[] {
   return read().plans[libraryItemId] ?? [];
 }

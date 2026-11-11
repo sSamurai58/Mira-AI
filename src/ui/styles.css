@@ -2877,6 +2877,37 @@ select:disabled {
   }
 }
 
+.library-item-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.library-item-select {
+  width: 100%;
+  text-align: left;
+  min-width: 0;
+}
+
+.library-item-delete {
+  flex: 0 0 auto;
+  width: 40px;
+  min-width: 40px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  border-color: color-mix(in srgb, var(--text-muted) 22%, transparent);
+}
+
+.library-item-delete:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
 .learned-unit-card {
   display: grid;
   gap: 8px;
