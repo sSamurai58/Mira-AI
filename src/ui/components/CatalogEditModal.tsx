@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { AutoGrowTextarea } from "./AutoGrowTextarea";
 
 export type CatalogEditDraft = {
   id: string;
@@ -140,10 +141,13 @@ export function CatalogEditModal({
         </label>
         <label className="field-label">
           Тело
-          <textarea
-            rows={8}
+          <AutoGrowTextarea
             value={local.body}
             disabled={busy}
+            minHeight={120}
+            maxHeight={Math.round(
+              typeof window !== "undefined" ? window.innerHeight * 0.55 : 420,
+            )}
             onChange={(e) => setLocal({ ...local, body: e.target.value })}
           />
         </label>

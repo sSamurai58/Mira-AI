@@ -8,6 +8,7 @@ import {
   setLocalProtocolEnabled,
   setLocalSkillEnabled,
 } from "../catalogLocal";
+import { AutoGrowTextarea } from "../components/AutoGrowTextarea";
 import {
   CatalogEditModal,
   type CatalogEditDraft,
@@ -581,11 +582,11 @@ export function WorkshopPage() {
             </label>
             <label className="field-label">
               Тело
-              <textarea
-                rows={5}
+              <AutoGrowTextarea
                 value={draft.body}
                 onChange={(e) => setDraft({ ...draft, body: e.target.value })}
                 placeholder="Шаги протокола…"
+                minHeight={120}
               />
             </label>
             <button type="submit" className="btn btn-primary">

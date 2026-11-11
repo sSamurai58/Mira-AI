@@ -14,6 +14,7 @@ import {
   displayLearnedContent,
   learnedKindLabel,
 } from "../library/learnedLabels";
+import { AutoGrowTextarea } from "./AutoGrowTextarea";
 
 type LibraryItem = MiraLibraryItem | LocalLibraryItem;
 type LearnedUnit = MiraLearnedUnit | LocalLearnedUnit;
@@ -392,10 +393,10 @@ export function LibraryPanel() {
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Название"
             />
-            <textarea
-              rows={8}
+            <AutoGrowTextarea
               value={text}
               onChange={(e) => setText(e.target.value)}
+              minHeight={140}
             />
             <button
               type="submit"
