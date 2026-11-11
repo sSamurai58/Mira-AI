@@ -1,12 +1,14 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 
 export type MiraPublicConfig = {
-  llmProvider: "openai" | "claude" | "gemini" | "offline" | "mock";
+  llmProvider: "openai" | "claude" | "gemini" | "grok" | "offline" | "mock";
   llmModel: string;
   hasOpenAiKey: boolean;
   hasAnthropicKey?: boolean;
   hasGeminiKey?: boolean;
+  hasXaiKey?: boolean;
   openaiBaseUrl: string;
+  xaiBaseUrl?: string;
   databasePath: string;
   visionEnabled?: boolean;
   activeProfileId?: string;
@@ -14,6 +16,7 @@ export type MiraPublicConfig = {
   webAllowlist?: string;
   webFetchConfirm?: boolean;
 };
+
 
 
 export type MiraSession = {

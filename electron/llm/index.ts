@@ -1,6 +1,7 @@
 import { loadConfig, type AppConfig } from "../config";
 import { createAnthropicAdapter } from "./anthropic";
 import { createGeminiAdapter } from "./gemini";
+import { createGrokAdapter } from "./grok";
 import { createMockAdapter } from "./mock";
 import { createOfflineAdapter } from "./offline";
 import { createOpenAiCompatibleAdapter } from "./openaiCompatible";
@@ -16,6 +17,8 @@ export function createLlmAdapter(cfg: AppConfig = loadConfig()): LlmAdapter {
       return createAnthropicAdapter(cfg);
     case "gemini":
       return createGeminiAdapter(cfg);
+    case "grok":
+      return createGrokAdapter(cfg);
     case "offline":
       return createOfflineAdapter(cfg.llmModel);
     case "openai":

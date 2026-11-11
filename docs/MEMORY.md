@@ -92,6 +92,8 @@
 | 2026-11-11 | F1–F8 pack | cameras/iot/calendar/mail/files/notes/media/i18n via chat+UI; F10 skipped |
 | 2026-11-11 | f-rest:smoke OK | покрытие F1–F8+F12 без F10 |
 | 2026-11-11 | Realize-all | Claude/Gemini/offline + vision + F10 profiles + HUD + CI/pack + WA/IG dry-run |
+| 2026-11-11 | Grok (xAI) | LLM_PROVIDER=grok + XAI_API_KEY → api.x.ai/v1 |
+
 | 2026-11-11 | f-all:smoke | deepenings smoke |
 
 

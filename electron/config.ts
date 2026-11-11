@@ -6,6 +6,7 @@ export type LlmProviderId =
   | "openai"
   | "claude"
   | "gemini"
+  | "grok"
   | "offline"
   | "mock";
 
@@ -19,6 +20,8 @@ export type AppConfig = {
   anthropicBaseUrl: string;
   geminiApiKey: string | null;
   geminiBaseUrl: string;
+  xaiApiKey: string | null;
+  xaiBaseUrl: string;
   visionEnabled: boolean;
   offlineModelPath: string | null;
   activeProfileId: string;
@@ -49,10 +52,12 @@ function asProvider(raw: string | undefined): LlmProviderId {
   if (v === "mock") return "mock";
   if (v === "claude" || v === "anthropic") return "claude";
   if (v === "gemini" || v === "google") return "gemini";
+  if (v === "grok" || v === "xai") return "grok";
   if (v === "offline" || v === "local") return "offline";
   if (v === "openai" || v === "openai-compatible") return "openai";
   if (process.env.ANTHROPIC_API_KEY?.trim()) return "claude";
   if (process.env.GEMINI_API_KEY?.trim()) return "gemini";
+  if (process.env.XAI_API_KEY?.trim()) return "grok";
   if (!process.env.OPENAI_API_KEY?.trim()) return "mock";
   return "openai";
 }
@@ -69,9 +74,11 @@ export function loadConfig(force = false): AppConfig {
         ? "claude-sonnet-4-20250514"
         : provider === "gemini"
           ? "gemini-2.0-flash"
-          : provider === "offline"
-            ? "mira-offline-stub"
-            : "gpt-4o-mini";
+          : provider === "grok"
+            ? "grok-2-latest"
+            : provider === "offline"
+              ? "mira-offline-stub"
+              : "gpt-4o-mini";
 
   cached = {
     databasePath:
@@ -91,6 +98,10 @@ export function loadConfig(force = false): AppConfig {
     geminiBaseUrl: (
       process.env.GEMINI_BASE_URL?.trim() ||
       "https://generativelanguage.googleapis.com/v1beta"
+    ).replace(/\/$/, ""),
+    xaiApiKey: process.env.XAI_API_KEY?.trim() || null,
+    xaiBaseUrl: (
+      process.env.XAI_BASE_URL?.trim() || "https://api.x.ai/v1"
     ).replace(/\/$/, ""),
     visionEnabled:
       (process.env.VISION_ENABLED ?? "true").trim().toLowerCase() !== "false",
@@ -113,7 +124,9 @@ export function getPublicConfig() {
     hasOpenAiKey: Boolean(cfg.openaiApiKey),
     hasAnthropicKey: Boolean(cfg.anthropicApiKey),
     hasGeminiKey: Boolean(cfg.geminiApiKey),
+    hasXaiKey: Boolean(cfg.xaiApiKey),
     openaiBaseUrl: cfg.openaiBaseUrl,
+    xaiBaseUrl: cfg.xaiBaseUrl,
     databasePath: cfg.databasePath,
     visionEnabled: cfg.visionEnabled,
     activeProfileId: cfg.activeProfileId,
@@ -136,7 +149,7 @@ export function validateLlmConfig(cfg = loadConfig()): {
     return {
       ok: false,
       reason:
-        "Нет OPENAI_API_KEY. Добавьте ключ или LLM_PROVIDER=mock|offline|claude|gemini.",
+        "Нет OPENAI_API_KEY. Добавьте ключ или LLM_PROVIDER=mock|offline|claude|gemini|grok.",
     };
   }
   if (cfg.llmProvider === "claude" && !cfg.anthropicApiKey) {
@@ -144,6 +157,9 @@ export function validateLlmConfig(cfg = loadConfig()): {
   }
   if (cfg.llmProvider === "gemini" && !cfg.geminiApiKey) {
     return { ok: false, reason: "Нет GEMINI_API_KEY для Gemini." };
+  }
+  if (cfg.llmProvider === "grok" && !cfg.xaiApiKey) {
+    return { ok: false, reason: "Нет XAI_API_KEY для Grok." };
   }
   return { ok: true };
 }

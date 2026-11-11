@@ -22,12 +22,14 @@ interface SpeechRecognitionErrorEvent extends Event {
 }
 
 type MiraPublicConfig = {
-  llmProvider: "openai" | "claude" | "gemini" | "offline" | "mock";
+  llmProvider: "openai" | "claude" | "gemini" | "grok" | "offline" | "mock";
   llmModel: string;
   hasOpenAiKey: boolean;
   hasAnthropicKey?: boolean;
   hasGeminiKey?: boolean;
+  hasXaiKey?: boolean;
   openaiBaseUrl: string;
+  xaiBaseUrl?: string;
   databasePath: string;
   visionEnabled?: boolean;
   activeProfileId?: string;
@@ -35,6 +37,7 @@ type MiraPublicConfig = {
   webAllowlist?: string;
   webFetchConfirm?: boolean;
 };
+
 
 
 type MiraSession = {

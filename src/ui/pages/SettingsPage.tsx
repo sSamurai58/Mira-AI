@@ -309,9 +309,10 @@ export function SettingsPage({
             </div>
             <p className="muted" style={{ margin: 0 }}>
               Ключи только в `.env` (`OPENAI_API_KEY`, опц. `OPENAI_BASE_URL`,
-              `LLM_PROVIDER=openai|claude|gemini|offline|mock`, `LLM_MODEL`,
-              `ANTHROPIC_API_KEY` / `GEMINI_API_KEY`, `VISION_ENABLED`). Без ключа —{" "}
-              <strong>mock</strong> или <strong>offline</strong>.
+              `LLM_PROVIDER=openai|claude|gemini|grok|offline|mock`, `LLM_MODEL`,
+              `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` / `XAI_API_KEY`, `VISION_ENABLED`).
+              Без ключа — <strong>mock</strong> или <strong>offline</strong>.
+
 
             </p>
             <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0 }}>

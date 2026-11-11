@@ -158,7 +158,8 @@
 | 2 | Человечная речь | `partial` | P2: Web Speech TTS + выбор системного голоса; cloud TTS — позже |
 | 3 | Память разговоров | `partial` | P1: SQLite utterances + LIKE-поиск + подъём в контекст |
 | 4 | Интернет | `partial` | P4: web.search (DDG) + web.fetch + WEB_* policy + confirm fetch |
-| 5 | Claude / Gemini / GPT | `partial` | P1: OpenAI-compatible (+ mock); Claude/Gemini — следующие адаптеры |
+| 5 | Claude / Gemini / GPT / Grok | `partial` | OpenAI + Claude + Gemini + Grok (xAI) + offline/mock |
+
 | 6 | Видимость экрана | `partial` | P5: desktopCapturer → PNG + метаданные в контекст; vision pixels — later |
 | 7 | Контроль экрана | `partial` | P5: клик/ввод + confirm; xdotool / dry-run |
 | 8 | Браузер | `partial` | P5: open URL + история Mira/Chromium; вкладки/deep control — later |

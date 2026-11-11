@@ -41,8 +41,20 @@ async function main() {
     const ping = await adapter.testConnection();
     assert.ok(ping.ok, `${provider} connection`);
   }
+  // Grok adapter wires without network when key missing
+  process.env.LLM_PROVIDER = "grok";
+  delete process.env.XAI_API_KEY;
+  const grokCfg = loadConfig(true);
+  assert.equal(grokCfg.llmProvider, "grok");
+  assert.equal(validateLlmConfig(grokCfg).ok, false);
+  const grok = createLlmAdapter(grokCfg);
+  assert.equal(grok.id, "grok");
+  const grokPing = await grok.testConnection();
+  assert.equal(grokPing.ok, false);
+
   process.env.LLM_PROVIDER = "mock";
   loadConfig(true);
+
 
   // Vision metadata path
   const png = path.resolve(process.cwd(), "data", "screenshots");
@@ -121,7 +133,8 @@ trailer<<>>
     JSON.stringify(
       {
         ok: true,
-        providers: ["mock", "offline", "claude", "gemini"],
+        providers: ["mock", "offline", "claude", "gemini", "grok"],
+
         vision: vision.mode,
         profiles: listProfiles().length,
         messaging: sent.mode,

@@ -22,17 +22,32 @@ function toOpenAiMessages(messages: ChatMessage[]) {
   });
 }
 
-export function createOpenAiCompatibleAdapter(cfg: AppConfig): LlmAdapter {
-  const model = cfg.llmModel;
-  const baseUrl = cfg.openaiBaseUrl;
-  const apiKey = cfg.openaiApiKey;
+export type OpenAiCompatibleOpts = {
+  id?: string;
+  model?: string;
+  apiKey?: string | null;
+  baseUrl?: string;
+  missingKeyMessage?: string;
+};
+
+export function createOpenAiCompatibleAdapter(
+  cfg: AppConfig,
+  opts: OpenAiCompatibleOpts = {},
+): LlmAdapter {
+  const id = opts.id ?? "openai";
+  const model = opts.model ?? cfg.llmModel;
+  const baseUrl = (opts.baseUrl ?? cfg.openaiBaseUrl).replace(/\/$/, "");
+  const apiKey = opts.apiKey !== undefined ? opts.apiKey : cfg.openaiApiKey;
+  const missingKeyMessage =
+    opts.missingKeyMessage ??
+    (id === "grok" ? "XAI_API_KEY не задан" : "OPENAI_API_KEY не задан");
 
   return {
-    id: "openai",
+    id,
     model,
     async testConnection() {
       if (!apiKey) {
-        return { ok: false, detail: "OPENAI_API_KEY пуст" };
+        return { ok: false, detail: missingKeyMessage };
       }
       try {
         const res = await fetch(`${baseUrl}/models`, {
@@ -45,7 +60,7 @@ export function createOpenAiCompatibleAdapter(cfg: AppConfig): LlmAdapter {
             detail: `HTTP ${res.status}: ${text.slice(0, 200)}`,
           };
         }
-        return { ok: true, detail: `OK · model default ${model}` };
+        return { ok: true, detail: `OK · ${id} · model default ${model}` };
       } catch (err) {
         return {
           ok: false,
@@ -59,7 +74,7 @@ export function createOpenAiCompatibleAdapter(cfg: AppConfig): LlmAdapter {
       signal?: AbortSignal,
     ) {
       if (!apiKey) {
-        handlers.onError(new Error("OPENAI_API_KEY не задан"));
+        handlers.onError(new Error(missingKeyMessage));
         return;
       }
 

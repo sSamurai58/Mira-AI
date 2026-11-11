@@ -35,8 +35,9 @@ export async function describeScreenshot(
     return {
       ok: true,
       mode: "metadata",
-      text: `[vision metadata] Снимок ${filePath} (${Math.round(bytes.length / 1024)} КБ, ${mime}). VISION_ENABLED=${cfg.visionEnabled}; provider=${cfg.llmProvider}. Подключите openai/claude/gemini для полного vision.`,
+      text: `[vision metadata] Снимок ${filePath} (${Math.round(bytes.length / 1024)} КБ, ${mime}). VISION_ENABLED=${cfg.visionEnabled}; provider=${cfg.llmProvider}. Подключите openai/claude/gemini/grok для полного vision.`,
     };
+
   }
 
   const messages: ChatMessage[] = [
