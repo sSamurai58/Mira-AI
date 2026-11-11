@@ -587,6 +587,26 @@ interface MiraBridge {
     name?: string;
     lang?: string;
   }) => Promise<MiraVoiceProject>;
+  updateVoiceProject: (payload: {
+    id: string;
+    name?: string;
+    lang?: string;
+  }) => Promise<MiraVoiceProject>;
+  deleteVoiceProject: (
+    id: string,
+  ) => Promise<{ ok: boolean; detail: string }>;
+  updateCustomVoice: (payload: {
+    id: string;
+    name?: string;
+    lang?: string;
+  }) => Promise<MiraCustomVoice>;
+  deleteCustomVoice: (
+    id: string,
+  ) => Promise<{ ok: boolean; detail: string }>;
+  addVoicePhrase: (
+    projectId: string,
+    text: string,
+  ) => Promise<MiraVoicePhrase>;
   generateVoicePhrases: (
     projectId: string,
     count?: number,

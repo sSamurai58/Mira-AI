@@ -19,6 +19,10 @@ import {
   listCatalogVoices,
   setActiveVoiceId,
 } from "../voice/catalog";
+import {
+  hideSystemVoice,
+  localDeleteCustomVoice,
+} from "../voice/studioLocal";
 import { speakText, stopSpeaking } from "../voice/tts";
 import type { VoiceInfo } from "../voice/types";
 
@@ -39,6 +43,10 @@ export function WorkshopPage() {
     useState<(typeof SEGMENTS)[number]["id"]>("skills");
   const [voices, setVoices] = useState<VoiceInfo[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [focusVoiceProjectId, setFocusVoiceProjectId] = useState<string | null>(
+    null,
+  );
+  const [voiceNote, setVoiceNote] = useState("");
   const [skills, setSkills] = useState<CatalogItem[]>([]);
   const [protocols, setProtocols] = useState<CatalogItem[]>([]);
   const [note, setNote] = useState("");
@@ -120,6 +128,42 @@ export function WorkshopPage() {
       }
     }
     speakText("Привет, я Mira. Это превью голоса из каталога.", id);
+  }
+
+  function configureCustomVoice(voice: VoiceInfo) {
+    if (!voice.custom) return;
+    const projectId = voice.projectId;
+    if (projectId) setFocusVoiceProjectId(projectId);
+    setVoiceNote(`Настройка «${voice.name}» — панель студии выше`);
+  }
+
+  async function removeVoice(voice: VoiceInfo) {
+    if (voice.custom) {
+      if (!window.confirm(`Удалить свой голос «${voice.name}» из каталога?`)) {
+        return;
+      }
+      const res = window.mira?.deleteCustomVoice
+        ? await window.mira.deleteCustomVoice(voice.id)
+        : localDeleteCustomVoice(voice.id);
+      if (activeId === voice.id) {
+        localStorage.removeItem("mira.activeVoiceId");
+      }
+      setVoiceNote(res.detail);
+      if (focusVoiceProjectId && voice.projectId === focusVoiceProjectId) {
+        setFocusVoiceProjectId(null);
+      }
+      await refreshVoices();
+      return;
+    }
+    if (!window.confirm(`Скрыть системный голос «${voice.name}» из каталога?`)) {
+      return;
+    }
+    hideSystemVoice(voice.id);
+    if (activeId === voice.id) {
+      localStorage.removeItem("mira.activeVoiceId");
+    }
+    setVoiceNote(`Скрыт системный голос ${voice.name}`);
+    await refreshVoices();
   }
 
   async function toggleSkill(id: string, enabled: boolean) {
@@ -484,12 +528,24 @@ export function WorkshopPage() {
 
       {segment === "voices" ? (
         <div className="stack">
-          <VoiceStudioPanel onCatalogChanged={() => void refreshVoices()} />
+          <VoiceStudioPanel
+            focusProjectId={focusVoiceProjectId}
+            onCatalogChanged={() => void refreshVoices()}
+          />
           <div className="panel stack">
             <div className="row">
               <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Каталог голосов</h2>
               <StubBadge label="P2/P9 #11" />
             </div>
+            <p className="muted" style={{ margin: 0 }}>
+              Свои голоса — настройка и удаление. Системные — превью / выбор /
+              скрыть из списка.
+            </p>
+            {voiceNote ? (
+              <p className="muted" style={{ margin: 0 }}>
+                {voiceNote}
+              </p>
+            ) : null}
             {voices.length === 0 ? (
               <p className="muted" style={{ margin: 0 }}>
                 Голоса не найдены в этой среде.
@@ -501,11 +557,11 @@ export function WorkshopPage() {
                     <strong>{v.name}</strong>
                     <div className="muted mono">
                       {v.lang}
-                      {v.custom ? " · custom" : ""}
+                      {v.custom ? " · custom" : " · system"}
                       {activeId === v.id ? " · active" : ""}
                     </div>
                   </div>
-                  <div className="row">
+                  <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
                     <button
                       type="button"
                       className="btn"
@@ -519,6 +575,22 @@ export function WorkshopPage() {
                       onClick={() => selectVoice(v.id)}
                     >
                       Выбрать
+                    </button>
+                    {v.custom ? (
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={() => configureCustomVoice(v)}
+                      >
+                        Настроить
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="btn btn-danger"
+                      onClick={() => void removeVoice(v)}
+                    >
+                      {v.custom ? "Удалить" : "Скрыть"}
                     </button>
                   </div>
                 </div>

@@ -7,6 +7,7 @@ export type VoiceInfo = {
   /** Studio custom voice (#15 → #11) */
   custom?: boolean;
   previewPath?: string | null;
+  projectId?: string | null;
 };
 
 export type AsrResult = {

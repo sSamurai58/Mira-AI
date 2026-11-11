@@ -488,6 +488,128 @@ export function listCustomVoices(): CustomVoiceRow[] {
     .all() as CustomVoiceRow[];
 }
 
+export function getCustomVoice(id: string): CustomVoiceRow | null {
+  return (
+    (openStore()
+      .prepare(
+        `SELECT id, project_id, name, lang, preview_path, meta_json, created_at, updated_at
+         FROM custom_voices WHERE id = ?`,
+      )
+      .get(id) as CustomVoiceRow | undefined) ?? null
+  );
+}
+
+export function updateVoiceProject(
+  id: string,
+  patch: { name?: string; lang?: string },
+): VoiceProjectRow {
+  const cur = getVoiceProject(id);
+  if (!cur) throw new Error("Проект не найден");
+  const name = patch.name !== undefined ? patch.name.trim() || cur.name : cur.name;
+  const lang =
+    patch.lang !== undefined ? patch.lang.trim() || cur.lang : cur.lang;
+  const updated_at = new Date().toISOString();
+  openStore()
+    .prepare(
+      `UPDATE voice_projects SET name = ?, lang = ?, updated_at = ? WHERE id = ?`,
+    )
+    .run(name, lang, updated_at, id);
+  if (cur.custom_voice_id) {
+    openStore()
+      .prepare(
+        `UPDATE custom_voices SET name = ?, lang = ?, updated_at = ? WHERE id = ?`,
+      )
+      .run(name, lang, updated_at, cur.custom_voice_id);
+  }
+  return getVoiceProject(id)!;
+}
+
+export function updateCustomVoice(
+  id: string,
+  patch: { name?: string; lang?: string },
+): CustomVoiceRow {
+  const cur = getCustomVoice(id);
+  if (!cur) throw new Error("Голос не найден");
+  const name = patch.name !== undefined ? patch.name.trim() || cur.name : cur.name;
+  const lang =
+    patch.lang !== undefined ? patch.lang.trim() || cur.lang : cur.lang;
+  const updated_at = new Date().toISOString();
+  openStore()
+    .prepare(
+      `UPDATE custom_voices SET name = ?, lang = ?, updated_at = ? WHERE id = ?`,
+    )
+    .run(name, lang, updated_at, id);
+  openStore()
+    .prepare(
+      `UPDATE voice_projects SET name = ?, lang = ?, updated_at = ? WHERE id = ?`,
+    )
+    .run(name, lang, updated_at, cur.project_id);
+  return getCustomVoice(id)!;
+}
+
+export function deleteCustomVoice(id: string): { ok: boolean; detail: string } {
+  const cur = getCustomVoice(id);
+  if (!cur) return { ok: false, detail: "Голос не найден" };
+  openStore().prepare(`DELETE FROM custom_voices WHERE id = ?`).run(id);
+  openStore()
+    .prepare(
+      `UPDATE voice_projects
+       SET custom_voice_id = NULL, status = 'created', recommendation = ?, updated_at = ?
+       WHERE id = ?`,
+    )
+    .run(
+      "Голос удалён из каталога. Загрузите клипы заново, чтобы собрать TTS.",
+      new Date().toISOString(),
+      cur.project_id,
+    );
+  return { ok: true, detail: `Удалён ${id}` };
+}
+
+export function deleteVoiceProject(
+  id: string,
+): { ok: boolean; detail: string } {
+  const cur = getVoiceProject(id);
+  if (!cur) return { ok: false, detail: "Проект не найден" };
+  const store = openStore();
+  store.prepare(`DELETE FROM voice_clips WHERE project_id = ?`).run(id);
+  store.prepare(`DELETE FROM voice_phrases WHERE project_id = ?`).run(id);
+  store.prepare(`DELETE FROM custom_voices WHERE project_id = ?`).run(id);
+  store.prepare(`DELETE FROM voice_projects WHERE id = ?`).run(id);
+  const dir = path.resolve(process.cwd(), "data", "voice-studio", id);
+  if (fs.existsSync(dir)) {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  return { ok: true, detail: `Проект ${cur.name} удалён` };
+}
+
+export function addCustomPhrase(
+  projectId: string,
+  text: string,
+): VoicePhraseRow {
+  const project = getVoiceProject(projectId);
+  if (!project) throw new Error("Проект не найден");
+  const trimmed = text.trim();
+  if (!trimmed) throw new Error("Пустая фраза");
+  const row: VoicePhraseRow = {
+    id: crypto.randomUUID(),
+    project_id: projectId,
+    text: trimmed,
+    recorded: 0,
+    created_at: new Date().toISOString(),
+  };
+  openStore()
+    .prepare(
+      `INSERT INTO voice_phrases (id, project_id, text, recorded, created_at)
+       VALUES (?, ?, ?, 0, ?)`,
+    )
+    .run(row.id, row.project_id, row.text, row.created_at);
+  touchProject(projectId, {
+    status: "phrases",
+    recommendation: "Запишите или загрузите аудио для новой фразы.",
+  });
+  return row;
+}
+
 export function getStudioSnapshot(projectId?: string) {
   const projects = listVoiceProjects();
   const project = projectId
