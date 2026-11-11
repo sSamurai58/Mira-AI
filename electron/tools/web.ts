@@ -208,7 +208,7 @@ export async function webFetch(
   const res = await fetch(parsed.toString(), {
     signal,
     redirect: "error",
-    headers: { "User-Agent": "MiraAssistant/0.0.1 (+local)" },
+    headers: { "User-Agent": "MiraAssistant/0.0.2 (+local)" },
   });
   const contentType = res.headers.get("content-type") || "";
   let text = await res.text();

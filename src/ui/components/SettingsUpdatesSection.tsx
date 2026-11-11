@@ -4,7 +4,7 @@ import { IntegCard } from "./SettingsFormBits";
 
 const DEMO_STATUS: MiraUpdateStatus = {
   channel: "idle",
-  currentVersion: "0.0.1-demo",
+  currentVersion: "0.0.2-demo",
   availableVersion: null,
   progress: null,
   detail:
