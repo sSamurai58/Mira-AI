@@ -607,6 +607,20 @@ interface MiraBridge {
     projectId: string,
     text: string,
   ) => Promise<MiraVoicePhrase>;
+  trainVoiceModel: (projectId: string) => Promise<{
+    project: MiraVoiceProject;
+    analysis: unknown[];
+    voice: MiraCustomVoice | null;
+    report: {
+      ok: boolean;
+      stage: string;
+      phraseCount: number;
+      acceptedClips: number;
+      linkedAccepted: number;
+      coveragePct: number;
+      detail: string;
+    };
+  }>;
   generateVoicePhrases: (
     projectId: string,
     count?: number,

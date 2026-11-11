@@ -248,6 +248,9 @@ export function localAddPhrase(
   return row;
 }
 
+const MIN_TRAIN_CLIPS = 3;
+const TARGET_TRAIN_CLIPS = 5;
+
 export function localImportClipBytes(opts: {
   projectId: string;
   bytes: number[] | Uint8Array;
@@ -285,50 +288,34 @@ export function localImportClipBytes(opts: {
     if (ph) ph.recorded = 1;
   }
 
-  let voice: MiraCustomVoice | null = null;
   const project = store.projects[pIdx];
-  if (accepted) {
-    const voiceId =
-      project.custom_voice_id ?? `mira-studio-${project.id.slice(0, 8)}`;
-    const stamp = now();
-    const existing = store.customVoices.find((v) => v.id === voiceId);
-    if (existing) {
-      existing.name = project.name;
-      existing.lang = project.lang;
-      existing.preview_path = clip.file_path;
-      existing.updated_at = stamp;
-      voice = existing;
-    } else {
-      voice = {
-        id: voiceId,
-        project_id: project.id,
-        name: project.name,
-        lang: project.lang,
-        preview_path: clip.file_path,
-        meta_json: JSON.stringify({ engine: "browser-demo" }),
-        created_at: stamp,
-        updated_at: stamp,
-      };
-      store.customVoices.unshift(voice);
-    }
-    const acceptedCount = store.clips.filter(
-      (c) => c.project_id === project.id && c.accepted,
-    ).length;
-    store.projects[pIdx] = {
-      ...project,
-      status: acceptedCount < 5 ? "ready_partial" : "ready",
-      custom_voice_id: voiceId,
-      recommendation:
-        acceptedCount < 5
-          ? `Голос в каталоге (browser-demo). Добавьте ещё ${5 - acceptedCount} записей.`
-          : "Голос готов (browser-demo).",
-      updated_at: stamp,
-    };
-  } else {
+  if (!accepted) {
     store.projects[pIdx] = {
       ...project,
       status: "needs_data",
-      recommendation: "Клип слишком короткий. Запишите длиннее.",
+      recommendation:
+        "Клип не прошёл QA. Запишите длиннее и привяжите к номеру фразы.",
+      updated_at: now(),
+    };
+  } else {
+    const acceptedCount = store.clips.filter(
+      (c) => c.project_id === project.id && c.accepted,
+    ).length;
+    const phraseCount = store.phrases.filter(
+      (p) => p.project_id === project.id,
+    ).length;
+    const linkedAccepted = store.clips.filter(
+      (c) => c.project_id === project.id && c.accepted && c.phrase_id,
+    ).length;
+    const coveragePct =
+      phraseCount > 0 ? Math.round((linkedAccepted / phraseCount) * 100) : 0;
+    const ready = acceptedCount >= MIN_TRAIN_CLIPS;
+    store.projects[pIdx] = {
+      ...project,
+      status: ready ? "ready_to_train" : "collecting",
+      recommendation: ready
+        ? `Корпус готов к обучению: ${acceptedCount} клипов, покрытие ${coveragePct}%. Нажмите «Обучить модель».`
+        : `Собрано ${acceptedCount}/${MIN_TRAIN_CLIPS} принятых клипов. Добавьте аудио к фразам 1…N.`,
       updated_at: now(),
     };
   }
@@ -338,7 +325,175 @@ export function localImportClipBytes(opts: {
     processed: {
       project: store.projects[pIdx],
       analysis: [],
-      voice,
+      voice: null,
+    },
+  };
+}
+
+export function localTrainVoiceModel(projectId: string): {
+  project: MiraVoiceProject;
+  analysis: unknown[];
+  voice: MiraCustomVoice | null;
+  report: {
+    ok: boolean;
+    stage: string;
+    phraseCount: number;
+    acceptedClips: number;
+    linkedAccepted: number;
+    coveragePct: number;
+    detail: string;
+  };
+} {
+  const store = read();
+  const pIdx = store.projects.findIndex((p) => p.id === projectId);
+  if (pIdx < 0) throw new Error("Проект не найден");
+  const project = store.projects[pIdx];
+  const phrases = store.phrases.filter((p) => p.project_id === projectId);
+  const clips = store.clips.filter((c) => c.project_id === projectId);
+  const acceptedClips = clips.filter((c) => c.accepted);
+  const linkedAccepted = acceptedClips.filter((c) => c.phrase_id).length;
+  const coveragePct =
+    phrases.length > 0
+      ? Math.round((linkedAccepted / phrases.length) * 100)
+      : 0;
+
+  store.projects[pIdx] = {
+    ...project,
+    status: "training",
+    recommendation: "Обучение модели…",
+    updated_at: now(),
+  };
+  write(store);
+
+  if (acceptedClips.length === 0) {
+    const detail =
+      "Обучение невозможно: нет принятых клипов. Запишите аудио к фразам 1…N.";
+    store.projects[pIdx] = {
+      ...store.projects[pIdx],
+      status: "needs_data",
+      recommendation: detail,
+      updated_at: now(),
+    };
+    write(store);
+    return {
+      project: store.projects[pIdx],
+      analysis: [],
+      voice: null,
+      report: {
+        ok: false,
+        stage: "needs_data",
+        phraseCount: phrases.length,
+        acceptedClips: 0,
+        linkedAccepted: 0,
+        coveragePct: 0,
+        detail,
+      },
+    };
+  }
+
+  if (acceptedClips.length < MIN_TRAIN_CLIPS) {
+    const detail = `Для обучения нужно минимум ${MIN_TRAIN_CLIPS} принятых клипов (сейчас ${acceptedClips.length}).`;
+    store.projects[pIdx] = {
+      ...store.projects[pIdx],
+      status: "ready_to_train",
+      recommendation: detail,
+      updated_at: now(),
+    };
+    write(store);
+    return {
+      project: store.projects[pIdx],
+      analysis: [],
+      voice: null,
+      report: {
+        ok: false,
+        stage: "ready_to_train",
+        phraseCount: phrases.length,
+        acceptedClips: acceptedClips.length,
+        linkedAccepted,
+        coveragePct,
+        detail,
+      },
+    };
+  }
+
+  const stamp = now();
+  const voiceId =
+    project.custom_voice_id ?? `mira-studio-${project.id.slice(0, 8)}`;
+  const quality =
+    acceptedClips.length >= TARGET_TRAIN_CLIPS && coveragePct >= 80
+      ? "high"
+      : acceptedClips.length >= TARGET_TRAIN_CLIPS
+        ? "medium"
+        : "draft";
+  const preview = acceptedClips[0]?.file_path ?? null;
+  let voice = store.customVoices.find((v) => v.id === voiceId) ?? null;
+  if (voice) {
+    voice = {
+      ...voice,
+      name: project.name,
+      lang: project.lang,
+      preview_path: preview,
+      meta_json: JSON.stringify({
+        engine: "mira-local-corpus-v1",
+        trainedAt: stamp,
+        quality,
+        browserDemo: true,
+      }),
+      updated_at: stamp,
+    };
+    store.customVoices = store.customVoices.map((v) =>
+      v.id === voiceId ? voice! : v,
+    );
+  } else {
+    voice = {
+      id: voiceId,
+      project_id: project.id,
+      name: project.name,
+      lang: project.lang,
+      preview_path: preview,
+      meta_json: JSON.stringify({
+        engine: "mira-local-corpus-v1",
+        trainedAt: stamp,
+        quality,
+        browserDemo: true,
+      }),
+      created_at: stamp,
+      updated_at: stamp,
+    };
+    store.customVoices.unshift(voice);
+  }
+
+  const needMore =
+    acceptedClips.length < TARGET_TRAIN_CLIPS || coveragePct < 80;
+  const detail = needMore
+    ? `Модель «${project.name}» обучена (${quality}, browser-demo). Для качества добавьте ещё клипы (покрытие ${coveragePct}%).`
+    : `Модель «${project.name}» обучена (${quality}, browser-demo) и в каталоге.`;
+
+  store.projects[pIdx] = {
+    ...project,
+    status: needMore ? "ready_partial" : "ready",
+    custom_voice_id: voiceId,
+    llm_profile: JSON.stringify({
+      style: "calm-assistant",
+      voiceId,
+      trainedQuality: quality,
+    }),
+    recommendation: detail,
+    updated_at: stamp,
+  };
+  write(store);
+  return {
+    project: store.projects[pIdx],
+    analysis: [],
+    voice,
+    report: {
+      ok: true,
+      stage: store.projects[pIdx].status,
+      phraseCount: phrases.length,
+      acceptedClips: acceptedClips.length,
+      linkedAccepted,
+      coveragePct,
+      detail,
     },
   };
 }
