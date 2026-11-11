@@ -1029,24 +1029,33 @@ export function ChatPage({
                 e.target.value = "";
               }}
             />
-            <button
-              type="button"
-              className="btn attach-btn"
-              disabled={busy}
-              title="Прикрепить файлы"
-              aria-label="Прикрепить файлы"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              📎
-            </button>
-            <div className="rainbow-field">
+            <div className="rainbow-field has-attach">
+              <button
+                type="button"
+                className="attach-btn"
+                disabled={busy}
+                title="Прикрепить файлы к сообщению"
+                aria-label="Прикрепить файлы к сообщению"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+                  <path
+                    d="M16.5 6.5v8.25a4.5 4.5 0 1 1-9 0V7a3 3 0 0 1 6 0v7.25a1.5 1.5 0 1 1-3 0V8"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                <span className="attach-btn-label">Файл</span>
+              </button>
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={
                   pendingFiles.length
                     ? "Напишите сообщение к файлам…"
-                    : "Скажите, напишите или перетащите файлы…"
+                    : "Сообщение или перетащите файлы сюда…"
                 }
                 disabled={busy}
                 aria-label="Сообщение для Mira"

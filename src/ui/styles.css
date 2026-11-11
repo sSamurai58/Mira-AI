@@ -1317,13 +1317,62 @@ strong {
   border-radius: 16px;
 }
 
+.rainbow-field.has-attach {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.rainbow-field.has-attach > input {
+  flex: 1;
+  min-width: 0;
+  padding-left: 4px;
+}
+
 .attach-btn {
+  position: relative;
+  z-index: 2;
   flex: 0 0 auto;
-  min-width: 44px;
-  height: 50px;
-  border-radius: 999px;
-  font-size: 1.1rem;
-  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: calc(var(--composer-h, 50px) - 2 * var(--composer-ring, 1.5px));
+  margin-left: 2px;
+  padding: 0 12px 0 14px;
+  border: 0;
+  border-radius: var(--composer-r-inner, 999px);
+  background: transparent;
+  color: color-mix(in srgb, var(--accent) 85%, #fff);
+  cursor: pointer;
+  white-space: nowrap;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.attach-btn:hover:not(:disabled) {
+  color: #fff;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.attach-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.attach-btn-label {
+  line-height: 1;
+}
+
+@media (max-width: 720px) {
+  .attach-btn-label {
+    display: none;
+  }
+  .attach-btn {
+    padding: 0 12px;
+  }
 }
 
 .attach-pending {
