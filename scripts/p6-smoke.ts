@@ -6,7 +6,9 @@ import {
   findMessengerContact,
   listMessengerMessages,
   openStore,
+  upsertMessengerContact,
 } from "../electron/store";
+
 import {
   looksLikeMessagingIntent,
   parseMessengerIntent,
@@ -69,14 +71,21 @@ async function main() {
   assert.equal(denied.ok, false);
   assert.equal(denied.mode, "denied");
 
-  const stub = await sendOrReplyMessage({
+  upsertMessengerContact({
+    provider: "whatsapp",
+    displayName: "WA Demo",
+    handle: "wa-demo",
+    chatId: "wa-demo",
+  });
+  const waDry = await sendOrReplyMessage({
     provider: "whatsapp",
     action: "send",
     recipientQuery: "WA Demo",
-    body: "stub",
+    body: "dry-run wa",
   });
-  assert.equal(stub.mode, "stub");
-  assert.equal(stub.ok, false);
+  assert.equal(waDry.mode, "dry-run");
+  assert.equal(waDry.ok, true);
+
 
   let messagingUsed: string | null = null;
   await sendChatMessage(
