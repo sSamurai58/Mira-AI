@@ -555,7 +555,7 @@ export function importClip(opts: {
   originalName?: string;
 }): {
   clip: VoiceClipRow;
-  processed: ReturnType<typeof autoProcessProject>;
+  processed: ReturnType<typeof prepareCorpusAfterImport>;
 } {
   const project = getVoiceProject(opts.projectId);
   if (!project) throw new Error("Проект не найден");
