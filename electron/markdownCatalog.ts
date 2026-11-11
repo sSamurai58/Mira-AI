@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { dataRoot, seedRoot } from "./appPaths";
 
 export type FrontMatter = Record<string, string | boolean | string[]>;
 
@@ -15,16 +16,12 @@ export type CatalogItem = {
   relativePath: string;
 };
 
-function appRoot(): string {
-  return path.resolve(__dirname, "..");
-}
-
 export function resolveDataDir(...parts: string[]): string {
-  return path.join(appRoot(), "data", ...parts);
+  return dataRoot(...parts);
 }
 
 export function resolveSeedDir(...parts: string[]): string {
-  return path.join(appRoot(), "seed", ...parts);
+  return seedRoot(...parts);
 }
 
 export function parseFrontMatter(raw: string): {

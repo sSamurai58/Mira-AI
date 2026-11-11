@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import { getPublicConfig, loadConfig, validateLlmConfig } from "./config";
@@ -144,6 +144,30 @@ const isDev = process.env.MIRA_DEV === "1";
 const activeAborts = new Map<string, AbortController>();
 let calendarTick: NodeJS.Timeout | null = null;
 
+// Packaged Windows: avoid silent GPU hangs; pin taskbar identity.
+if (process.platform === "win32") {
+  app.setAppUserModelId("ai.mira.desktop");
+  if (!isDev) {
+    app.disableHardwareAcceleration();
+  }
+}
+
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    const win = BrowserWindow.getAllWindows()[0];
+    if (!win) {
+      createWindow();
+      return;
+    }
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+  });
+}
+
 
 function appIconPath(): string | undefined {
   const candidates = [
@@ -166,6 +190,8 @@ function createWindow(): BrowserWindow {
     minHeight: 640,
     backgroundColor: "#000814",
     title: "Mira",
+    show: false,
+    autoHideMenuBar: true,
     ...(icon ? { icon } : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -174,6 +200,18 @@ function createWindow(): BrowserWindow {
       sandbox: false,
     },
   });
+
+  win.once("ready-to-show", () => {
+    win.show();
+    win.focus();
+  });
+  // Fallback if ready-to-show never fires (some GPU drivers)
+  setTimeout(() => {
+    if (!win.isDestroyed() && !win.isVisible()) {
+      win.show();
+      win.focus();
+    }
+  }, 2500);
 
   if (isDev) {
     void win.loadURL(process.env.MIRA_DEV_URL ?? "http://127.0.0.1:5173");
@@ -190,14 +228,21 @@ function broadcast(channel: string, payload: unknown): void {
   }
 }
 
-app.whenReady().then(() => {
-  initIpcSecurity();
-  loadConfig(true);
-  wireConfirmBridge();
-  openStore();
-  ensureBootstrapSession();
-  ensureSeededCatalog("skills");
-  ensureSeededCatalog("protocols");
+if (gotSingleInstanceLock) app.whenReady().then(() => {
+  // Make window appear even if later init throws (common on Windows install).
+  let bootError: string | null = null;
+  try {
+    initIpcSecurity();
+    loadConfig(true);
+    wireConfirmBridge();
+    openStore();
+    ensureBootstrapSession();
+    ensureSeededCatalog("skills");
+    ensureSeededCatalog("protocols");
+  } catch (err) {
+    bootError = err instanceof Error ? err.message : String(err);
+    console.error("[mira] boot failed", err);
+  }
 
   setTerminalHandlers({
     onData: (sessionId, data) => {
@@ -208,7 +253,11 @@ app.whenReady().then(() => {
     },
   });
 
-  initUpdater(broadcast);
+  try {
+    initUpdater(broadcast);
+  } catch (err) {
+    console.error("[mira] updater init failed", err);
+  }
 
   const on = (
     channel: string,
@@ -850,9 +899,10 @@ app.whenReady().then(() => {
   on(
     "mira:read-voice-preview",
     (_e, filePath: string) => {
+      const { dataRoot, seedRoot } = require("./appPaths") as typeof import("./appPaths");
       const abs = path.resolve(filePath);
-      const root = path.resolve(process.cwd(), "data", "voice-studio");
-      const seed = path.resolve(process.cwd(), "seed", "voice-studio");
+      const root = dataRoot("voice-studio");
+      const seed = seedRoot("voice-studio");
       if (
         !(abs === root || abs.startsWith(root + path.sep)) &&
         !(abs === seed || abs.startsWith(seed + path.sep))
@@ -890,6 +940,16 @@ app.whenReady().then(() => {
   );
 
   createWindow();
+
+  if (bootError) {
+    void dialog.showMessageBox({
+      type: "error",
+      title: "Mira — ошибка запуска",
+      message: "Часть модулей не поднялась",
+      detail:
+        `${bootError}\n\nОкно всё равно открыто. Данные пишутся в:\n${app.getPath("userData")}`,
+    });
+  }
 
   calendarTick = setInterval(() => {
     void tickCalendarNotifications().catch(() => undefined);

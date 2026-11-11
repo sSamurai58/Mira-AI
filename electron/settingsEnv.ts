@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { envFilePath } from "./appPaths";
 import { loadConfig } from "./config";
 
 /** Serialize .env writes so concurrent Save/Delete cannot clobber each other. */
@@ -58,7 +59,7 @@ const SECRET_KEYS = new Set<string>([
 ]);
 
 function envPath(): string {
-  return path.resolve(process.cwd(), ".env");
+  return envFilePath();
 }
 
 function parseEnvFile(raw: string): Map<string, string> {

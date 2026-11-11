@@ -75,17 +75,18 @@ const PHRASE_BANK_EN = [
 ];
 
 function studioRoot(...parts: string[]): string {
-  const dir = path.resolve(process.cwd(), "data", "voice-studio", ...parts);
+  const { dataRoot } = require("../appPaths") as typeof import("../appPaths");
+  const dir = dataRoot("voice-studio", ...parts);
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
 
 function assertStudioPath(absPath: string): void {
+  const { seedRoot } = require("../appPaths") as typeof import("../appPaths");
   const root = studioRoot();
   const resolved = path.resolve(absPath);
   if (!(resolved === root || resolved.startsWith(root + path.sep))) {
-    // also allow seed samples
-    const seed = path.resolve(process.cwd(), "seed", "voice-studio");
+    const seed = seedRoot("voice-studio");
     if (!(resolved === seed || resolved.startsWith(seed + path.sep))) {
       throw new Error("Импорт клипов только из data/voice-studio или seed/voice-studio");
     }
@@ -783,7 +784,7 @@ export function deleteVoiceProject(id: string): {
   store.prepare(`DELETE FROM voice_phrases WHERE project_id = ?`).run(id);
   store.prepare(`DELETE FROM custom_voices WHERE project_id = ?`).run(id);
   store.prepare(`DELETE FROM voice_projects WHERE id = ?`).run(id);
-  const dir = path.resolve(process.cwd(), "data", "voice-studio", id);
+  const dir = studioRoot(id);
   if (fs.existsSync(dir)) {
     fs.rmSync(dir, { recursive: true, force: true });
   }

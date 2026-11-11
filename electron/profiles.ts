@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { dataRoot } from "./appPaths";
 import { loadConfig } from "./config";
 
 export type MiraProfile = {
@@ -20,7 +21,7 @@ type ProfilesFile = {
 };
 
 function profilesPath(): string {
-  const dir = path.resolve(process.cwd(), "data", "profiles");
+  const dir = dataRoot("profiles");
   fs.mkdirSync(dir, { recursive: true });
   return path.join(dir, "profiles.json");
 }

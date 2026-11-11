@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { dataRoot, seedRoot } from "../appPaths";
 import { requestUserConfirm } from "../confirmBridge";
 import { writeCatalogItem } from "../markdownCatalog";
 import { ensureMiraLibraryLayout, miraLibraryDir } from "../paths";
@@ -217,9 +218,9 @@ function assertAllowedImportPath(absPath: string): void {
   const allowedRoots = [
     libraryRoot(),
     miraLibraryDir(),
-    path.resolve(process.cwd(), "seed"),
-    path.resolve(process.cwd(), "seed", "library"),
-    path.resolve(process.cwd(), "data", "library"),
+    seedRoot(),
+    seedRoot("library"),
+    dataRoot("library"),
   ].map((p) => path.resolve(p));
   const resolved = path.resolve(absPath);
   const ok = allowedRoots.some(

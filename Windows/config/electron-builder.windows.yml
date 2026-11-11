@@ -21,6 +21,8 @@ nodeGypRebuild: false
 extraResources:
   - from: build/icon.png
     to: icon.png
+  - from: seed
+    to: seed
 extraMetadata:
   main: dist-electron/main.js
 win:

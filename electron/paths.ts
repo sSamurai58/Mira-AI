@@ -1,9 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
+import {
+  dataRoot,
+  miraRoot,
+  writableRoot,
+} from "./appPaths";
 
-/** Mira-owned local data root (inside the project directory). */
+/** Mira-owned local data root. */
 export function miraDataRoot(): string {
-  return path.resolve(process.cwd(), "mira");
+  return miraRoot();
 }
 
 /** Mira library (materials + nested database folder). */
@@ -22,14 +27,18 @@ export function defaultDatabasePath(): string {
 
 /** Previous defaults — used once for migration. */
 export function legacyDatabasePaths(): string[] {
+  const cwd = path.resolve(process.cwd());
   return [
-    path.resolve(process.cwd(), "mira", "database", "mira.db"),
-    path.resolve(process.cwd(), "data", "mira.db"),
+    path.join(cwd, "mira", "library", "database", "mira.db"),
+    path.join(cwd, "mira", "database", "mira.db"),
+    path.join(cwd, "data", "mira.db"),
+    // Old packaged attempts under install dir
+    path.join(writableRoot(), "mira", "database", "mira.db"),
   ];
 }
 
 export function legacyLibraryDir(): string {
-  return path.resolve(process.cwd(), "data", "library");
+  return dataRoot("library");
 }
 
 export function resolveDatabasePathFromEnv(): string {
@@ -37,7 +46,7 @@ export function resolveDatabasePathFromEnv(): string {
   if (fromEnv) {
     return path.isAbsolute(fromEnv)
       ? fromEnv
-      : path.resolve(process.cwd(), fromEnv);
+      : path.resolve(writableRoot(), fromEnv);
   }
   return defaultDatabasePath();
 }
@@ -83,7 +92,7 @@ export function ensureMiraLibraryLayout(): string {
 
 /**
  * Ensure mira/library/database exists. Migrate DB from older locations
- * (mira/database or data/) when the new file is missing.
+ * when the new file is missing.
  */
 export function ensureMiraDatabaseLayout(
   dbPath = resolveDatabasePathFromEnv(),

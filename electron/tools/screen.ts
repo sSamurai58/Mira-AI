@@ -35,7 +35,8 @@ function isElectronRuntime(): boolean {
 }
 
 function screenshotsDir(): string {
-  const dir = path.resolve(process.cwd(), "data", "screenshots");
+  const { dataRoot } = require("../appPaths") as typeof import("../appPaths");
+  const dir = dataRoot("screenshots");
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
