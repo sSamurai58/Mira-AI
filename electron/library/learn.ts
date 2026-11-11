@@ -280,6 +280,38 @@ export function importLibraryText(opts: {
   });
 }
 
+const MAX_LIBRARY_BYTES = 20_000_000;
+
+/** Import raw bytes from renderer file picker / chat attach. */
+export function importLibraryBytes(opts: {
+  bytes: Uint8Array | Buffer;
+  fileName: string;
+  title?: string;
+}): LibraryItemRow {
+  const buf = Buffer.from(opts.bytes);
+  if (buf.byteLength < 1) throw new Error("Пустой файл");
+  if (buf.byteLength > MAX_LIBRARY_BYTES) {
+    throw new Error(
+      `Файл слишком большой (${buf.byteLength} B). Лимит ${MAX_LIBRARY_BYTES} B.`,
+    );
+  }
+  const safe =
+    opts.fileName.replace(/[^\w.\-а-яА-ЯёЁ]+/gi, "_") || "material.bin";
+  const destDir = libraryRoot();
+  const dest = path.join(destDir, `${Date.now()}-${safe}`);
+  fs.writeFileSync(dest, buf);
+  const mediaType = detectMediaType(dest);
+  const extracted = extractContent(dest, mediaType);
+  return insertLibraryItem({
+    title: opts.title?.trim() || safe.replace(/\.[^.]+$/, ""),
+    kind: mediaType === "text" ? "document" : mediaType,
+    sourcePath: dest,
+    status: "new",
+    mediaType,
+    extractedText: extracted.text,
+  });
+}
+
 function slugify(s: string): string {
   const map: Record<string, string> = {
     а: "a",

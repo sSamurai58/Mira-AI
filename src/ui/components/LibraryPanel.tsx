@@ -1,7 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
+import {
+  localGetLearnPlan,
+  localImportLibraryBytes,
+  localImportLibraryText,
+  localListLearnedUnits,
+  localListLibraryItems,
+  localProcessLibraryItem,
+  type LocalLearnedUnit,
+  type LocalLibraryItem,
+} from "../library/libraryLocal";
 
-type LibraryItem = MiraLibraryItem;
-type LearnedUnit = MiraLearnedUnit;
+type LibraryItem = MiraLibraryItem | LocalLibraryItem;
+type LearnedUnit = MiraLearnedUnit | LocalLearnedUnit;
 
 export function LibraryPanel() {
   const [items, setItems] = useState<LibraryItem[]>([]);
@@ -15,14 +25,17 @@ export function LibraryPanel() {
   const [filePath, setFilePath] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const electron = typeof window !== "undefined" && Boolean(window.mira);
 
   async function refresh() {
-    if (!window.mira) {
-      setNote("Нужен Electron для библиотеки.");
+    if (window.mira) {
+      const list = await window.mira.listLibraryItems();
+      setItems(list);
       return;
     }
-    const list = await window.mira.listLibraryItems();
-    setItems(list);
+    setItems(localListLibraryItems());
   }
 
   useEffect(() => {
@@ -30,33 +43,40 @@ export function LibraryPanel() {
   }, []);
 
   async function selectItem(id: string) {
-    if (!window.mira) return;
     setActiveId(id);
-    const [learned, plan] = await Promise.all([
-      window.mira.listLearnedUnits(id),
-      window.mira.getLearnPlan(id),
-    ]);
-    setUnits(learned);
-    if (plan) {
-      try {
-        const steps = JSON.parse(plan.steps_json) as string[];
-        setPlanText(steps.map((s, i) => `${i + 1}. ${s}`).join("\n"));
-      } catch {
-        setPlanText(plan.steps_json);
+    if (window.mira) {
+      const [learned, plan] = await Promise.all([
+        window.mira.listLearnedUnits(id),
+        window.mira.getLearnPlan(id),
+      ]);
+      setUnits(learned);
+      if (plan) {
+        try {
+          const steps = JSON.parse(plan.steps_json) as string[];
+          setPlanText(steps.map((s, i) => `${i + 1}. ${s}`).join("\n"));
+        } catch {
+          setPlanText(plan.steps_json);
+        }
+      } else {
+        setPlanText("");
       }
-    } else {
-      setPlanText("");
+      return;
     }
+    setUnits(localListLearnedUnits(id));
+    const plan = localGetLearnPlan(id);
+    setPlanText(plan.map((s, i) => `${i + 1}. ${s}`).join("\n"));
   }
 
   async function importText() {
-    if (!window.mira || !title.trim() || !text.trim()) return;
+    if (!title.trim() || !text.trim()) return;
     setBusy("import");
     try {
-      const item = await window.mira.importLibraryText({
-        title: title.trim(),
-        text,
-      });
+      const item = window.mira
+        ? await window.mira.importLibraryText({
+            title: title.trim(),
+            text,
+          })
+        : localImportLibraryText({ title: title.trim(), text });
       setNote(`Импортировано: ${item.title} (${item.status})`);
       await refresh();
       await selectItem(item.id);
@@ -65,7 +85,7 @@ export function LibraryPanel() {
     }
   }
 
-  async function importFile() {
+  async function importFilePath() {
     if (!window.mira || !filePath.trim()) return;
     setBusy("file");
     try {
@@ -80,14 +100,62 @@ export function LibraryPanel() {
     }
   }
 
+  async function importPickedFiles(list: FileList | File[] | null) {
+    if (!list || list.length === 0) return;
+    setBusy("picker");
+    const names: string[] = [];
+    try {
+      for (const file of Array.from(list)) {
+        if (window.mira?.importLibraryBytes) {
+          const buf = new Uint8Array(await file.arrayBuffer());
+          const item = await window.mira.importLibraryBytes({
+            bytes: Array.from(buf),
+            fileName: file.name,
+            title: file.name.replace(/\.[^.]+$/, ""),
+          });
+          names.push(item.title);
+          await selectItem(item.id);
+        } else {
+          let extracted = "";
+          if (
+            file.type.startsWith("text/") ||
+            /\.(md|txt|markdown|json|csv)$/i.test(file.name)
+          ) {
+            extracted = await file.text();
+          }
+          const item = localImportLibraryBytes({
+            title: file.name.replace(/\.[^.]+$/, ""),
+            fileName: file.name,
+            text: extracted || undefined,
+          });
+          names.push(item.title);
+          await selectItem(item.id);
+        }
+      }
+      setNote(`Добавлено в обучение: ${names.join(", ")}`);
+      await refresh();
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function processActive() {
-    if (!window.mira || !activeId) return;
+    if (!activeId) return;
     setBusy("process");
     try {
-      const res = await window.mira.processLibraryItem(activeId);
-      setNote(
-        `Разбор готов · units=${res.units.length} · v${res.item.version}`,
-      );
+      if (window.mira) {
+        const res = await window.mira.processLibraryItem(activeId);
+        setNote(
+          `Разбор готов · units=${res.units.length} · v${res.item.version}`,
+        );
+      } else {
+        const res = localProcessLibraryItem(activeId);
+        setNote(
+          `Разбор (demo) · units=${res.units.length} · v${res.item.version}`,
+        );
+      }
       await refresh();
       await selectItem(activeId);
     } catch (err) {
@@ -98,7 +166,10 @@ export function LibraryPanel() {
   }
 
   async function proposeSkill() {
-    if (!window.mira || !activeId) return;
+    if (!window.mira || !activeId) {
+      setNote("Предложить skill доступно в Electron.");
+      return;
+    }
     setBusy("skill");
     try {
       const res = await window.mira.proposeLibrarySkill(activeId);
@@ -109,26 +180,42 @@ export function LibraryPanel() {
     }
   }
 
+  function onDrop(e: DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    void importPickedFiles(e.dataTransfer.files);
+  }
+
   return (
     <div className="stack">
       <div className="panel stack">
         <div className="row">
-          <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Библиотека</h2>
-          <span className="chip">P8 #14</span>
+          <h2 style={{ margin: 0, fontSize: "1.05rem" }}>
+            Материалы для обучения
+          </h2>
+          <span className="chip">P8</span>
         </div>
         <p className="muted" style={{ margin: 0 }}>
-          Upload → extract → анализ → план → память. Skill — только после
-          confirm. PDF/аудио/видео: stub extract.
+          Добавьте текст или файлы (md/txt/pdf/аудио…) → «Разобрать» → тезисы и
+          план попадают в память. В Диалоге можно прикрепить файл и отметить «В
+          материалы обучения».
+          {!electron
+            ? " Сейчас browser-demo: материалы в localStorage."
+            : ""}
         </p>
-        {note ? <p className="mono muted" style={{ margin: 0 }}>{note}</p> : null}
+        {note ? (
+          <p className="mono muted" style={{ margin: 0 }}>
+            {note}
+          </p>
+        ) : null}
       </div>
 
       <div className="memory-split">
         <div className="panel stack">
-          <strong>Материалы</strong>
+          <strong>Библиотека</strong>
           {items.length === 0 ? (
             <p className="muted" style={{ margin: 0 }}>
-              Пока пусто — импортируйте текст справа.
+              Пока пусто — загрузите материал справа или перетащите файл.
             </p>
           ) : (
             items.map((item) => (
@@ -142,7 +229,9 @@ export function LibraryPanel() {
                 <div>{item.title}</div>
                 <div className="mono muted" style={{ fontSize: "0.75rem" }}>
                   {item.status} · {item.media_type} · v{item.version}
-                  {item.skill_id ? ` · skill:${item.skill_id}` : ""}
+                  {"skill_id" in item && item.skill_id
+                    ? ` · skill:${item.skill_id}`
+                    : ""}
                 </div>
               </button>
             ))
@@ -159,7 +248,7 @@ export function LibraryPanel() {
             <button
               type="button"
               className="btn"
-              disabled={!activeId || busy !== null}
+              disabled={!activeId || busy !== null || !electron}
               onClick={() => void proposeSkill()}
             >
               Предложить skill
@@ -168,14 +257,49 @@ export function LibraryPanel() {
         </div>
 
         <div className="stack">
+          <div
+            className={`panel stack library-drop ${dragOver ? "is-drop" : ""}`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={onDrop}
+          >
+            <strong>Добавить файлы</strong>
+            <p className="muted" style={{ margin: 0 }}>
+              Перетащите сюда или выберите с диска — материал попадёт в
+              обучение.
+            </p>
+            <input
+              ref={fileRef}
+              type="file"
+              multiple
+              hidden
+              accept=".md,.txt,.markdown,.pdf,.epub,.mp3,.wav,.m4a,.ogg,.mp4,.webm,.json,.csv"
+              onChange={(e) => {
+                void importPickedFiles(e.target.files);
+                e.target.value = "";
+              }}
+            />
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={busy !== null}
+              onClick={() => fileRef.current?.click()}
+            >
+              Выбрать файлы…
+            </button>
+          </div>
+
           <form
             className="panel stack"
-            onSubmit={(e) => {
+            onSubmit={(e: FormEvent) => {
               e.preventDefault();
               void importText();
             }}
           >
-            <strong>Импорт текста / md</strong>
+            <strong>Или вставить текст / md</strong>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -195,22 +319,24 @@ export function LibraryPanel() {
             </button>
           </form>
 
-          <div className="panel stack">
-            <strong>Импорт файла (путь)</strong>
-            <input
-              value={filePath}
-              onChange={(e) => setFilePath(e.target.value)}
-              placeholder="/path/to/file.md|.txt|.pdf|.mp3…"
-            />
-            <button
-              type="button"
-              className="btn"
-              disabled={busy !== null}
-              onClick={() => void importFile()}
-            >
-              Импорт по пути
-            </button>
-          </div>
+          {electron ? (
+            <div className="panel stack">
+              <strong>Импорт по пути (Electron)</strong>
+              <input
+                value={filePath}
+                onChange={(e) => setFilePath(e.target.value)}
+                placeholder="/path/to/file.md|.txt|.pdf|.mp3…"
+              />
+              <button
+                type="button"
+                className="btn"
+                disabled={busy !== null}
+                onClick={() => void importFilePath()}
+              >
+                Импорт по пути
+              </button>
+            </div>
+          ) : null}
 
           <div className="panel stack">
             <strong>План освоения</strong>

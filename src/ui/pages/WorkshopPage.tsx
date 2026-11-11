@@ -31,7 +31,7 @@ const SEGMENTS = [
   { id: "skills", label: "Скиллы", phase: "P3" },
   { id: "protocols", label: "Протоколы", phase: "P3" },
   { id: "voices", label: "Голоса", phase: "P9" },
-  { id: "library", label: "Библиотека", phase: "P8" },
+  { id: "library", label: "Обучение", phase: "P8" },
   { id: "notes", label: "Заметки/файлы", phase: "F2/F5" },
   { id: "terminal", label: "Терминал", phase: "P7" },
 ] as const;

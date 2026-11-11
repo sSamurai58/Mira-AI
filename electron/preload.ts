@@ -141,6 +141,15 @@ contextBridge.exposeInMainWorld("mira", {
     text: string;
     requestId: string;
     forceProtocolId?: string | null;
+    attachments?: Array<{
+      name: string;
+      mimeType: string;
+      size: number;
+      kind: string;
+      text?: string;
+      dataBase64?: string;
+    }>;
+    addToLibrary?: boolean;
   }): Promise<{
     ok: boolean;
     sessionId?: string;
@@ -242,6 +251,11 @@ contextBridge.exposeInMainWorld("mira", {
     text: string;
     fileName?: string;
   }) => call("mira:import-library-text", payload),
+  importLibraryBytes: (payload: {
+    bytes: number[] | Uint8Array;
+    fileName: string;
+    title?: string;
+  }) => call("mira:import-library-bytes", payload),
   processLibraryItem: (id: string) => call("mira:process-library-item", id),
   proposeLibrarySkill: (id: string) => call("mira:propose-library-skill", id),
   listLearnedUnits: (libraryItemId?: string) =>

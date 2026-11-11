@@ -1,9 +1,27 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type DragEvent,
+  type FormEvent,
+} from "react";
 import { getBrowserLlmLabel, streamBrowserChat } from "../browserLlm";
+import {
+  filesToPendingAttachments,
+  formatAttachmentsForPrompt,
+  isLearnableAttachment,
+  toAttachmentPayload,
+  type PendingChatAttachment,
+} from "../chat/attachments";
 import { CoreOrb } from "../components/CoreOrb";
 import { HomeRail } from "../components/HomeRail";
 import { HudCorners } from "../components/HudCorners";
 import { ThemeSelect } from "../components/ThemeSelect";
+import {
+  localImportLibraryBytes,
+  localImportLibraryText,
+} from "../library/libraryLocal";
 import { createAsrSession, isAsrAvailable } from "../voice/asr";
 import {
   getActiveVoiceId,
@@ -38,6 +56,7 @@ type Bubble = {
   role: "user" | "assistant";
   content: string;
   pending?: boolean;
+  attachments?: Array<{ name: string; kind: string }>;
 };
 
 export function ChatPage({
@@ -63,8 +82,13 @@ export function ChatPage({
   const [handsFree, setHandsFree] = useState<HandsFreePrefs>(() =>
     getHandsFreePrefs(),
   );
+  const [pendingFiles, setPendingFiles] = useState<PendingChatAttachment[]>([]);
+  const [addToLibrary, setAddToLibrary] = useState(false);
+  const [attachNote, setAttachNote] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
   const requestIdRef = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const asrRef = useRef<ReturnType<typeof createAsrSession> | null>(null);
   const wakeRef = useRef<ReturnType<typeof createAsrSession> | null>(null);
   const sessionIdRef = useRef(sessionId);
@@ -141,16 +165,63 @@ export function ChatPage({
     [activeVoiceId, autoSpeak, onError, onVoiceState],
   );
 
+  async function importPendingToLocalLibrary(
+    files: PendingChatAttachment[],
+  ): Promise<string | null> {
+    const titles: string[] = [];
+    for (const f of files) {
+      if (!isLearnableAttachment(f) && !f.dataBase64) continue;
+      try {
+        if (f.kind === "text" && f.text?.trim()) {
+          const item = localImportLibraryText({
+            title: f.name.replace(/\.[^.]+$/, "") || f.name,
+            text: f.text,
+            fileName: f.name,
+          });
+          titles.push(item.title);
+        } else {
+          const item = localImportLibraryBytes({
+            title: f.name.replace(/\.[^.]+$/, "") || f.name,
+            fileName: f.name,
+            text: f.text,
+          });
+          titles.push(item.title);
+        }
+      } catch {
+        /* skip bad file */
+      }
+    }
+    return titles.length
+      ? `Добавлено в обучение (demo): ${titles.join(", ")}. Workshop → Обучение → Разобрать.`
+      : null;
+  }
+
   const sendBrowserDemo = useCallback(
-    async (trimmed: string) => {
+    async (
+      trimmed: string,
+      files: PendingChatAttachment[] = [],
+      toLibrary = false,
+    ) => {
       const requestId = crypto.randomUUID();
       requestIdRef.current = requestId;
       setBusy(true);
       setMemoryNote(null);
       onVoiceState("thinking");
+      const payloads = files.map(toAttachmentPayload);
+      const prompt = formatAttachmentsForPrompt(trimmed, payloads);
+      const display =
+        trimmed ||
+        (files.length
+          ? `📎 ${files.map((f) => f.name).join(", ")}`
+          : "");
       setBubbles((prev) => [
         ...prev,
-        { id: `local-user-${requestId}`, role: "user", content: trimmed },
+        {
+          id: `local-user-${requestId}`,
+          role: "user",
+          content: display,
+          attachments: files.map((f) => ({ name: f.name, kind: f.kind })),
+        },
         {
           id: `local-assistant-${requestId}`,
           role: "assistant",
@@ -159,13 +230,18 @@ export function ChatPage({
         },
       ]);
 
+      let libraryHint: string | null = null;
+      if (toLibrary && files.length) {
+        libraryHint = await importPendingToLocalLibrary(files);
+      }
+
       const history = bubbles
         .filter((b) => !b.pending && (b.role === "user" || b.role === "assistant"))
         .map((b) => ({ role: b.role, content: b.content }));
 
       try {
         const cfg = await streamBrowserChat({
-          userText: trimmed,
+          userText: libraryHint ? `${prompt}\n\n[${libraryHint}]` : prompt,
           history,
           handlers: {
             onToken: (chunk) => {
@@ -187,7 +263,11 @@ export function ChatPage({
                 ),
               );
               setModelLabel(label);
-              setContextNote(`browser · ${label}`);
+              setContextNote(
+                libraryHint
+                  ? `browser · ${label} · library`
+                  : `browser · ${label}`,
+              );
               setBusy(false);
               speakAssistant(full);
             },
@@ -216,10 +296,14 @@ export function ChatPage({
         setModelLabel("browser-only");
         const reply = [
           "Browser-demo Mira (mock).",
-          `Вы сказали: «${trimmed.slice(0, 240)}».`,
+          `Вы сказали: «${trimmed.slice(0, 240) || "вложения"}».`,
+          files.length ? `Файлов: ${files.map((f) => f.name).join(", ")}.` : "",
+          libraryHint ?? "",
           "Ключ Grok/OpenAI ещё не сохранён в этой вкладке.",
           "Настройки → API и модели → провайдер grok + XAI_API_KEY → Сохранить, затем снова напишите сюда.",
-        ].join(" ");
+        ]
+          .filter(Boolean)
+          .join(" ");
 
         let built = "";
         for (const word of reply.split(/(\s+)/)) {
@@ -249,11 +333,15 @@ export function ChatPage({
   );
 
   const sendText = useCallback(
-    async (text: string) => {
+    async (
+      text: string,
+      files: PendingChatAttachment[] = [],
+      toLibrary = false,
+    ) => {
       const trimmed = text.trim();
-      if (!trimmed || busy) return;
+      if ((!trimmed && !files.length) || busy) return;
       if (!window.mira) {
-        await sendBrowserDemo(trimmed);
+        await sendBrowserDemo(trimmed, files, toLibrary);
         return;
       }
 
@@ -265,10 +353,20 @@ export function ChatPage({
 
       const requestId = crypto.randomUUID();
       requestIdRef.current = requestId;
+      const display =
+        trimmed ||
+        (files.length
+          ? `📎 ${files.map((f) => f.name).join(", ")}`
+          : "");
 
       setBubbles((prev) => [
         ...prev,
-        { id: `local-user-${requestId}`, role: "user", content: trimmed },
+        {
+          id: `local-user-${requestId}`,
+          role: "user",
+          content: display,
+          attachments: files.map((f) => ({ name: f.name, kind: f.kind })),
+        },
         {
           id: `local-assistant-${requestId}`,
           role: "assistant",
@@ -281,6 +379,8 @@ export function ChatPage({
         sessionId: sessionIdRef.current,
         text: trimmed,
         requestId,
+        attachments: files.map(toAttachmentPayload),
+        addToLibrary: toLibrary,
       });
 
       if (result.sessionId) onSessionChange(result.sessionId);
@@ -450,12 +550,35 @@ export function ChatPage({
     onVoiceState("idle");
   }
 
+  async function addFilesFromList(list: FileList | File[] | null) {
+    if (!list || list.length === 0) return;
+    const { added, errors } = await filesToPendingAttachments(
+      list,
+      pendingFiles.length,
+    );
+    if (added.length) {
+      setPendingFiles((prev) => [...prev, ...added]);
+      if (added.some(isLearnableAttachment)) setAddToLibrary(true);
+    }
+    setAttachNote(errors[0] ?? null);
+  }
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     const text = input.trim();
-    if (!text) return;
+    if (!text && !pendingFiles.length) return;
+    const files = pendingFiles;
+    const toLibrary = addToLibrary;
     setInput("");
-    void sendText(text);
+    setPendingFiles([]);
+    setAttachNote(null);
+    void sendText(text, files, toLibrary);
+  }
+
+  function onComposerDrop(e: DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    void addFilesFromList(e.dataTransfer.files);
   }
 
   function stopWakeListen() {
@@ -816,6 +939,15 @@ export function ChatPage({
             ) : (
               bubbles.map((b) => (
                 <div key={b.id} className={`bubble ${b.role}`}>
+                  {b.attachments?.length ? (
+                    <div className="bubble-attach-list">
+                      {b.attachments.map((a) => (
+                        <span key={a.name} className="attach-chip">
+                          {a.kind === "image" ? "🖼" : "📎"} {a.name}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                   {b.content || (b.pending ? "…" : "")}
                 </div>
               ))
@@ -842,12 +974,80 @@ export function ChatPage({
             ))}
           </div>
 
-          <form className="composer-row" onSubmit={handleSubmit}>
+          {pendingFiles.length > 0 ? (
+            <div className="attach-pending">
+              {pendingFiles.map((f) => (
+                <span key={f.id} className="attach-chip is-pending">
+                  {f.kind === "image" ? "🖼" : "📎"} {f.name}
+                  <button
+                    type="button"
+                    className="attach-chip-x"
+                    aria-label={`Убрать ${f.name}`}
+                    onClick={() =>
+                      setPendingFiles((prev) =>
+                        prev.filter((x) => x.id !== f.id),
+                      )
+                    }
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+              <label className="attach-learn-toggle">
+                <input
+                  type="checkbox"
+                  checked={addToLibrary}
+                  onChange={(e) => setAddToLibrary(e.target.checked)}
+                />
+                В материалы обучения
+              </label>
+            </div>
+          ) : null}
+          {attachNote ? (
+            <p className="mono tiny muted" style={{ margin: 0 }}>
+              {attachNote}
+            </p>
+          ) : null}
+
+          <form
+            className={`composer-row ${dragOver ? "is-drop" : ""}`}
+            onSubmit={handleSubmit}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={onComposerDrop}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              hidden
+              onChange={(e) => {
+                void addFilesFromList(e.target.files);
+                e.target.value = "";
+              }}
+            />
+            <button
+              type="button"
+              className="btn attach-btn"
+              disabled={busy}
+              title="Прикрепить файлы"
+              aria-label="Прикрепить файлы"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              📎
+            </button>
             <div className="rainbow-field">
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Скажите или напишите…"
+                placeholder={
+                  pendingFiles.length
+                    ? "Напишите сообщение к файлам…"
+                    : "Скажите, напишите или перетащите файлы…"
+                }
                 disabled={busy}
                 aria-label="Сообщение для Mira"
               />
@@ -872,7 +1072,7 @@ export function ChatPage({
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={busy || !input.trim()}
+              disabled={busy || (!input.trim() && !pendingFiles.length)}
             >
               {busy ? "Думаю…" : "Отправить"}
             </button>
