@@ -184,6 +184,59 @@ export type BrowserLlmConfig = {
   label: string;
 };
 
+const DEFAULT_MODELS: Record<string, string> = {
+  grok: "grok-2-latest",
+  openai: "gpt-4o-mini",
+  claude: "claude-3-5-sonnet-latest",
+  gemini: "gemini-2.0-flash",
+};
+
+/** Pick a model that belongs to the provider (avoid gpt-* on xAI, etc.). */
+export function modelForProvider(
+  provider: string,
+  requested: string | undefined,
+): string {
+  const p = provider.trim().toLowerCase();
+  const fallback = DEFAULT_MODELS[p] || "gpt-4o-mini";
+  const model = (requested || "").trim();
+  if (!model) return fallback;
+
+  const lower = model.toLowerCase();
+  if (p === "grok") {
+    if (lower.startsWith("grok") || lower.startsWith("xai")) return model;
+    return fallback;
+  }
+  if (p === "openai") {
+    if (
+      lower.startsWith("gpt") ||
+      lower.startsWith("o1") ||
+      lower.startsWith("o3") ||
+      lower.startsWith("o4") ||
+      lower.includes("chatgpt")
+    ) {
+      return model;
+    }
+    // Custom OpenAI-compatible proxies may use any id — keep if not clearly foreign
+    if (
+      lower.startsWith("grok") ||
+      lower.startsWith("claude") ||
+      lower.startsWith("gemini")
+    ) {
+      return fallback;
+    }
+    return model;
+  }
+  if (p === "claude") {
+    if (lower.startsWith("claude")) return model;
+    return fallback;
+  }
+  if (p === "gemini") {
+    if (lower.startsWith("gemini") || lower.startsWith("models/")) return model;
+    return fallback;
+  }
+  return model || fallback;
+}
+
 /**
  * Resolve which live model the browser demo can call.
  * Uses Vite `/mira-llm/*` proxies to avoid CORS.
@@ -207,44 +260,48 @@ export function resolveBrowserLlmConfig(
     else if (geminiKey) provider = "gemini";
   }
 
-  const model = (values.LLM_MODEL || "").trim();
+  const requested = (values.LLM_MODEL || "").trim();
 
   if (provider === "grok" && xaiKey) {
+    const model = modelForProvider("grok", requested);
     return {
       provider: "grok",
-      model: model || "grok-2-latest",
+      model,
       apiKey: xaiKey,
       baseUrl: "/mira-llm/xai",
-      label: `grok/${model || "grok-2-latest"}`,
+      label: `grok/${model}`,
     };
   }
   if (provider === "openai" && openaiKey) {
     const custom = (values.OPENAI_BASE_URL || "").trim();
     const useProxy = !custom || custom.includes("api.openai.com");
+    const model = modelForProvider("openai", requested);
     return {
       provider: "openai",
-      model: model || "gpt-4o-mini",
+      model,
       apiKey: openaiKey,
       baseUrl: useProxy ? "/mira-llm/openai" : custom.replace(/\/$/, ""),
-      label: `openai/${model || "gpt-4o-mini"}`,
+      label: `openai/${model}`,
     };
   }
   if (provider === "claude" && anthropicKey) {
+    const model = modelForProvider("claude", requested);
     return {
       provider: "claude",
-      model: model || "claude-3-5-sonnet-latest",
+      model,
       apiKey: anthropicKey,
       baseUrl: "/mira-llm/anthropic",
-      label: `claude/${model || "claude-3-5-sonnet-latest"}`,
+      label: `claude/${model}`,
     };
   }
   if (provider === "gemini" && geminiKey) {
+    const model = modelForProvider("gemini", requested);
     return {
       provider: "gemini",
-      model: model || "gemini-2.0-flash",
+      model,
       apiKey: geminiKey,
       baseUrl: "/mira-llm/gemini",
-      label: `gemini/${model || "gemini-2.0-flash"}`,
+      label: `gemini/${model}`,
     };
   }
 

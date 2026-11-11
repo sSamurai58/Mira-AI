@@ -11,6 +11,7 @@ import {
   boolToEnv,
   isTruthyEnv,
   loadSettingsEnv,
+  modelForProvider,
   saveSettingsEnv,
   type SettingsEnvSnapshot,
 } from "../settingsEnvClient";
@@ -23,6 +24,15 @@ const PROVIDERS = [
   { id: "grok", label: "xAI Grok" },
   { id: "offline", label: "Offline" },
 ] as const;
+
+const PROVIDER_MODEL_HINT: Record<string, string> = {
+  grok: "grok-2-latest / grok-3",
+  openai: "gpt-4o-mini / gpt-4o",
+  claude: "claude-3-5-sonnet-latest",
+  gemini: "gemini-2.0-flash",
+  mock: "не используется",
+  offline: "локальный id модели",
+};
 
 export function SettingsApiSection() {
   const [snap, setSnap] = useState<SettingsEnvSnapshot | null>(null);
@@ -197,7 +207,14 @@ export function SettingsApiSection() {
         <Field label="Провайдер" hint="Переменная LLM_PROVIDER">
           <select
             value={provider}
-            onChange={(e) => setField("LLM_PROVIDER", e.target.value)}
+            onChange={(e) => {
+              const next = e.target.value;
+              setDraft((prev) => ({
+                ...prev,
+                LLM_PROVIDER: next,
+                LLM_MODEL: modelForProvider(next, prev.LLM_MODEL),
+              }));
+            }}
           >
             {PROVIDERS.map((p) => (
               <option key={p.id} value={p.id}>
@@ -206,11 +223,14 @@ export function SettingsApiSection() {
             ))}
           </select>
         </Field>
-        <Field label="Модель" hint="LLM_MODEL — например gpt-4o-mini, claude-3-5-sonnet">
+        <Field
+          label="Модель"
+          hint={`LLM_MODEL — для ${provider}: ${PROVIDER_MODEL_HINT[provider] ?? "см. документацию провайдера"}`}
+        >
           <input
             value={draft.LLM_MODEL ?? ""}
             onChange={(e) => setField("LLM_MODEL", e.target.value)}
-            placeholder="gpt-4o-mini"
+            placeholder={PROVIDER_MODEL_HINT[provider]?.split(" / ")[0] || "model-id"}
           />
         </Field>
         <ToggleRow
