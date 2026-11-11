@@ -2023,6 +2023,26 @@ strong {
   width: min(560px, calc(100vw - 40px));
 }
 
+.catalog-edit-modal {
+  display: grid;
+  gap: 10px;
+  max-height: min(90vh, 720px);
+  overflow: auto;
+}
+
+.catalog-edit-modal .field-label {
+  margin: 0;
+}
+
+.catalog-edit-close {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+}
+
 .modal h2 {
   margin: 0 0 8px;
   font-family: var(--font-display);

@@ -74,6 +74,7 @@ type MiraCatalogItem = {
   body: string;
   filePath: string;
   relativePath: string;
+  updatedAt?: string;
 };
 
 type MiraConfirmSkillPropose = {
@@ -360,6 +361,12 @@ interface MiraBridge {
     enabled: boolean;
     body: string;
   }) => Promise<MiraCatalogItem>;
+  deleteSkill: (
+    id: string,
+  ) => Promise<{ ok: boolean; detail: string; deletedId: string | null }>;
+  deleteProtocol: (
+    id: string,
+  ) => Promise<{ ok: boolean; detail: string; deletedId: string | null }>;
   getWebPolicy: () => Promise<{
     enabled: boolean;
     allowlist: string[];
