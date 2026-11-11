@@ -4,6 +4,9 @@ export type VoiceInfo = {
   lang: string;
   localService: boolean;
   default?: boolean;
+  /** Studio custom voice (#15 → #11) */
+  custom?: boolean;
+  previewPath?: string | null;
 };
 
 export type AsrResult = {

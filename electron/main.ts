@@ -65,6 +65,16 @@ import {
   upsertMessengerContact,
 } from "./store";
 import { authed, desktopToolsEnabled, initIpcSecurity } from "./ipcSecurity";
+import {
+  createVoiceProject,
+  generatePhrases,
+  getStudioSnapshot,
+  importClip,
+  importClipBytes,
+  listCustomVoices,
+  listVoiceProjects,
+} from "./voiceStudio/studio";
+import fs from "node:fs";
 
 const isDev = process.env.MIRA_DEV === "1";
 const activeAborts = new Map<string, AbortController>();
@@ -132,7 +142,7 @@ app.whenReady().then(() => {
     const cfg = getPublicConfig();
     const validation = validateLlmConfig();
     return {
-      phase: "P8",
+      phase: "P9",
       databasePath: "<local-sqlite>",
       ok: health.ok,
       path: "<local-sqlite>",
@@ -143,6 +153,8 @@ app.whenReady().then(() => {
       messengerMessages: health.messengerMessages,
       libraryItems: health.libraryItems,
       learnedUnits: health.learnedUnits,
+      voiceProjects: listVoiceProjects().length,
+      customVoices: listCustomVoices().length,
       llm: cfg,
       llmOk: validation.ok,
       llmReason: validation.reason ?? null,
@@ -471,6 +483,88 @@ app.whenReady().then(() => {
   );
   on("mira:get-learn-plan", (_e, libraryItemId: string) =>
     getLearnPlan(libraryItemId),
+  );
+
+  on("mira:voice-studio-snapshot", (_e, projectId?: string) =>
+    getStudioSnapshot(projectId),
+  );
+  on("mira:list-voice-projects", () => listVoiceProjects());
+  on("mira:list-custom-voices", () => listCustomVoices());
+  on(
+    "mira:create-voice-project",
+    (_e, payload?: { name?: string; lang?: string }) =>
+      createVoiceProject({
+        name: payload?.name ?? "Новый голос",
+        lang: payload?.lang,
+      }),
+  );
+  on(
+    "mira:generate-voice-phrases",
+    (_e, projectId: string, count?: number) =>
+      generatePhrases(projectId, count ?? 5),
+  );
+  on(
+    "mira:import-voice-clip",
+    (
+      _e,
+      payload: {
+        projectId: string;
+        sourcePath: string;
+        phraseId?: string | null;
+      },
+    ) =>
+      importClip({
+        projectId: payload.projectId,
+        sourcePath: payload.sourcePath,
+        phraseId: payload.phraseId,
+      }),
+    { privileged: true },
+  );
+  on(
+    "mira:import-voice-clip-bytes",
+    (
+      _e,
+      payload: {
+        projectId: string;
+        bytes: number[] | Uint8Array;
+        fileName: string;
+        phraseId?: string | null;
+      },
+    ) =>
+      importClipBytes({
+        projectId: payload.projectId,
+        bytes: Uint8Array.from(payload.bytes),
+        fileName: payload.fileName,
+        phraseId: payload.phraseId,
+      }),
+  );
+  on(
+    "mira:read-voice-preview",
+    (_e, filePath: string) => {
+      const abs = path.resolve(filePath);
+      const root = path.resolve(process.cwd(), "data", "voice-studio");
+      const seed = path.resolve(process.cwd(), "seed", "voice-studio");
+      if (
+        !(abs === root || abs.startsWith(root + path.sep)) &&
+        !(abs === seed || abs.startsWith(seed + path.sep))
+      ) {
+        throw new Error("Превью только из voice-studio");
+      }
+      const buf = fs.readFileSync(abs);
+      const ext = path.extname(abs).toLowerCase();
+      const mime =
+        ext === ".wav"
+          ? "audio/wav"
+          : ext === ".mp3"
+            ? "audio/mpeg"
+            : ext === ".ogg"
+              ? "audio/ogg"
+              : ext === ".m4a"
+                ? "audio/mp4"
+                : "audio/webm";
+      return `data:${mime};base64,${buf.toString("base64")}`;
+    },
+    { privileged: true },
   );
 
   createWindow();

@@ -202,6 +202,27 @@ contextBridge.exposeInMainWorld("mira", {
   searchLearnedUnits: (query?: string) => call("mira:search-learned-units", query),
   getLearnPlan: (libraryItemId: string) =>
     call("mira:get-learn-plan", libraryItemId),
+  voiceStudioSnapshot: (projectId?: string) =>
+    call("mira:voice-studio-snapshot", projectId),
+  listVoiceProjects: () => call("mira:list-voice-projects"),
+  listCustomVoices: () => call("mira:list-custom-voices"),
+  createVoiceProject: (payload?: { name?: string; lang?: string }) =>
+    call("mira:create-voice-project", payload),
+  generateVoicePhrases: (projectId: string, count?: number) =>
+    call("mira:generate-voice-phrases", projectId, count),
+  importVoiceClip: (payload: {
+    projectId: string;
+    sourcePath: string;
+    phraseId?: string | null;
+  }) => call("mira:import-voice-clip", payload),
+  importVoiceClipBytes: (payload: {
+    projectId: string;
+    bytes: number[] | Uint8Array;
+    fileName: string;
+    phraseId?: string | null;
+  }) => call("mira:import-voice-clip-bytes", payload),
+  readVoicePreview: (filePath: string) =>
+    call("mira:read-voice-preview", filePath),
   respondConfirm: (id: string, accepted: boolean) =>
     call("mira:confirm-response", id, accepted),
   onConfirmRequest: (handler: (req: MiraConfirmRequest) => void) => {

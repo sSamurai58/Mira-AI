@@ -2,10 +2,12 @@ import { useEffect, useState, type FormEvent } from "react";
 import { LibraryPanel } from "../components/LibraryPanel";
 import { StubBadge } from "../components/StubBadge";
 import { TerminalView } from "../components/TerminalView";
+import { VoiceStudioPanel } from "../components/VoiceStudioPanel";
 import {
   getActiveVoiceId,
+  isCustomVoiceId,
+  listCatalogVoices,
   setActiveVoiceId,
-  waitForVoices,
 } from "../voice/catalog";
 import { speakText, stopSpeaking } from "../voice/tts";
 import type { VoiceInfo } from "../voice/types";
@@ -13,7 +15,7 @@ import type { VoiceInfo } from "../voice/types";
 const SEGMENTS = [
   { id: "skills", label: "Скиллы", phase: "P3" },
   { id: "protocols", label: "Протоколы", phase: "P3" },
-  { id: "voices", label: "Голоса", phase: "P2" },
+  { id: "voices", label: "Голоса", phase: "P9" },
   { id: "library", label: "Библиотека", phase: "P8" },
   { id: "terminal", label: "Терминал", phase: "P7" },
 ] as const;
@@ -51,9 +53,15 @@ export function WorkshopPage() {
     setNote(`Skills: ${s.length} · Protocols: ${p.length}`);
   }
 
+  async function refreshVoices() {
+    const list = await listCatalogVoices();
+    setVoices(list);
+    setActiveId(getActiveVoiceId(list));
+  }
+
   useEffect(() => {
     let cancelled = false;
-    void waitForVoices().then((list) => {
+    void listCatalogVoices().then((list) => {
       if (cancelled) return;
       setVoices(list);
       setActiveId(getActiveVoiceId(list));
@@ -70,8 +78,19 @@ export function WorkshopPage() {
     setActiveId(id);
   }
 
-  function preview(id: string) {
+  async function preview(id: string) {
     selectVoice(id);
+    const voice = voices.find((v) => v.id === id);
+    if (isCustomVoiceId(id) && voice?.previewPath && window.mira) {
+      try {
+        const dataUrl = await window.mira.readVoicePreview(voice.previewPath);
+        const audio = new Audio(dataUrl);
+        void audio.play();
+        return;
+      } catch {
+        // fall through to speechSynthesis stub
+      }
+    }
     speakText("Привет, я Mira. Это превью голоса из каталога.", id);
   }
 
@@ -264,40 +283,48 @@ export function WorkshopPage() {
       ) : null}
 
       {segment === "voices" ? (
-        <div className="panel stack">
-          <div className="row">
-            <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Голоса</h2>
-            <StubBadge label="P2 #11" />
-          </div>
-          {voices.length === 0 ? (
-            <p className="muted" style={{ margin: 0 }}>
-              Голоса не найдены в этой среде.
-            </p>
-          ) : (
-            voices.map((v) => (
-              <div key={v.id} className="panel voice-row">
-                <div>
-                  <strong>{v.name}</strong>
-                  <div className="muted mono">
-                    {v.lang}
-                    {activeId === v.id ? " · active" : ""}
+        <div className="stack">
+          <VoiceStudioPanel onCatalogChanged={() => void refreshVoices()} />
+          <div className="panel stack">
+            <div className="row">
+              <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Каталог голосов</h2>
+              <StubBadge label="P2/P9 #11" />
+            </div>
+            {voices.length === 0 ? (
+              <p className="muted" style={{ margin: 0 }}>
+                Голоса не найдены в этой среде.
+              </p>
+            ) : (
+              voices.map((v) => (
+                <div key={v.id} className="panel voice-row">
+                  <div>
+                    <strong>{v.name}</strong>
+                    <div className="muted mono">
+                      {v.lang}
+                      {v.custom ? " · custom" : ""}
+                      {activeId === v.id ? " · active" : ""}
+                    </div>
+                  </div>
+                  <div className="row">
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => void preview(v.id)}
+                    >
+                      Превью
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn ${activeId === v.id ? "btn-primary" : ""}`}
+                      onClick={() => selectVoice(v.id)}
+                    >
+                      Выбрать
+                    </button>
                   </div>
                 </div>
-                <div className="row">
-                  <button type="button" className="btn" onClick={() => preview(v.id)}>
-                    Превью
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn ${activeId === v.id ? "btn-primary" : ""}`}
-                    onClick={() => selectVoice(v.id)}
-                  >
-                    Выбрать
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
+              ))
+            )}
+          </div>
         </div>
       ) : null}
 

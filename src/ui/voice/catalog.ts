@@ -37,16 +37,50 @@ export function setActiveVoiceId(id: string): void {
   localStorage.setItem(STORAGE_KEY, id);
 }
 
+export function isCustomVoiceId(voiceId: string | null | undefined): boolean {
+  return Boolean(voiceId && voiceId.startsWith("mira-studio-"));
+}
+
 export function resolveSpeechVoice(voiceId: string | null): SpeechSynthesisVoice | null {
   if (!window.speechSynthesis) return null;
   const voices = window.speechSynthesis.getVoices();
   if (!voiceId) return voices.find((v) => v.default) ?? voices[0] ?? null;
+  // Custom studio voices: synthesis falls back to a local RU/system voice
+  // until a neural TTS engine is wired (P9 corpus pack stub).
+  if (isCustomVoiceId(voiceId)) {
+    return (
+      voices.find((v) => v.lang.toLowerCase().startsWith("ru") && /neural|premium|enhanced/i.test(v.name)) ||
+      voices.find((v) => v.lang.toLowerCase().startsWith("ru")) ||
+      voices.find((v) => v.default) ||
+      voices[0] ||
+      null
+    );
+  }
   const [uri, lang] = voiceId.split("::");
   return (
     voices.find((v) => v.voiceURI === uri && v.lang === lang) ||
     voices.find((v) => v.voiceURI === uri) ||
     null
   );
+}
+
+export async function listCatalogVoices(): Promise<VoiceInfo[]> {
+  const system = await waitForVoices();
+  if (!window.mira?.listCustomVoices) return system;
+  try {
+    const custom = await window.mira.listCustomVoices();
+    const mapped: VoiceInfo[] = custom.map((c) => ({
+      id: c.id,
+      name: `${c.name} (студия)`,
+      lang: c.lang,
+      localService: true,
+      custom: true,
+      previewPath: c.preview_path,
+    }));
+    return [...mapped, ...system];
+  } catch {
+    return system;
+  }
 }
 
 export function waitForVoices(timeoutMs = 2500): Promise<VoiceInfo[]> {

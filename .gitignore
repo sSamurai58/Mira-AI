@@ -18,6 +18,7 @@ data/skills/
 data/protocols/
 data/screenshots/
 data/library/
+data/voice-studio/
 !data/.gitkeep
 
 # logs / OS

@@ -200,6 +200,47 @@ export function openStore(): DatabaseSync {
       updated_at TEXT NOT NULL,
       FOREIGN KEY (library_item_id) REFERENCES library_items(id)
     );
+    CREATE TABLE IF NOT EXISTS voice_projects (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      lang TEXT NOT NULL,
+      status TEXT NOT NULL,
+      recommendation TEXT,
+      llm_profile TEXT,
+      custom_voice_id TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS voice_phrases (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      text TEXT NOT NULL,
+      recorded INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES voice_projects(id)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_voice_phrases_dedup
+      ON voice_phrases(project_id, text);
+    CREATE TABLE IF NOT EXISTS voice_clips (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      phrase_id TEXT,
+      file_path TEXT NOT NULL,
+      qa_json TEXT,
+      accepted INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (project_id) REFERENCES voice_projects(id)
+    );
+    CREATE TABLE IF NOT EXISTS custom_voices (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      lang TEXT NOT NULL,
+      preview_path TEXT,
+      meta_json TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   try {

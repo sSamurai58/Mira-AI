@@ -124,6 +124,47 @@ type MiraLearnedUnit = {
   created_at: string;
 };
 
+type MiraVoiceProject = {
+  id: string;
+  name: string;
+  lang: string;
+  status: string;
+  recommendation: string | null;
+  llm_profile: string | null;
+  custom_voice_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type MiraVoicePhrase = {
+  id: string;
+  project_id: string;
+  text: string;
+  recorded: number;
+  created_at: string;
+};
+
+type MiraVoiceClip = {
+  id: string;
+  project_id: string;
+  phrase_id: string | null;
+  file_path: string;
+  qa_json: string | null;
+  accepted: number;
+  created_at: string;
+};
+
+type MiraCustomVoice = {
+  id: string;
+  project_id: string;
+  name: string;
+  lang: string;
+  preview_path: string | null;
+  meta_json: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 type MiraTerminalSession = {
   id: string;
   title: string;
@@ -185,6 +226,10 @@ type MiraHealth = {
     };
   };
   terminalSessions?: number;
+  libraryItems?: number;
+  learnedUnits?: number;
+  voiceProjects?: number;
+  customVoices?: number;
 };
 
 interface MiraBridge {
@@ -442,6 +487,49 @@ interface MiraBridge {
     created_at: string;
     updated_at: string;
   } | null>;
+  voiceStudioSnapshot: (projectId?: string) => Promise<{
+    projects: MiraVoiceProject[];
+    project: MiraVoiceProject | null;
+    phrases: MiraVoicePhrase[];
+    clips: MiraVoiceClip[];
+    customVoices: MiraCustomVoice[];
+  }>;
+  listVoiceProjects: () => Promise<MiraVoiceProject[]>;
+  listCustomVoices: () => Promise<MiraCustomVoice[]>;
+  createVoiceProject: (payload?: {
+    name?: string;
+    lang?: string;
+  }) => Promise<MiraVoiceProject>;
+  generateVoicePhrases: (
+    projectId: string,
+    count?: number,
+  ) => Promise<MiraVoicePhrase[]>;
+  importVoiceClip: (payload: {
+    projectId: string;
+    sourcePath: string;
+    phraseId?: string | null;
+  }) => Promise<{
+    clip: MiraVoiceClip;
+    processed: {
+      project: MiraVoiceProject;
+      analysis: unknown[];
+      voice: MiraCustomVoice | null;
+    };
+  }>;
+  importVoiceClipBytes: (payload: {
+    projectId: string;
+    bytes: number[] | Uint8Array;
+    fileName: string;
+    phraseId?: string | null;
+  }) => Promise<{
+    clip: MiraVoiceClip;
+    processed: {
+      project: MiraVoiceProject;
+      analysis: unknown[];
+      voice: MiraCustomVoice | null;
+    };
+  }>;
+  readVoicePreview: (filePath: string) => Promise<string>;
 }
 
 interface Window {
