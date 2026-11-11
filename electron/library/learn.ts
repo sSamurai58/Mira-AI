@@ -7,6 +7,7 @@ import { ensureMiraLibraryLayout, miraLibraryDir } from "../paths";
 import {
   addLearnedUnit,
   deleteLearnedUnitsForItem,
+  deleteLibraryItem as deleteLibraryItemRow,
   getLearnPlan,
   getLibraryItem,
   insertLibraryItem,
@@ -677,6 +678,52 @@ export function getLibrarySnapshot(): {
   return {
     items: listLibraryItems(50),
     learned: listLearnedUnits({ limit: 30 }),
+  };
+}
+
+/**
+ * Delete a library material: DB row, learned units, plan, and source file
+ * if it lives under the Mira library root (imported uploads).
+ * Does not delete catalog skills that were already created from it.
+ */
+export function deleteLibraryMaterial(id: string): {
+  ok: boolean;
+  detail: string;
+  deletedId: string | null;
+} {
+  const item = getLibraryItem(id);
+  if (!item) {
+    return { ok: false, detail: "Материал не найден", deletedId: null };
+  }
+
+  const removed = deleteLibraryItemRow(id);
+  if (!removed) {
+    return { ok: false, detail: "Не удалось удалить", deletedId: null };
+  }
+
+  let fileNote = "";
+  const src = removed.source_path;
+  if (src) {
+    try {
+      const resolved = path.resolve(src);
+      const root = path.resolve(libraryRoot());
+      if (
+        (resolved === root || resolved.startsWith(root + path.sep)) &&
+        fs.existsSync(resolved) &&
+        fs.statSync(resolved).isFile()
+      ) {
+        fs.unlinkSync(resolved);
+        fileNote = " · файл удалён";
+      }
+    } catch {
+      fileNote = " · файл на диске не удалён";
+    }
+  }
+
+  return {
+    ok: true,
+    detail: `Удалено «${removed.title}»${fileNote}`,
+    deletedId: removed.id,
   };
 }
 

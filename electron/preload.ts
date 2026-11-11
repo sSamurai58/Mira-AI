@@ -259,6 +259,7 @@ contextBridge.exposeInMainWorld("mira", {
     extractedText?: string;
   }) => call("mira:import-library-bytes", payload),
   processLibraryItem: (id: string) => call("mira:process-library-item", id),
+  deleteLibraryItem: (id: string) => call("mira:delete-library-item", id),
   proposeLibrarySkill: (id: string) => call("mira:propose-library-skill", id),
   listLearnedUnits: (libraryItemId?: string) =>
     call("mira:list-learned-units", libraryItemId),

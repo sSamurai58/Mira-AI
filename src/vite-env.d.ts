@@ -588,6 +588,9 @@ interface MiraBridge {
     plan: string[];
     units: MiraLearnedUnit[];
   }>;
+  deleteLibraryItem: (
+    id: string,
+  ) => Promise<{ ok: boolean; detail: string; deletedId: string | null }>;
   proposeLibrarySkill: (
     id: string,
   ) => Promise<{ ok: boolean; detail: string; skillId: string | null }>;

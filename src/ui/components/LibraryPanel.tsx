@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
 import {
+  localDeleteLibraryItem,
   localGetLearnPlan,
   localImportLibraryBytes,
   localImportLibraryText,
@@ -188,6 +189,39 @@ export function LibraryPanel() {
     }
   }
 
+  async function deleteById(id: string) {
+    const item = items.find((i) => i.id === id);
+    const label = item?.title ?? id;
+    const ok = window.confirm(
+      `Удалить материал «${label}»?\nВыдержки и план тоже будут удалены. Созданный skill в каталоге останется.`,
+    );
+    if (!ok) return;
+    setBusy("delete");
+    try {
+      const res = window.mira?.deleteLibraryItem
+        ? await window.mira.deleteLibraryItem(id)
+        : localDeleteLibraryItem(id);
+      setNote(`${res.ok ? "OK" : "FAIL"} — ${res.detail}`);
+      if (res.ok) {
+        if (activeId === id) {
+          setActiveId(null);
+          setUnits([]);
+          setPlanText("");
+        }
+        await refresh();
+      }
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function deleteActive() {
+    if (!activeId) return;
+    await deleteById(activeId);
+  }
+
   function onDrop(e: DragEvent) {
     e.preventDefault();
     setDragOver(false);
@@ -227,21 +261,45 @@ export function LibraryPanel() {
             </p>
           ) : (
             items.map((item) => (
-              <button
+              <div
                 key={item.id}
-                type="button"
-                className={`btn ${activeId === item.id ? "btn-primary" : ""}`}
-                style={{ textAlign: "left" }}
-                onClick={() => void selectItem(item.id)}
+                className={`library-item-row ${activeId === item.id ? "is-active" : ""}`}
               >
-                <div>{item.title}</div>
-                <div className="mono muted" style={{ fontSize: "0.75rem" }}>
-                  {item.status} · {item.media_type} · v{item.version}
-                  {"skill_id" in item && item.skill_id
-                    ? ` · skill:${item.skill_id}`
-                    : ""}
-                </div>
-              </button>
+                <button
+                  type="button"
+                  className={`btn library-item-select ${activeId === item.id ? "btn-primary" : ""}`}
+                  onClick={() => void selectItem(item.id)}
+                >
+                  <div>{item.title}</div>
+                  <div className="mono muted" style={{ fontSize: "0.75rem" }}>
+                    {item.status} · {item.media_type} · v{item.version}
+                    {"skill_id" in item && item.skill_id
+                      ? ` · skill:${item.skill_id}`
+                      : ""}
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className="btn library-item-delete"
+                  title="Удалить материал"
+                  aria-label={`Удалить «${item.title}»`}
+                  disabled={busy !== null}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void deleteById(item.id);
+                  }}
+                >
+                  <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden>
+                    <path
+                      d="M3.2 3.2l9.6 9.6M12.8 3.2L3.2 12.8"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.7"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </button>
+              </div>
             ))
           )}
           <div className="row">
@@ -260,6 +318,14 @@ export function LibraryPanel() {
               onClick={() => void proposeSkill()}
             >
               Предложить skill
+            </button>
+            <button
+              type="button"
+              className="btn btn-danger"
+              disabled={!activeId || busy !== null}
+              onClick={() => void deleteActive()}
+            >
+              Удалить
             </button>
           </div>
         </div>
