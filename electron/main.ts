@@ -54,6 +54,13 @@ import { captureScreen, getScreenPolicy } from "./tools/screen";
 import { executeTerminalFromChat, getTerminalPolicy } from "./tools/terminal";
 import { getWebPolicy, webSearch } from "./tools/web";
 import {
+  checkForUpdates,
+  downloadUpdate,
+  getUpdateStatus,
+  initUpdater,
+  quitAndInstall,
+} from "./updater";
+import {
   closeStore,
   createSession,
   ensureBootstrapSession,
@@ -181,6 +188,7 @@ app.whenReady().then(() => {
     },
   });
 
+  initUpdater(broadcast);
 
   const on = (
     channel: string,
@@ -787,6 +795,19 @@ app.whenReady().then(() => {
                 : "audio/webm";
       return `data:${mime};base64,${buf.toString("base64")}`;
     },
+    { privileged: true },
+  );
+
+  on("mira:get-update-status", () => getUpdateStatus());
+  on("mira:check-for-updates", async () => checkForUpdates());
+  on(
+    "mira:download-update",
+    async () => downloadUpdate(),
+    { privileged: true },
+  );
+  on(
+    "mira:quit-and-install",
+    () => quitAndInstall(),
     { privileged: true },
   );
 

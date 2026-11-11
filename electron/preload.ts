@@ -345,6 +345,10 @@ contextBridge.exposeInMainWorld("mira", {
   toggleHud: () => call("mira:toggle-hud"),
   respondConfirm: (id: string, accepted: boolean) =>
     call("mira:confirm-response", id, accepted),
+  getUpdateStatus: () => call("mira:get-update-status"),
+  checkForUpdates: () => call("mira:check-for-updates"),
+  downloadUpdate: () => call("mira:download-update"),
+  quitAndInstall: () => call("mira:quit-and-install"),
 
   onConfirmRequest: (handler: (req: MiraConfirmRequest) => void) => {
     const listener = (_event: IpcRendererEvent, req: MiraConfirmRequest) =>
@@ -381,5 +385,35 @@ contextBridge.exposeInMainWorld("mira", {
     ) => handler(payload);
     ipcRenderer.on("mira:terminal-exit", listener);
     return () => ipcRenderer.removeListener("mira:terminal-exit", listener);
+  },
+  onUpdateEvent: (
+    handler: (status: {
+      channel: string;
+      currentVersion: string;
+      availableVersion: string | null;
+      progress: number | null;
+      detail: string;
+      canCheck: boolean;
+      canDownload: boolean;
+      canInstall: boolean;
+      packaged: boolean;
+    }) => void,
+  ) => {
+    const listener = (
+      _event: IpcRendererEvent,
+      status: {
+        channel: string;
+        currentVersion: string;
+        availableVersion: string | null;
+        progress: number | null;
+        detail: string;
+        canCheck: boolean;
+        canDownload: boolean;
+        canInstall: boolean;
+        packaged: boolean;
+      },
+    ) => handler(status);
+    ipcRenderer.on("mira:update-event", listener);
+    return () => ipcRenderer.removeListener("mira:update-event", listener);
   },
 });

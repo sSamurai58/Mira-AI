@@ -10,6 +10,11 @@ files:
   - package.json
   - "!**/*.map"
 asar: true
+publish:
+  provider: github
+  owner: sSamurai58
+  repo: Mira-AI
+  releaseType: release
 linux:
   target:
     - AppImage
@@ -24,3 +29,4 @@ mac:
   category: public.app-category.productivity
 extraMetadata:
   main: dist-electron/main.js
+
