@@ -7,6 +7,7 @@ import {
   SecretField,
   ToggleRow,
 } from "./SettingsFormBits";
+import { ThemeSelect } from "./ThemeSelect";
 import {
   boolToEnv,
   isTruthyEnv,
@@ -27,8 +28,8 @@ const PROVIDERS = [
 export function SettingsApiSection() {
   const [snap, setSnap] = useState<SettingsEnvSnapshot | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [notes, setNotes] = useState<Record<string, string>>({});
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
 
@@ -48,16 +49,15 @@ export function SettingsApiSection() {
     setDraft((prev) => ({ ...prev, [key]: value }));
   }
 
-  async function handleSave(keys: string[]) {
-    setSaving(true);
-    setNote(null);
+  async function handleSave(group: string, keys: string[]) {
+    setSavingKey(group);
     const patch: Record<string, string> = {};
     for (const key of keys) patch[key] = draft[key] ?? "";
     const res = await saveSettingsEnv(patch);
     setSnap(res.snap);
     setDraft((prev) => ({ ...prev, ...res.snap.values }));
-    setNote(res.detail);
-    setSaving(false);
+    setNotes((prev) => ({ ...prev, [group]: res.detail }));
+    setSavingKey(null);
   }
 
   async function handleTest() {
@@ -94,7 +94,7 @@ export function SettingsApiSection() {
         {snap.source === "electron"
           ? ` в \`.env\`${snap.envFile ? ` (${snap.envFile})` : ""}`
           : " в браузере (demo) — в Electron попадут в `.env`"}
-        . Без ключа Mira работает в режиме mock.
+        . У каждой карточки своя кнопка «Сохранить ключ».
       </p>
 
       <IntegCard
@@ -104,24 +104,19 @@ export function SettingsApiSection() {
         howto={
           <ul>
             <li>Выберите провайдера ниже.</li>
-            <li>Вставьте API-ключ соответствующего сервиса.</li>
-            <li>Сохраните и нажмите «Тест соединения».</li>
+            <li>Вставьте API-ключ в карточке сервиса и нажмите «Сохранить ключ».</li>
+            <li>Затем «Тест соединения».</li>
           </ul>
         }
         footer={
           <SaveRow
-            saving={saving}
-            note={note}
+            saving={savingKey === "llm"}
+            note={notes.llm}
             onSave={() =>
-              void handleSave([
+              void handleSave("llm", [
                 "LLM_PROVIDER",
                 "LLM_MODEL",
-                "OPENAI_BASE_URL",
                 "VISION_ENABLED",
-                "OPENAI_API_KEY",
-                "ANTHROPIC_API_KEY",
-                "GEMINI_API_KEY",
-                "XAI_API_KEY",
               ])
             }
           >
@@ -138,16 +133,12 @@ export function SettingsApiSection() {
         }
       >
         <Field label="Провайдер" hint="Переменная LLM_PROVIDER">
-          <select
+          <ThemeSelect
+            aria-label="Провайдер LLM"
             value={provider}
-            onChange={(e) => setField("LLM_PROVIDER", e.target.value)}
-          >
-            {PROVIDERS.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </select>
+            onChange={(v) => setField("LLM_PROVIDER", v)}
+            options={PROVIDERS.map((p) => ({ value: p.id, label: p.label }))}
+          />
         </Field>
         <Field label="Модель" hint="LLM_MODEL — например gpt-4o-mini, claude-3-5-sonnet">
           <input
@@ -184,6 +175,16 @@ export function SettingsApiSection() {
             <li>Провайдер: openai.</li>
           </ol>
         }
+        footer={
+          <SaveRow
+            label="Сохранить ключ"
+            saving={savingKey === "openai"}
+            note={notes.openai}
+            onSave={() =>
+              void handleSave("openai", ["OPENAI_API_KEY", "OPENAI_BASE_URL"])
+            }
+          />
+        }
       >
         <SecretField
           label="OPENAI_API_KEY"
@@ -218,6 +219,14 @@ export function SettingsApiSection() {
             . Провайдер: claude.
           </p>
         }
+        footer={
+          <SaveRow
+            label="Сохранить ключ"
+            saving={savingKey === "anthropic"}
+            note={notes.anthropic}
+            onSave={() => void handleSave("anthropic", ["ANTHROPIC_API_KEY"])}
+          />
+        }
       >
         <SecretField
           label="ANTHROPIC_API_KEY"
@@ -244,6 +253,14 @@ export function SettingsApiSection() {
             . Провайдер: gemini.
           </p>
         }
+        footer={
+          <SaveRow
+            label="Сохранить ключ"
+            saving={savingKey === "gemini"}
+            note={notes.gemini}
+            onSave={() => void handleSave("gemini", ["GEMINI_API_KEY"])}
+          />
+        }
       >
         <SecretField
           label="GEMINI_API_KEY"
@@ -265,6 +282,14 @@ export function SettingsApiSection() {
             </a>
             . Провайдер: grok.
           </p>
+        }
+        footer={
+          <SaveRow
+            label="Сохранить ключ"
+            saving={savingKey === "xai"}
+            note={notes.xai}
+            onSave={() => void handleSave("xai", ["XAI_API_KEY"])}
+          />
         }
       >
         <SecretField

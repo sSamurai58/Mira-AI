@@ -115,8 +115,10 @@ export function SaveRow(props: {
   saving?: boolean;
   note?: string | null;
   onSave: () => void;
+  label?: string;
   children?: ReactNode;
 }) {
+  const label = props.label ?? "Сохранить";
   return (
     <div className="integ-actions">
       <button
@@ -125,7 +127,7 @@ export function SaveRow(props: {
         disabled={props.saving}
         onClick={props.onSave}
       >
-        {props.saving ? "Сохранение…" : "Сохранить"}
+        {props.saving ? "Сохранение…" : label}
       </button>
       {props.children}
       {props.note ? <span className="chip">{props.note}</span> : null}
