@@ -590,11 +590,11 @@ export function ChatPage({
   return (
     <div className="home-grid">
       <div className="home-center">
-        <section className="glass-card">
+        <section className="glass-card core-card">
           <HudCorners />
           <div className="core-card-grid">
             <div className="core-col">
-              <CoreOrb level={coreLevel} voiceState={voiceState} size={340} />
+              <CoreOrb level={coreLevel} voiceState={voiceState} size={220} />
               <div className="level-ticks" aria-hidden>
                 {Array.from({ length: 5 }, (_, i) => (
                   <span key={i} className={i < coreLevel ? "on" : ""} />
@@ -737,7 +737,7 @@ export function ChatPage({
             ) : null}
           </div>
 
-          <div className="thread">
+          <div className="thread hide-scroll">
             {bubbles.length === 0 ? (
               <p className="muted" style={{ margin: 0 }}>
                 Скажите «Мира», зажмите микрофон или напишите ниже.

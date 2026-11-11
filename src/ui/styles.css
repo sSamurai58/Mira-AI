@@ -44,6 +44,7 @@ html,
 body,
 #root {
   height: 100%;
+  overflow: hidden;
 }
 
 body {
@@ -54,6 +55,18 @@ body {
   color: var(--text-muted);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;
+}
+
+/* Scroll without visible bars (chat / journal only) */
+.hide-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.hide-scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 button,
@@ -76,8 +89,10 @@ strong {
   display: grid;
   grid-template-columns: var(--nav-w) minmax(0, 1fr);
   gap: var(--gap);
+  width: 100%;
   height: 100%;
-  min-height: 900px;
+  min-height: 0;
+  max-height: 100%;
   padding: var(--pad-screen);
   isolation: isolate;
   overflow: hidden;
@@ -198,6 +213,9 @@ strong {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
   padding: var(--space-5);
   border-radius: var(--radius);
   border: 1px solid var(--panel-line);
@@ -396,6 +414,9 @@ strong {
   flex-direction: column;
   gap: var(--gap);
   min-width: 0;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .topbar {
@@ -403,7 +424,8 @@ strong {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  flex-wrap: wrap;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
 }
 
 .pill-row {
@@ -495,7 +517,27 @@ strong {
 .workspace-body {
   flex: 1;
   min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.workspace-body > .stack,
+.workspace-body > .settings-layout,
+.workspace-body > .page-stack {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.workspace-body > .stack::-webkit-scrollbar,
+.workspace-body > .settings-layout::-webkit-scrollbar,
+.workspace-body > .page-stack::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 .glass-card {
@@ -553,8 +595,11 @@ strong {
   display: grid;
   grid-template-columns: minmax(0, 1fr) var(--rail-w);
   gap: var(--gap);
-  align-items: start;
-  min-height: 100%;
+  align-items: stretch;
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .home-center {
@@ -562,26 +607,42 @@ strong {
   flex-direction: column;
   gap: var(--gap);
   min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.home-center > .glass-card.core-card {
+  flex: 0 1 auto;
+  max-height: 42%;
+  overflow: hidden;
+  padding: 14px 16px;
 }
 
 .core-card-grid {
   display: grid;
-  grid-template-columns: 1.15fr 1fr;
-  gap: 20px;
+  grid-template-columns: minmax(140px, 0.9fr) 1fr;
+  gap: 16px;
   align-items: center;
+  height: 100%;
+  min-height: 0;
 }
 
 .core-col {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  justify-content: center;
+  gap: 8px;
+  min-height: 0;
 }
 
 .core-orb {
   position: relative;
   aspect-ratio: 1;
-  max-width: 380px;
+  width: min(100%, 220px);
+  max-width: 220px;
+  max-height: 100%;
 }
 
 .core-orb svg {
@@ -724,14 +785,16 @@ strong {
 .core-meta {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .greeting {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 1.875rem;
+  font-size: clamp(1.15rem, 2.2vh, 1.6rem);
   font-weight: 700;
   line-height: 1.15;
   letter-spacing: -0.01em;
@@ -744,6 +807,22 @@ strong {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+}
+
+.core-meta .stat-block {
+  padding: 6px 14px;
+}
+
+.core-meta .stat-value {
+  font-size: clamp(1.1rem, 2.4vh, 1.5rem);
+}
+
+.core-meta .voice-panel {
+  padding: 10px 12px;
+}
+
+.core-meta .wave {
+  height: 28px;
 }
 
 .stat-block {
@@ -877,8 +956,10 @@ strong {
 .chat-card {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  min-height: 280px;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .chat-toolbar {
@@ -886,16 +967,27 @@ strong {
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+  flex: 0 0 auto;
 }
 
 .thread {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  min-height: 140px;
-  max-height: min(42vh, 420px);
-  overflow: auto;
-  padding-right: 4px;
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding-right: 0;
+}
+
+.thread::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 .bubble {
@@ -939,6 +1031,7 @@ strong {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  flex: 0 0 auto;
 }
 
 .chip,
@@ -976,6 +1069,7 @@ strong {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex: 0 0 auto;
 }
 
 .rainbow-field {
@@ -1057,6 +1151,13 @@ strong {
   flex-direction: column;
   gap: var(--gap);
   min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.home-rail > .glass-card {
+  flex: 0 0 auto;
 }
 
 .ring-row {
@@ -1106,7 +1207,11 @@ strong {
 }
 
 .journal-card {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .journal-list {
@@ -1114,6 +1219,18 @@ strong {
   margin: 0;
   padding: 0 0 0 20px;
   border-left: 1px solid var(--track);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.journal-list::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 .journal-item {
@@ -1539,24 +1656,51 @@ input[type="search"] {
 }
 
 @media (max-width: 1100px) {
+  html,
+  body,
+  #root {
+    overflow: auto;
+  }
+
   .app-shell {
     grid-template-columns: 1fr;
     overflow: auto;
     height: auto;
+    max-height: none;
   }
 
   .nav {
-    position: sticky;
-    top: 12px;
-    z-index: 2;
+    height: auto;
+    overflow: visible;
+  }
+
+  .workspace,
+  .workspace-body,
+  .home-grid,
+  .home-center,
+  .home-rail {
+    height: auto;
+    overflow: visible;
   }
 
   .home-grid {
     grid-template-columns: 1fr;
   }
 
+  .home-center > .glass-card.core-card {
+    max-height: none;
+  }
+
   .core-card-grid {
     grid-template-columns: 1fr;
+  }
+
+  .chat-card,
+  .thread,
+  .journal-card,
+  .journal-list {
+    overflow: visible;
+    max-height: none;
   }
 
   .memory-split {

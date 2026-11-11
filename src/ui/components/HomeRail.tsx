@@ -61,7 +61,7 @@ export function HomeRail({ modelLabel, voiceNote }: HomeRailProps) {
 
       <section className="glass-card journal-card">
         <h3 className="card-kicker">Журнал действий</h3>
-        <ol className="journal-list">
+        <ol className="journal-list hide-scroll">
           {DEMO_JOURNAL.map((item) => (
             <li
               key={item.title}
