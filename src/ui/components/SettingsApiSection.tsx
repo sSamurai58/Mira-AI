@@ -37,8 +37,8 @@ const PROVIDER_MODEL_HINT: Record<string, string> = {
 export function SettingsApiSection() {
   const [snap, setSnap] = useState<SettingsEnvSnapshot | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [notes, setNotes] = useState<Record<string, string>>({});
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
 
@@ -58,16 +58,28 @@ export function SettingsApiSection() {
     setDraft((prev) => ({ ...prev, [key]: value }));
   }
 
-  async function handleSave(keys: string[]) {
-    setSaving(true);
-    setNote(null);
+  async function handleSave(group: string, keys: string[]) {
+    setSavingKey(group);
     const patch: Record<string, string> = {};
     for (const key of keys) patch[key] = draft[key] ?? "";
     const res = await saveSettingsEnv(patch);
     setSnap(res.snap);
     setDraft((prev) => ({ ...prev, ...res.snap.values }));
-    setNote(res.detail);
-    setSaving(false);
+    setNotes((prev) => ({ ...prev, [group]: res.detail }));
+    setSavingKey(null);
+  }
+
+  async function handleDeleteKey(group: string, secretKey: string) {
+    setSavingKey(`del-${group}`);
+    setDraft((prev) => ({ ...prev, [secretKey]: "" }));
+    const res = await saveSettingsEnv({ [secretKey]: "" });
+    setSnap(res.snap);
+    setDraft((prev) => ({ ...prev, ...res.snap.values, [secretKey]: "" }));
+    setNotes((prev) => ({
+      ...prev,
+      [group]: `Ключ ${secretKey} удалён`,
+    }));
+    setSavingKey(null);
   }
 
   async function handleTest() {
@@ -79,7 +91,6 @@ export function SettingsApiSection() {
         setTestResult(`${res.ok ? "OK" : "FAIL"} — ${res.detail}`);
         return;
       }
-      // Browser demo: hit Vite LLM proxy with saved/typed key
       const {
         getRawBrowserSettings,
         resolveBrowserLlmConfig,
@@ -161,7 +172,8 @@ export function SettingsApiSection() {
         {snap.source === "electron"
           ? ` в \`.env\`${snap.envFile ? ` (${snap.envFile})` : ""}`
           : " в браузере (demo) — в Electron попадут в `.env`"}
-        . Без ключа Mira работает в режиме mock.
+        . Без ключа Mira работает в режиме mock. У каждого провайдера — свои
+        «Сохранить ключ» / «Удалить ключ».
       </p>
 
       <IntegCard
@@ -171,24 +183,20 @@ export function SettingsApiSection() {
         howto={
           <ul>
             <li>Выберите провайдера ниже.</li>
-            <li>Вставьте API-ключ соответствующего сервиса.</li>
-            <li>Сохраните и нажмите «Тест соединения».</li>
+            <li>Вставьте API-ключ в карточке сервиса и нажмите «Сохранить ключ».</li>
+            <li>«Тест соединения» проверяет активный провайдер.</li>
           </ul>
         }
         footer={
           <SaveRow
-            saving={saving}
-            note={note}
+            label="Сохранить провайдер"
+            saving={savingKey === "llm"}
+            note={notes.llm}
             onSave={() =>
-              void handleSave([
+              void handleSave("llm", [
                 "LLM_PROVIDER",
                 "LLM_MODEL",
-                "OPENAI_BASE_URL",
                 "VISION_ENABLED",
-                "OPENAI_API_KEY",
-                "ANTHROPIC_API_KEY",
-                "GEMINI_API_KEY",
-                "XAI_API_KEY",
               ])
             }
           >
@@ -230,7 +238,9 @@ export function SettingsApiSection() {
           <input
             value={draft.LLM_MODEL ?? ""}
             onChange={(e) => setField("LLM_MODEL", e.target.value)}
-            placeholder={PROVIDER_MODEL_HINT[provider]?.split(" / ")[0] || "model-id"}
+            placeholder={
+              PROVIDER_MODEL_HINT[provider]?.split(" / ")[0] || "model-id"
+            }
           />
         </Field>
         <ToggleRow
@@ -260,6 +270,20 @@ export function SettingsApiSection() {
             <li>Для прокси укажите Base URL.</li>
             <li>Провайдер: openai.</li>
           </ol>
+        }
+        footer={
+          <SaveRow
+            label="Сохранить ключ"
+            saving={savingKey === "openai"}
+            note={notes.openai}
+            onSave={() =>
+              void handleSave("openai", ["OPENAI_API_KEY", "OPENAI_BASE_URL"])
+            }
+            deleteLabel="Удалить ключ"
+            canDelete={Boolean(snap.secretsSet.OPENAI_API_KEY)}
+            deleting={savingKey === "del-openai"}
+            onDelete={() => void handleDeleteKey("openai", "OPENAI_API_KEY")}
+          />
         }
       >
         <SecretField
@@ -295,6 +319,20 @@ export function SettingsApiSection() {
             . Провайдер: claude.
           </p>
         }
+        footer={
+          <SaveRow
+            label="Сохранить ключ"
+            saving={savingKey === "anthropic"}
+            note={notes.anthropic}
+            onSave={() => void handleSave("anthropic", ["ANTHROPIC_API_KEY"])}
+            deleteLabel="Удалить ключ"
+            canDelete={Boolean(snap.secretsSet.ANTHROPIC_API_KEY)}
+            deleting={savingKey === "del-anthropic"}
+            onDelete={() =>
+              void handleDeleteKey("anthropic", "ANTHROPIC_API_KEY")
+            }
+          />
+        }
       >
         <SecretField
           label="ANTHROPIC_API_KEY"
@@ -321,6 +359,18 @@ export function SettingsApiSection() {
             . Провайдер: gemini.
           </p>
         }
+        footer={
+          <SaveRow
+            label="Сохранить ключ"
+            saving={savingKey === "gemini"}
+            note={notes.gemini}
+            onSave={() => void handleSave("gemini", ["GEMINI_API_KEY"])}
+            deleteLabel="Удалить ключ"
+            canDelete={Boolean(snap.secretsSet.GEMINI_API_KEY)}
+            deleting={savingKey === "del-gemini"}
+            onDelete={() => void handleDeleteKey("gemini", "GEMINI_API_KEY")}
+          />
+        }
       >
         <SecretField
           label="GEMINI_API_KEY"
@@ -342,6 +392,18 @@ export function SettingsApiSection() {
             </a>
             . Провайдер: grok.
           </p>
+        }
+        footer={
+          <SaveRow
+            label="Сохранить ключ"
+            saving={savingKey === "xai"}
+            note={notes.xai}
+            onSave={() => void handleSave("xai", ["XAI_API_KEY"])}
+            deleteLabel="Удалить ключ"
+            canDelete={Boolean(snap.secretsSet.XAI_API_KEY)}
+            deleting={savingKey === "del-xai"}
+            onDelete={() => void handleDeleteKey("xai", "XAI_API_KEY")}
+          />
         }
       >
         <SecretField

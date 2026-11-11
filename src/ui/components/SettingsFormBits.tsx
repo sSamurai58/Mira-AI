@@ -112,9 +112,14 @@ export function SecretField(props: {
 }
 
 export function SaveRow(props: {
+  label?: string;
   saving?: boolean;
   note?: string | null;
   onSave: () => void;
+  deleteLabel?: string;
+  onDelete?: () => void;
+  canDelete?: boolean;
+  deleting?: boolean;
   children?: ReactNode;
 }) {
   return (
@@ -122,11 +127,23 @@ export function SaveRow(props: {
       <button
         type="button"
         className="btn btn-primary"
-        disabled={props.saving}
+        disabled={props.saving || props.deleting}
         onClick={props.onSave}
       >
-        {props.saving ? "Сохранение…" : "Сохранить"}
+        {props.saving ? "Сохранение…" : props.label ?? "Сохранить"}
       </button>
+      {props.onDelete ? (
+        <button
+          type="button"
+          className="btn btn-danger"
+          disabled={
+            props.saving || props.deleting || props.canDelete === false
+          }
+          onClick={props.onDelete}
+        >
+          {props.deleting ? "Удаление…" : props.deleteLabel ?? "Удалить ключ"}
+        </button>
+      ) : null}
       {props.children}
       {props.note ? <span className="chip">{props.note}</span> : null}
     </div>
