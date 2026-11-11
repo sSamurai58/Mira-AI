@@ -68,6 +68,7 @@
 | `history` | История | Лента реплик / сессий |
 | `memory` | Память | Поиск по прошлым разговорам |
 | `skills` | Скиллы | Список / добавить / вкл-выкл (как Cursor/Claude) |
+| `protocols` | Протоколы | Панель: список, md-импорт, шаги, запуск, вкл/выкл |
 | `settings` | Настройки | Микрофон, TTS, LLM-провайдер, разрешения экрана/браузера |
 
 ## Экраны
@@ -78,6 +79,7 @@
 | History | `history` | Текущие / недавние сессии | `stub` |
 | Memory search | `memory` | «О чём говорили тогда…» | `stub` |
 | Skills | `skills` | Каталог skills, импорт, toggle | `stub` |
+| Protocols Panel | `protocols` | CRUD протоколов, шаги, Run | `stub` |
 | Settings | `settings` | LLM, TTS, экран/браузер, пути | `stub` |
 | Confirm action | modal | Подтверждение контроля экрана/браузера | `planned` |
 
