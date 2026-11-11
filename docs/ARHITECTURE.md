@@ -10,7 +10,7 @@
 3. **Сменные адаптеры** — LLM (Claude / Gemini / GPT…), ASR, TTS без lock-in.
 4. **Инструменты по команде** — интернет, экран, браузер вызываются явно из диалога.
 5. **Явные stubs** — незавершённое в `PRD.md` / `DESIGN.md`.
-6. **Обязательный scope** — возможности 1–10 из `PRD.md` (skills + протоколы).
+6. **Обязательный scope** — возможности 1–11 из `PRD.md` (в т.ч. голоса).
 
 ## Один процесс
 
@@ -19,7 +19,7 @@
 │                         App process                          │
 │  ┌──────┐   ┌─────────────┐   ┌──────────┐   ┌───────────┐  │
 │  │  UI  │──▶│ Orchestrator│──▶│ LLM APIs │   │ ASR / TTS │  │
-│  └──────┘◀──│  + Dialog   │◀──│ adapters │   │ adapters  │  │
+│  └──────┘◀──│  + Dialog   │◀──│ adapters │   │ + voices  │  │
 │             └──────┬──────┘   └──────────┘   └───────────┘  │
 │                    │                                         │
 │     ┌──────────────┼──────────────┬──────────────┐           │
@@ -55,7 +55,8 @@
 | `sessions` | Сессии диалога |
 | `utterances` | Реплики user/assistant + время |
 | `memory_index` | Поиск по истории (FTS или аналог) |
-| `providers` / settings | Выбранный LLM/TTS (без секретов) |
+| `providers` / settings | Выбранный LLM/TTS/голос (без секретов) |
+| `voices` | Записи каталога голосов (id, путь/провайдер, активный) |
 | `meta` | Версия схемы |
 
 Секреты API — только `.env`, не в БД.
@@ -68,6 +69,7 @@
 | `orchestrator` | Склейка диалога, tool-loop, речь | Схема БД |
 | `llm` | Адаптеры Claude / Gemini / GPT… | Автоматизация ОС |
 | `asr` / `tts` | Распознавание / человечная озвучка | Продуктовая память |
+| `voices` | Каталог голосов: list / select / add | Хранение API-ключей |
 | `memory` | Запись и поиск разговоров | Клики по экрану |
 | `tools.web` | Интернет-поиск / fetch | Секреты в логах |
 | `tools.screen` | Capture + automation | Обход подтверждений |
@@ -101,6 +103,7 @@
 │   ├── llm/
 │   ├── asr/
 │   ├── tts/
+│   ├── voices/         # catalog + add/select (PRD #11)
 │   ├── memory/
 │   ├── skills/         # user skills (Cursor/Claude-like)
 │   ├── protocols/      # command sequences (md + Panel)
