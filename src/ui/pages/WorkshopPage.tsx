@@ -252,33 +252,51 @@ export function WorkshopPage() {
 
           <form className="panel stack" onSubmit={(e) => void saveProtocol(e)}>
             <strong>Создать / обновить протокол</strong>
-            <input
-              value={draft.id}
-              onChange={(e) => setDraft({ ...draft, id: e.target.value })}
-              placeholder="id"
-            />
-            <input
-              value={draft.name}
-              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              placeholder="name"
-            />
-            <input
-              value={draft.description}
-              onChange={(e) =>
-                setDraft({ ...draft, description: e.target.value })
-              }
-              placeholder="description"
-            />
-            <input
-              value={draft.triggers}
-              onChange={(e) => setDraft({ ...draft, triggers: e.target.value })}
-              placeholder="triggers, comma-separated"
-            />
-            <textarea
-              rows={5}
-              value={draft.body}
-              onChange={(e) => setDraft({ ...draft, body: e.target.value })}
-            />
+            <label className="field-label">
+              ID
+              <input
+                value={draft.id}
+                onChange={(e) => setDraft({ ...draft, id: e.target.value })}
+                placeholder="custom-protocol"
+              />
+            </label>
+            <label className="field-label">
+              Название
+              <input
+                value={draft.name}
+                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                placeholder="Новый протокол"
+              />
+            </label>
+            <label className="field-label">
+              Описание
+              <input
+                value={draft.description}
+                onChange={(e) =>
+                  setDraft({ ...draft, description: e.target.value })
+                }
+                placeholder="Кратко, для чего протокол"
+              />
+            </label>
+            <label className="field-label">
+              Триггеры
+              <input
+                value={draft.triggers}
+                onChange={(e) =>
+                  setDraft({ ...draft, triggers: e.target.value })
+                }
+                placeholder="фразы через запятую"
+              />
+            </label>
+            <label className="field-label">
+              Тело
+              <textarea
+                rows={5}
+                value={draft.body}
+                onChange={(e) => setDraft({ ...draft, body: e.target.value })}
+                placeholder="Шаги протокола…"
+              />
+            </label>
             <button type="submit" className="btn btn-primary">
               Сохранить md
             </button>
