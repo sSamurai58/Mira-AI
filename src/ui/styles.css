@@ -623,6 +623,20 @@ strong {
   overflow: hidden;
 }
 
+.home-grid.is-dialog-tab {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.home-grid.is-home-tab .home-center > .glass-card.core-card {
+  flex: 1 1 auto;
+}
+
+.home-grid.is-dialog-tab .home-center > .glass-card.chat-card {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+
 .home-center {
   display: flex;
   flex-direction: column;
