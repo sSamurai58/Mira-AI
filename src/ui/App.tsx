@@ -21,7 +21,7 @@ import { getUiLang, t } from "./i18n";
 import { getVoiceEngineStatus } from "./voice/engineStatus";
 import type { VoiceState } from "./voiceState";
 
-type RootNav = "chat" | "memory" | "workshop" | "settings";
+type RootNav = "home" | "chat" | "memory" | "workshop" | "settings";
 
 function navItems(): {
   id: RootNav;
@@ -30,6 +30,7 @@ function navItems(): {
 }[] {
   const lang = getUiLang();
   return [
+    { id: "home", label: t("home", lang), tone: "accent" },
     { id: "chat", label: t("chat", lang), tone: "accent" },
     { id: "memory", label: t("memory", lang), tone: "success" },
     { id: "workshop", label: t("workshop", lang), tone: "warning" },
@@ -47,11 +48,18 @@ function NavIcon({ id }: { id: RootNav }) {
     strokeLinejoin: "round" as const,
     className: "nav-ico",
   };
-  if (id === "chat") {
+  if (id === "home") {
     return (
       <svg {...common}>
         <circle cx="12" cy="12" r="7" />
         <circle cx="12" cy="12" r="2.5" />
+      </svg>
+    );
+  }
+  if (id === "chat") {
+    return (
+      <svg {...common}>
+        <path d="M4 6h16v10H8l-4 3V6z" />
       </svg>
     );
   }
@@ -102,7 +110,9 @@ export function App() {
     if (hash.includes("settings")) return "settings";
     if (hash.includes("workshop")) return "workshop";
     if (hash.includes("memory")) return "memory";
-    return "chat";
+    if (hash.includes("chat") || hash.includes("dialog")) return "chat";
+    if (hash.includes("home")) return "home";
+    return "home";
   });
   const [themeId, setThemeId] = useState<ThemeId>(() => loadStoredThemeId());
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
@@ -316,9 +326,14 @@ export function App() {
       <div className="workspace">
         <header className="topbar">
           <div className="pill-row">
+            <span className={`pill ${nav === "home" ? "active" : ""}`}>
+              <button type="button" onClick={() => setNav("home")}>
+                Главная
+              </button>
+            </span>
             <span className={`pill ${nav === "chat" ? "active" : ""}`}>
               <button type="button" onClick={() => setNav("chat")}>
-                Главная
+                Диалог
               </button>
             </span>
             <span className={`pill ${nav === "workshop" ? "active" : ""}`}>
@@ -359,8 +374,9 @@ export function App() {
         ) : null}
 
         <div className="workspace-body">
-          {nav === "chat" ? (
+          {nav === "home" || nav === "chat" ? (
             <ChatPage
+              panel={nav === "home" ? "home" : "dialog"}
               voiceState={voiceState}
               sessionId={sessionId}
               onSessionChange={handleSessionChange}

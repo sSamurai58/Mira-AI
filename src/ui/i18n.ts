@@ -4,6 +4,7 @@ const KEY = "mira.uiLang";
 
 const DICT = {
   ru: {
+    home: "Главная",
     chat: "Диалог",
     memory: "Память",
     workshop: "Мастерская",
@@ -12,6 +13,7 @@ const DICT = {
     notes: "Заметки",
   },
   en: {
+    home: "Home",
     chat: "Chat",
     memory: "Memory",
     workshop: "Workshop",
