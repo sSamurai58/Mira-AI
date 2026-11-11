@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ThemeSelect } from "./ThemeSelect";
 import { setActiveVoiceId } from "../voice/catalog";
 
 export function VoiceStudioPanel(props: {
@@ -234,16 +235,15 @@ export function VoiceStudioPanel(props: {
       {projects.length > 0 ? (
         <label className="stack" style={{ gap: "0.25rem" }}>
           <span className="muted">Проект</span>
-          <select
+          <ThemeSelect
+            aria-label="Проект голоса"
             value={project?.id ?? ""}
-            onChange={(e) => void refresh(e.target.value)}
-          >
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} · {p.status}
-              </option>
-            ))}
-          </select>
+            options={projects.map((p) => ({
+              value: p.id,
+              label: `${p.name} · ${p.status}`,
+            }))}
+            onChange={(id) => void refresh(id)}
+          />
         </label>
       ) : null}
 
@@ -295,18 +295,18 @@ export function VoiceStudioPanel(props: {
 
           <label className="stack" style={{ gap: "0.25rem" }}>
             <span className="muted">Фраза для привязки клипа</span>
-            <select
+            <ThemeSelect
+              aria-label="Фраза для привязки клипа"
               value={phraseId}
-              onChange={(e) => setPhraseId(e.target.value)}
-            >
-              <option value="">— без привязки —</option>
-              {phrases.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.recorded ? "✓ " : ""}
-                  {p.text.slice(0, 72)}
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: "", label: "— без привязки —" },
+                ...phrases.map((p) => ({
+                  value: p.id,
+                  label: `${p.recorded ? "✓ " : ""}${p.text.slice(0, 72)}`,
+                })),
+              ]}
+              onChange={setPhraseId}
+            />
           </label>
 
           <div className="row" style={{ flexWrap: "wrap", gap: "0.5rem" }}>

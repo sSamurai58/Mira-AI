@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { CoreOrb } from "../components/CoreOrb";
 import { HomeRail } from "../components/HomeRail";
 import { HudCorners } from "../components/HudCorners";
+import { ThemeSelect } from "../components/ThemeSelect";
 import { createAsrSession, isAsrAvailable } from "../voice/asr";
 import {
   getActiveVoiceId,
@@ -594,7 +595,7 @@ export function ChatPage({
           <HudCorners />
           <div className="core-card-grid">
             <div className="core-col">
-              <CoreOrb level={coreLevel} voiceState={voiceState} size={220} />
+              <CoreOrb level={coreLevel} voiceState={voiceState} size={180} />
               <div className="level-ticks" aria-hidden>
                 {Array.from({ length: 5 }, (_, i) => (
                   <span key={i} className={i < coreLevel ? "on" : ""} />
@@ -697,16 +698,15 @@ export function ChatPage({
             {voices.length > 0 ? (
               <label className="row voice-select">
                 <span className="muted">Голос</span>
-                <select
+                <ThemeSelect
+                  aria-label="Голос"
                   value={activeVoiceId ?? ""}
-                  onChange={(e) => handleVoicePick(e.target.value)}
-                >
-                  {voices.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.name} ({v.lang})
-                    </option>
-                  ))}
-                </select>
+                  options={voices.map((v) => ({
+                    value: v.id,
+                    label: `${v.name} (${v.lang})`,
+                  }))}
+                  onChange={handleVoicePick}
+                />
               </label>
             ) : null}
 

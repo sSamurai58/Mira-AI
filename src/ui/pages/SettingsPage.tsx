@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { StubBadge } from "../components/StubBadge";
+import { ThemeSelect } from "../components/ThemeSelect";
 import { THEMES, type ThemeId } from "../themes";
 import {
   getActiveVoiceId,
@@ -177,21 +178,18 @@ export function SettingsPage({
             </p>
             <label className="stack">
               <span className="muted">Движок TTS</span>
-              <select
+              <ThemeSelect
+                aria-label="Движок TTS"
                 value={ttsEngine}
-                onChange={(e) => {
-                  const id = e.target.value as TtsEngineId;
-                  setTtsEngine(setActiveTtsEngine(id));
+                options={listTtsEngines().map((eng) => ({
+                  value: eng.id,
+                  label: `${eng.label}${eng.ready ? "" : " (stub)"}`,
+                }))}
+                onChange={(id) => {
+                  setTtsEngine(setActiveTtsEngine(id as TtsEngineId));
                   setEngineDetail(getVoiceEngineStatus().detail);
                 }}
-              >
-                {listTtsEngines().map((eng) => (
-                  <option key={eng.id} value={eng.id}>
-                    {eng.label}
-                    {eng.ready ? "" : " (stub)"}
-                  </option>
-                ))}
-              </select>
+              />
             </label>
             <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
               {listTtsEngines().find((e) => e.id === ttsEngine)?.detail}
@@ -247,20 +245,22 @@ export function SettingsPage({
             </label>
             <label className="stack">
               <span className="muted">Чувствительность wake-word</span>
-              <select
+              <ThemeSelect
+                aria-label="Чувствительность wake-word"
                 value={handsFree.sensitivity}
-                onChange={(e) =>
+                options={[
+                  { value: "strict", label: "strict" },
+                  { value: "normal", label: "normal" },
+                  { value: "loose", label: "loose" },
+                ]}
+                onChange={(v) =>
                   setHandsFree(
                     setHandsFreePrefs({
-                      sensitivity: e.target.value as WakeSensitivity,
+                      sensitivity: v as WakeSensitivity,
                     }),
                   )
                 }
-              >
-                <option value="strict">strict</option>
-                <option value="normal">normal</option>
-                <option value="loose">loose</option>
-              </select>
+              />
             </label>
             {voices.length === 0 ? (
               <p className="muted" style={{ margin: 0 }}>
@@ -269,19 +269,18 @@ export function SettingsPage({
             ) : (
               <label className="stack">
                 <span className="muted">Активный голос</span>
-                <select
+                <ThemeSelect
+                  aria-label="Активный голос"
                   value={activeVoiceId ?? ""}
-                  onChange={(e) => {
-                    setActiveVoiceId(e.target.value);
-                    setActiveVoiceIdState(e.target.value);
+                  options={voices.map((v) => ({
+                    value: v.id,
+                    label: `${v.name} (${v.lang})`,
+                  }))}
+                  onChange={(id) => {
+                    setActiveVoiceId(id);
+                    setActiveVoiceIdState(id);
                   }}
-                >
-                  {voices.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.name} ({v.lang})
-                    </option>
-                  ))}
-                </select>
+                />
                 <button
                   type="button"
                   className="btn"
@@ -392,31 +391,35 @@ function GeneralSection() {
 
       <label className="stack">
         <span className="muted">Язык UI</span>
-        <select
+        <ThemeSelect
+          aria-label="Язык UI"
           value={lang}
-          onChange={(e) => {
-            const v = e.target.value === "en" ? "en" : "ru";
+          options={[
+            { value: "ru", label: "Русский" },
+            { value: "en", label: "English" },
+          ]}
+          onChange={(raw) => {
+            const v = raw === "en" ? "en" : "ru";
             setLang(v);
             localStorage.setItem("mira.uiLang", v);
             setNote(`UI lang → ${v} (перезагрузка nav при следующем открытии)`);
           }}
-        >
-          <option value="ru">Русский</option>
-          <option value="en">English</option>
-        </select>
+        />
       </label>
       <label className="stack">
         <span className="muted">Режим подтверждений (F12)</span>
-        <select
+        <ThemeSelect
+          aria-label="Режим подтверждений"
           value={mode}
-          onChange={(e) =>
-            setMode(e.target.value as "always" | "smart" | "dangerous-list")
+          options={[
+            { value: "always", label: "always" },
+            { value: "smart", label: "smart" },
+            { value: "dangerous-list", label: "dangerous-list" },
+          ]}
+          onChange={(v) =>
+            setMode(v as "always" | "smart" | "dangerous-list")
           }
-        >
-          <option value="always">always</option>
-          <option value="smart">smart</option>
-          <option value="dangerous-list">dangerous-list</option>
-        </select>
+        />
       </label>
       <label className="stack">
         <span className="muted">Dangerous classes (csv)</span>
@@ -451,23 +454,18 @@ function GeneralSection() {
       </div>
       <label className="stack">
         <span className="muted">Активный профиль</span>
-        <select
+        <ThemeSelect
+          aria-label="Активный профиль"
           value={activeProfileId}
-          onChange={(e) => {
-            const id = e.target.value;
+          options={profiles.map((p) => ({ value: p.id, label: p.name }))}
+          onChange={(id) => {
             setActiveProfileId(id);
             if (!window.mira?.setActiveProfile) return;
             void window.mira.setActiveProfile(id).then(() => {
               setNote(`Активный профиль → ${id}`);
             });
           }}
-        >
-          {profiles.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </select>
+        />
       </label>
       <div className="row">
         <input
