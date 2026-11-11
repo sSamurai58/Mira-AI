@@ -9,6 +9,26 @@ import {
 } from "./markdownCatalog";
 import { requestUserConfirm } from "./confirmBridge";
 import {
+  extractOpenUrl,
+  formatBrowserBlock,
+  getBrowserPolicy,
+  looksLikeBrowserHistoryIntent,
+  looksLikeBrowserOpenIntent,
+  openBrowserUrl,
+  searchHistory,
+} from "./tools/browser";
+import {
+  captureScreen,
+  clickAt,
+  formatScreenBlock,
+  getScreenPolicy,
+  looksLikeScreenControlIntent,
+  looksLikeScreenSeeIntent,
+  parseClickCoords,
+  parseTypeText,
+  typeText,
+} from "./tools/screen";
+import {
   extractSearchQueryFromText,
   formatWebBlock,
   getWebPolicy,
@@ -29,7 +49,7 @@ import {
 } from "./store";
 
 const SYSTEM_PROMPT =
-  "Ты Mira — локальный голосовой ИИ-помощник. Отвечай по делу на языке пользователя. Если даны фрагменты памяти или интернет-данные, опирайся на них. Skills подключаются только по необходимости — не выдумывай, что все навыки активны.";
+  "Ты Mira — локальный голосовой ИИ-помощник. Отвечай по делу на языке пользователя. Если даны фрагменты памяти, интернет-данные, снимок экрана или история браузера — опирайся на них. Skills подключаются только по необходимости.";
 
 export type ChatStreamEvent =
   | { type: "user"; utterance: UtteranceRow }
@@ -38,6 +58,7 @@ export type ChatStreamEvent =
       skills: Array<{ id: string; name: string }>;
       protocol: { id: string; name: string } | null;
       web?: string | null;
+      desktop?: string | null;
     }
   | { type: "assistant_start"; sessionId: string }
   | { type: "token"; text: string }
@@ -48,6 +69,7 @@ export type ChatStreamEvent =
       skillsUsed: Array<{ id: string; name: string }>;
       protocolUsed: { id: string; name: string } | null;
       webUsed: string | null;
+      desktopUsed: string | null;
     }
   | { type: "error"; message: string };
 
@@ -188,11 +210,52 @@ export async function sendChatMessage(
 
   let webUsed: string | null = null;
   let webBlock: string | null = null;
+  let desktopUsed: string | null = null;
+  let desktopBlock: string | null = null;
+
+  // Prefer explicit desktop/browser intents over generic web when both match.
   try {
-    if (looksLikeWebIntent(text) && getWebPolicy().enabled) {
+    if (looksLikeScreenSeeIntent(text) && getScreenPolicy().enabled) {
+      const shot = await captureScreen();
+      desktopUsed = "screen-capture";
+      desktopBlock = formatScreenBlock("capture", shot);
+    } else if (
+      looksLikeScreenControlIntent(text) &&
+      getScreenPolicy().controlEnabled
+    ) {
+      const typed = parseTypeText(text);
+      if (typed && !parseClickCoords(text)) {
+        const typedResult = await typeText(typed);
+        desktopUsed = typedResult.ok
+          ? `screen-type:${typedResult.mode}`
+          : "screen-type-denied";
+        desktopBlock = formatScreenBlock("type", typedResult);
+      } else {
+        const coords = parseClickCoords(text) ?? { x: 100, y: 100 };
+        const click = await clickAt(coords.x, coords.y);
+        desktopUsed = click.ok
+          ? `screen-click:${click.mode}`
+          : "screen-click-denied";
+        desktopBlock = formatScreenBlock("click", click);
+      }
+    } else if (looksLikeBrowserOpenIntent(text) && getBrowserPolicy().enabled) {
+      const url = extractOpenUrl(text);
+      if (url) {
+        const opened = await openBrowserUrl(url);
+        desktopUsed = opened.ok ? "browser-open" : "browser-open-denied";
+        desktopBlock = formatBrowserBlock("open", opened);
+      }
+    } else if (looksLikeBrowserHistoryIntent(text)) {
+      const q = text
+        .replace(/история браузера|где я (уже )?был|сайты?|browser history/gi, " ")
+        .trim();
+      const hits = searchHistory(q || "", 15);
+      desktopUsed = "browser-history";
+      desktopBlock = formatBrowserBlock("history", hits);
+    } else if (looksLikeWebIntent(text) && getWebPolicy().enabled) {
       const q = extractSearchQueryFromText(text);
       const urlMatch = text.match(/https?:\/\/\S+/i)?.[0];
-      if (urlMatch) {
+      if (urlMatch && !looksLikeBrowserOpenIntent(text)) {
         const policy = getWebPolicy();
         if (policy.requireConfirmForFetch) {
           const ok = await requestUserConfirm({
@@ -219,15 +282,14 @@ export async function sendChatMessage(
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    webUsed = "error";
-    webBlock = `[Интернет: ошибка] ${message}`;
-    emit({
-      type: "context",
-      skills: skills.map((s) => ({ id: s.id, name: s.name })),
-      protocol: protocol ? { id: protocol.id, name: protocol.name } : null,
-      web: webUsed,
-    });
-    // continue chat with error note in context rather than hard-fail
+    if (!webUsed && !desktopUsed) {
+      webUsed = "error";
+      webBlock = `[Инструменты: ошибка] ${message}`;
+    } else if (desktopUsed) {
+      desktopBlock = `${desktopBlock ?? ""}\n[Ошибка] ${message}`;
+    } else {
+      webBlock = `[Интернет: ошибка] ${message}`;
+    }
   }
 
   emit({
@@ -235,6 +297,7 @@ export async function sendChatMessage(
     skills: skills.map((s) => ({ id: s.id, name: s.name })),
     protocol: protocol ? { id: protocol.id, name: protocol.name } : null,
     web: webUsed,
+    desktop: desktopUsed,
   });
 
   const history = listUtterances(session.id);
@@ -252,6 +315,7 @@ export async function sendChatMessage(
     messages.push({ role: "system", content: buildProtocolBlock(protocol) });
   }
   if (webBlock) messages.push({ role: "system", content: webBlock });
+  if (desktopBlock) messages.push({ role: "system", content: desktopBlock });
 
   for (const u of history) {
     if (u.role === "system") continue;
@@ -309,6 +373,7 @@ export async function sendChatMessage(
     skillsUsed: skills.map((s) => ({ id: s.id, name: s.name })),
     protocolUsed: protocol ? { id: protocol.id, name: protocol.name } : null,
     webUsed,
+    desktopUsed,
   });
 
   return getSession(session.id) ?? session;

@@ -4,9 +4,8 @@
 
 ## Фаза сейчас
 
-**P4 — Web:** `web.search` / `web.fetch`, allowlist, confirm на fetch.  
-**P3 — Skills/Protocols:** md-каталог, on-demand skills, протоколы + Run.  
-**P2 — Голос** · **P1 — чат/память** · **P0 — shell**.
+**P5 — Экран + браузер:** capture, клик/ввод + confirm, open URL, история.  
+**P4 — Web** · **P3 — Skills/Protocols** · **P2 — Голос** · **P1 — чат/память** · **P0 — shell**.
 
 Дорожная карта: [`docs/WIP.md`](./docs/WIP.md).
 
@@ -20,12 +19,10 @@ npm run p1:smoke     # headless: mock-чат + поиск памяти
 npm run p2:smoke     # headless: каталог голосов / engine status
 npm run p3:smoke     # headless: on-demand skills + protocol match
 npm run p4:smoke     # headless: DuckDuckGo search + chat webUsed
+npm run p5:smoke     # headless: screen capture + browser open/history
 npm run dev          # UI в браузере (без IPC)
 npm run dev:electron # полный локальный контур
 ```
-
-
-
 
 Без `OPENAI_API_KEY` используется **mock**. Для живой модели:
 
@@ -45,7 +42,7 @@ npm start
 
 ## Структура
 
-- `electron/` — main/preload + SQLite store
+- `electron/` — main/preload + SQLite store + tools (web/screen/browser)
 - `src/ui/` — React AppShell (Диалог / Память / Мастерская / Настройки)
 - `src/*` — модульные stubs под ARHITECTURE
 - `docs/` — PRD, DESIGN, RULES, MEMORY, WIP

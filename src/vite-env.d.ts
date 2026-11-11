@@ -78,6 +78,7 @@ type MiraChatEvent =
       skills: Array<{ id: string; name: string }>;
       protocol: { id: string; name: string } | null;
       web?: string | null;
+      desktop?: string | null;
     }
   | { type: "assistant_start"; sessionId: string }
   | { type: "token"; text: string }
@@ -88,6 +89,7 @@ type MiraChatEvent =
       skillsUsed: Array<{ id: string; name: string }>;
       protocolUsed: { id: string; name: string } | null;
       webUsed: string | null;
+      desktopUsed: string | null;
     }
   | { type: "error"; message: string };
 
@@ -98,11 +100,27 @@ type MiraHealth = {
   databasePath: string;
   sessions: number;
   utterances: number;
+  browserVisits?: number;
   llm?: MiraPublicConfig;
   llmOk?: boolean;
   llmReason?: string | null;
   skills?: number;
   protocols?: number;
+  web?: {
+    enabled: boolean;
+    allowlist: string[];
+    requireConfirmForFetch: boolean;
+  };
+  screen?: {
+    enabled: boolean;
+    controlEnabled: boolean;
+    osPriority: string;
+  };
+  browser?: {
+    enabled: boolean;
+    preferred: string;
+    requireConfirmOpen: boolean;
+  };
 };
 
 interface MiraBridge {
@@ -150,9 +168,38 @@ interface MiraBridge {
     allowlist: string[];
     requireConfirmForFetch: boolean;
   }>;
+  getScreenPolicy: () => Promise<{
+    enabled: boolean;
+    controlEnabled: boolean;
+    osPriority: string;
+  }>;
+  getBrowserPolicy: () => Promise<{
+    enabled: boolean;
+    preferred: string;
+    requireConfirmOpen: boolean;
+  }>;
   testWeb: (
     query?: string,
   ) => Promise<{ ok: boolean; detail: string; hits: unknown[] }>;
+  testScreen: () => Promise<{
+    ok: boolean;
+    detail: string;
+    path: string | null;
+  }>;
+  testBrowserOpen: (
+    url?: string,
+  ) => Promise<{ ok: boolean; detail: string; url: string | null }>;
+  searchBrowserHistory: (
+    query?: string,
+  ) => Promise<
+    Array<{
+      id: string;
+      url: string;
+      title: string;
+      source: string;
+      visited_at: string;
+    }>
+  >;
   respondConfirm: (
     id: string,
     accepted: boolean,

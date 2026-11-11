@@ -281,19 +281,35 @@ function StubSection({ title, body }: { title: string; body: string }) {
 }
 
 function IntegrationsSection() {
-  const [policyText, setPolicyText] = useState("…");
-  const [test, setTest] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [webPolicy, setWebPolicy] = useState("…");
+  const [screenPolicy, setScreenPolicy] = useState("…");
+  const [browserPolicy, setBrowserPolicy] = useState("…");
+  const [webTest, setWebTest] = useState<string | null>(null);
+  const [screenTest, setScreenTest] = useState<string | null>(null);
+  const [browserTest, setBrowserTest] = useState<string | null>(null);
+  const [historyText, setHistoryText] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
       if (!window.mira) {
-        if (!cancelled) setPolicyText("IPC недоступен");
+        if (!cancelled) {
+          setWebPolicy("IPC недоступен");
+          setScreenPolicy("IPC недоступен");
+          setBrowserPolicy("IPC недоступен");
+        }
         return;
       }
-      const policy = await window.mira.getWebPolicy();
-      if (!cancelled) setPolicyText(JSON.stringify(policy, null, 2));
+      const [web, screen, browser] = await Promise.all([
+        window.mira.getWebPolicy(),
+        window.mira.getScreenPolicy(),
+        window.mira.getBrowserPolicy(),
+      ]);
+      if (cancelled) return;
+      setWebPolicy(JSON.stringify(web, null, 2));
+      setScreenPolicy(JSON.stringify(screen, null, 2));
+      setBrowserPolicy(JSON.stringify(browser, null, 2));
     }
     void load();
     return () => {
@@ -305,37 +321,129 @@ function IntegrationsSection() {
     <>
       <div className="row">
         <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Интеграции</h2>
-        <StubBadge label="P4 web" />
+        <StubBadge label="P5" />
       </div>
+
+      <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Интернет (#4)</h3>
       <p className="muted" style={{ margin: 0 }}>
-        Интернет (#4): `WEB_ENABLED`, `WEB_ALLOWLIST`, `WEB_FETCH_CONFIRM` в
-        `.env`. Fetch URL всегда через ConfirmModal (always до F12).
+        `WEB_ENABLED`, `WEB_ALLOWLIST`, `WEB_FETCH_CONFIRM`. Fetch URL — через
+        ConfirmModal (always до F12).
       </p>
       <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
-        {policyText}
+        {webPolicy}
       </pre>
       <div className="row">
         <button
           type="button"
           className="btn btn-primary"
-          disabled={busy}
+          disabled={busy !== null}
           onClick={() => {
             if (!window.mira) return;
-            setBusy(true);
+            setBusy("web");
             void window.mira
               .testWeb("weather Moscow")
               .then((res) => {
-                setTest(`${res.ok ? "OK" : "FAIL"} — ${res.detail}`);
+                setWebTest(`${res.ok ? "OK" : "FAIL"} — ${res.detail}`);
               })
-              .finally(() => setBusy(false));
+              .finally(() => setBusy(null));
           }}
         >
           Тест web.search
         </button>
-        {test ? <span className="chip">{test}</span> : null}
+        {webTest ? <span className="chip">{webTest}</span> : null}
       </div>
+
+      <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Экран (#6–7)</h3>
       <p className="muted" style={{ margin: 0 }}>
-        Экран / браузер / мессенджеры / Blender — следующие фазы.
+        `SCREEN_ENABLED`, `SCREEN_CONTROL_ENABLED`, `OS_PRIORITY`. Клик/ввод —
+        confirm. Capture → `data/screenshots/`.
+      </p>
+      <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
+        {screenPolicy}
+      </pre>
+      <div className="row">
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={busy !== null}
+          onClick={() => {
+            if (!window.mira) return;
+            setBusy("screen");
+            void window.mira
+              .testScreen()
+              .then((res) => {
+                setScreenTest(
+                  `${res.ok ? "OK" : "FAIL"} — ${res.detail}${res.path ? ` · ${res.path}` : ""}`,
+                );
+              })
+              .finally(() => setBusy(null));
+          }}
+        >
+          Тест screen.capture
+        </button>
+        {screenTest ? <span className="chip">{screenTest}</span> : null}
+      </div>
+
+      <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Браузер (#8)</h3>
+      <p className="muted" style={{ margin: 0 }}>
+        `BROWSER_ENABLED`, `BROWSER_PREFERRED`, `BROWSER_OPEN_CONFIRM`. История:
+        визиты Mira + опц. Chromium History (read-only).
+      </p>
+      <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
+        {browserPolicy}
+      </pre>
+      <div className="row">
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={busy !== null}
+          onClick={() => {
+            if (!window.mira) return;
+            setBusy("browser");
+            void window.mira
+              .testBrowserOpen("https://example.com")
+              .then((res) => {
+                setBrowserTest(`${res.ok ? "OK" : "FAIL"} — ${res.detail}`);
+              })
+              .finally(() => setBusy(null));
+          }}
+        >
+          Тест open URL
+        </button>
+        <button
+          type="button"
+          className="btn"
+          disabled={busy !== null}
+          onClick={() => {
+            if (!window.mira) return;
+            setBusy("history");
+            void window.mira
+              .searchBrowserHistory("")
+              .then((rows) => {
+                setHistoryText(
+                  rows.length
+                    ? rows
+                        .slice(0, 8)
+                        .map((r) => `${r.title}\n  ${r.url}`)
+                        .join("\n")
+                    : "(пусто)",
+                );
+              })
+              .finally(() => setBusy(null));
+          }}
+        >
+          История
+        </button>
+        {browserTest ? <span className="chip">{browserTest}</span> : null}
+      </div>
+      {historyText ? (
+        <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
+          {historyText}
+        </pre>
+      ) : null}
+
+      <p className="muted" style={{ margin: 0 }}>
+        Мессенджеры / Blender — следующие фазы.
       </p>
     </>
   );

@@ -146,7 +146,7 @@
 |---------|--------|-------------|
 | Папка `docs/` | `done` | Живые документы |
 | Обязательные возможности в PRD | `done` | Этот раздел |
-| Рабочий код | `planned` | Пока только docs |
+| Рабочий код | `partial` | P0–P5: Electron app + tools web/screen/browser |
 | Старый `mira_tts` | `out` | Удалён; новый контур речи — заново |
 
 ### Обязательный контур
@@ -158,9 +158,9 @@
 | 3 | Память разговоров | `partial` | P1: SQLite utterances + LIKE-поиск + подъём в контекст |
 | 4 | Интернет | `partial` | P4: web.search (DDG) + web.fetch + WEB_* policy + confirm fetch |
 | 5 | Claude / Gemini / GPT | `partial` | P1: OpenAI-compatible (+ mock); Claude/Gemini — следующие адаптеры |
-| 6 | Видимость экрана | `planned` | Capture + описание/видение для модели |
-| 7 | Контроль экрана | `planned` | Automation по команде; подтверждения для опасных действий |
-| 8 | Браузер | `planned` | Управление вкладками, история, поиск по критериям |
+| 6 | Видимость экрана | `partial` | P5: desktopCapturer → PNG + метаданные в контекст; vision pixels — later |
+| 7 | Контроль экрана | `partial` | P5: клик/ввод + confirm; xdotool / dry-run |
+| 8 | Браузер | `partial` | P5: open URL + история Mira/Chromium; вкладки/deep control — later |
 | 9 | Скиллы | `partial` | P3: md-каталог; on-demand triggers; не весь каталог в контексте |
 | 10 | Протоколы | `partial` | P3: md + Панель CRUD/Run; триггер из Диалога |
 | 11 | Голоса | `partial` | P2: каталог системных TTS + выбор; импорт/студия — P9 |

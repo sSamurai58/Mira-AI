@@ -10,6 +10,12 @@ import {
   writeCatalogItem,
 } from "./markdownCatalog";
 import { runMemorySearch, sendChatMessage } from "./orchestrator";
+import {
+  getBrowserPolicy,
+  openBrowserUrl,
+  searchHistory,
+} from "./tools/browser";
+import { captureScreen, getScreenPolicy } from "./tools/screen";
 import { getWebPolicy, webSearch } from "./tools/web";
 import {
   closeStore,
@@ -70,7 +76,7 @@ app.whenReady().then(() => {
     const cfg = getPublicConfig();
     const validation = validateLlmConfig();
     return {
-      phase: "P4",
+      phase: "P5",
       databasePath: getDatabasePath(),
       ...health,
       llm: cfg,
@@ -79,6 +85,8 @@ app.whenReady().then(() => {
       skills: loadMarkdownCatalog("skills").length,
       protocols: loadMarkdownCatalog("protocols").length,
       web: getWebPolicy(),
+      screen: getScreenPolicy(),
+      browser: getBrowserPolicy(),
     };
   });
 
@@ -191,6 +199,8 @@ app.whenReady().then(() => {
   );
 
   ipcMain.handle("mira:get-web-policy", () => getWebPolicy());
+  ipcMain.handle("mira:get-screen-policy", () => getScreenPolicy());
+  ipcMain.handle("mira:get-browser-policy", () => getBrowserPolicy());
 
   ipcMain.handle("mira:test-web", async (_e, query?: string) => {
     try {
@@ -208,6 +218,48 @@ app.whenReady().then(() => {
       };
     }
   });
+
+  ipcMain.handle("mira:test-screen", async () => {
+    try {
+      const shot = await captureScreen();
+      return {
+        ok: shot.ok,
+        detail: shot.note,
+        path: shot.path,
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        detail: err instanceof Error ? err.message : String(err),
+        path: null,
+      };
+    }
+  });
+
+  ipcMain.handle("mira:test-browser-open", async (_e, url?: string) => {
+    try {
+      const target = (url?.trim() || "https://example.com").replace(
+        /[),.]+$/,
+        "",
+      );
+      const opened = await openBrowserUrl(target);
+      return {
+        ok: opened.ok,
+        detail: opened.detail,
+        url: opened.url,
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        detail: err instanceof Error ? err.message : String(err),
+        url: null,
+      };
+    }
+  });
+
+  ipcMain.handle("mira:search-browser-history", (_e, query?: string) =>
+    searchHistory(query ?? "", 20),
+  );
 
   createWindow();
 

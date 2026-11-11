@@ -1,8 +1,3 @@
-export {
-  webSearch,
-  webFetch,
-  getWebPolicy,
-  looksLikeWebIntent,
-  extractSearchQueryFromText,
-  formatWebBlock,
-} from "./web";
+export * from "./web";
+export * from "./screen";
+export * from "./browser";

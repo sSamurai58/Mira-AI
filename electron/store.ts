@@ -26,6 +26,14 @@ export type MemoryHit = {
   created_at: string;
 };
 
+export type BrowserVisitRow = {
+  id: string;
+  url: string;
+  title: string;
+  source: string;
+  visited_at: string;
+};
+
 let db: DatabaseSync | null = null;
 
 function resolveDatabasePath(): string {
@@ -65,6 +73,15 @@ export function openStore(): DatabaseSync {
     );
     CREATE INDEX IF NOT EXISTS idx_utterances_session
       ON utterances(session_id, created_at);
+    CREATE TABLE IF NOT EXISTS browser_visits (
+      id TEXT PRIMARY KEY,
+      url TEXT NOT NULL,
+      title TEXT NOT NULL,
+      source TEXT NOT NULL,
+      visited_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_browser_visits_visited
+      ON browser_visits(visited_at DESC);
   `);
 
   return db;
@@ -214,11 +231,62 @@ export function searchMemory(
     .all(like, limit) as MemoryHit[];
 }
 
+export function addBrowserVisit(
+  url: string,
+  source = "mira-open",
+  title?: string,
+): BrowserVisitRow {
+  const store = openStore();
+  const row: BrowserVisitRow = {
+    id: crypto.randomUUID(),
+    url,
+    title: title || url,
+    source,
+    visited_at: new Date().toISOString(),
+  };
+  store
+    .prepare(
+      `INSERT INTO browser_visits (id, url, title, source, visited_at)
+       VALUES (?, ?, ?, ?, ?)`,
+    )
+    .run(row.id, row.url, row.title, row.source, row.visited_at);
+  return row;
+}
+
+export function searchBrowserVisits(
+  query: string,
+  limit = 20,
+): BrowserVisitRow[] {
+  const store = openStore();
+  const q = query.trim();
+  if (!q) {
+    return store
+      .prepare(
+        `SELECT id, url, title, source, visited_at
+         FROM browser_visits
+         ORDER BY visited_at DESC
+         LIMIT ?`,
+      )
+      .all(limit) as BrowserVisitRow[];
+  }
+  const like = `%${q.replace(/[%_]/g, "")}%`;
+  return store
+    .prepare(
+      `SELECT id, url, title, source, visited_at
+       FROM browser_visits
+       WHERE url LIKE ? OR title LIKE ?
+       ORDER BY visited_at DESC
+       LIMIT ?`,
+    )
+    .all(like, like, limit) as BrowserVisitRow[];
+}
+
 export function getStoreHealth(): {
   ok: boolean;
   path: string;
   sessions: number;
   utterances: number;
+  browserVisits: number;
 } {
   const store = openStore();
   const sessions = (
@@ -227,12 +295,18 @@ export function getStoreHealth(): {
   const utterances = (
     store.prepare(`SELECT COUNT(*) AS c FROM utterances`).get() as { c: number }
   ).c;
+  const browserVisits = (
+    store.prepare(`SELECT COUNT(*) AS c FROM browser_visits`).get() as {
+      c: number;
+    }
+  ).c;
 
   return {
     ok: true,
     path: resolveDatabasePath(),
     sessions,
     utterances,
+    browserVisits,
   };
 }
 

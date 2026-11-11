@@ -30,6 +30,14 @@ export function requestUserConfirm(
   req: Omit<ConfirmRequest, "id"> & { id?: string },
   timeoutMs = 120_000,
 ): Promise<boolean> {
+  const auto = (process.env.MIRA_CONFIRM_AUTO ?? "").trim().toLowerCase();
+  if (auto === "accept" || auto === "1" || auto === "true") {
+    return Promise.resolve(true);
+  }
+  if (auto === "deny" || auto === "0" || auto === "false") {
+    return Promise.resolve(false);
+  }
+
   const id = req.id ?? crypto.randomUUID();
   const payload: ConfirmRequest = {
     id,
@@ -38,7 +46,13 @@ export function requestUserConfirm(
     confirmLabel: req.confirmLabel,
   };
 
-  for (const win of BrowserWindow.getAllWindows()) {
+  const windows = BrowserWindow.getAllWindows();
+  if (windows.length === 0) {
+    // Headless/smoke without UI: deny rather than hang until timeout.
+    return Promise.resolve(false);
+  }
+
+  for (const win of windows) {
     win.webContents.send("mira:confirm-request", payload);
   }
 

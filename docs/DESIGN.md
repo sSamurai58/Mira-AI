@@ -242,7 +242,7 @@ Mira
 | `ModelVoiceChips` | Быстрый выбор модели/голоса | `partial` (voice select on Home) |
 | `WorkshopNav` | Сегменты Мастерской | `partial` |
 | `SettingsNav` | Разделы настроек | `partial` (темы работают) |
-| `ConfirmModal` | Превью опасного действия / исходящего сообщения / shell | `partial` (demo) |
+| `ConfirmModal` | Превью опасного действия / исходящего сообщения / shell | `partial` (P4/P5: web.fetch, screen click/type, browser open) |
 | `TerminalView` | Эмулятор + вкладки сессий | `stub` |
 | `StubBadge` | Заглушка | `done` |
 
@@ -256,7 +256,7 @@ Mira
 | Workshop hub + segments | `workshop` | `stub` |
 | Voice Studio (nested) | `workshop/voices` | `stub` |
 | Terminal | `workshop/terminal` (+ optional chat split) | `stub` |
-| Settings hub + разделы | `settings` | `stub` |
+| Settings hub + разделы | `settings` | `partial` (темы, API, голос, Интеграции: web/screen/browser) |
 | Confirm modal | global | `planned` |
 
 ## Stubs

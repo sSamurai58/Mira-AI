@@ -57,6 +57,7 @@ export type MiraChatEvent =
       skills: Array<{ id: string; name: string }>;
       protocol: { id: string; name: string } | null;
       web?: string | null;
+      desktop?: string | null;
     }
   | { type: "assistant_start"; sessionId: string }
   | { type: "token"; text: string }
@@ -67,6 +68,7 @@ export type MiraChatEvent =
       skillsUsed: Array<{ id: string; name: string }>;
       protocolUsed: { id: string; name: string } | null;
       webUsed: string | null;
+      desktopUsed: string | null;
     }
   | { type: "error"; message: string };
 
@@ -116,7 +118,14 @@ contextBridge.exposeInMainWorld("mira", {
     body: string;
   }) => ipcRenderer.invoke("mira:save-protocol", item),
   getWebPolicy: () => ipcRenderer.invoke("mira:get-web-policy"),
+  getScreenPolicy: () => ipcRenderer.invoke("mira:get-screen-policy"),
+  getBrowserPolicy: () => ipcRenderer.invoke("mira:get-browser-policy"),
   testWeb: (query?: string) => ipcRenderer.invoke("mira:test-web", query),
+  testScreen: () => ipcRenderer.invoke("mira:test-screen"),
+  testBrowserOpen: (url?: string) =>
+    ipcRenderer.invoke("mira:test-browser-open", url),
+  searchBrowserHistory: (query?: string) =>
+    ipcRenderer.invoke("mira:search-browser-history", query),
   respondConfirm: (id: string, accepted: boolean) =>
     ipcRenderer.invoke("mira:confirm-response", id, accepted),
   onConfirmRequest: (handler: (req: MiraConfirmRequest) => void) => {

@@ -194,7 +194,12 @@ export function ChatPage({
           ? `protocol: ${event.protocol.id}`
           : "protocol: none";
         const webPart = event.web ? `web: ${event.web}` : "web: none";
-        setContextNote(`${skillPart} · ${protoPart} · ${webPart}`);
+        const desktopPart = event.desktop
+          ? `desktop: ${event.desktop}`
+          : "desktop: none";
+        setContextNote(
+          `${skillPart} · ${protoPart} · ${webPart} · ${desktopPart}`,
+        );
       }
 
       if (event.type === "token") {
@@ -236,7 +241,12 @@ export function ChatPage({
           ? `protocol: ${event.protocolUsed.id}`
           : "protocol: none";
         const webPart = event.webUsed ? `web: ${event.webUsed}` : "web: none";
-        setContextNote(`${skillPart} · ${protoPart} · ${webPart}`);
+        const desktopPart = event.desktopUsed
+          ? `desktop: ${event.desktopUsed}`
+          : "desktop: none";
+        setContextNote(
+          `${skillPart} · ${protoPart} · ${webPart} · ${desktopPart}`,
+        );
         setBusy(false);
         requestIdRef.current = null;
         speakAssistant(event.utterance.content);

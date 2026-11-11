@@ -6,14 +6,14 @@
 
 | Поле | Значение |
 |------|----------|
-| Фаза | **P4 — Интернет + confirm ✅** (ожидает подтверждения → **P5**) |
+| Фаза | **P5 — Экран + браузер ✅** (ожидает подтверждения → **P6**) |
 | Продукт | Голосовой ИИ-помощник Mira (диалог, память, сеть, экран, браузер) |
-| Код | P0–P3 + web.search/fetch, ConfirmBridge, Integrations test |
+| Код | P0–P5: screen capture/control, browser open/history, ConfirmBridge |
 | Предыдущее | Учебный TTS (`mira_tts`) удалён; не восстанавливаем как есть |
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
 | Дорожная карта | `WIP.md` § «План разработки» — фазы **P0→P11**, затем F* |
 
-**Сейчас:** P4 закрыт. После OK — **P5** (экран + браузер).
+**Сейчас:** P5 закрыт. После OK — **P6** (мессенджеры).
 
 ## Решения
 
@@ -60,6 +60,11 @@
 | 2026-11-11 | ConfirmBridge | IPC confirm-request/response для опасных исходящих действий |
 | 2026-11-11 | P4 готов | web.search в диалоге; тест в Интеграциях; p4:smoke OK |
 | 2026-11-11 | Провайдеры Claude / Gemini / GPT — must | Без lock-in на одного вендора |
+| 2026-11-11 | OS priority для screen | **linux → windows → macos** (`OS_PRIORITY`); Linux first в cloud/dev |
+| 2026-11-11 | Screen capture P5 | desktopCapturer + fallback window/placeholder; PNG в `data/screenshots/` |
+| 2026-11-11 | Screen control P5 | клик/ввод через xdotool + confirm; dry-run если xdotool нет |
+| 2026-11-11 | Browser P5 | openExternal + SQLite `browser_visits`; Chromium History read-only fallback |
+| 2026-11-11 | P5 готов | «что на экране» / open URL / история; Интеграции UI; p5:smoke OK |
 
 ## Баги
 
@@ -91,6 +96,7 @@
 | 2026-11-11 | Завершён этап P2 (голос ASR/TTS + каталог) |
 | 2026-11-11 | Завершён этап P3 (skills + протоколы) |
 | 2026-11-11 | Завершён этап P4 (интернет + confirm) |
+| 2026-11-11 | Завершён этап P5 (экран + браузер) |
 | 2026-11-11 | DESIGN: информационная архитектура, карта настроек |
 | 2026-11-11 | Подключены agent skills Emil Kowalski (design/animation) |
 | 2026-11-11 | Добавлен каталог 14 цветовых тем + референсы в docs/themes/ |
