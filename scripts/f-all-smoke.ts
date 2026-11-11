@@ -25,7 +25,7 @@ async function main() {
   process.env.LLM_PROVIDER = process.env.LLM_PROVIDER || "mock";
   process.env.DATABASE_PATH =
     process.env.DATABASE_PATH ||
-    path.resolve(process.cwd(), "data", "mira-f-all-smoke.db");
+    path.resolve(process.cwd(), "mira", "database", "mira-f-all-smoke.db");
   process.env.MESSAGING_CONFIRM = "false";
   process.env.MESSAGING_MODE = "dry-run";
 

@@ -1,7 +1,10 @@
 import fs from "node:fs";
-import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { getOwnerId } from "./owner";
+import {
+  ensureMiraDatabaseLayout,
+  resolveDatabasePathFromEnv,
+} from "./paths";
 
 export type SessionRow = {
   id: string;
@@ -94,11 +97,7 @@ export type LearnPlanRow = {
 let db: DatabaseSync | null = null;
 
 function resolveDatabasePath(): string {
-  const fromEnv = process.env.DATABASE_PATH?.trim();
-  if (fromEnv) {
-    return path.isAbsolute(fromEnv) ? fromEnv : path.resolve(process.cwd(), fromEnv);
-  }
-  return path.resolve(process.cwd(), "data", "mira.db");
+  return resolveDatabasePathFromEnv();
 }
 
 export function getDatabasePath(): string {
@@ -108,8 +107,8 @@ export function getDatabasePath(): string {
 export function openStore(): DatabaseSync {
   if (db) return db;
 
-  const dbPath = resolveDatabasePath();
-  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  const dbPath = ensureMiraDatabaseLayout(resolveDatabasePath());
+  process.env.DATABASE_PATH = dbPath;
 
   db = new DatabaseSync(dbPath);
   db.exec(`

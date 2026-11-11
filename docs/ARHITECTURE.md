@@ -111,7 +111,8 @@
 │   ├── asr/ tts/ voices/ voice_studio/
 │   ├── memory/ library/ learn/
 │   ├── skills/ protocols/ terminal/ tools/
-├── data/               # mira.db (local, gitignored)
+├── mira/database/      # SQLite mira.db (local, gitignored)
+├── data/               # runtime: skills, logs, screenshots, backups
 ├── .env.example
 ├── package.json
 └── README.md

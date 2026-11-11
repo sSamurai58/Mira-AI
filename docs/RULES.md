@@ -80,7 +80,7 @@
 ```env
 # .env.example
 APP_ENV=development
-DATABASE_PATH=./data/app.sqlite
+DATABASE_PATH=./mira/database/mira.db
 # LLM (заполнять локально, не коммитить)
 # OPENAI_API_KEY=
 # ANTHROPIC_API_KEY=

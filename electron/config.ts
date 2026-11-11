@@ -1,6 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import dotenv from "dotenv";
+import {
+  defaultDatabasePath,
+  ensureMiraDatabaseLayout,
+} from "./paths";
 
 export type LlmProviderId =
   | "openai"
@@ -80,10 +84,16 @@ export function loadConfig(force = false): AppConfig {
               ? "mira-offline-stub"
               : "gpt-4o-mini";
 
+  const databasePath = ensureMiraDatabaseLayout(
+    process.env.DATABASE_PATH?.trim()
+      ? path.isAbsolute(process.env.DATABASE_PATH.trim())
+        ? process.env.DATABASE_PATH.trim()
+        : path.resolve(process.cwd(), process.env.DATABASE_PATH.trim())
+      : defaultDatabasePath(),
+  );
+
   cached = {
-    databasePath:
-      process.env.DATABASE_PATH?.trim() ||
-      path.resolve(process.cwd(), "data", "mira.db"),
+    databasePath,
     llmProvider: provider,
     llmModel: process.env.LLM_MODEL?.trim() || defaultModel,
     openaiApiKey: process.env.OPENAI_API_KEY?.trim() || null,
