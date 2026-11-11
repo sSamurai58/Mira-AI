@@ -22,7 +22,6 @@ export function LibraryPanel() {
   const [text, setText] = useState(
     `# Внимание и фокус\n\nГлавный тезис: внимание — это навык, а не черта характера.\nПрактика коротких интервалов укрепляет концентрацию.\nФормула: намерение → действие → короткая пауза.\nМы учимся возвращать ум мягко, без самокритики.\n`,
   );
-  const [filePath, setFilePath] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -80,21 +79,6 @@ export function LibraryPanel() {
       setNote(`Импортировано: ${item.title} (${item.status})`);
       await refresh();
       await selectItem(item.id);
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function importFilePath() {
-    if (!window.mira || !filePath.trim()) return;
-    setBusy("file");
-    try {
-      const item = await window.mira.importLibraryFile(filePath.trim());
-      setNote(`Файл: ${item.title} · ${item.media_type}`);
-      await refresh();
-      await selectItem(item.id);
-    } catch (err) {
-      setNote(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(null);
     }
@@ -265,11 +249,20 @@ export function LibraryPanel() {
             }}
             onDragLeave={() => setDragOver(false)}
             onDrop={onDrop}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                fileRef.current?.click();
+              }
+            }}
+            onClick={() => fileRef.current?.click()}
           >
-            <strong>Добавить файлы</strong>
+            <strong>Прикрепить файл</strong>
             <p className="muted" style={{ margin: 0 }}>
-              Перетащите сюда или выберите с диска — материал попадёт в
-              обучение.
+              Нажмите или перетащите сюда md / txt / pdf / аудио — материал
+              попадёт в обучение.
             </p>
             <input
               ref={fileRef}
@@ -277,6 +270,7 @@ export function LibraryPanel() {
               multiple
               hidden
               accept=".md,.txt,.markdown,.pdf,.epub,.mp3,.wav,.m4a,.ogg,.mp4,.webm,.json,.csv"
+              onClick={(e) => e.stopPropagation()}
               onChange={(e) => {
                 void importPickedFiles(e.target.files);
                 e.target.value = "";
@@ -286,9 +280,12 @@ export function LibraryPanel() {
               type="button"
               className="btn btn-primary"
               disabled={busy !== null}
-              onClick={() => fileRef.current?.click()}
+              onClick={(e) => {
+                e.stopPropagation();
+                fileRef.current?.click();
+              }}
             >
-              Выбрать файлы…
+              Прикрепить файл…
             </button>
           </div>
 
@@ -318,25 +315,6 @@ export function LibraryPanel() {
               Загрузить текст
             </button>
           </form>
-
-          {electron ? (
-            <div className="panel stack">
-              <strong>Импорт по пути (Electron)</strong>
-              <input
-                value={filePath}
-                onChange={(e) => setFilePath(e.target.value)}
-                placeholder="/path/to/file.md|.txt|.pdf|.mp3…"
-              />
-              <button
-                type="button"
-                className="btn"
-                disabled={busy !== null}
-                onClick={() => void importFilePath()}
-              >
-                Импорт по пути
-              </button>
-            </div>
-          ) : null}
 
           <div className="panel stack">
             <strong>План освоения</strong>

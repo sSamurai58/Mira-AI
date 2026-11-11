@@ -1441,9 +1441,24 @@ strong {
   user-select: none;
 }
 
+.library-drop {
+  cursor: pointer;
+  border: 1px dashed color-mix(in srgb, var(--accent) 40%, transparent);
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.library-drop:hover {
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
 .library-drop.is-drop {
   outline: 2px dashed color-mix(in srgb, var(--accent) 55%, transparent);
   outline-offset: 2px;
+  border-color: color-mix(in srgb, var(--accent) 80%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 /* Accent ring: outer/inner radii stay concentric (outer − ring) */
