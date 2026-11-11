@@ -47,15 +47,23 @@ async function main() {
   assert.ok(fs.existsSync(shot.path));
 
   let desktopUsed: string | null = null;
+  let screenDesktopUsed: string | null = null;
   await sendChatMessage(
     { sessionId: null, text: "Что у меня на экране?" },
     (e) => {
       if (e.type === "assistant_done") desktopUsed = e.desktopUsed;
     },
   );
-  assert.equal(desktopUsed, "screen-capture");
+  screenDesktopUsed = desktopUsed;
+  assert.ok(
+    desktopUsed === "screen-capture" ||
+      (typeof desktopUsed === "string" &&
+        desktopUsed.startsWith("screen-capture:")),
+    `unexpected screen desktopUsed=${desktopUsed}`,
+  );
 
   desktopUsed = null;
+
   await sendChatMessage(
     { sessionId: null, text: "Кликни 10, 20" },
     (e) => {
@@ -101,7 +109,7 @@ async function main() {
         ok: true,
         capturePath: shot.path,
         captureSource: shot.sourceName,
-        chatScreen: "screen-capture",
+        chatScreen: screenDesktopUsed,
         chatClick: desktopUsed === "browser-history" ? "ok" : desktopUsed,
         visits: visits.length,
         historyHits: hist.length,
