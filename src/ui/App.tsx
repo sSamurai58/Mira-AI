@@ -85,21 +85,6 @@ function NavIcon({ id }: { id: RootNav }) {
   );
 }
 
-function voiceLabel(state: VoiceState): string {
-  switch (state) {
-    case "listening":
-      return "Слушает";
-    case "thinking":
-      return "Думает";
-    case "speaking":
-      return "Говорит";
-    case "error":
-      return "Ошибка";
-    default:
-      return "Готово";
-  }
-}
-
 export function App() {
   const isHud =
     typeof window !== "undefined" &&
@@ -116,7 +101,6 @@ export function App() {
   });
   const [themeId, setThemeId] = useState<ThemeId>(() => loadStoredThemeId());
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
-  const [confirmOpen, setConfirmOpen] = useState(false);
   const [pendingConfirm, setPendingConfirm] =
     useState<MiraConfirmRequest | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -125,12 +109,6 @@ export function App() {
   const [healthText, setHealthText] = useState("Проверка store…");
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [coreLevel, setCoreLevel] = useState(() => loadCoreLevel());
-  const [clock, setClock] = useState(() =>
-    new Date().toLocaleTimeString("ru-RU", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }),
-  );
   const [autoSpeak, setAutoSpeak] = useState(() => {
     if (localStorage.getItem("mira.autoSpeak") === "1") return true;
     if (localStorage.getItem("mira.autoSpeak") === "0") return false;
@@ -168,12 +146,6 @@ export function App() {
           ? prev
           : nextNav;
       });
-      setClock(
-        new Date().toLocaleTimeString("ru-RU", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-      );
     }, 800);
     return () => window.clearInterval(id);
   }, []);
@@ -324,42 +296,6 @@ export function App() {
       </aside>
 
       <div className="workspace">
-        <header className="topbar">
-          <div className="pill-row">
-            <span className={`pill ${nav === "home" ? "active" : ""}`}>
-              <button type="button" onClick={() => setNav("home")}>
-                Главная
-              </button>
-            </span>
-            <span className={`pill ${nav === "chat" ? "active" : ""}`}>
-              <button type="button" onClick={() => setNav("chat")}>
-                Диалог
-              </button>
-            </span>
-            <span className={`pill ${nav === "workshop" ? "active" : ""}`}>
-              <button type="button" onClick={() => setNav("workshop")}>
-                Мастерская
-              </button>
-            </span>
-            <span className="pill">
-              <button
-                type="button"
-                onClick={() => setConfirmOpen(true)}
-                title="Demo confirm"
-              >
-                +
-              </button>
-            </span>
-          </div>
-          <div className="mono tiny">
-            {clock} · Mira · тема {themeId}
-          </div>
-          <div className={`pill status-pill state-${voiceState}`}>
-            <span className="status-dot" aria-hidden />
-            {voiceLabel(voiceState)}
-          </div>
-        </header>
-
         {errorMessage ? (
           <ErrorBanner
             message={errorMessage}
@@ -405,14 +341,6 @@ export function App() {
           ) : null}
         </div>
       </div>
-
-      <ConfirmModal
-        open={confirmOpen}
-        title="Подтверждение действия"
-        body="ConfirmModal (always до F12)."
-        onCancel={() => setConfirmOpen(false)}
-        onConfirm={() => setConfirmOpen(false)}
-      />
 
       <ConfirmModal
         open={Boolean(pendingConfirm)}
