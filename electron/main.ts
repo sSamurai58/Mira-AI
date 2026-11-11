@@ -213,10 +213,28 @@ function createWindow(): BrowserWindow {
     }
   }, 2500);
 
+  win.webContents.on("did-fail-load", (_e, code, desc, url, isMainFrame) => {
+    if (!isMainFrame || code === -3 /* aborted */) return;
+    console.error("[mira] renderer failed", code, desc, url);
+    void dialog.showMessageBox(win, {
+      type: "error",
+      title: "Mira — UI не загрузился",
+      message: "Не удалось открыть интерфейс",
+      detail: `${desc} (${code})\n${url}`,
+    });
+  });
+
   if (isDev) {
     void win.loadURL(process.env.MIRA_DEV_URL ?? "http://127.0.0.1:5173");
   } else {
-    void win.loadFile(path.join(__dirname, "..", "dist", "index.html"));
+    const indexHtml = path.join(__dirname, "..", "dist", "index.html");
+    void win.loadFile(indexHtml).catch((err) => {
+      console.error("[mira] loadFile failed", indexHtml, err);
+      void dialog.showErrorBox(
+        "Mira — UI не загрузился",
+        `${indexHtml}\n${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
   }
 
   return win;

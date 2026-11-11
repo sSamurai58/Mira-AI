@@ -267,7 +267,7 @@ export function App() {
         <div className="brand-row">
           <img
             className="brand-logo"
-            src="/brand/mira-mark.svg"
+            src="./brand/mira-mark.svg"
             width={28}
             height={30}
             alt=""

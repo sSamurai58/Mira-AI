@@ -3,6 +3,8 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
 export default defineConfig({
+  // Relative asset URLs so Electron loadFile(file://) can resolve CSS/JS.
+  base: "./",
   plugins: [react()],
   resolve: {
     alias: {

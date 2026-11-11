@@ -91,7 +91,7 @@ export function HudPage() {
           }}
         >
           <img
-            src="/brand/mira-mark.svg"
+            src="./brand/mira-mark.svg"
             width={18}
             height={20}
             alt=""
