@@ -570,6 +570,47 @@ interface MiraBridge {
       fix?: string;
     }>;
   }>;
+  getBackupStatus: () => Promise<{
+    databasePath: string;
+    libraryDir: string;
+    voiceStudioDir: string;
+    backupsDir: string;
+    packages: string[];
+    health: {
+      sessions: number;
+      utterances: number;
+      libraryItems: number;
+      learnedUnits: number;
+    };
+  }>;
+  exportBackup: (opts?: {
+    includeSecrets?: boolean;
+  }) => Promise<{
+    ok: boolean;
+    packagePath: string;
+    manifest: {
+      format: string;
+      createdAt: string;
+      includeSecrets: boolean;
+      parts: string[];
+      dbFile: string;
+      note: string;
+    };
+    detail: string;
+  }>;
+  importBackup: (packagePath: string) => Promise<{
+    ok: boolean;
+    detail: string;
+    packagePath: string;
+  }>;
+  forgetData: (
+    scope: "memory" | "learned" | "library" | "voice-studio" | "all",
+  ) => Promise<{
+    ok: boolean;
+    scope: string;
+    detail: string;
+    deleted: Record<string, number>;
+  }>;
 }
 
 interface Window {

@@ -228,6 +228,14 @@ contextBridge.exposeInMainWorld("mira", {
   getBlenderPolicy: () => call("mira:get-blender-policy"),
   testBlenderDemo: () => call("mira:test-blender-demo"),
   runDoctor: () => call("mira:run-doctor"),
+  getBackupStatus: () => call("mira:get-backup-status"),
+  exportBackup: (opts?: { includeSecrets?: boolean }) =>
+    call("mira:export-backup", opts),
+  importBackup: (packagePath: string) =>
+    call("mira:import-backup", packagePath),
+  forgetData: (
+    scope: "memory" | "learned" | "library" | "voice-studio" | "all",
+  ) => call("mira:forget-data", scope),
   respondConfirm: (id: string, accepted: boolean) =>
     call("mira:confirm-response", id, accepted),
   onConfirmRequest: (handler: (req: MiraConfirmRequest) => void) => {

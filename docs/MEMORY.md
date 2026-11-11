@@ -6,14 +6,14 @@
 
 | Поле | Значение |
 |------|----------|
-| Фаза | **P11 — Стабилизация must ✅** (обязательный контур 1–16 ≥ partial) |
+| Фаза | **F11 — Backup / «забыть» ✅** |
 | Продукт | Голосовой ИИ-помощник Mira (диалог, память, сеть, экран, TG, TTY, learn, voice, Blender) |
-| Код | P0–P11: doctor-light + p11:smoke happy-path #1–16 |
+| Код | P0–P11 + F11: mira-backup-v1 export/import + forget scopes |
 | Предыдущее | Учебный TTS (`mira_tts`) удалён; не восстанавливаем как есть |
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
-| Дорожная карта | Must P0–P11 закрыт → дальше F* по приоритету |
+| Дорожная карта | Must закрыт; F*: F11 ✅ → **F13** → F9 |
 
-**Сейчас:** P11 закрыт. Следующие F*: **F11 → F13 → F9** (решение P11).
+**Сейчас:** F11 закрыт. После OK — **F13** (полный Doctor / логи).
 
 ## Решения
 
@@ -81,6 +81,8 @@
 | 2026-11-11 | P11 F* приоритет | После must: **F11** backup/забыть → **F13** Doctor полный → **F9** barge-in |
 | 2026-11-11 | Doctor-light P11 | mic/API/Blender/tools findings + fix hints; UI Настройки→Данные |
 | 2026-11-11 | P11 готов | критерии 1–16 ≥ partial; p11:smoke OK |
+| 2026-11-11 | Backup format mira-backup-v1 | БД + library + voice-studio + skills/protocols; secrets только opt-in |
+| 2026-11-11 | F11 готов | export/import + forget (memory/learned/library/voice/all); f11:smoke OK |
 
 ## Баги
 
@@ -119,6 +121,7 @@
 | 2026-11-11 | Завершён этап P9 (студия голоса) |
 | 2026-11-11 | Завершён этап P10 (Blender bridge) |
 | 2026-11-11 | Завершён этап P11 (стабилизация must) |
+| 2026-11-11 | Завершён F11 (backup / забывать) |
 | 2026-11-11 | DESIGN: информационная архитектура, карта настроек |
 | 2026-11-11 | Подключены agent skills Emil Kowalski (design/animation) |
 | 2026-11-11 | Добавлен каталог 14 цветовых тем + референсы в docs/themes/ |

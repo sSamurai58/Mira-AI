@@ -79,6 +79,13 @@ import {
   runDemoScene,
 } from "./tools/blender";
 import { formatDoctorText, runDoctor } from "./doctor";
+import {
+  exportBackup,
+  forgetData,
+  getBackupStatus,
+  importBackup,
+  type ForgetScope,
+} from "./backup";
 import fs from "node:fs";
 
 const isDev = process.env.MIRA_DEV === "1";
@@ -549,6 +556,22 @@ app.whenReady().then(() => {
     const report = runDoctor();
     return { ...report, text: formatDoctorText(report) };
   });
+  on("mira:get-backup-status", () => getBackupStatus());
+  on(
+    "mira:export-backup",
+    async (_e, opts?: { includeSecrets?: boolean }) => exportBackup(opts),
+    { privileged: true },
+  );
+  on(
+    "mira:import-backup",
+    async (_e, packagePath: string) => importBackup(String(packagePath ?? "")),
+    { privileged: true },
+  );
+  on(
+    "mira:forget-data",
+    async (_e, scope: ForgetScope) => forgetData(scope),
+    { privileged: true },
+  );
   on(
     "mira:test-blender-demo",
     async () => {

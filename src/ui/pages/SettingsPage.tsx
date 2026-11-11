@@ -243,33 +243,165 @@ export function SettingsPage({
         ) : null}
         {section === "terminal" ? <TerminalSettingsSection /> : null}
         {section === "data" ? (
-          <>
-            <div className="row">
-              <h2 style={{ margin: 0, fontSize: "1.05rem" }}>
-                Данные и приватность
-              </h2>
-              <StubBadge label="P11 doctor" />
-            </div>
-            <p className="muted" style={{ margin: 0 }}>
-              Doctor-light: mic / API / Blender / tools. Backup/забыть — F11
-              (следующий приоритет после P11).
-            </p>
-            <div className="row">
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => onOpenDoctor?.()}
-              >
-                Открыть Doctor
-              </button>
-            </div>
-            <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
-              {healthText}
-            </pre>
-          </>
+          <DataPrivacySection
+            healthText={healthText}
+            onOpenDoctor={onOpenDoctor}
+          />
         ) : null}
       </div>
     </div>
+  );
+}
+
+function DataPrivacySection(props: {
+  healthText: string;
+  onOpenDoctor?: () => void;
+}) {
+  const [statusText, setStatusText] = useState("…");
+  const [packagePath, setPackagePath] = useState("");
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [includeSecrets, setIncludeSecrets] = useState(false);
+
+  async function refreshStatus() {
+    if (!window.mira?.getBackupStatus) {
+      setStatusText("IPC недоступен");
+      return;
+    }
+    const st = await window.mira.getBackupStatus();
+    setStatusText(JSON.stringify(st, null, 2));
+    if (!packagePath && st.packages[0]) {
+      setPackagePath(`data/backups/${st.packages[0]}`);
+    }
+  }
+
+  useEffect(() => {
+    void refreshStatus();
+  }, []);
+
+  return (
+    <>
+      <div className="row">
+        <h2 style={{ margin: 0, fontSize: "1.05rem" }}>
+          Данные и приватность
+        </h2>
+        <StubBadge label="F11" />
+      </div>
+      <p className="muted" style={{ margin: 0 }}>
+        Export/import пакета (`mira-backup-v1`: БД, library, voice-studio,
+        skills/protocols). Секреты в пакет — только с явной опцией. «Забыть» —
+        с confirm и предупреждением о необратимости.
+      </p>
+      <div className="row" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => props.onOpenDoctor?.()}
+        >
+          Doctor
+        </button>
+        <button
+          type="button"
+          className="btn"
+          disabled={busy !== null}
+          onClick={() => {
+            setBusy("export");
+            void window.mira
+              ?.exportBackup({ includeSecrets })
+              .then((res) => {
+                setNote(res.detail);
+                setPackagePath(res.packagePath);
+                return refreshStatus();
+              })
+              .catch((err) =>
+                setNote(err instanceof Error ? err.message : String(err)),
+              )
+              .finally(() => setBusy(null));
+          }}
+        >
+          Export backup
+        </button>
+        <label className="row" style={{ gap: "0.35rem" }}>
+          <input
+            type="checkbox"
+            checked={includeSecrets}
+            onChange={(e) => setIncludeSecrets(e.target.checked)}
+          />
+          <span className="muted">включить .env (не рекомендуется)</span>
+        </label>
+      </div>
+      <label className="stack" style={{ gap: "0.25rem" }}>
+        <span className="muted">Путь пакета для import (внутри data/)</span>
+        <input
+          value={packagePath}
+          onChange={(e) => setPackagePath(e.target.value)}
+          placeholder="data/backups/mira-backup-…"
+        />
+      </label>
+      <div className="row" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
+        <button
+          type="button"
+          className="btn"
+          disabled={busy !== null || !packagePath.trim()}
+          onClick={() => {
+            setBusy("import");
+            void window.mira
+              ?.importBackup(packagePath.trim())
+              .then((res) => {
+                setNote(res.detail);
+                return refreshStatus();
+              })
+              .catch((err) =>
+                setNote(err instanceof Error ? err.message : String(err)),
+              )
+              .finally(() => setBusy(null));
+          }}
+        >
+          Import backup
+        </button>
+        {(
+          [
+            ["memory", "Забыть память"],
+            ["learned", "Забыть выученное"],
+            ["library", "Забыть библиотеку"],
+            ["voice-studio", "Забыть студию"],
+            ["all", "Забыть всё"],
+          ] as const
+        ).map(([scope, label]) => (
+          <button
+            key={scope}
+            type="button"
+            className="btn"
+            disabled={busy !== null}
+            onClick={() => {
+              setBusy(`forget-${scope}`);
+              void window.mira
+                ?.forgetData(scope)
+                .then((res) => {
+                  setNote(
+                    `${res.detail} · ${JSON.stringify(res.deleted)}`,
+                  );
+                  return refreshStatus();
+                })
+                .catch((err) =>
+                  setNote(err instanceof Error ? err.message : String(err)),
+                )
+                .finally(() => setBusy(null));
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {note ? <p className="muted" style={{ margin: 0 }}>{note}</p> : null}
+      {busy ? <p className="muted mono">busy: {busy}</p> : null}
+      <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
+        {statusText}
+      </pre>
+      <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
+        {props.healthText}
+      </pre>
+    </>
   );
 }
 
