@@ -229,24 +229,24 @@ export function WorkshopPage() {
   }
 
   return (
-    <div className="stack">
-      <div className="workshop-segments">
+    <div className="settings-layout workshop-layout">
+      <nav className="settings-nav" aria-label="Мастерская">
         {SEGMENTS.map((s) => (
           <button
             key={s.id}
             type="button"
-            className={`btn ${segment === s.id ? "btn-primary" : ""}`}
+            className={`nav-btn ${segment === s.id ? "active" : ""}`}
             onClick={() => setSegment(s.id)}
           >
             {s.label}
           </button>
         ))}
-      </div>
+      </nav>
 
+      <div className="panel stack workshop-main">
       {segment === "skills" ? (
         <div className="stack">
-          <div className="panel stack">
-            <div className="row">
+          <div className="row">
               <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Скиллы</h2>
               <StubBadge label="P3 #9" />
               {browserOnly ? <span className="chip">browser-demo</span> : null}
@@ -299,7 +299,6 @@ export function WorkshopPage() {
                 </div>
               </div>
             ))}
-          </div>
 
           <form className="panel stack" onSubmit={(e) => void saveSkill(e)}>
             <strong>Создать / обновить скилл</strong>
@@ -532,7 +531,7 @@ export function WorkshopPage() {
       {segment === "terminal" ? <TerminalView /> : null}
       {segment === "library" ? <LibraryPanel /> : null}
       {segment === "notes" ? <NotesFilesPanel /> : null}
-
+      </div>
     </div>
   );
 }

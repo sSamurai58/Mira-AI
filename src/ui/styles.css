@@ -535,6 +535,7 @@ strong {
 
 .workspace-body > .stack,
 .workspace-body > .settings-layout,
+.workspace-body > .workshop-layout,
 .workspace-body > .page-stack {
   flex: 1;
   min-height: 0;
@@ -545,6 +546,7 @@ strong {
 
 .workspace-body > .stack::-webkit-scrollbar,
 .workspace-body > .settings-layout::-webkit-scrollbar,
+.workspace-body > .workshop-layout::-webkit-scrollbar,
 .workspace-body > .page-stack::-webkit-scrollbar {
   width: 0;
   height: 0;
@@ -1754,11 +1756,23 @@ strong {
   );
 }
 
-.segment-row,
-.workshop-segments {
+.segment-row {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.workshop-layout {
+  align-items: start;
+}
+
+.workshop-layout > .settings-nav {
+  position: sticky;
+  top: 0;
+}
+
+.workshop-main {
+  min-width: 0;
 }
 
 .voice-row {
