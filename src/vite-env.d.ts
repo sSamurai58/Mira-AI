@@ -334,7 +334,21 @@ interface MiraBridge {
     enabled: boolean;
     preferred: string;
     requireConfirmOpen: boolean;
+    installed: Array<{
+      id: string;
+      name: string;
+      path: string | null;
+      installed: boolean;
+    }>;
   }>;
+  listInstalledBrowsers: () => Promise<
+    Array<{
+      id: string;
+      name: string;
+      path: string | null;
+      installed: boolean;
+    }>
+  >;
   testWeb: (
     query?: string,
   ) => Promise<{ ok: boolean; detail: string; hits: unknown[] }>;

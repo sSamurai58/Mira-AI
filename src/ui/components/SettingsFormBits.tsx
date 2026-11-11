@@ -35,12 +35,13 @@ export function Field(props: {
   hint?: string;
   children: ReactNode;
 }) {
+  // Use <div>, not <label>: ThemeSelect / nested buttons break when wrapped in label.
   return (
-    <label className="settings-field">
+    <div className="settings-field">
       <span className="settings-field-label">{props.label}</span>
       {props.children}
       {props.hint ? <span className="settings-field-hint">{props.hint}</span> : null}
-    </label>
+    </div>
   );
 }
 

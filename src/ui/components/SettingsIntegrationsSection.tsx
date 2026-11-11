@@ -7,6 +7,7 @@ import {
   SecretField,
   ToggleRow,
 } from "./SettingsFormBits";
+import { ThemeSelect } from "./ThemeSelect";
 import {
   boolToEnv,
   isTruthyEnv,
@@ -14,6 +15,35 @@ import {
   saveSettingsEnv,
   type SettingsEnvSnapshot,
 } from "../settingsEnvClient";
+
+type InstalledBrowser = {
+  id: string;
+  name: string;
+  path: string | null;
+  installed: boolean;
+};
+
+const DEMO_BROWSERS: InstalledBrowser[] = [
+  { id: "system", name: "Системный по умолчанию", path: null, installed: true },
+  {
+    id: "chrome",
+    name: "Google Chrome",
+    path: "/usr/bin/google-chrome",
+    installed: true,
+  },
+  {
+    id: "firefox",
+    name: "Firefox",
+    path: "/usr/bin/firefox",
+    installed: true,
+  },
+  {
+    id: "chromium",
+    name: "Chromium",
+    path: "/usr/bin/chromium",
+    installed: true,
+  },
+];
 
 export function SettingsIntegrationsSection() {
   const [snap, setSnap] = useState<SettingsEnvSnapshot | null>(null);
@@ -31,6 +61,7 @@ export function SettingsIntegrationsSection() {
   const [contactsText, setContactsText] = useState<string>("");
   const [tgChatId, setTgChatId] = useState("");
   const [live, setLive] = useState(Boolean(window.mira));
+  const [browsers, setBrowsers] = useState<InstalledBrowser[]>(DEMO_BROWSERS);
 
   useEffect(() => {
     let cancelled = false;
@@ -43,10 +74,15 @@ export function SettingsIntegrationsSection() {
 
       if (!window.mira) {
         setContactsText("Контакты доступны в Electron");
+        setBrowsers(DEMO_BROWSERS);
         return;
       }
       try {
-        const contacts = await window.mira.listMessengerContacts();
+        const [contacts, installed] = await Promise.all([
+          window.mira.listMessengerContacts(),
+          window.mira.listInstalledBrowsers?.() ??
+            window.mira.getBrowserPolicy().then((p) => p.installed ?? []),
+        ]);
         if (cancelled) return;
         setContactsText(
           contacts
@@ -56,6 +92,9 @@ export function SettingsIntegrationsSection() {
             )
             .join("\n") || "Пока нет сохранённых контактов",
         );
+        if (installed?.length) {
+          setBrowsers(installed.filter((b) => b.installed));
+        }
       } catch {
         if (!cancelled) setContactsText("Не удалось загрузить контакты");
       }
@@ -253,7 +292,10 @@ export function SettingsIntegrationsSection() {
         howto={
           <ol>
             <li>Включите BROWSER_ENABLED.</li>
-            <li>BROWSER_PREFERRED — chromium / chrome / system.</li>
+            <li>
+              BROWSER_PREFERRED — выберите из установленных браузеров на этой
+              машине (или «Системный»).
+            </li>
             <li>BROWSER_OPEN_CONFIRM — спрашивать перед открытием.</li>
           </ol>
         }
@@ -320,15 +362,27 @@ export function SettingsIntegrationsSection() {
           checked={isTruthyEnv(draft.BROWSER_ENABLED)}
           onChange={(on) => setField("BROWSER_ENABLED", boolToEnv(on))}
         />
-        <Field label="Предпочтительный браузер" hint="BROWSER_PREFERRED">
-          <select
-            value={draft.BROWSER_PREFERRED || "chromium"}
-            onChange={(e) => setField("BROWSER_PREFERRED", e.target.value)}
-          >
-            <option value="chromium">Chromium</option>
-            <option value="chrome">Chrome</option>
-            <option value="system">Системный</option>
-          </select>
+        <Field
+          label="Предпочтительный браузер"
+          hint={
+            live
+              ? `BROWSER_PREFERRED · найдено: ${browsers.length}`
+              : "BROWSER_PREFERRED · в demo показан примерный список; в Electron — установленные"
+          }
+        >
+          <ThemeSelect
+            aria-label="Предпочтительный браузер"
+            value={
+              browsers.some((b) => b.id === draft.BROWSER_PREFERRED)
+                ? draft.BROWSER_PREFERRED
+                : "system"
+            }
+            onChange={(v) => setField("BROWSER_PREFERRED", v)}
+            options={browsers.map((b) => ({
+              value: b.id,
+              label: b.path ? `${b.name} · ${b.path}` : b.name,
+            }))}
+          />
         </Field>
         <ToggleRow
           label="Confirm перед открытием URL"

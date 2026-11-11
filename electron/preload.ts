@@ -175,6 +175,14 @@ contextBridge.exposeInMainWorld("mira", {
   getWebPolicy: () => call("mira:get-web-policy"),
   getScreenPolicy: () => call("mira:get-screen-policy"),
   getBrowserPolicy: () => call("mira:get-browser-policy"),
+  listInstalledBrowsers: (): Promise<
+    Array<{
+      id: string;
+      name: string;
+      path: string | null;
+      installed: boolean;
+    }>
+  > => call("mira:list-installed-browsers"),
   testWeb: (query?: string) => call("mira:test-web", query),
   testScreen: () => call("mira:test-screen"),
   testBrowserOpen: (url?: string) => call("mira:test-browser-open", url),

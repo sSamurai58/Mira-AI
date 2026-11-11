@@ -40,6 +40,7 @@ import {
 } from "./terminal/manager";
 import {
   getBrowserPolicy,
+  listInstalledBrowsers,
   openBrowserUrl,
   searchHistory,
 } from "./tools/browser";
@@ -346,6 +347,7 @@ app.whenReady().then(() => {
   on("mira:get-web-policy", () => getWebPolicy());
   on("mira:get-screen-policy", () => getScreenPolicy());
   on("mira:get-browser-policy", () => getBrowserPolicy());
+  on("mira:list-installed-browsers", () => listInstalledBrowsers());
 
   on("mira:test-web", async (_e, query?: string) => {
     try {
