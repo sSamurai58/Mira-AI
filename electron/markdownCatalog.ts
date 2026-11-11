@@ -8,6 +8,7 @@ export type CatalogItem = {
   name: string;
   description: string;
   triggers: string[];
+  tags: string[];
   enabled: boolean;
   body: string;
   filePath: string;
@@ -110,6 +111,7 @@ export function loadMarkdownCatalog(
       name: String(meta.name ?? id),
       description: String(meta.description ?? ""),
       triggers: asStringArray(meta.triggers).map((t) => t.toLowerCase()),
+      tags: asStringArray(meta.tags).map((t) => t.toLowerCase()),
       enabled: meta.enabled !== false,
       body,
       filePath,
@@ -126,26 +128,35 @@ export function writeCatalogItem(
     name: string;
     description: string;
     triggers: string[];
+    tags?: string[];
     enabled: boolean;
     body: string;
   },
 ): CatalogItem {
   const dir = ensureSeededCatalog(kind);
-  const file = `${item.id}.md`;
+  const safeId = item.id
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  if (!safeId) throw new Error("id скилла/протокола пустой");
+  const file = `${safeId}.md`;
   const filePath = path.join(dir, file);
   const triggers = item.triggers.join(", ");
+  const tags = (item.tags ?? []).map((t) => t.trim()).filter(Boolean);
+  const tagsLine = tags.length ? `\ntags: ${tags.join(", ")}` : "";
   const raw = `---
-id: ${item.id}
+id: ${safeId}
 name: ${item.name}
 description: ${item.description}
-triggers: ${triggers}
+triggers: ${triggers}${tagsLine}
 enabled: ${item.enabled ? "true" : "false"}
 ---
 
 ${item.body.trim()}
 `;
   fs.writeFileSync(filePath, raw, "utf8");
-  return loadMarkdownCatalog(kind).find((x) => x.id === item.id)!;
+  return loadMarkdownCatalog(kind).find((x) => x.id === safeId)!;
 }
 
 export function setCatalogEnabled(
@@ -161,6 +172,7 @@ export function setCatalogEnabled(
     name: found.name,
     description: found.description,
     triggers: found.triggers,
+    tags: found.tags,
     enabled,
     body: found.body,
   });

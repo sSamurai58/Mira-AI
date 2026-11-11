@@ -1547,10 +1547,18 @@ strong {
   );
 }
 
-.segment-row {
+.segment-row,
+.workshop-segments {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.voice-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .theme-grid {

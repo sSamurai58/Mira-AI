@@ -314,10 +314,26 @@ app.whenReady().then(() => {
         name: string;
         description: string;
         triggers: string[];
+        tags?: string[];
         enabled: boolean;
         body: string;
       },
     ) => writeCatalogItem("protocols", item),
+  );
+  on(
+    "mira:save-skill",
+    (
+      _e,
+      item: {
+        id: string;
+        name: string;
+        description: string;
+        triggers: string[];
+        tags?: string[];
+        enabled: boolean;
+        body: string;
+      },
+    ) => writeCatalogItem("skills", item),
   );
 
   on("mira:get-web-policy", () => getWebPolicy());

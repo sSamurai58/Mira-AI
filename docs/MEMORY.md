@@ -95,6 +95,7 @@
 | 2026-11-11 | Grok (xAI) | LLM_PROVIDER=grok + XAI_API_KEY → api.x.ai/v1 |
 | 2026-11-11 | UI redesign | Jarvis-HUD композиция + темы Mira; CoreOrb 1–5; IA 4 пункта |
 | 2026-11-11 | SQLite path | Default `mira/library/database/mira.db`; миграция с `mira/database` и `data/mira.db` |
+| 2026-11-11 | Skills workshop | UI create/edit + tags; `saveSkill` IPC; browser localStorage fallback |
 
 
 | 2026-11-11 | f-all:smoke | deepenings smoke |

@@ -1,4 +1,12 @@
 import { useEffect, useState, type FormEvent } from "react";
+import {
+  listLocalProtocols,
+  listLocalSkills,
+  saveLocalProtocol,
+  saveLocalSkill,
+  setLocalProtocolEnabled,
+  setLocalSkillEnabled,
+} from "../catalogLocal";
 import { LibraryPanel } from "../components/LibraryPanel";
 import { NotesFilesPanel } from "../components/NotesFilesPanel";
 import { StubBadge } from "../components/StubBadge";
@@ -34,18 +42,34 @@ export function WorkshopPage() {
   const [skills, setSkills] = useState<CatalogItem[]>([]);
   const [protocols, setProtocols] = useState<CatalogItem[]>([]);
   const [note, setNote] = useState("");
+  const [skillDraft, setSkillDraft] = useState({
+    id: "custom-skill",
+    name: "Новый скилл",
+    description: "",
+    triggers: "помоги, skill тест",
+    tags: "custom, workshop",
+    body: "1. Уточни задачу.\n2. Дай короткий ответ по шагам.\n3. Предложи следующий шаг.",
+  });
   const [draft, setDraft] = useState({
     id: "custom-protocol",
     name: "Новый протокол",
     description: "",
     triggers: "протокол тест",
+    tags: "custom",
     body: "1. Скажи «протокол выполнен».\n2. Предложи следующий шаг.",
   });
   const [runLog, setRunLog] = useState<string | null>(null);
+  const browserOnly = typeof window !== "undefined" && !window.mira;
 
   async function refreshCatalogs() {
     if (!window.mira) {
-      setNote("Нужен Electron для каталогов skills/protocols.");
+      const s = listLocalSkills();
+      const p = listLocalProtocols();
+      setSkills(s);
+      setProtocols(p);
+      setNote(
+        `Browser-demo · Skills: ${s.length} · Protocols: ${p.length} (localStorage; в Electron — data/skills)`,
+      );
       return;
     }
     const [s, p] = await Promise.all([
@@ -99,33 +123,81 @@ export function WorkshopPage() {
   }
 
   async function toggleSkill(id: string, enabled: boolean) {
-    if (!window.mira) return;
+    if (!window.mira) {
+      setLocalSkillEnabled(id, enabled);
+      await refreshCatalogs();
+      return;
+    }
     await window.mira.setSkillEnabled(id, enabled);
     await refreshCatalogs();
   }
 
   async function toggleProtocol(id: string, enabled: boolean) {
-    if (!window.mira) return;
+    if (!window.mira) {
+      setLocalProtocolEnabled(id, enabled);
+      await refreshCatalogs();
+      return;
+    }
     await window.mira.setProtocolEnabled(id, enabled);
     await refreshCatalogs();
   }
 
+  function parseCsv(raw: string): string[] {
+    return raw
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+  }
+
+  async function saveSkill(e: FormEvent) {
+    e.preventDefault();
+    const payload = {
+      id: skillDraft.id.trim(),
+      name: skillDraft.name.trim(),
+      description: skillDraft.description.trim(),
+      triggers: parseCsv(skillDraft.triggers),
+      tags: parseCsv(skillDraft.tags),
+      enabled: false,
+      body: skillDraft.body,
+    };
+    if (!window.mira) {
+      saveLocalSkill(payload);
+    } else {
+      await window.mira.saveSkill(payload);
+    }
+    await refreshCatalogs();
+    setNote(`Сохранён skill ${payload.id} (default off · on-demand)`);
+  }
+
   async function saveProtocol(e: FormEvent) {
     e.preventDefault();
-    if (!window.mira) return;
-    await window.mira.saveProtocol({
+    const payload = {
       id: draft.id.trim(),
       name: draft.name.trim(),
       description: draft.description.trim(),
-      triggers: draft.triggers
-        .split(",")
-        .map((t) => t.trim())
-        .filter(Boolean),
+      triggers: parseCsv(draft.triggers),
+      tags: parseCsv(draft.tags),
       enabled: true,
       body: draft.body,
-    });
+    };
+    if (!window.mira) {
+      saveLocalProtocol(payload);
+    } else {
+      await window.mira.saveProtocol(payload);
+    }
     await refreshCatalogs();
-    setNote(`Сохранён протокол ${draft.id}`);
+    setNote(`Сохранён протокол ${payload.id}`);
+  }
+
+  function editSkill(item: CatalogItem) {
+    setSkillDraft({
+      id: item.id,
+      name: item.name,
+      description: item.description,
+      triggers: item.triggers.join(", "),
+      tags: (item.tags ?? []).join(", "),
+      body: item.body,
+    });
   }
 
   async function runProtocol(id: string) {
@@ -172,34 +244,133 @@ export function WorkshopPage() {
       </div>
 
       {segment === "skills" ? (
-        <div className="panel stack">
-          <div className="row">
-            <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Скиллы</h2>
-            <StubBadge label="P3 #9" />
-          </div>
-          <p className="muted" style={{ margin: 0 }}>
-            Установленные ≠ активные. В контекст попадают только matched
-            on-demand (или явная команда «включи skill …»). {note}
-          </p>
-          {skills.map((s) => (
-            <div key={s.id} className="panel voice-row">
-              <div>
-                <strong>{s.name}</strong>
-                <div className="muted">{s.description}</div>
-                <div className="mono muted">
-                  {s.id} · triggers: {s.triggers.join(", ") || "—"}
+        <div className="stack">
+          <div className="panel stack">
+            <div className="row">
+              <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Скиллы</h2>
+              <StubBadge label="P3 #9" />
+              {browserOnly ? <span className="chip">browser-demo</span> : null}
+            </div>
+            <p className="muted" style={{ margin: 0 }}>
+              Установленные ≠ активные. В контекст — matched on-demand или
+              «включи skill …». {note}
+            </p>
+            {skills.length === 0 ? (
+              <p className="muted" style={{ margin: 0 }}>
+                Пока пусто — создайте скилл формой ниже.
+              </p>
+            ) : null}
+            {skills.map((s) => (
+              <div key={s.id} className="panel voice-row">
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <strong>{s.name}</strong>
+                  <div className="muted">{s.description || "—"}</div>
+                  <div className="mono muted">
+                    {s.id} · triggers: {s.triggers.join(", ") || "—"}
+                  </div>
+                  <div className="row" style={{ marginTop: 6 }}>
+                    {(s.tags ?? []).length === 0 ? (
+                      <span className="chip">без тегов</span>
+                    ) : (
+                      (s.tags ?? []).map((tag) => (
+                        <span key={tag} className="chip">
+                          #{tag}
+                        </span>
+                      ))
+                    )}
+                  </div>
+                </div>
+                <div className="stack" style={{ gap: 8 }}>
+                  <label className="row">
+                    <input
+                      type="checkbox"
+                      checked={s.enabled}
+                      onChange={(e) => void toggleSkill(s.id, e.target.checked)}
+                    />
+                    <span>установлен</span>
+                  </label>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => editSkill(s)}
+                  >
+                    Править
+                  </button>
                 </div>
               </div>
-              <label className="row">
-                <input
-                  type="checkbox"
-                  checked={s.enabled}
-                  onChange={(e) => void toggleSkill(s.id, e.target.checked)}
-                />
-                <span>установлен</span>
-              </label>
-            </div>
-          ))}
+            ))}
+          </div>
+
+          <form className="panel stack" onSubmit={(e) => void saveSkill(e)}>
+            <strong>Создать / обновить скилл</strong>
+            <label className="field-label">
+              ID
+              <input
+                value={skillDraft.id}
+                onChange={(e) =>
+                  setSkillDraft({ ...skillDraft, id: e.target.value })
+                }
+                placeholder="custom-skill"
+              />
+            </label>
+            <label className="field-label">
+              Название
+              <input
+                value={skillDraft.name}
+                onChange={(e) =>
+                  setSkillDraft({ ...skillDraft, name: e.target.value })
+                }
+                placeholder="Новый скилл"
+              />
+            </label>
+            <label className="field-label">
+              Описание
+              <input
+                value={skillDraft.description}
+                onChange={(e) =>
+                  setSkillDraft({
+                    ...skillDraft,
+                    description: e.target.value,
+                  })
+                }
+                placeholder="Зачем этот скилл"
+              />
+            </label>
+            <label className="field-label">
+              Триггеры
+              <input
+                value={skillDraft.triggers}
+                onChange={(e) =>
+                  setSkillDraft({ ...skillDraft, triggers: e.target.value })
+                }
+                placeholder="фразы через запятую"
+              />
+            </label>
+            <label className="field-label">
+              Теги
+              <input
+                value={skillDraft.tags}
+                onChange={(e) =>
+                  setSkillDraft({ ...skillDraft, tags: e.target.value })
+                }
+                placeholder="custom, voice, tools"
+              />
+            </label>
+            <label className="field-label">
+              Тело
+              <textarea
+                rows={5}
+                value={skillDraft.body}
+                onChange={(e) =>
+                  setSkillDraft({ ...skillDraft, body: e.target.value })
+                }
+                placeholder="Инструкции для модели…"
+              />
+            </label>
+            <button type="submit" className="btn btn-primary">
+              Сохранить skill
+            </button>
+          </form>
         </div>
       ) : null}
 
@@ -286,6 +457,14 @@ export function WorkshopPage() {
                   setDraft({ ...draft, triggers: e.target.value })
                 }
                 placeholder="фразы через запятую"
+              />
+            </label>
+            <label className="field-label">
+              Теги
+              <input
+                value={draft.tags}
+                onChange={(e) => setDraft({ ...draft, tags: e.target.value })}
+                placeholder="custom, flow"
               />
             </label>
             <label className="field-label">

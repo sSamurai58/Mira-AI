@@ -466,6 +466,7 @@ export async function proposeSkillFromItem(id: string): Promise<{
       "выученное",
       `стиль ${item.title.toLowerCase()}`,
     ],
+    tags: ["learned", "library"],
     enabled: false,
     body,
   });

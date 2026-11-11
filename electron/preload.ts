@@ -145,9 +145,19 @@ contextBridge.exposeInMainWorld("mira", {
     name: string;
     description: string;
     triggers: string[];
+    tags?: string[];
     enabled: boolean;
     body: string;
   }) => call("mira:save-protocol", item),
+  saveSkill: (item: {
+    id: string;
+    name: string;
+    description: string;
+    triggers: string[];
+    tags?: string[];
+    enabled: boolean;
+    body: string;
+  }) => call("mira:save-skill", item),
   getWebPolicy: () => call("mira:get-web-policy"),
   getScreenPolicy: () => call("mira:get-screen-policy"),
   getBrowserPolicy: () => call("mira:get-browser-policy"),

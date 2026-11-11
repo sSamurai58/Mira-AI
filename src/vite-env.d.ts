@@ -69,6 +69,7 @@ type MiraCatalogItem = {
   name: string;
   description: string;
   triggers: string[];
+  tags: string[];
   enabled: boolean;
   body: string;
   filePath: string;
@@ -292,6 +293,16 @@ interface MiraBridge {
     name: string;
     description: string;
     triggers: string[];
+    tags?: string[];
+    enabled: boolean;
+    body: string;
+  }) => Promise<MiraCatalogItem>;
+  saveSkill: (item: {
+    id: string;
+    name: string;
+    description: string;
+    triggers: string[];
+    tags?: string[];
     enabled: boolean;
     body: string;
   }) => Promise<MiraCatalogItem>;
