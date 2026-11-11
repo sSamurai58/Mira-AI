@@ -58,6 +58,7 @@
 - Blender: bpy/remote API vs управление UI через screen-control (#6–7) как fallback?
 - Набор стартовых Blender-skills: modeling / shading / animation / render — что в v1?
 - UI: desktop sidebar vs mobile bottom — один `AppShell` с адаптивом (см. DESIGN IA)
+- При UI/motion: грузить `.cursor/skills/emil-design-eng` + точечно `animate` / `review-animations` и др. (см. DESIGN)
 
 ### 2026-11-11 — Чеклист PRD #14 (обучение по материалам)
 

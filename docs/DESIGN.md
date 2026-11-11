@@ -3,6 +3,26 @@
 Тёмный UI голосового ИИ-помощника Mira.  
 Источник правды по интерфейсу (см. `RULES.md`).
 
+## Agent skills для дизайна и анимации
+
+При проектировании/реализации UI и motion агент подключает **только нужные** скиллы из `.cursor/skills/` (upstream: [emilkowalski/skills](https://github.com/emilkowalski/skills/tree/main/skills)). Это **не** продуктовый каталог PRD #9.
+
+| Когда | Скилл |
+|-------|--------|
+| Общий вкус / polish UI | `emil-design-eng` |
+| Собрать анимацию с нуля | `animate` |
+| Ревью / улучшить / найти / убрать motion | `review-animations` · `improve-animations` · `find-animation-opportunities` · `remove-animations` |
+| Несколько элементов вместе | `choreograph` |
+| Жесты | `gestures` |
+| Перф анимаций | `animation-performance` |
+| Точный язык motion | `animation-vocabulary` |
+| Принципы Apple → web | `apple-design` |
+| Варианты прототипа | `prototype` |
+| Сломать UI худшими данными | `break-ui` |
+| Выбор UI-библиотеки | `pick-ui-library` |
+
+Список и исключения — `.cursor/skills/README.md`. Активировать по задаче (как PRD #9 on-demand).
+
 ## Принципы UX/UI (жёсткие)
 
 1. **Одна главная задача на home** — диалог с Mira. Не витрина всех фич.
