@@ -69,7 +69,8 @@
 | `memory` | Память | Поиск по прошлым разговорам |
 | `skills` | Скиллы | Каталог / добавить; статус: в каталоге vs сейчас активен (on-demand) |
 | `protocols` | Протоколы | Панель: список, md-импорт, шаги, запуск, вкл/выкл |
-| `voices` | Голоса | Каталог, превью, выбор активного, добавить новый |
+| `voices` | Голоса | Каталог, превью, выбор активного |
+| `voice_studio` | Студия | Проект голоса: фразы, запись, анализ, train TTS / LLM |
 | `messaging` | Мессенджеры | Подключённые аккаунты, чаты, лог исходящих |
 | `blender` | Blender | Статус связи с Blender, путь к проекту, активные Blender-skills |
 | `library` | Библиотека | Загрузка материалов, статусы разбора, выученное, связь со skills |
@@ -84,7 +85,8 @@
 | Memory search | `memory` | «О чём говорили тогда…» | `stub` |
 | Skills | `skills` | Каталог, импорт; индикатор «активен сейчас» (не путать с «установлен») | `stub` |
 | Protocols Panel | `protocols` | CRUD протоколов, шаги, Run | `stub` |
-| Voices | `voices` | Список голосов, preview, add, select | `stub` |
+| Voices | `voices` | Список голосов, preview, select | `stub` |
+| Voice Studio | `voice_studio` | Phrase queue, record/upload, QA, train, publish to catalog | `stub` |
 | Messaging | `messaging` | Аккаунты TG/WA/IG, чаты, история исходящих | `stub` |
 | Blender | `blender` | Connected scene, Blender-skills active badge | `stub` |
 | Library | `library` | Upload, analyze status, plan, learned units, propose skill | `stub` |
