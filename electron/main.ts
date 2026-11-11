@@ -1,4 +1,5 @@
 import { app, BrowserWindow, ipcMain } from "electron";
+import fs from "node:fs";
 import path from "node:path";
 import { getPublicConfig, loadConfig, validateLlmConfig } from "./config";
 import { getSettingsEnv, setSettingsEnv } from "./settingsEnv";
@@ -138,15 +139,26 @@ import {
   upsertProfile,
 } from "./profiles";
 import { getHudPolicy, isHudOpen, toggleHud } from "./hud";
-import fs from "node:fs";
-
 
 const isDev = process.env.MIRA_DEV === "1";
 const activeAborts = new Map<string, AbortController>();
 let calendarTick: NodeJS.Timeout | null = null;
 
 
+function appIconPath(): string | undefined {
+  const candidates = [
+    path.join(__dirname, "..", "build", "icon.png"),
+    path.join(process.cwd(), "build", "icon.png"),
+    path.join(process.resourcesPath ?? "", "icon.png"),
+  ];
+  for (const p of candidates) {
+    if (p && fs.existsSync(p)) return p;
+  }
+  return undefined;
+}
+
 function createWindow(): BrowserWindow {
+  const icon = appIconPath();
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -154,6 +166,7 @@ function createWindow(): BrowserWindow {
     minHeight: 640,
     backgroundColor: "#000814",
     title: "Mira",
+    ...(icon ? { icon } : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,

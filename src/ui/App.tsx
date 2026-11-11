@@ -265,7 +265,14 @@ export function App() {
 
       <aside className="nav">
         <div className="brand-row">
-          <span className="brand-orb" aria-hidden />
+          <img
+            className="brand-logo"
+            src="/brand/mira-mark.svg"
+            width={28}
+            height={30}
+            alt=""
+            aria-hidden
+          />
           <div className="brand-name">{APP_NAME}</div>
           <div className="brand-phase">{APP_PHASE}</div>
         </div>

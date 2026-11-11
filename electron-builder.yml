@@ -7,9 +7,13 @@ directories:
 files:
   - dist/**/*
   - dist-electron/**/*
+  - build/icon.png
   - package.json
   - "!**/*.map"
 asar: true
+extraResources:
+  - from: build/icon.png
+    to: icon.png
 publish:
   provider: github
   owner: sSamurai58
@@ -20,13 +24,17 @@ linux:
     - AppImage
     - deb
   category: Utility
+  icon: build/icon.png
 win:
   target:
     - nsis
+  artifactName: Mira-Setup-${version}.${ext}
+  icon: build/icon.ico
 mac:
   target:
     - dmg
   category: public.app-category.productivity
+  icon: build/icon.png
 extraMetadata:
   main: dist-electron/main.js
 
