@@ -27,6 +27,11 @@ extraMetadata:
   main: dist-electron/main.js
 win:
   target:
+    # Plain zip — preferred for Linux→Windows cross-builds (NSIS CRC often
+    # fails on real Windows even when the file looks intact).
+    - target: zip
+      arch:
+        - x64
     - target: nsis
       arch:
         - x64
@@ -44,5 +49,7 @@ nsis:
   language: 1049
   include: Windows/nsis/installer.nsh
   license: Windows/nsis/license.txt
+  # Wine-cross NSIS can trip Windows CRC; zip target is the reliable path.
+  differentialPackage: false
 portable:
   artifactName: Mira-Portable-${version}.${ext}
