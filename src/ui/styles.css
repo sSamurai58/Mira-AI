@@ -1875,19 +1875,19 @@ strong {
   }
 }
 
-/* Form controls — glass fields, theme tokens */
+/* Form controls — glass fields, theme tokens (never style checkbox/radio as text fields) */
 .field,
 .voice-select select,
 .panel select,
-.panel input,
+.panel input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="hidden"]):not([type="color"]),
 .panel textarea,
-.stack > input,
+.stack > input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="hidden"]),
 .stack > textarea,
 .stack > select,
-.composer input,
+.composer input:not([type="checkbox"]):not([type="radio"]),
 .composer textarea,
 .composer select,
-.settings-layout input,
+.settings-layout input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="hidden"]):not([type="color"]),
 .settings-layout textarea,
 .settings-layout select,
 input:not([type]),

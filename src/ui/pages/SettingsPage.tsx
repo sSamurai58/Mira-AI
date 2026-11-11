@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { StubBadge } from "../components/StubBadge";
 import { SettingsApiSection } from "../components/SettingsApiSection";
+import { ToggleRow } from "../components/SettingsFormBits";
 import { SettingsIntegrationsSection } from "../components/SettingsIntegrationsSection";
 import { SettingsUpdatesSection } from "../components/SettingsUpdatesSection";
 import { ThemeSelect } from "../components/ThemeSelect";
@@ -174,43 +175,31 @@ export function SettingsPage({
             <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
               {listTtsEngines().find((e) => e.id === ttsEngine)?.detail}
             </p>
-            <label className="row">
-              <input
-                type="checkbox"
-                checked={autoSpeak}
-                onChange={(e) => {
-                  const on = e.target.checked;
-                  setAutoSpeak(on);
-                  localStorage.setItem("mira.autoSpeak", on ? "1" : "0");
-                }}
-              />
-              <span>Автоозвучка ответов</span>
-            </label>
-
-            <label className="row">
-              <input
-                type="checkbox"
-                checked={handsFree.enabled}
-                onChange={(e) =>
-                  setHandsFree(
-                    setHandsFreePrefs({ enabled: e.target.checked }),
-                  )
-                }
-              />
-              <span>Hands-free (wake-word без PTT)</span>
-            </label>
-            <label className="row">
-              <input
-                type="checkbox"
-                checked={handsFree.bargeIn}
-                onChange={(e) =>
-                  setHandsFree(
-                    setHandsFreePrefs({ bargeIn: e.target.checked }),
-                  )
-                }
-              />
-              <span>Barge-in: перебить озвучку → сразу слушать (Space)</span>
-            </label>
+            <ToggleRow
+              label="Автоозвучка ответов"
+              hint="Озвучивать ответы Миры автоматически"
+              checked={autoSpeak}
+              onChange={(on) => {
+                setAutoSpeak(on);
+                localStorage.setItem("mira.autoSpeak", on ? "1" : "0");
+              }}
+            />
+            <ToggleRow
+              label="Hands-free (wake-word без PTT)"
+              hint="Слушать wake-фразу в idle без удержания кнопки"
+              checked={handsFree.enabled}
+              onChange={(on) =>
+                setHandsFree(setHandsFreePrefs({ enabled: on }))
+              }
+            />
+            <ToggleRow
+              label="Barge-in"
+              hint="Перебить озвучку → сразу слушать (Space)"
+              checked={handsFree.bargeIn}
+              onChange={(on) =>
+                setHandsFree(setHandsFreePrefs({ bargeIn: on }))
+              }
+            />
             <label className="stack">
               <span className="muted">Wake-фраза</span>
               <input
