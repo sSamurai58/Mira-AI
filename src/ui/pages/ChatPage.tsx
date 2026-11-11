@@ -19,6 +19,7 @@ import { CoreOrb } from "../components/CoreOrb";
 import { HomeRail } from "../components/HomeRail";
 import { HudCorners } from "../components/HudCorners";
 import { ThemeSelect } from "../components/ThemeSelect";
+import { saveCoreLevel } from "../coreLevel";
 import {
   localImportLibraryBytes,
   localImportLibraryText,
@@ -841,13 +842,27 @@ export function ChatPage({
             <div className="core-card-grid">
               <div className="core-col">
                 <CoreOrb level={coreLevel} voiceState={voiceState} size={320} />
-                <div className="level-ticks" aria-hidden>
+                <div
+                  className="level-ticks"
+                  role="group"
+                  aria-label="Уровень ядра"
+                >
                   {Array.from({ length: 5 }, (_, i) => (
-                    <span key={i} className={i < coreLevel ? "on" : ""} />
+                    <button
+                      key={i}
+                      type="button"
+                      className={i < coreLevel ? "on" : ""}
+                      aria-label={`Уровень ${i + 1}`}
+                      aria-pressed={coreLevel === i + 1}
+                      onClick={() => {
+                        saveCoreLevel(i + 1);
+                        window.dispatchEvent(new Event("storage"));
+                      }}
+                    />
                   ))}
                 </div>
                 <p className="core-level-caption muted">
-                  Уровень ядра {coreLevel}/5
+                  Уровень ядра {coreLevel}/5 · растёт с Мирой
                 </p>
               </div>
 
