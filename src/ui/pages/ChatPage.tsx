@@ -682,12 +682,15 @@ export function ChatPage({
 
             <div className="core-card-grid">
               <div className="core-col">
-                <CoreOrb level={coreLevel} voiceState={voiceState} size={150} />
+                <CoreOrb level={coreLevel} voiceState={voiceState} size={320} />
                 <div className="level-ticks" aria-hidden>
                   {Array.from({ length: 5 }, (_, i) => (
                     <span key={i} className={i < coreLevel ? "on" : ""} />
                   ))}
                 </div>
+                <p className="core-level-caption muted">
+                  Уровень ядра {coreLevel}/5
+                </p>
               </div>
 
               <div className="core-meta">
@@ -725,7 +728,7 @@ export function ChatPage({
                     className={`wave ${waveActive ? "" : "is-idle"}`}
                     aria-hidden
                   >
-                    {Array.from({ length: 28 }, (_, i) => (
+                    {Array.from({ length: 36 }, (_, i) => (
                       <span
                         key={i}
                         style={{
@@ -735,6 +738,13 @@ export function ChatPage({
                       />
                     ))}
                   </div>
+                </div>
+
+                <div className="core-hint-row">
+                  <p className="muted" style={{ margin: 0 }}>
+                    Ядро реагирует на голос и ответы. Чтобы писать или говорить
+                    с Мирой — откройте «Диалог».
+                  </p>
                 </div>
               </div>
             </div>
