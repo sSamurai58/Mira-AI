@@ -690,7 +690,8 @@ strong {
   aspect-ratio: 1;
   width: clamp(110px, 16vw, 150px);
   max-width: 150px;
-  overflow: hidden;
+  overflow: visible;
+  isolation: isolate;
 }
 
 .home-grid.is-home-tab .core-orb {
@@ -700,15 +701,99 @@ strong {
   margin-inline: auto;
 }
 
+.core-orb-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  position: relative;
+  z-index: 1;
+}
+
+.core-orb-glow {
+  pointer-events: none;
+  position: absolute;
+  inset: 8%;
+  border-radius: 50%;
+  z-index: 0;
+  background: radial-gradient(
+    circle at 50% 45%,
+    color-mix(in srgb, var(--accent) 38%, transparent),
+    color-mix(in srgb, var(--accent) 12%, transparent) 42%,
+    transparent 72%
+  );
+  filter: blur(18px);
+  opacity: 0.9;
+  animation: pulse-core 3.2s ease-in-out infinite;
+}
+
+.core-orb[data-voice="speaking"] .core-orb-glow {
+  animation-duration: 1.1s;
+  opacity: 1;
+}
+
+.core-orb[data-voice="listening"] .core-orb-glow {
+  animation-duration: 2s;
+}
+
+.core-orb[data-voice="thinking"] .core-orb-glow {
+  animation-duration: 1.4s;
+  filter: blur(22px);
+}
+
 .core-level-caption {
   margin: 0;
   font-size: 0.85rem;
   letter-spacing: 0.04em;
 }
 
+.core-level-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.core-level-step {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.core-level-value {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 4.5rem;
+}
+
+.core-level-value strong {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.core-level-value span {
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.core-level-ring span {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+}
+
 .core-orb svg {
   display: block;
   overflow: hidden;
+  position: relative;
+  z-index: 1;
 }
 
 .core-radar {
@@ -803,31 +888,40 @@ strong {
   gap: 8px;
 }
 
-.level-ticks span {
+.level-ticks span,
+.level-ticks button {
   width: 36px;
   height: 5px;
   border-radius: 2px;
+  border: 0;
+  padding: 0;
   background: var(--track);
+  cursor: pointer;
 }
 
-.home-grid.is-home-tab .level-ticks span {
+.level-ticks button:hover {
+  filter: brightness(1.25);
+}
+
+.home-grid.is-home-tab .level-ticks span,
+.home-grid.is-home-tab .level-ticks button {
   width: 44px;
   height: 6px;
 }
 
-.level-ticks span.on:nth-child(1) {
+.level-ticks .on:nth-child(1) {
   background: var(--success);
 }
-.level-ticks span.on:nth-child(2) {
+.level-ticks .on:nth-child(2) {
   background: var(--accent);
 }
-.level-ticks span.on:nth-child(3) {
+.level-ticks .on:nth-child(3) {
   background: var(--border);
 }
-.level-ticks span.on:nth-child(4) {
+.level-ticks .on:nth-child(4) {
   background: var(--warning);
 }
-.level-ticks span.on:nth-child(5) {
+.level-ticks .on:nth-child(5) {
   background: var(--danger);
 }
 

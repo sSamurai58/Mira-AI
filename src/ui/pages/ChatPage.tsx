@@ -19,6 +19,7 @@ import { CoreOrb } from "../components/CoreOrb";
 import { HomeRail } from "../components/HomeRail";
 import { HudCorners } from "../components/HudCorners";
 import { ThemeSelect } from "../components/ThemeSelect";
+import { saveCoreLevel } from "../coreLevel";
 import {
   localImportLibraryBytes,
   localImportLibraryText,
@@ -841,13 +842,41 @@ export function ChatPage({
             <div className="core-card-grid">
               <div className="core-col">
                 <CoreOrb level={coreLevel} voiceState={voiceState} size={320} />
-                <div className="level-ticks" aria-hidden>
-                  {Array.from({ length: 5 }, (_, i) => (
-                    <span key={i} className={i < coreLevel ? "on" : ""} />
-                  ))}
+                <div
+                  className="core-level-controls"
+                  role="group"
+                  aria-label="Уровень ядра"
+                >
+                  <button
+                    type="button"
+                    className="btn core-level-step"
+                    aria-label="Понизить уровень"
+                    disabled={coreLevel <= 1}
+                    onClick={() => {
+                      saveCoreLevel(coreLevel - 1);
+                      window.dispatchEvent(new Event("storage"));
+                    }}
+                  >
+                    −
+                  </button>
+                  <div className="core-level-value" aria-live="polite">
+                    <strong>{coreLevel}</strong>
+                    <span className="muted">уровень</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn core-level-step"
+                    aria-label="Повысить уровень"
+                    onClick={() => {
+                      saveCoreLevel(coreLevel + 1);
+                      window.dispatchEvent(new Event("storage"));
+                    }}
+                  >
+                    +
+                  </button>
                 </div>
                 <p className="core-level-caption muted">
-                  Уровень ядра {coreLevel}/5
+                  Уровень ядра {coreLevel} · без потолка · растёт с Мирой
                 </p>
               </div>
 
