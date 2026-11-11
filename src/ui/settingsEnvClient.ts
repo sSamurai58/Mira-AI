@@ -47,12 +47,38 @@ export type SettingsEnvSnapshot = {
   envFile?: string;
 };
 
+function migrateLocalModels(values: Record<string, string>): Record<string, string> {
+  let provider = (values.LLM_PROVIDER || "mock").trim().toLowerCase();
+  if (provider === "xai") provider = "grok";
+  const next = { ...values };
+  const usingGrok =
+    provider === "grok" ||
+    ((provider === "mock" || provider === "offline" || !provider) &&
+      Boolean((next.XAI_API_KEY || "").trim()) &&
+      !(next.OPENAI_API_KEY || "").trim());
+  if (usingGrok) {
+    const fixed = modelForProvider("grok", next.LLM_MODEL);
+    if (fixed !== (next.LLM_MODEL || "").trim()) {
+      next.LLM_MODEL = fixed;
+      if (provider === "mock" || provider === "offline" || !provider) {
+        next.LLM_PROVIDER = "grok";
+      }
+    }
+  }
+  return next;
+}
+
 function readLocal(): Record<string, string> {
   try {
     const raw = localStorage.getItem(LS_KEY);
     if (!raw) return { ...DEFAULTS };
     const parsed = JSON.parse(raw) as Record<string, string>;
-    return { ...DEFAULTS, ...parsed };
+    const merged = migrateLocalModels({ ...DEFAULTS, ...parsed });
+    // Persist remap so Settings field and chat stay in sync
+    if (merged.LLM_MODEL !== (parsed.LLM_MODEL || DEFAULTS.LLM_MODEL)) {
+      writeLocal(merged);
+    }
+    return merged;
   } catch {
     return { ...DEFAULTS };
   }
@@ -185,11 +211,23 @@ export type BrowserLlmConfig = {
 };
 
 const DEFAULT_MODELS: Record<string, string> = {
-  grok: "grok-2-latest",
+  // xAI retired grok-2*; current public chat default is grok-4.7
+  grok: "grok-4.7",
   openai: "gpt-4o-mini",
   claude: "claude-3-5-sonnet-latest",
   gemini: "gemini-2.0-flash",
 };
+
+/** Retired / redirected xAI ids that 404 on current API. */
+const RETIRED_GROK_MODELS = new Set([
+  "grok-2",
+  "grok-2-latest",
+  "grok-2-1212",
+  "grok-2-vision",
+  "grok-2-vision-1212",
+  "grok-beta",
+  "grok-vision-beta",
+]);
 
 /** Pick a model that belongs to the provider (avoid gpt-* on xAI, etc.). */
 export function modelForProvider(
@@ -203,6 +241,8 @@ export function modelForProvider(
 
   const lower = model.toLowerCase();
   if (p === "grok") {
+    if (RETIRED_GROK_MODELS.has(lower)) return fallback;
+    // grok-3* may still redirect on some accounts; prefer current default if exact retired alias
     if (lower.startsWith("grok") || lower.startsWith("xai")) return model;
     return fallback;
   }
