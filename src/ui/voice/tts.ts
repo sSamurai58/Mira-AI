@@ -54,7 +54,22 @@ export function speakText(
   utter.pitch = engine === "neural-pack" ? 1.02 : 1;
   utter.onstart = () => handlers.onStart?.();
   utter.onend = () => handlers.onEnd?.();
-  utter.onerror = (ev) => handlers.onError?.(ev.error || "TTS error");
+  utter.onerror = (ev) => {
+    const code = ev.error || "TTS error";
+    // Headless / empty voice catalogs often throw synthesis-failed — soft fail.
+    if (
+      code === "synthesis-failed" ||
+      code === "synthesis-unavailable" ||
+      code === "language-unavailable" ||
+      code === "voice-unavailable" ||
+      code === "not-allowed"
+    ) {
+      handlers.onEnd?.();
+      return;
+    }
+    handlers.onError?.(code);
+  };
   window.speechSynthesis.speak(utter);
 }
+
 

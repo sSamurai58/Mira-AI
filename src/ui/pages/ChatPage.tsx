@@ -120,12 +120,68 @@ export function ChatPage({
         onStart: () => onVoiceState("speaking"),
         onEnd: () => onVoiceState("idle"),
         onError: (msg) => {
-          onError(msg);
-          onVoiceState("error");
+          // Soft-fail TTS: keep chat usable in headless / empty-voice envs
+          localStorage.setItem("mira.autoSpeak", "0");
+          onVoiceState("idle");
+          if (msg && msg !== "synthesis-failed") {
+            onError(`TTS: ${msg} (автоозвучка выключена)`);
+          }
         },
       });
     },
     [activeVoiceId, autoSpeak, onError, onVoiceState],
+  );
+
+  const sendBrowserDemo = useCallback(
+    async (trimmed: string) => {
+      const requestId = crypto.randomUUID();
+      requestIdRef.current = requestId;
+      setBusy(true);
+      setMemoryNote(null);
+      setContextNote("demo: browser mock (без Electron IPC)");
+      onVoiceState("thinking");
+      setBubbles((prev) => [
+        ...prev,
+        { id: `local-user-${requestId}`, role: "user", content: trimmed },
+        {
+          id: `local-assistant-${requestId}`,
+          role: "assistant",
+          content: "",
+          pending: true,
+        },
+      ]);
+
+      const reply = [
+        "Browser-demo Mira (mock).",
+        `Вы сказали: «${trimmed.slice(0, 240)}».`,
+        "Полный чат с SQLite/tools — в Electron. Здесь быстрый демо-ответ без IPC.",
+        "Живые модели: LLM_PROVIDER=openai|claude|gemini|grok + ключ в .env.",
+      ].join(" ");
+
+      let built = "";
+      for (const word of reply.split(/(\s+)/)) {
+        built += word;
+        const snapshot = built;
+        setBubbles((prev) =>
+          prev.map((b) =>
+            b.id === `local-assistant-${requestId}`
+              ? { ...b, content: snapshot, pending: true }
+              : b,
+          ),
+        );
+        await new Promise((r) => setTimeout(r, 8));
+      }
+      setBubbles((prev) =>
+        prev.map((b) =>
+          b.id === `local-assistant-${requestId}`
+            ? { ...b, content: built, pending: false }
+            : b,
+        ),
+      );
+      setBusy(false);
+      speakAssistant(built);
+    },
+    [onVoiceState, speakAssistant],
   );
 
   const sendText = useCallback(
@@ -133,9 +189,7 @@ export function ChatPage({
       const trimmed = text.trim();
       if (!trimmed || busy) return;
       if (!window.mira) {
-        onError(
-          "Чат доступен в Electron (`npm run dev:electron` / `npm start`).",
-        );
+        await sendBrowserDemo(trimmed);
         return;
       }
 
@@ -173,8 +227,9 @@ export function ChatPage({
         setBubbles((prev) => prev.filter((b) => !b.pending));
       }
     },
-    [busy, onError, onSessionChange, onVoiceState],
+    [busy, onError, onSessionChange, onVoiceState, sendBrowserDemo],
   );
+
 
   sendTextRef.current = sendText;
 

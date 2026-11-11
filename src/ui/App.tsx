@@ -49,9 +49,14 @@ export function App() {
   const [doctorText, setDoctorText] = useState("Doctor…");
   const [healthText, setHealthText] = useState("Проверка store…");
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [autoSpeak, setAutoSpeak] = useState(
-    () => localStorage.getItem("mira.autoSpeak") !== "0",
-  );
+  const [autoSpeak, setAutoSpeak] = useState(() => {
+    // Default off in empty-voice / headless demos; user can enable in Settings.
+    if (localStorage.getItem("mira.autoSpeak") === "1") return true;
+    if (localStorage.getItem("mira.autoSpeak") === "0") return false;
+    localStorage.setItem("mira.autoSpeak", "0");
+    return false;
+  });
+
   const [navLabels, setNavLabels] = useState(() => navItems());
   const titles = Object.fromEntries(
     navLabels.map((n) => [n.id, n.label]),

@@ -56,8 +56,9 @@ export function createMockAdapter(model = "mock-mira"): LlmAdapter {
             ? `Учтены интернет-данные: ${webHint.content.slice(0, 280)}…`
             : "Интернет-инструменты для этого хода не вызывались.",
           skillHint ? "Активны skills on-demand." : "Skills в контексте нет.",
-          "Подключите OPENAI_API_KEY и LLM_PROVIDER=openai для живой модели.",
+          "Для живой модели: LLM_PROVIDER=openai|claude|gemini|grok и соответствующий API-ключ в .env.",
         ]
+
           .filter(Boolean)
           .join("\n");
 
