@@ -75,6 +75,7 @@ export type MiraChatEvent =
       blender?: string | null;
       addon?: string | null;
     }
+  | { type: "phase"; phase: "tools" | "llm"; detail: string }
   | { type: "assistant_start"; sessionId: string }
   | { type: "token"; text: string }
   | {

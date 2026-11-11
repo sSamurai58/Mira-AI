@@ -55,8 +55,10 @@ import {
 } from "./tools/terminal";
 import {
   extractSearchQueryFromText,
+  fetchWeatherSnapshot,
   formatWebBlock,
   getWebPolicy,
+  looksLikeWeatherIntent,
   looksLikeWebIntent,
   webFetch,
   webSearch,
@@ -88,8 +90,14 @@ import { handleMailFromChat, looksLikeMailIntent } from "./future/mail";
 import { handleMediaFromChat, looksLikeMediaIntent } from "./future/media";
 import { handleNotesFromChat, looksLikeNotesIntent } from "./future/notes";
 
-const SYSTEM_PROMPT =
-  "Ты Mira — локальный голосовой ИИ-помощник. Отвечай по делу на языке пользователя. Если даны фрагменты памяти, выученное из библиотеки, интернет-данные, снимок экрана, история браузера, мессенджер, вывод терминала или результат Blender — опирайся на них. Skills подключаются только по необходимости.";
+const SYSTEM_PROMPT = [
+  "Ты Mira — локальный голосовой ИИ-помощник.",
+  "Отвечай на языке пользователя, выразительно и по делу.",
+  "Формат ответа: Markdown — **жирный**, *курсив*, __подчёркнутый__ где уместно; списки через «- »; обязательно несколько коротких абзацев (не одна длинная строка).",
+  "Если в контексте есть интернет/погода/память/инструменты — опирайся только на них и дождись их данных: не пиши заранее, что данных нет, пока блок инструментов пуст или помечен как ошибка.",
+  "Если блок погоды или поиска уже содержит цифры — используй их как актуальные и не предлагай «проверьте сайт» без нужды.",
+  "Skills подключаются только по необходимости.",
+].join(" ");
 
 export type ChatStreamEvent =
   | { type: "user"; utterance: UtteranceRow }
@@ -105,6 +113,7 @@ export type ChatStreamEvent =
       blender?: string | null;
       addon?: string | null;
     }
+  | { type: "phase"; phase: "tools" | "llm"; detail: string }
   | { type: "assistant_start"; sessionId: string }
   | { type: "token"; text: string }
   | {
@@ -384,6 +393,11 @@ export async function sendChatMessage(
 
   // Must tools first, then F* addons, then generic web — avoid calendar
   // stealing «Напиши … в Telegram, что встреча…».
+  emit({
+    type: "phase",
+    phase: "tools",
+    detail: "Собираю данные…",
+  });
   try {
     if (looksLikeBlenderIntent(text) && getBlenderPolicy().enabled) {
       const job = await runDemoScene();
@@ -495,7 +509,23 @@ export async function sendChatMessage(
     } else if (looksLikeWebIntent(text) && getWebPolicy().enabled) {
       const q = extractSearchQueryFromText(text);
       const urlMatch = text.match(/https?:\/\/\S+/i)?.[0];
-      if (urlMatch && !looksLikeBrowserOpenIntent(text)) {
+      if (looksLikeWeatherIntent(text) && !urlMatch) {
+        emit({
+          type: "phase",
+          phase: "tools",
+          detail: "Уточняю погоду…",
+        });
+        try {
+          webBlock = await fetchWeatherSnapshot(q || text, signal);
+          webUsed = "weather";
+        } catch (weatherErr) {
+          const hits = await webSearch(q || text, signal);
+          webUsed = "search";
+          webBlock = `${formatWebBlock("search", hits)}\n\n[Погода: прямой источник недоступен — ${
+            weatherErr instanceof Error ? weatherErr.message : String(weatherErr)
+          }. Если в поиске нет температуры, честно скажи об этом.]`;
+        }
+      } else if (urlMatch && !looksLikeBrowserOpenIntent(text)) {
         const policy = getWebPolicy();
         if (policy.requireConfirmForFetch) {
           const ok = await requestUserConfirm({
@@ -512,11 +542,21 @@ export async function sendChatMessage(
           }
         }
         if (webUsed !== "fetch-denied") {
+          emit({
+            type: "phase",
+            phase: "tools",
+            detail: "Загружаю страницу…",
+          });
           const fetched = await webFetch(urlMatch, signal);
           webUsed = "fetch";
           webBlock = formatWebBlock("fetch", fetched);
         }
       } else {
+        emit({
+          type: "phase",
+          phase: "tools",
+          detail: "Ищу в интернете…",
+        });
         const hits = await webSearch(q, signal);
         webUsed = "search";
         webBlock = formatWebBlock("search", hits);
@@ -630,6 +670,11 @@ export async function sendChatMessage(
   }
 
   const adapter = createLlmAdapter(cfg);
+  emit({
+    type: "phase",
+    phase: "llm",
+    detail: "Формирую полный ответ…",
+  });
   emit({ type: "assistant_start", sessionId: session.id });
 
   let full = "";

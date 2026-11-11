@@ -14,6 +14,7 @@ import {
   toAttachmentPayload,
   type PendingChatAttachment,
 } from "../chat/attachments";
+import { ChatMarkdown } from "../chat/ChatMarkdown";
 import { CoreOrb } from "../components/CoreOrb";
 import { HomeRail } from "../components/HomeRail";
 import { HudCorners } from "../components/HudCorners";
@@ -56,6 +57,8 @@ type Bubble = {
   role: "user" | "assistant";
   content: string;
   pending?: boolean;
+  /** Shown while waiting for tools / first tokens */
+  statusHint?: string;
   attachments?: Array<{ name: string; kind: string }>;
 };
 
@@ -149,7 +152,16 @@ export function ChatPage({
         onVoiceState("idle");
         return;
       }
-      speakText(text, activeVoiceId, {
+      const spoken = text
+        .replace(/\*\*([^*]+)\*\*/g, "$1")
+        .replace(/__([^_]+)__/g, "$1")
+        .replace(/\*([^*]+)\*/g, "$1")
+        .replace(/_([^_]+)_/g, "$1")
+        .replace(/`([^`]+)`/g, "$1")
+        .replace(/^\s*[-*•]\s+/gm, "")
+        .replace(/\n+/g, " ")
+        .trim();
+      speakText(spoken, activeVoiceId, {
         onStart: () => onVoiceState("speaking"),
         onEnd: () => onVoiceState("idle"),
         onError: (msg) => {
@@ -372,6 +384,7 @@ export function ChatPage({
           role: "assistant",
           content: "",
           pending: true,
+          statusHint: "Собираю данные…",
         },
       ]);
 
@@ -410,6 +423,8 @@ export function ChatPage({
       }
 
       if (sessionId) {
+        // Don't clobber an in-flight reply (causes duplicate / truncated bubbles).
+        if (busyRef.current || requestIdRef.current) return;
         const pack = await window.mira.getSession(sessionId);
         if (!cancelled && pack) {
           setBubbles(
@@ -439,6 +454,20 @@ export function ChatPage({
     if (!window.mira) return;
     return window.mira.onChatEvent(({ requestId, event }) => {
       if (requestIdRef.current && requestId !== requestIdRef.current) return;
+
+      if (event.type === "phase") {
+        setBubbles((prev) => {
+          const next = [...prev];
+          const last = next[next.length - 1];
+          if (last?.pending && last.role === "assistant" && !last.content) {
+            next[next.length - 1] = {
+              ...last,
+              statusHint: event.detail,
+            };
+          }
+          return next;
+        });
+      }
 
       if (event.type === "context") {
         const skillPart = event.skills.length
@@ -473,6 +502,7 @@ export function ChatPage({
             next[next.length - 1] = {
               ...last,
               content: last.content + event.text,
+              statusHint: undefined,
             };
           }
           return next;
@@ -482,13 +512,22 @@ export function ChatPage({
       if (event.type === "assistant_done") {
         setBubbles((prev) => {
           const next = [...prev];
-          const last = next[next.length - 1];
-          if (last?.pending) {
-            next[next.length - 1] = {
-              id: event.utterance.id,
-              role: "assistant",
-              content: event.utterance.content,
-            };
+          const pendingIdx = [...next]
+            .map((b, i) => ({ b, i }))
+            .reverse()
+            .find((x) => x.b.pending && x.b.role === "assistant")?.i;
+          const bubble = {
+            id: event.utterance.id,
+            role: "assistant" as const,
+            content: event.utterance.content,
+          };
+          if (pendingIdx != null) {
+            next[pendingIdx] = bubble;
+            return next;
+          }
+          // Fallback: avoid losing the final answer if the pending bubble was cleared.
+          if (!next.some((b) => b.id === event.utterance.id)) {
+            next.push(bubble);
           }
           return next;
         });
@@ -948,7 +987,17 @@ export function ChatPage({
                       ))}
                     </div>
                   ) : null}
-                  {b.content || (b.pending ? "…" : "")}
+                  {b.content ? (
+                    b.role === "assistant" ? (
+                      <ChatMarkdown text={b.content} />
+                    ) : (
+                      <div className="bubble-plain">{b.content}</div>
+                    )
+                  ) : b.pending ? (
+                    <span className="bubble-pending">
+                      {b.statusHint || "Думаю…"}
+                    </span>
+                  ) : null}
                 </div>
               ))
             )}
