@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain } from "electron";
 import path from "node:path";
 import { getPublicConfig, loadConfig, validateLlmConfig } from "./config";
+import { getSettingsEnv, setSettingsEnv } from "./settingsEnv";
 import { wireConfirmBridge } from "./confirmBridge";
 import { createLlmAdapter } from "./llm";
 import {
@@ -225,6 +226,12 @@ app.whenReady().then(() => {
   });
 
   on("mira:get-config", () => getPublicConfig());
+  on("mira:get-settings-env", () => getSettingsEnv());
+  on(
+    "mira:set-settings-env",
+    (_e, patch: Record<string, string>) => setSettingsEnv(patch ?? {}),
+    { privileged: true },
+  );
   on("mira:list-sessions", () => listSessions());
   on("mira:create-session", (_e, title?: string) =>
     createSession(title || "Новый диалог"),

@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { StubBadge } from "../components/StubBadge";
+import { SettingsApiSection } from "../components/SettingsApiSection";
+import { SettingsIntegrationsSection } from "../components/SettingsIntegrationsSection";
 import { ThemeSelect } from "../components/ThemeSelect";
 import { THEMES, type ThemeId } from "../themes";
 import {
@@ -49,10 +51,16 @@ export function SettingsPage({
   healthText,
   onOpenDoctor,
 }: SettingsPageProps) {
-  const [section, setSection] = useState<SectionId>("appearance");
-  const [cfgText, setCfgText] = useState("…");
-  const [testResult, setTestResult] = useState<string | null>(null);
-  const [testing, setTesting] = useState(false);
+  const [section, setSection] = useState<SectionId>(() => {
+    const hash = typeof window !== "undefined" ? window.location.hash : "";
+    if (hash.includes("integrations")) return "integrations";
+    if (hash.includes("api")) return "api";
+    if (hash.includes("voice")) return "voice";
+    if (hash.includes("terminal")) return "terminal";
+    if (hash.includes("data")) return "data";
+    if (hash.includes("general")) return "general";
+    return "appearance";
+  });
   const [voices, setVoices] = useState<VoiceInfo[]>([]);
   const [activeVoiceId, setActiveVoiceIdState] = useState<string | null>(null);
   const [engineDetail, setEngineDetail] = useState("");
@@ -65,23 +73,6 @@ export function SettingsPage({
   const [ttsEngine, setTtsEngine] = useState<TtsEngineId>(() =>
     getActiveTtsEngine(),
   );
-
-
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      if (!window.mira) {
-        if (!cancelled) setCfgText("IPC недоступен (откройте в Electron)");
-        return;
-      }
-      const cfg = await window.mira.getConfig();
-      if (!cancelled) setCfgText(JSON.stringify(cfg, null, 2));
-    }
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, [section]);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,20 +87,6 @@ export function SettingsPage({
       stopSpeaking();
     };
   }, []);
-
-  async function handleTest() {
-    if (!window.mira) return;
-    setTesting(true);
-    setTestResult(null);
-    try {
-      const res = await window.mira.testLlm();
-      setTestResult(`${res.ok ? "OK" : "FAIL"} — ${res.detail}`);
-    } catch (err) {
-      setTestResult(err instanceof Error ? err.message : String(err));
-    } finally {
-      setTesting(false);
-    }
-  }
 
   return (
     <div className="settings-layout">
@@ -300,39 +277,8 @@ export function SettingsPage({
             </p>
           </>
         ) : null}
-        {section === "api" ? (
-          <>
-            <div className="row">
-              <h2 style={{ margin: 0, fontSize: "1.05rem" }}>API и модели</h2>
-              <StubBadge label="P1" />
-            </div>
-            <p className="muted" style={{ margin: 0 }}>
-              Ключи только в `.env` (`OPENAI_API_KEY`, опц. `OPENAI_BASE_URL`,
-              `LLM_PROVIDER=openai|claude|gemini|grok|offline|mock`, `LLM_MODEL`,
-              `ANTHROPIC_API_KEY` / `GEMINI_API_KEY` / `XAI_API_KEY`, `VISION_ENABLED`).
-              Без ключа — <strong>mock</strong> или <strong>offline</strong>.
-
-
-            </p>
-            <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
-              {cfgText}
-            </pre>
-            <div className="row">
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={testing}
-                onClick={() => void handleTest()}
-              >
-                {testing ? "Проверка…" : "Тест соединения"}
-              </button>
-              {testResult ? <span className="chip">{testResult}</span> : null}
-            </div>
-          </>
-        ) : null}
-        {section === "integrations" ? (
-          <IntegrationsSection />
-        ) : null}
+        {section === "api" ? <SettingsApiSection /> : null}
+        {section === "integrations" ? <SettingsIntegrationsSection /> : null}
         {section === "terminal" ? <TerminalSettingsSection /> : null}
         {section === "data" ? (
           <DataPrivacySection
@@ -844,330 +790,3 @@ function TerminalSettingsSection() {
   );
 }
 
-function IntegrationsSection() {
-  const [webPolicy, setWebPolicy] = useState("…");
-  const [screenPolicy, setScreenPolicy] = useState("…");
-  const [browserPolicy, setBrowserPolicy] = useState("…");
-  const [messagingPolicy, setMessagingPolicy] = useState("…");
-  const [contactsText, setContactsText] = useState("…");
-  const [webTest, setWebTest] = useState<string | null>(null);
-  const [screenTest, setScreenTest] = useState<string | null>(null);
-  const [browserTest, setBrowserTest] = useState<string | null>(null);
-  const [messagingTest, setMessagingTest] = useState<string | null>(null);
-  const [blenderPolicy, setBlenderPolicy] = useState("…");
-  const [blenderTest, setBlenderTest] = useState<string | null>(null);
-  const [historyText, setHistoryText] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [tgChatId, setTgChatId] = useState("");
-
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      if (!window.mira) {
-        if (!cancelled) {
-          setWebPolicy("IPC недоступен");
-          setScreenPolicy("IPC недоступен");
-          setBrowserPolicy("IPC недоступен");
-          setMessagingPolicy("IPC недоступен");
-          setBlenderPolicy("IPC недоступен");
-          setContactsText("IPC недоступен");
-        }
-        return;
-      }
-      const [web, screen, browser, messaging, blender, contacts] =
-        await Promise.all([
-          window.mira.getWebPolicy(),
-          window.mira.getScreenPolicy(),
-          window.mira.getBrowserPolicy(),
-          window.mira.getMessagingPolicy(),
-          window.mira.getBlenderPolicy(),
-          window.mira.listMessengerContacts(),
-        ]);
-      if (cancelled) return;
-      setWebPolicy(JSON.stringify(web, null, 2));
-      setScreenPolicy(JSON.stringify(screen, null, 2));
-      setBrowserPolicy(JSON.stringify(browser, null, 2));
-      setMessagingPolicy(JSON.stringify(messaging, null, 2));
-      setBlenderPolicy(JSON.stringify(blender, null, 2));
-      setContactsText(
-        contacts
-          .map(
-            (c) =>
-              `${c.provider}: ${c.display_name} (${c.handle}) → ${c.chat_id}`,
-          )
-          .join("\n") || "(нет контактов)",
-      );
-    }
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return (
-    <>
-      <div className="row">
-        <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Интеграции</h2>
-        <StubBadge label="P10" />
-      </div>
-
-      <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Интернет (#4)</h3>
-      <p className="muted" style={{ margin: 0 }}>
-        `WEB_ENABLED`, `WEB_ALLOWLIST`, `WEB_FETCH_CONFIRM`. Fetch URL — через
-        ConfirmModal (always до F12).
-      </p>
-      <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
-        {webPolicy}
-      </pre>
-      <div className="row">
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={busy !== null}
-          onClick={() => {
-            if (!window.mira) return;
-            setBusy("web");
-            void window.mira
-              .testWeb("weather Moscow")
-              .then((res) => {
-                setWebTest(`${res.ok ? "OK" : "FAIL"} — ${res.detail}`);
-              })
-              .finally(() => setBusy(null));
-          }}
-        >
-          Тест web.search
-        </button>
-        {webTest ? <span className="chip">{webTest}</span> : null}
-      </div>
-
-      <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Экран (#6–7)</h3>
-      <p className="muted" style={{ margin: 0 }}>
-        `SCREEN_ENABLED`, `SCREEN_CONTROL_ENABLED`, `OS_PRIORITY`. Клик/ввод —
-        confirm. Capture → `data/screenshots/`.
-      </p>
-      <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
-        {screenPolicy}
-      </pre>
-      <div className="row">
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={busy !== null}
-          onClick={() => {
-            if (!window.mira) return;
-            setBusy("screen");
-            void window.mira
-              .testScreen()
-              .then((res) => {
-                setScreenTest(
-                  `${res.ok ? "OK" : "FAIL"} — ${res.detail}${res.path ? ` · ${res.path}` : ""}`,
-                );
-              })
-              .finally(() => setBusy(null));
-          }}
-        >
-          Тест screen.capture
-        </button>
-        {screenTest ? <span className="chip">{screenTest}</span> : null}
-      </div>
-
-      <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Браузер (#8)</h3>
-      <p className="muted" style={{ margin: 0 }}>
-        `BROWSER_ENABLED`, `BROWSER_PREFERRED`, `BROWSER_OPEN_CONFIRM`. История:
-        визиты Mira + опц. Chromium History (read-only).
-      </p>
-      <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
-        {browserPolicy}
-      </pre>
-      <div className="row">
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={busy !== null}
-          onClick={() => {
-            if (!window.mira) return;
-            setBusy("browser");
-            void window.mira
-              .testBrowserOpen("https://example.com")
-              .then((res) => {
-                setBrowserTest(`${res.ok ? "OK" : "FAIL"} — ${res.detail}`);
-              })
-              .finally(() => setBusy(null));
-          }}
-        >
-          Тест open URL
-        </button>
-        <button
-          type="button"
-          className="btn"
-          disabled={busy !== null}
-          onClick={() => {
-            if (!window.mira) return;
-            setBusy("history");
-            void window.mira
-              .searchBrowserHistory("")
-              .then((rows) => {
-                setHistoryText(
-                  rows.length
-                    ? rows
-                        .slice(0, 8)
-                        .map((r) => `${r.title}\n  ${r.url}`)
-                        .join("\n")
-                    : "(пусто)",
-                );
-              })
-              .finally(() => setBusy(null));
-          }}
-        >
-          История
-        </button>
-        {browserTest ? <span className="chip">{browserTest}</span> : null}
-      </div>
-      {historyText ? (
-        <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
-          {historyText}
-        </pre>
-      ) : null}
-
-      <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Мессенджеры (#12)</h3>
-      <p className="muted" style={{ margin: 0 }}>
-        Primary: Telegram. Env: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_DEFAULT_CHAT_ID`,
-        `MESSAGING_MODE=dry-run|live`, `MESSAGING_CONFIRM`. Отправка только после
-        ConfirmModal. WhatsApp / Instagram — stub.
-      </p>
-      <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
-        {messagingPolicy}
-      </pre>
-      <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
-        {contactsText}
-      </pre>
-      <label className="stack">
-        <span className="muted">Chat ID для контакта «Иван» (Telegram)</span>
-        <input
-          value={tgChatId}
-          onChange={(e) => setTgChatId(e.target.value)}
-          placeholder="например 123456789"
-        />
-      </label>
-      <div className="row">
-        <button
-          type="button"
-          className="btn"
-          disabled={busy !== null || !tgChatId.trim()}
-          onClick={() => {
-            if (!window.mira) return;
-            setBusy("contact");
-            void window.mira
-              .upsertMessengerContact({
-                id: "tg-ivan",
-                provider: "telegram",
-                displayName: "Иван",
-                handle: "@ivan_demo",
-                chatId: tgChatId.trim(),
-              })
-              .then((row) => {
-                setContactsText((prev) =>
-                  `${row.provider}: ${row.display_name} (${row.handle}) → ${row.chat_id}\n${prev}`
-                    .split("\n")
-                    .filter((line, i, arr) => arr.indexOf(line) === i)
-                    .join("\n"),
-                );
-              })
-              .finally(() => setBusy(null));
-          }}
-        >
-          Сохранить chat id
-        </button>
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={busy !== null}
-          onClick={() => {
-            if (!window.mira) return;
-            setBusy("messaging");
-            void window.mira
-              .testMessagingSend({
-                recipient: "Ивану",
-                body: "тест из Настроек Mira",
-              })
-              .then((res) => {
-                setMessagingTest(`${res.ok ? "OK" : "FAIL"} — ${res.detail}`);
-              })
-              .finally(() => setBusy(null));
-          }}
-        >
-          Тест send (confirm)
-        </button>
-        {messagingTest ? <span className="chip">{messagingTest}</span> : null}
-      </div>
-      <p className="muted" style={{ margin: 0 }}>
-        WhatsApp / Instagram — интерфейс-заглушки (без отправки).
-      </p>
-
-      <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Future addons</h3>
-      <p className="muted" style={{ margin: 0 }}>
-        F1 камеры · F2 IoT · F3 календарь/таймеры · F4 почта · F5 файлы · F7
-        медиа — через Диалог. F10 профили — в Общих.
-
-      </p>
-      <div className="row" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
-        <button
-          type="button"
-          className="btn"
-          disabled={busy !== null}
-          onClick={() => {
-            if (!window.mira) return;
-            setBusy("future");
-            void Promise.all([
-              window.mira.listCameras(),
-              window.mira.listIotDevices(),
-              window.mira.getMailPolicy(),
-              window.mira.getMediaStatus(),
-              window.mira.listCalendarEvents(),
-            ])
-              .then(([cams, iot, mail, media, events]) => {
-                setBlenderTest(
-                  `cams=${(cams as unknown[]).length} iot=${(iot as unknown[]).length} mail=${(mail as { mode: string }).mode} media=${JSON.stringify(media).slice(0, 80)} events=${(events as unknown[]).length}`,
-                );
-              })
-              .finally(() => setBusy(null));
-          }}
-        >
-          Статус F1/F2/F3/F4/F7
-        </button>
-      </div>
-
-      <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Blender (#13)</h3>
-      <p className="muted" style={{ margin: 0 }}>
-        `BLENDER_ENABLED`, `BLENDER_PATH`, `BLENDER_MODE=dry-run|live`,
-        `BLENDER_CONFIRM`. Демо: куб + свет + камера через bpy. Skill
-        `blender-scene` — on-demand (default off).
-      </p>
-      <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
-        {blenderPolicy}
-      </pre>
-      <div className="row">
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={busy !== null}
-          onClick={() => {
-            if (!window.mira) return;
-            setBusy("blender");
-            void window.mira
-              .testBlenderDemo()
-              .then((res) => {
-                setBlenderTest(
-                  `${res.ok ? "OK" : "FAIL"} · ${res.mode} — ${res.detail}`,
-                );
-              })
-              .finally(() => setBusy(null));
-          }}
-        >
-          Тест демо-сцены
-        </button>
-        {blenderTest ? <span className="chip">{blenderTest}</span> : null}
-      </div>
-    </>
-  );
-}

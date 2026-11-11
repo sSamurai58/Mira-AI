@@ -112,6 +112,20 @@ const call = (channel: string, ...args: unknown[]) =>
 contextBridge.exposeInMainWorld("mira", {
   getHealth: () => call("mira:get-health"),
   getConfig: (): Promise<MiraPublicConfig> => call("mira:get-config"),
+  getSettingsEnv: (): Promise<{
+    values: Record<string, string>;
+    secretsSet: Record<string, boolean>;
+    envFile: string;
+    exists: boolean;
+  }> => call("mira:get-settings-env"),
+  setSettingsEnv: (
+    patch: Record<string, string>,
+  ): Promise<{
+    ok: boolean;
+    detail: string;
+    values: Record<string, string>;
+    secretsSet: Record<string, boolean>;
+  }> => call("mira:set-settings-env", patch),
   listSessions: (): Promise<MiraSession[]> => call("mira:list-sessions"),
   createSession: (title?: string): Promise<MiraSession> =>
     call("mira:create-session", title),

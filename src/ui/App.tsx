@@ -97,7 +97,13 @@ export function App() {
     typeof window !== "undefined" &&
     (window.location.hash === "#/hud" || window.location.hash === "#hud");
 
-  const [nav, setNav] = useState<RootNav>("chat");
+  const [nav, setNav] = useState<RootNav>(() => {
+    const hash = typeof window !== "undefined" ? window.location.hash : "";
+    if (hash.includes("settings")) return "settings";
+    if (hash.includes("workshop")) return "workshop";
+    if (hash.includes("memory")) return "memory";
+    return "chat";
+  });
   const [themeId, setThemeId] = useState<ThemeId>(() => loadStoredThemeId());
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [confirmOpen, setConfirmOpen] = useState(false);

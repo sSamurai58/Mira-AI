@@ -259,6 +259,20 @@ type MiraHealth = {
 interface MiraBridge {
   getHealth: () => Promise<MiraHealth>;
   getConfig: () => Promise<MiraPublicConfig>;
+  getSettingsEnv: () => Promise<{
+    values: Record<string, string>;
+    secretsSet: Record<string, boolean>;
+    envFile: string;
+    exists: boolean;
+  }>;
+  setSettingsEnv: (
+    patch: Record<string, string>,
+  ) => Promise<{
+    ok: boolean;
+    detail: string;
+    values: Record<string, string>;
+    secretsSet: Record<string, boolean>;
+  }>;
   listSessions: () => Promise<MiraSession[]>;
   createSession: (title?: string) => Promise<MiraSession>;
   getSession: (
