@@ -255,6 +255,14 @@ contextBridge.exposeInMainWorld("mira", {
   listCustomVoices: () => call("mira:list-custom-voices"),
   createVoiceProject: (payload?: { name?: string; lang?: string }) =>
     call("mira:create-voice-project", payload),
+  updateVoiceProject: (payload: { id: string; name?: string; lang?: string }) =>
+    call("mira:update-voice-project", payload),
+  deleteVoiceProject: (id: string) => call("mira:delete-voice-project", id),
+  updateCustomVoice: (payload: { id: string; name?: string; lang?: string }) =>
+    call("mira:update-custom-voice", payload),
+  deleteCustomVoice: (id: string) => call("mira:delete-custom-voice", id),
+  addVoicePhrase: (projectId: string, text: string) =>
+    call("mira:add-voice-phrase", projectId, text),
   generateVoicePhrases: (projectId: string, count?: number) =>
     call("mira:generate-voice-phrases", projectId, count),
   importVoiceClip: (payload: {

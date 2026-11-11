@@ -75,13 +75,18 @@ import {
 } from "./store";
 import { authed, desktopToolsEnabled, initIpcSecurity } from "./ipcSecurity";
 import {
+  addCustomPhrase,
   createVoiceProject,
+  deleteCustomVoice,
+  deleteVoiceProject,
   generatePhrases,
   getStudioSnapshot,
   importClip,
   importClipBytes,
   listCustomVoices,
   listVoiceProjects,
+  updateCustomVoice,
+  updateVoiceProject,
 } from "./voiceStudio/studio";
 import {
   getBlenderPolicy,
@@ -583,6 +588,28 @@ app.whenReady().then(() => {
         name: payload?.name ?? "Новый голос",
         lang: payload?.lang,
       }),
+  );
+  on(
+    "mira:update-voice-project",
+    (_e, payload: { id: string; name?: string; lang?: string }) =>
+      updateVoiceProject(payload.id, {
+        name: payload.name,
+        lang: payload.lang,
+      }),
+  );
+  on("mira:delete-voice-project", (_e, id: string) => deleteVoiceProject(id));
+  on(
+    "mira:update-custom-voice",
+    (_e, payload: { id: string; name?: string; lang?: string }) =>
+      updateCustomVoice(payload.id, {
+        name: payload.name,
+        lang: payload.lang,
+      }),
+  );
+  on("mira:delete-custom-voice", (_e, id: string) => deleteCustomVoice(id));
+  on(
+    "mira:add-voice-phrase",
+    (_e, projectId: string, text: string) => addCustomPhrase(projectId, text),
   );
   on(
     "mira:generate-voice-phrases",

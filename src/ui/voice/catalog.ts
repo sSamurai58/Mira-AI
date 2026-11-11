@@ -65,22 +65,33 @@ export function resolveSpeechVoice(voiceId: string | null): SpeechSynthesisVoice
 }
 
 export async function listCatalogVoices(): Promise<VoiceInfo[]> {
-  const system = await waitForVoices();
-  if (!window.mira?.listCustomVoices) return system;
-  try {
-    const custom = await window.mira.listCustomVoices();
-    const mapped: VoiceInfo[] = custom.map((c) => ({
-      id: c.id,
-      name: `${c.name} (студия)`,
-      lang: c.lang,
-      localService: true,
-      custom: true,
-      previewPath: c.preview_path,
-    }));
-    return [...mapped, ...system];
-  } catch {
-    return system;
+  const { getHiddenSystemVoiceIds, listLocalCustomVoices } = await import(
+    "./studioLocal"
+  );
+  const hidden = new Set(getHiddenSystemVoiceIds());
+  const system = (await waitForVoices()).filter((v) => !hidden.has(v.id));
+
+  let customRows: MiraCustomVoice[] = [];
+  if (window.mira?.listCustomVoices) {
+    try {
+      customRows = await window.mira.listCustomVoices();
+    } catch {
+      customRows = listLocalCustomVoices();
+    }
+  } else {
+    customRows = listLocalCustomVoices();
   }
+
+  const mapped: VoiceInfo[] = customRows.map((c) => ({
+    id: c.id,
+    name: `${c.name} (студия)`,
+    lang: c.lang,
+    localService: true,
+    custom: true,
+    previewPath: c.preview_path,
+    projectId: c.project_id,
+  }));
+  return [...mapped, ...system];
 }
 
 export function waitForVoices(timeoutMs = 2500): Promise<VoiceInfo[]> {
