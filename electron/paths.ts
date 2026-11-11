@@ -6,18 +6,30 @@ export function miraDataRoot(): string {
   return path.resolve(process.cwd(), "mira");
 }
 
+/** Mira library (materials + nested database folder). */
+export function miraLibraryDir(): string {
+  return path.join(miraDataRoot(), "library");
+}
+
 /** Dedicated folder for the SQLite database and WAL/SHM sidecars. */
 export function miraDatabaseDir(): string {
-  return path.join(miraDataRoot(), "database");
+  return path.join(miraLibraryDir(), "database");
 }
 
 export function defaultDatabasePath(): string {
   return path.join(miraDatabaseDir(), "mira.db");
 }
 
-/** Legacy default before mira/database/ — used once for migration. */
-export function legacyDatabasePath(): string {
-  return path.resolve(process.cwd(), "data", "mira.db");
+/** Previous defaults — used once for migration. */
+export function legacyDatabasePaths(): string[] {
+  return [
+    path.resolve(process.cwd(), "mira", "database", "mira.db"),
+    path.resolve(process.cwd(), "data", "mira.db"),
+  ];
+}
+
+export function legacyLibraryDir(): string {
+  return path.resolve(process.cwd(), "data", "library");
 }
 
 export function resolveDatabasePathFromEnv(): string {
@@ -30,11 +42,53 @@ export function resolveDatabasePathFromEnv(): string {
   return defaultDatabasePath();
 }
 
+function moveDbSidecars(srcDb: string, destDb: string): void {
+  for (const suffix of ["", "-wal", "-shm"]) {
+    const src = `${srcDb}${suffix}`;
+    const dest = `${destDb}${suffix}`;
+    if (fs.existsSync(src) && !fs.existsSync(dest)) {
+      fs.renameSync(src, dest);
+    }
+  }
+}
+
+/** Move loose files from data/library → mira/library (once). */
+export function ensureMiraLibraryLayout(): string {
+  const dest = miraLibraryDir();
+  fs.mkdirSync(dest, { recursive: true });
+  fs.mkdirSync(miraDatabaseDir(), { recursive: true });
+
+  const legacy = legacyLibraryDir();
+  if (!fs.existsSync(legacy)) return dest;
+
+  let entries: fs.Dirent[] = [];
+  try {
+    entries = fs.readdirSync(legacy, { withFileTypes: true });
+  } catch {
+    return dest;
+  }
+  for (const e of entries) {
+    if (e.name === "." || e.name === "..") continue;
+    const src = path.join(legacy, e.name);
+    const target = path.join(dest, e.name);
+    if (fs.existsSync(target)) continue;
+    try {
+      fs.renameSync(src, target);
+    } catch {
+      // ignore locked / cross-device edge cases
+    }
+  }
+  return dest;
+}
+
 /**
- * Ensure mira/database exists. If the new DB is missing but legacy
- * data/mira.db is present, move DB + WAL/SHM into mira/database/.
+ * Ensure mira/library/database exists. Migrate DB from older locations
+ * (mira/database or data/) when the new file is missing.
  */
-export function ensureMiraDatabaseLayout(dbPath = resolveDatabasePathFromEnv()): string {
+export function ensureMiraDatabaseLayout(
+  dbPath = resolveDatabasePathFromEnv(),
+): string {
+  ensureMiraLibraryLayout();
   const dir = path.dirname(dbPath);
   fs.mkdirSync(dir, { recursive: true });
 
@@ -42,14 +96,10 @@ export function ensureMiraDatabaseLayout(dbPath = resolveDatabasePathFromEnv()):
     path.resolve(dbPath) === path.resolve(defaultDatabasePath());
   if (!usingDefault || fs.existsSync(dbPath)) return dbPath;
 
-  const legacy = legacyDatabasePath();
-  if (!fs.existsSync(legacy)) return dbPath;
-
-  for (const suffix of ["", "-wal", "-shm"]) {
-    const src = `${legacy}${suffix}`;
-    const dest = `${dbPath}${suffix}`;
-    if (fs.existsSync(src) && !fs.existsSync(dest)) {
-      fs.renameSync(src, dest);
+  for (const legacy of legacyDatabasePaths()) {
+    if (fs.existsSync(legacy)) {
+      moveDbSidecars(legacy, dbPath);
+      break;
     }
   }
   return dbPath;

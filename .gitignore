@@ -10,12 +10,18 @@ out/
 # env / local data
 .env
 .env.local
-# Mira local database (project-owned folder)
-mira/database/*.db
-mira/database/*.db-*
-mira/database/*.db-shm
-mira/database/*.db-wal
-!mira/database/.gitkeep
+# Mira library + nested SQLite
+mira/library/**
+!mira/library/.gitkeep
+!mira/library/database/
+!mira/library/database/.gitkeep
+mira/library/database/*.db
+mira/library/database/*.db-*
+mira/library/database/*.db-shm
+mira/library/database/*.db-wal
+
+# Legacy mira/database (pre library nesting)
+mira/database/
 
 # Other local runtime data
 data/*.db

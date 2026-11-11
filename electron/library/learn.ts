@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { requestUserConfirm } from "../confirmBridge";
 import { writeCatalogItem } from "../markdownCatalog";
+import { ensureMiraLibraryLayout, miraLibraryDir } from "../paths";
 import {
   addLearnedUnit,
   deleteLearnedUnitsForItem,
@@ -26,9 +27,7 @@ export type LibraryAnalysis = {
 };
 
 function libraryRoot(): string {
-  const dir = path.resolve(process.cwd(), "data", "library");
-  fs.mkdirSync(dir, { recursive: true });
-  return dir;
+  return ensureMiraLibraryLayout();
 }
 
 export function detectMediaType(filePath: string): string {
@@ -217,6 +216,7 @@ export function buildLearnPlan(
 function assertAllowedImportPath(absPath: string): void {
   const allowedRoots = [
     libraryRoot(),
+    miraLibraryDir(),
     path.resolve(process.cwd(), "seed"),
     path.resolve(process.cwd(), "seed", "library"),
     path.resolve(process.cwd(), "data", "library"),
@@ -227,7 +227,7 @@ function assertAllowedImportPath(absPath: string): void {
   );
   if (!ok) {
     throw new Error(
-      "Импорт разрешён только из seed/ или data/library (path allowlist).",
+      "Импорт разрешён только из seed/ или mira/library (path allowlist).",
     );
   }
   // Block obvious traversal after resolve

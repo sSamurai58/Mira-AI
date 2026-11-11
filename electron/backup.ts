@@ -99,7 +99,7 @@ export function getBackupStatus() {
   const health = getStoreHealth();
   return {
     databasePath: "<local-sqlite>",
-    libraryDir: "data/library",
+    libraryDir: "mira/library",
     voiceStudioDir: "data/voice-studio",
     backupsDir: "data/backups",
     packages: listBackupPackages().map((p) => path.basename(p)),
@@ -301,7 +301,7 @@ export async function forgetData(scope: ForgetScope): Promise<{
   const labels: Record<ForgetScope, string> = {
     memory: "память разговоров (сессии и utterances)",
     learned: "выученное (#14 learned_units / plans)",
-    library: "библиотеку материалов и файлы data/library",
+    library: "библиотеку материалов и файлы mira/library",
     "voice-studio": "корпуса студии голоса",
     all: "ВСЕ локальные данные Mira (память + библиотека + выученное + студия)",
   };

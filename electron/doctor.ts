@@ -85,7 +85,7 @@ export function runDoctor(): DoctorReport {
       fix:
         health.ok && dbExists
           ? undefined
-          : "Проверьте DATABASE_PATH и права на папку mira/database/.",
+          : "Проверьте DATABASE_PATH и права на папку mira/library/database/.",
     }),
   );
 
@@ -226,7 +226,14 @@ export function runDoctor(): DoctorReport {
   );
 
   // writable data dirs
-  for (const rel of ["mira", "mira/database", "data", "data/logs", "data/backups"]) {
+  for (const rel of [
+    "mira",
+    "mira/library",
+    "mira/library/database",
+    "data",
+    "data/logs",
+    "data/backups",
+  ]) {
     const abs = path.resolve(process.cwd(), rel);
     let writable = true;
     try {

@@ -95,7 +95,7 @@ export async function handleCameraFromChat(text: string): Promise<{
       actionClass: "camera",
       risk: "high",
       title: "Запись с камеры",
-      body: `Сохранить stub-запись с «${cam?.name}» в data/library?`,
+      body: `Сохранить stub-запись с «${cam?.name}» в mira/library?`,
       confirmLabel: "Записать",
     });
     if (!ok) {

@@ -4,7 +4,8 @@
 
 | Путь | Назначение |
 |------|------------|
-| `mira/database/` | SQLite (`mira.db` + WAL/SHM). Путь по умолчанию и в `.env.example`. |
+| `mira/library/` | Библиотека материалов (импорт/learn) |
+| `mira/library/database/` | SQLite (`mira.db` + WAL/SHM) |
 
 Остальной runtime (skills, screenshots, logs, backups) пока в `data/`.  
-Не коммитьте `*.db` — они в `.gitignore`.
+Не коммитьте `*.db` и содержимое библиотеки — в `.gitignore`.
