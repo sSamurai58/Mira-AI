@@ -224,9 +224,7 @@ strong {
     color-mix(in srgb, var(--border) 42%, transparent),
     color-mix(in srgb, var(--bg-elevated) 62%, transparent)
   );
-  box-shadow:
-    0 20px 50px rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 rgba(204, 208, 207, 0.08);
+  box-shadow: inset 0 1px 0 rgba(204, 208, 207, 0.08);
   backdrop-filter: blur(16px) saturate(1.1);
 }
 
@@ -550,9 +548,8 @@ strong {
     color-mix(in srgb, var(--border) 36%, transparent),
     color-mix(in srgb, var(--bg-elevated) 55%, transparent)
   );
-  box-shadow:
-    0 20px 50px rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 rgba(204, 208, 207, 0.08);
+  /* No drop shadow between stacked blocks — only a light inner edge */
+  box-shadow: inset 0 1px 0 rgba(204, 208, 207, 0.08);
   backdrop-filter: blur(16px);
 }
 
@@ -605,7 +602,7 @@ strong {
 .home-center {
   display: flex;
   flex-direction: column;
-  gap: var(--gap);
+  gap: 10px;
   min-width: 0;
   min-height: 0;
   height: 100%;
@@ -1149,7 +1146,7 @@ strong {
 .home-rail {
   display: flex;
   flex-direction: column;
-  gap: var(--gap);
+  gap: 10px;
   min-width: 0;
   min-height: 0;
   height: 100%;
