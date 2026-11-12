@@ -79,6 +79,9 @@ export function VoiceStudioPanel(props: {
   const [recording, setRecording] = useState(false);
   const [phrasesOpen, setPhrasesOpen] = useState(false);
   const [playingPhraseId, setPlayingPhraseId] = useState<string | null>(null);
+  const [genCount, setGenCount] = useState(8);
+  const [genMinWords, setGenMinWords] = useState(4);
+  const [genMaxWords, setGenMaxWords] = useState(48);
   const [trainProgress, setTrainProgress] = useState<{
     step: string;
     pct: number;
@@ -190,14 +193,18 @@ export function VoiceStudioPanel(props: {
   async function morePhrases() {
     if (!project) return;
     setBusy("phrases");
+    const minW = Math.max(1, Math.min(genMinWords, 400));
+    const maxW = Math.max(minW, Math.min(genMaxWords, 500));
+    const count = Math.max(1, Math.min(genCount, 40));
+    const opts = { count, minWords: minW, maxWords: maxW };
     try {
       const rows = electron
-        ? await window.mira!.generateVoicePhrases(project.id, 5)
-        : localGeneratePhrases(project.id, 5);
+        ? await window.mira!.generateVoicePhrases(project.id, opts)
+        : localGeneratePhrases(project.id, opts);
       setNote(
         rows.length
-          ? `+${rows.length} фраз (сначала речь ассистента / частые ответы). Запишите аудио 1…N`
-          : "Новых фраз нет — добавьте свою ниже",
+          ? `+${rows.length} текстов (${minW}–${maxW} слов; сначала речь ассистента). Запишите аудио 1…N`
+          : `Новых текстов на ${minW}–${maxW} слов нет — добавьте свою ниже`,
       );
       await refresh(project.id);
       // After train, corpus is collapsed — open list so generation isn't "silent".
@@ -662,13 +669,95 @@ export function VoiceStudioPanel(props: {
             </div>
           </div>
 
-          <div className="row" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
+          <div
+            className="row"
+            style={{
+              flexWrap: "wrap",
+              gap: "0.5rem",
+              alignItems: "center",
+            }}
+          >
+            <label
+              className="muted"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.35rem",
+                fontSize: "0.85rem",
+              }}
+              title="Сколько текстов добавить за один запуск"
+            >
+              шт.
+              <input
+                type="number"
+                min={1}
+                max={40}
+                value={genCount}
+                disabled={Boolean(busy)}
+                onChange={(e) =>
+                  setGenCount(
+                    Math.max(1, Math.min(40, Number(e.target.value) || 1)),
+                  )
+                }
+                style={{ width: "3.25rem" }}
+              />
+            </label>
+            <label
+              className="muted"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.35rem",
+                fontSize: "0.85rem",
+              }}
+              title="Минимум слов в каждом тексте — для длинного корпуса обучения"
+            >
+              слов от
+              <input
+                type="number"
+                min={1}
+                max={400}
+                value={genMinWords}
+                disabled={Boolean(busy)}
+                onChange={(e) =>
+                  setGenMinWords(
+                    Math.max(1, Math.min(400, Number(e.target.value) || 1)),
+                  )
+                }
+                style={{ width: "3.5rem" }}
+              />
+            </label>
+            <label
+              className="muted"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.35rem",
+                fontSize: "0.85rem",
+              }}
+              title="Максимум слов в каждом тексте"
+            >
+              до
+              <input
+                type="number"
+                min={1}
+                max={500}
+                value={genMaxWords}
+                disabled={Boolean(busy)}
+                onChange={(e) =>
+                  setGenMaxWords(
+                    Math.max(1, Math.min(500, Number(e.target.value) || 1)),
+                  )
+                }
+                style={{ width: "3.5rem" }}
+              />
+            </label>
             <button
               type="button"
               className="btn"
               disabled={Boolean(busy)}
               onClick={() => void morePhrases()}
-              title="Сначала фразы из речи ассистента и частые ответы Mira"
+              title="Сначала тексты из речи ассистента в заданном диапазоне слов"
             >
               {busy === "phrases" ? "Генерация…" : "Сгенерировать фразы"}
             </button>
