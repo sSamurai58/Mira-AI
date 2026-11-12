@@ -13,6 +13,14 @@ type ConfirmModalProps = {
   title: string;
   body: string;
   confirmLabel?: string;
+  cancelLabel?: string;
+  /** Primary vs destructive confirm button. */
+  tone?: "primary" | "danger";
+  /**
+   * Bridge/integration confirms show the always-on policy hint.
+   * Local UI confirms (Voice Studio, Library, …) keep the panel clean.
+   */
+  bridgeHint?: boolean;
   skillPropose?: SkillProposeForm | null;
   onConfirm: (fields?: { skillId?: string; skillName?: string }) => void;
   onCancel: () => void;
@@ -31,6 +39,9 @@ export function ConfirmModal({
   title,
   body,
   confirmLabel = "Подтвердить",
+  cancelLabel = "Отмена",
+  tone = "primary",
+  bridgeHint = false,
   skillPropose = null,
   onConfirm,
   onCancel,
@@ -43,6 +54,17 @@ export function ConfirmModal({
     setSkillId(skillPropose.defaultId);
     setSkillName(skillPropose.defaultName);
   }, [open, skillPropose]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      onCancel();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onCancel]);
 
   const normalizedId = useMemo(() => normalizeSkillId(skillId), [skillId]);
   const existing = useMemo(() => {
@@ -62,6 +84,9 @@ export function ConfirmModal({
   const canSubmit = !skillPropose || (!duplicate && !invalidId);
 
   if (!open) return null;
+
+  const confirmClass =
+    tone === "danger" ? "btn btn-danger" : "btn btn-primary";
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={onCancel}>
@@ -124,14 +149,16 @@ export function ConfirmModal({
           </div>
         ) : null}
 
-        <p className="mono muted">Режим confirm: always (до F12)</p>
+        {bridgeHint ? (
+          <p className="mono muted">Режим confirm: always (до F12)</p>
+        ) : null}
         <div className="modal-actions">
           <button type="button" className="btn" onClick={onCancel}>
-            Отмена
+            {cancelLabel}
           </button>
           <button
             type="button"
-            className="btn btn-primary"
+            className={confirmClass}
             disabled={!canSubmit}
             onClick={() => {
               if (!canSubmit) return;

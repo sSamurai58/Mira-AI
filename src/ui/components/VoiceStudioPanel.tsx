@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useAppConfirm } from "./AppConfirm";
 import { ThemeSelect } from "./ThemeSelect";
 import { clearActiveVoiceId, setActiveVoiceId } from "../voice/catalog";
 import {
@@ -73,6 +74,7 @@ export function VoiceStudioPanel(props: {
   onCatalogChanged?: () => void;
   focusProjectId?: string | null;
 }) {
+  const confirm = useAppConfirm();
   const [projects, setProjects] = useState<MiraVoiceProject[]>([]);
   const [project, setProject] = useState<MiraVoiceProject | null>(null);
   const [phrases, setPhrases] = useState<MiraVoicePhrase[]>([]);
@@ -222,9 +224,13 @@ export function VoiceStudioPanel(props: {
 
   async function removeProject() {
     if (!project) return;
-    if (!window.confirm(`Удалить проект «${project.name}» и связанное аудио?`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: "Удалить проект",
+      body: `Удалить проект «${project.name}» и связанное аудио?`,
+      confirmLabel: "Удалить",
+      tone: "danger",
+    });
+    if (!ok) return;
     setBusy("delete");
     try {
       const res = electron
@@ -379,7 +385,13 @@ export function VoiceStudioPanel(props: {
       return;
     }
     const preview = phraseTextPreview(target.text, 48);
-    if (!window.confirm(`Удалить необученный текст «${preview}»?`)) return;
+    const ok = await confirm({
+      title: "Удалить текст",
+      body: `Удалить необученный текст «${preview}»?`,
+      confirmLabel: "Удалить",
+      tone: "danger",
+    });
+    if (!ok) return;
     setBusy("delete-phrase");
     try {
       const res = electron
@@ -594,13 +606,13 @@ export function VoiceStudioPanel(props: {
   async function resetLearnedPhrase(target: MiraVoicePhrase) {
     if (!project) return;
     const preview = phraseTextPreview(target.text, 48);
-    if (
-      !window.confirm(
-        `Сбросить аудио для «${preview}»?\nТекст вернётся в необученные для новой загрузки; из «Обученные» фраза пропадёт.`,
-      )
-    ) {
-      return;
-    }
+    const ok = await confirm({
+      title: "Сбросить аудио",
+      body: `Сбросить аудио для «${preview}»?\nТекст вернётся в необученные для новой загрузки; из «Обученные» фраза пропадёт.`,
+      confirmLabel: "OK",
+      tone: "danger",
+    });
+    if (!ok) return;
     stopPhraseAudio();
     setBusy("reset-phrase");
     try {

@@ -328,6 +328,7 @@ UX: **Создать → фразы → загрузить → Mira сама о�
 Версия пакета **0.1.5**. Накопление изменений здесь.
 
 - [x] Bump `package.json` / `package-lock.json` → 0.1.5 (`__MIRA_VERSION__` / UI)
+- [x] In-app confirm modals (`AppConfirm` / `ConfirmModal`) вместо native `window.confirm` — Voice Studio «Перезагрузить», удаление проекта/фраз, Workshop голоса/skills, Library delete
 - [ ] Накопление фич по командам
 - [ ] **Не** tag / GitHub Release `v0.1.5`, пока явно не скажут «релиз 0.1.5»
 

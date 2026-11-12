@@ -22,6 +22,7 @@
 
 | Дата | Решение | Почему |
 |------|---------|--------|
+| 2026-11-12 | Локальные UI-confirm через `AppConfirm`/`ConfirmModal`, не `window.confirm` | Native OS chrome (фиолетовый title bar) выбивается из тёмной темы Mira |
 | 2026-11-12 | MCP каталог в Настройки; этапы UI = кат. 1,2,3,5,6,7,8,9,10 (Dev + Design/Blender) | Продуктивность через стандартный разъём; плитки как темы; план в `docs/MCP.md` |
 | 2026-11-12 | **Релиз 0.1.4 опубликован** (`v0.1.4`, Latest) | MCP catalog + Voice Studio slice/reload + content-fit modals; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.4 |
 | 2026-11-11 | Один процесс приложения | Проще модель данных и отладка |

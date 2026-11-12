@@ -9,6 +9,7 @@ import {
   setLocalProtocolEnabled,
   setLocalSkillEnabled,
 } from "../catalogLocal";
+import { useAppConfirm } from "../components/AppConfirm";
 import { AutoGrowTextarea } from "../components/AutoGrowTextarea";
 import {
   CatalogEditModal,
@@ -96,6 +97,7 @@ function itemToDraft(item: CatalogItem): CatalogEditDraft {
 }
 
 export function WorkshopPage() {
+  const confirm = useAppConfirm();
   const [segment, setSegment] =
     useState<(typeof SEGMENTS)[number]["id"]>("skills");
   const [voices, setVoices] = useState<VoiceInfo[]>([]);
@@ -204,9 +206,13 @@ export function WorkshopPage() {
 
   async function removeVoice(voice: VoiceInfo) {
     if (voice.custom) {
-      if (!window.confirm(`Удалить свой голос «${voice.name}» из каталога?`)) {
-        return;
-      }
+      const ok = await confirm({
+        title: "Удалить голос",
+        body: `Удалить свой голос «${voice.name}» из каталога?`,
+        confirmLabel: "Удалить",
+        tone: "danger",
+      });
+      if (!ok) return;
       const res = window.mira?.deleteCustomVoice
         ? await window.mira.deleteCustomVoice(voice.id)
         : localDeleteCustomVoice(voice.id);
@@ -219,9 +225,13 @@ export function WorkshopPage() {
       await refreshVoices();
       return;
     }
-    if (!window.confirm(`Скрыть системный голос «${voice.name}» из каталога?`)) {
-      return;
-    }
+    const ok = await confirm({
+      title: "Скрыть голос",
+      body: `Скрыть системный голос «${voice.name}» из каталога?`,
+      confirmLabel: "Скрыть",
+      tone: "danger",
+    });
+    if (!ok) return;
     hideSystemVoice(voice.id);
     clearActiveVoiceId(voice.id);
     if (activeId === voice.id) setActiveId(null);
@@ -306,13 +316,13 @@ export function WorkshopPage() {
   }
 
   async function deleteSkill(item: CatalogItem) {
-    if (
-      !window.confirm(
-        `Удалить skill «${item.name}» (${item.id})?\nФайл будет удалён из каталога.`,
-      )
-    ) {
-      return;
-    }
+    const ok = await confirm({
+      title: "Удалить skill",
+      body: `Удалить skill «${item.name}» (${item.id})?\nФайл будет удалён из каталога.`,
+      confirmLabel: "Удалить",
+      tone: "danger",
+    });
+    if (!ok) return;
     const res = window.mira?.deleteSkill
       ? await window.mira.deleteSkill(item.id)
       : deleteLocalSkill(item.id);

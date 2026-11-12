@@ -7,6 +7,7 @@ import {
   logVoiceState,
 } from "./actionLog";
 import { installAutoGrowTextareas } from "./autoGrowTextareas";
+import { AppConfirmProvider } from "./components/AppConfirm";
 import { ConfirmModal } from "./components/ConfirmModal";
 import { ErrorBanner } from "./components/ErrorBanner";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -344,6 +345,7 @@ export function App() {
   const levelPct = coreLevelRingPct(coreLevel, coreXp);
 
   return (
+    <AppConfirmProvider>
     <div className="app-shell" data-voice={voiceState}>
       <div className="atmosphere" aria-hidden />
       <div className="atmosphere-mid" aria-hidden />
@@ -454,6 +456,7 @@ export function App() {
           body={pendingConfirm?.body ?? ""}
           confirmLabel={pendingConfirm?.confirmLabel ?? "Подтвердить"}
           skillPropose={pendingConfirm?.skillPropose ?? null}
+          bridgeHint
           onCancel={() => {
             if (pendingConfirm) {
               logConfirmResolved(pendingConfirm.id, false, pendingConfirm.title);
@@ -490,5 +493,6 @@ export function App() {
         />
       </ErrorBoundary>
     </div>
+    </AppConfirmProvider>
   );
 }

@@ -15,12 +15,14 @@ import {
   displayLearnedContent,
   learnedKindLabel,
 } from "../library/learnedLabels";
+import { useAppConfirm } from "./AppConfirm";
 import { AutoGrowTextarea } from "./AutoGrowTextarea";
 
 type LibraryItem = MiraLibraryItem | LocalLibraryItem;
 type LearnedUnit = MiraLearnedUnit | LocalLearnedUnit;
 
 export function LibraryPanel() {
+  const confirm = useAppConfirm();
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [units, setUnits] = useState<LearnedUnit[]>([]);
@@ -200,9 +202,12 @@ export function LibraryPanel() {
   async function deleteById(id: string) {
     const item = items.find((i) => i.id === id);
     const label = item?.title ?? id;
-    const ok = window.confirm(
-      `Удалить материал «${label}»?\nВыдержки и план тоже будут удалены. Созданный skill в каталоге останется.`,
-    );
+    const ok = await confirm({
+      title: "Удалить материал",
+      body: `Удалить материал «${label}»?\nВыдержки и план тоже будут удалены. Созданный skill в каталоге останется.`,
+      confirmLabel: "Удалить",
+      tone: "danger",
+    });
     if (!ok) return;
     setBusy("delete");
     try {
