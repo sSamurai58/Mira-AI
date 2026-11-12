@@ -62,7 +62,7 @@ export function CatalogEditModal({
       }}
     >
       <form
-        className="modal modal-wide catalog-edit-modal"
+        className="modal modal-wide modal-resizable catalog-edit-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="catalog-edit-title"

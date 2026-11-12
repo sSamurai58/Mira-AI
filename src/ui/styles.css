@@ -2375,12 +2375,55 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   width: min(560px, calc(100vw - 40px));
 }
 
+/*
+ * Content-fit + user-resizable shell for Workshop / Voice Studio dialogs.
+ * Default height follows inner content (clamped to ~90vh); drag the SE corner to resize.
+ */
+.modal-resizable {
+  position: relative;
+  resize: both;
+  /* non-visible overflow is required for CSS resize; auto keeps long forms usable */
+  overflow: auto;
+  box-sizing: border-box;
+  height: max-content;
+  max-width: min(96vw, 1100px);
+  max-height: min(90vh, 920px);
+  min-width: min(280px, calc(100vw - 40px));
+  min-height: 180px;
+}
+
+/* Subtle grip so the native SE resize handle is findable on dark panels */
+.modal-resizable::after {
+  content: "";
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 12px;
+  height: 12px;
+  pointer-events: none;
+  background: linear-gradient(
+    135deg,
+    transparent 55%,
+    color-mix(in srgb, var(--accent) 55%, transparent) 55%,
+    color-mix(in srgb, var(--accent) 55%, transparent) 62%,
+    transparent 62%,
+    transparent 70%,
+    color-mix(in srgb, var(--accent) 45%, transparent) 70%,
+    color-mix(in srgb, var(--accent) 45%, transparent) 77%,
+    transparent 77%
+  );
+}
+
 .catalog-edit-modal {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
   width: min(640px, calc(100vw - 40px));
-  max-height: min(92vh, 860px);
-  overflow: auto;
+}
+
+.catalog-edit-modal > .modal-actions {
+  flex-shrink: 0;
+  margin-top: auto;
 }
 
 .voice-phrases-summary {
@@ -2397,17 +2440,24 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
 }
 
 .voice-phrases-modal {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
   width: min(720px, calc(100vw - 40px));
-  max-height: min(92vh, 880px);
-  overflow: auto;
+  /* Keep header/footer fixed; the phrase list is the scrollport */
+  overflow: hidden;
+}
+
+.voice-phrases-modal > .row:first-child,
+.voice-phrases-modal > .modal-actions {
+  flex-shrink: 0;
 }
 
 .voice-phrases-modal-list {
   display: grid;
   gap: 8px;
-  max-height: min(42vh, 360px);
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: auto;
   padding-right: 2px;
 }

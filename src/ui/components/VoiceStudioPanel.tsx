@@ -1270,7 +1270,7 @@ export function VoiceStudioPanel(props: {
           onClick={() => closeTrainedPanel()}
         >
           <div
-            className="modal modal-wide voice-phrases-modal"
+            className="modal modal-wide modal-resizable voice-phrases-modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby="voice-trained-title"
