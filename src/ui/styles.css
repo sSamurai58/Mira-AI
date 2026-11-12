@@ -2387,6 +2387,15 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   gap: 0.55rem;
 }
 
+/* Studio generate counters: room for spinner + grow with digit count. */
+.voice-gen-number {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  padding-inline: 0.55rem 0.35rem;
+  field-sizing: content;
+  max-width: 9rem;
+}
+
 .voice-phrases-modal {
   display: grid;
   gap: 12px;

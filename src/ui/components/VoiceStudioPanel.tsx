@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { ThemeSelect } from "./ThemeSelect";
 import { clearActiveVoiceId, setActiveVoiceId } from "../voice/catalog";
 import {
@@ -43,6 +43,16 @@ function phraseTextPreview(text: string, max = 42): string {
 function phraseSelectLabel(all: MiraVoicePhrase[], p: MiraVoicePhrase): string {
   const n = phraseDisplayNo(all, p.id);
   return `${n}. ${p.recorded ? "✓ " : ""}${p.text.slice(0, 68)}`;
+}
+
+/** Wider by default; grows with digit count so values like 100 aren't clipped. */
+function autoNumberInputStyle(value: number, minDigits = 3): CSSProperties {
+  const digits = Math.max(minDigits, String(Math.abs(value)).length);
+  return {
+    width: `max(5rem, calc(${digits}ch + 2.5rem))`,
+    minWidth: "5rem",
+    boxSizing: "border-box",
+  };
 }
 
 /** Row label for uploaded/recorded audio: same 1…N as the phrase list + short text. */
@@ -714,6 +724,7 @@ export function VoiceStudioPanel(props: {
                 шт.
                 <input
                   type="number"
+                  className="voice-gen-number"
                   min={1}
                   max={40}
                   value={genCount}
@@ -723,7 +734,7 @@ export function VoiceStudioPanel(props: {
                       Math.max(1, Math.min(40, Number(e.target.value) || 1)),
                     )
                   }
-                  style={{ width: "3.5rem" }}
+                  style={autoNumberInputStyle(genCount, 2)}
                   aria-label="Количество текстов"
                 />
               </label>
@@ -741,6 +752,7 @@ export function VoiceStudioPanel(props: {
                 слов от
                 <input
                   type="number"
+                  className="voice-gen-number"
                   min={1}
                   max={400}
                   value={genMinWords}
@@ -750,7 +762,7 @@ export function VoiceStudioPanel(props: {
                       Math.max(1, Math.min(400, Number(e.target.value) || 1)),
                     )
                   }
-                  style={{ width: "3.75rem" }}
+                  style={autoNumberInputStyle(genMinWords, 3)}
                   aria-label="Минимум слов"
                 />
               </label>
@@ -768,6 +780,7 @@ export function VoiceStudioPanel(props: {
                 до
                 <input
                   type="number"
+                  className="voice-gen-number"
                   min={1}
                   max={500}
                   value={genMaxWords}
@@ -777,7 +790,7 @@ export function VoiceStudioPanel(props: {
                       Math.max(1, Math.min(500, Number(e.target.value) || 1)),
                     )
                   }
-                  style={{ width: "3.75rem" }}
+                  style={autoNumberInputStyle(genMaxWords, 3)}
                   aria-label="Максимум слов"
                 />
               </label>
