@@ -1,7 +1,9 @@
 # Отчёт Mira Voice Studio — v0.1.3 (neural TTS writeup → desktop)
 
-**Версия:** 0.1.3 (следующий патч после 0.1.2 Latest; 0.1.1/0.1.2 не переписывались)  
-**Ветка:** `cursor/release-0-1-3-6838`  
+**Версия:** 0.1.3 (Latest; 0.1.1/0.1.2 не переписывались)  
+**Release:** https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.3  
+**Ветка:** `cursor/release-0-1-3-6838` (push OK)  
+**PR:** создать с base `main` — https://github.com/sSamurai58/Mira-AI/compare/main...cursor/release-0-1-3-6838?expand=1 (gh integration 403; нужен ManagePullRequest у parent)  
 **Дата:** 2026-11-12
 
 ## Что сделано
