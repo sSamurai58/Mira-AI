@@ -441,17 +441,24 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
 .core-level-card {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 14px;
-  border-radius: 16px;
-  background: var(--inset);
-  border: 1px solid color-mix(in srgb, var(--text-muted) 14%, transparent);
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--panel-line);
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--border) 42%, transparent),
+    color-mix(in srgb, var(--bg-elevated) 52%, transparent) 55%,
+    color-mix(in srgb, var(--accent) 8%, transparent)
+  );
+  box-shadow: inset 0 1px 0 rgba(204, 208, 207, 0.1);
+  user-select: none;
 }
 
 .core-level-ring {
   position: relative;
-  width: 56px;
-  height: 56px;
+  width: 44px;
+  height: 44px;
   flex: none;
 }
 
@@ -459,27 +466,57 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   display: block;
 }
 
+.core-level-ring-track {
+  stroke: color-mix(in srgb, var(--track) 88%, var(--border));
+}
+
+.core-level-ring-fill {
+  stroke: var(--accent);
+  transition: stroke-dasharray 0.55s var(--ease-out);
+}
+
 .core-level-ring span {
   position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   color: var(--text);
+  line-height: 1;
+}
+
+.core-level-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
 .core-level-copy strong {
   display: block;
+  font-family: var(--font-display);
+  font-size: 0.92rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
   color: var(--text);
-  font-weight: 600;
+  line-height: 1.15;
 }
 
 .core-level-copy span {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  color: var(--text-muted);
+  display: block;
+  font-family: var(--font-sans);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--text-muted) 92%, var(--accent));
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .workspace {
@@ -854,25 +891,32 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   min-width: 4.5rem;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--panel-line);
+  background: linear-gradient(
+    160deg,
+    color-mix(in srgb, var(--border) 36%, transparent),
+    color-mix(in srgb, var(--bg-elevated) 48%, transparent)
+  );
+  box-shadow: inset 0 1px 0 rgba(204, 208, 207, 0.08);
 }
 
 .core-level-value strong {
   font-family: var(--font-display);
   font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
   line-height: 1;
+  color: var(--text);
 }
 
 .core-level-value span {
   font-size: 0.72rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-}
-
-.core-level-ring span {
-  font-variant-numeric: tabular-nums;
-  font-size: 0.85rem;
+  color: color-mix(in srgb, var(--text-muted) 90%, var(--accent));
 }
 
 .core-orb svg {

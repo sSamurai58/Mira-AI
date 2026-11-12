@@ -57,6 +57,12 @@ export function levelFromXp(xp: number): number {
   return normalizeCoreLevel(1 + Math.floor(Math.sqrt(safe / 4)));
 }
 
+/** XP required to reach a given level (start of that level). */
+export function xpThresholdForLevel(level: number): number {
+  const lv = normalizeCoreLevel(level);
+  return 4 * (lv - 1) ** 2;
+}
+
 /**
  * Recompute level from live progress. Level only rises (watermark):
  * never drops if the user deletes content.
@@ -71,8 +77,16 @@ export function syncCoreLevelFromProgress(
   return next;
 }
 
-/** Soft ring fill 0…100 — grows forever but never hard-caps the level. */
-export function coreLevelRingPct(level: number): number {
+/**
+ * Ring fill 0…100 = fraction toward the next automatic level.
+ * Watermark level is used so the ring never implies a drop.
+ */
+export function coreLevelRingPct(level: number, xp = 0): number {
   const lv = normalizeCoreLevel(level);
-  return (1 - Math.exp(-lv / 10)) * 100;
+  const safe = Number.isFinite(xp) && xp > 0 ? xp : 0;
+  const lo = xpThresholdForLevel(lv);
+  const hi = xpThresholdForLevel(lv + 1);
+  if (hi <= lo) return 0;
+  const effective = Math.max(safe, lo);
+  return Math.min(100, Math.max(0, ((effective - lo) / (hi - lo)) * 100));
 }

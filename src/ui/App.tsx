@@ -20,7 +20,9 @@ import {
   loadStoredBgPatternId,
   type BgPatternId,
 } from "./backgrounds";
+import { CoreLevelChip } from "./components/CoreLevelChip";
 import {
+  computeCoreXp,
   coreLevelRingPct,
   loadCoreLevel,
   syncCoreLevelFromProgress,
@@ -156,6 +158,7 @@ export function App() {
   const [healthText, setHealthText] = useState("Проверка store…");
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [coreLevel, setCoreLevel] = useState(() => loadCoreLevel());
+  const [coreXp, setCoreXp] = useState(0);
   const [autoSpeak, setAutoSpeak] = useState(() => {
     if (localStorage.getItem("mira.autoSpeak") === "1") return true;
     if (localStorage.getItem("mira.autoSpeak") === "0") return false;
@@ -218,25 +221,32 @@ export function App() {
     return () => window.clearInterval(id);
   }, []);
 
+  const applyProgressFromHealth = useCallback((health: MiraHealth) => {
+    const signals = {
+      sessions: health.sessions,
+      utterances: health.utterances,
+      learnedUnits: health.learnedUnits,
+      libraryItems: health.libraryItems,
+      skills: health.skills,
+      voiceProjects: health.voiceProjects,
+      customVoices: health.customVoices,
+      browserVisits: health.browserVisits,
+    };
+    const xp = computeCoreXp(signals);
+    const nextLevel = syncCoreLevelFromProgress(signals);
+    setCoreXp(xp);
+    setCoreLevel((prev) => (prev === nextLevel ? prev : nextLevel));
+  }, []);
+
   const refreshCoreLevel = useCallback(async () => {
     if (!window.mira?.getHealth) return;
     try {
       const health = await window.mira.getHealth();
-      const nextLevel = syncCoreLevelFromProgress({
-        sessions: health.sessions,
-        utterances: health.utterances,
-        learnedUnits: health.learnedUnits,
-        libraryItems: health.libraryItems,
-        skills: health.skills,
-        voiceProjects: health.voiceProjects,
-        customVoices: health.customVoices,
-        browserVisits: health.browserVisits,
-      });
-      setCoreLevel((prev) => (prev === nextLevel ? prev : nextLevel));
+      applyProgressFromHealth(health);
     } catch {
       /* keep last known level */
     }
-  }, []);
+  }, [applyProgressFromHealth]);
 
   const refreshHealth = useCallback(async () => {
     if (!window.mira) {
@@ -249,17 +259,7 @@ export function App() {
       const health = await window.mira.getHealth();
       const voice = getVoiceEngineStatus();
       setHealthText(JSON.stringify({ ...health, voice }, null, 2));
-      const nextLevel = syncCoreLevelFromProgress({
-        sessions: health.sessions,
-        utterances: health.utterances,
-        learnedUnits: health.learnedUnits,
-        libraryItems: health.libraryItems,
-        skills: health.skills,
-        voiceProjects: health.voiceProjects,
-        customVoices: health.customVoices,
-        browserVisits: health.browserVisits,
-      });
-      setCoreLevel((prev) => (prev === nextLevel ? prev : nextLevel));
+      applyProgressFromHealth(health);
       if (health.llmOk === false && health.llmReason) {
         setErrorMessage(health.llmReason);
       }
@@ -271,7 +271,7 @@ export function App() {
         err instanceof Error ? err.message : "health check failed",
       );
     }
-  }, []);
+  }, [applyProgressFromHealth]);
 
   useEffect(() => {
     void refreshHealth();
@@ -341,9 +341,7 @@ export function App() {
     return <HudPage />;
   }
 
-  const levelPct = coreLevelRingPct(coreLevel);
-  const ringC = 2 * Math.PI * 24;
-  const ringDash = (levelPct / 100) * ringC;
+  const levelPct = coreLevelRingPct(coreLevel, coreXp);
 
   return (
     <div className="app-shell" data-voice={voiceState}>
@@ -392,36 +390,7 @@ export function App() {
 
           <div className="nav-spacer" />
 
-          <div className="core-level-card">
-            <div className="core-level-ring" aria-hidden>
-              <svg viewBox="0 0 56 56" width="56" height="56">
-                <circle
-                  cx="28"
-                  cy="28"
-                  r="24"
-                  fill="none"
-                  stroke="var(--track)"
-                  strokeWidth="4"
-                />
-                <circle
-                  cx="28"
-                  cy="28"
-                  r="24"
-                  fill="none"
-                  stroke="var(--success)"
-                  strokeWidth="4"
-                  strokeLinecap="round"
-                  strokeDasharray={`${ringDash} ${ringC}`}
-                  transform="rotate(-90 28 28)"
-                />
-              </svg>
-              <span>{coreLevel}</span>
-            </div>
-            <div className="core-level-copy">
-              <strong>Уровень ядра</strong>
-              <span>1…∞ · растёт с Мирой</span>
-            </div>
-          </div>
+          <CoreLevelChip level={coreLevel} progressPct={levelPct} />
         </aside>
       </ErrorBoundary>
 
