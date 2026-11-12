@@ -458,7 +458,7 @@ export function trainVoiceModel(projectId: string): {
     phraseCount: qa.phraseCount,
     coveragePct,
     synthesis:
-      "Корпусный пакет: превью из принятых клипов; синтез новых фраз — Web Speech с профилем голоса до подключения neural trainer.",
+      "Корпусный пакет (mira-local-corpus-v1): озвучка совпадений с обученными фразами вашими клипами; новые фразы без совпадения — запасной Web Speech до neural trainer.",
     curriculum: [
       "1. Фразы (банк / свои)",
       "2. Аудио 1…N к фразам",
@@ -703,6 +703,51 @@ export function getCustomVoice(id: string): CustomVoiceRow | null {
       )
       .get(id) as CustomVoiceRow | undefined) ?? null
   );
+}
+
+export type CustomVoiceCorpusUnit = {
+  phraseId: string;
+  text: string;
+  filePath: string;
+};
+
+export type CustomVoiceCorpus = {
+  voice: CustomVoiceRow;
+  units: CustomVoiceCorpusUnit[];
+};
+
+/** Accepted phrase→clip units for corpus / neural-pack TTS. */
+export function getCustomVoiceCorpus(voiceId: string): CustomVoiceCorpus {
+  const voice = getCustomVoice(voiceId);
+  if (!voice) throw new Error("Голос не найден");
+  const rows = openStore()
+    .prepare(
+      `SELECT c.phrase_id AS phraseId, p.text AS text, c.file_path AS filePath, c.created_at AS createdAt
+       FROM voice_clips c
+       JOIN voice_phrases p ON p.id = c.phrase_id
+       WHERE c.project_id = ?
+         AND c.accepted = 1
+         AND c.phrase_id IS NOT NULL
+       ORDER BY c.created_at DESC`,
+    )
+    .all(voice.project_id) as Array<{
+    phraseId: string;
+    text: string;
+    filePath: string;
+    createdAt: string;
+  }>;
+  const seen = new Set<string>();
+  const units: CustomVoiceCorpusUnit[] = [];
+  for (const row of rows) {
+    if (seen.has(row.phraseId)) continue;
+    seen.add(row.phraseId);
+    units.push({
+      phraseId: row.phraseId,
+      text: row.text,
+      filePath: row.filePath,
+    });
+  }
+  return { voice, units };
 }
 
 export function updateVoiceProject(

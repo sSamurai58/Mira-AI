@@ -302,6 +302,13 @@ export function SettingsPage({
                     speakText(
                       "Проверка голоса Mira. Звучу ли я достаточно естественно?",
                       activeVoiceId,
+                      {
+                        preferPreview: true,
+                        onStatus: (msg) => {
+                          // Surface studio vs system path for the listen check.
+                          console.info("[mira.tts]", msg);
+                        },
+                      },
                     )
                   }
                 >

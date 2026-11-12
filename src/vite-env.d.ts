@@ -637,6 +637,10 @@ interface MiraBridge {
   }>;
   listVoiceProjects: () => Promise<MiraVoiceProject[]>;
   listCustomVoices: () => Promise<MiraCustomVoice[]>;
+  getCustomVoiceCorpus: (voiceId: string) => Promise<{
+    voice: MiraCustomVoice;
+    units: Array<{ phraseId: string; text: string; filePath: string }>;
+  }>;
   createVoiceProject: (payload?: {
     name?: string;
     lang?: string;

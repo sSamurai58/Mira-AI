@@ -86,6 +86,7 @@ import {
   deleteCustomVoice,
   deleteVoiceProject,
   generatePhrases,
+  getCustomVoiceCorpus,
   getStudioSnapshot,
   importClip,
   importClipBytes,
@@ -721,6 +722,9 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
   );
   on("mira:list-voice-projects", () => listVoiceProjects());
   on("mira:list-custom-voices", () => listCustomVoices());
+  on("mira:get-custom-voice-corpus", (_e, voiceId: string) =>
+    getCustomVoiceCorpus(voiceId),
+  );
   on(
     "mira:create-voice-project",
     (_e, payload?: { name?: string; lang?: string }) =>

@@ -183,16 +183,14 @@ export function WorkshopPage() {
 
   async function preview(id: string) {
     selectVoice(id);
-    const voice = voices.find((v) => v.id === id);
-    if (isCustomVoiceId(id) && voice?.previewPath && window.mira) {
-      try {
-        const dataUrl = await window.mira.readVoicePreview(voice.previewPath);
-        const audio = new Audio(dataUrl);
-        void audio.play();
-        return;
-      } catch {
-        // fall through to speechSynthesis stub
-      }
+    // Custom studio voices: speak path plays corpus/preview clips (not system TTS).
+    if (isCustomVoiceId(id)) {
+      speakText("Привет, я Mira — твой голосовой помощник.", id, {
+        preferPreview: true,
+        onStatus: (msg) => setVoiceNote(msg),
+        onError: (msg) => setVoiceNote(msg),
+      });
+      return;
     }
     speakText("Привет, я Mira. Это превью голоса из каталога.", id);
   }

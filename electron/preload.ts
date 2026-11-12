@@ -292,6 +292,8 @@ contextBridge.exposeInMainWorld("mira", {
     call("mira:voice-studio-snapshot", projectId),
   listVoiceProjects: () => call("mira:list-voice-projects"),
   listCustomVoices: () => call("mira:list-custom-voices"),
+  getCustomVoiceCorpus: (voiceId: string) =>
+    call("mira:get-custom-voice-corpus", voiceId),
   createVoiceProject: (payload?: { name?: string; lang?: string }) =>
     call("mira:create-voice-project", payload),
   updateVoiceProject: (payload: { id: string; name?: string; lang?: string }) =>
