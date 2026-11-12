@@ -198,7 +198,9 @@ export function listPhrases(projectId: string): VoicePhraseRow[] {
   return openStore()
     .prepare(
       `SELECT id, project_id, text, recorded, created_at
-       FROM voice_phrases WHERE project_id = ? ORDER BY created_at ASC`,
+       FROM voice_phrases
+       WHERE project_id = ?
+       ORDER BY created_at ASC, rowid ASC`,
     )
     .all(projectId) as VoicePhraseRow[];
 }
@@ -227,15 +229,17 @@ export function generatePhrases(
     `INSERT INTO voice_phrases (id, project_id, text, recorded, created_at)
      VALUES (?, ?, ?, 0, ?)`,
   );
-  const now = new Date().toISOString();
+  const baseMs = Date.now();
   const rows: VoicePhraseRow[] = [];
-  for (const text of pick) {
+  for (let i = 0; i < pick.length; i++) {
+    const text = pick[i]!;
+    // Stagger created_at so 1…N order stays stable across refreshes/collapse.
     const row: VoicePhraseRow = {
       id: crypto.randomUUID(),
       project_id: projectId,
       text,
       recorded: 0,
-      created_at: now,
+      created_at: new Date(baseMs + i).toISOString(),
     };
     try {
       insert.run(row.id, row.project_id, row.text, row.created_at);
