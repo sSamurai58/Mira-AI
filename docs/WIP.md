@@ -334,6 +334,15 @@ UX: **Создать → фразы → загрузить → Mira сама о�
 - [x] Публикация GitHub Release **0.1.5** — https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.5 (tag `v0.1.5` @ `f1b8424`)
 - [ ] MCP runtime / OAuth (по-прежнему later; после явной команды)
 
+## 2026-11-12 — 0.1.6 WIP (no publish yet)
+
+Ветка `cursor/release-0-1-6-6838` от tip `cursor/release-0-1-5-6838` (`04dc220`).
+Версия пакета **0.1.6**. Накопление изменений здесь.
+
+- [x] Bump `package.json` / `package-lock.json` → 0.1.6 (`__MIRA_VERSION__` / UI)
+- [x] Voice Studio «Обученные фразы» modal + CatalogEditModal → `createPortal(document.body)` (nav rail z-index)
+- [ ] **Не** tag / GitHub Release `v0.1.6`, пока явно не скажут «релиз 0.1.6»
+
 ## Шаблон новой темы
 
 ```markdown

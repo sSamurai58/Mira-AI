@@ -13,7 +13,7 @@
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
 | Дорожная карта | Must + future F* закрыты (partial→done stubs where noted) |
 
-**Сейчас:** **0.1.5 опубликован** (Latest). Ветка `cursor/release-0-1-5-6838` @ `f1b8424`. Release: https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.5
+**Сейчас:** **0.1.6 WIP** (ветка `cursor/release-0-1-6-6838`). База = tip 0.1.5 (`04dc220` / tag `v0.1.5` @ `f1b8424`). **Не публиковать** GitHub Release/`v0.1.6`, пока явно не скажут «релиз 0.1.6».
 
 
 ## Решения
@@ -22,6 +22,7 @@
 
 | Дата | Решение | Почему |
 |------|---------|--------|
+| 2026-11-12 | Workshop overlays (`Обученные фразы`, CatalogEdit) → `createPortal(document.body)` | Sticky `.workshop-layout > .settings-nav` z-index 2 sits above `.workshop-main` (z=0); in-tree `modal-backdrop` z=40 was trapped |
 | 2026-11-12 | **Релиз 0.1.5 опубликован** (`v0.1.5`, Latest) | Themed ConfirmModal/AppConfirm + frameless TitleBar; Integrations blank-UI (hide/show, shell, portal, hash); ThemeSelect phrase-bind close; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.5 |
 | 2026-11-12 | Локальные UI-confirm через `AppConfirm`/`ConfirmModal`, не `window.confirm` | Native OS chrome (фиолетовый title bar) выбивается из тёмной темы Mira |
 | 2026-11-12 | MCP каталог в Настройки; этапы UI = кат. 1,2,3,5,6,7,8,9,10 (Dev + Design/Blender) | Продуктивность через стандартный разъём; плитки как темы; план в `docs/MCP.md` |
