@@ -538,7 +538,7 @@ export function localTrainVoiceModel(projectId: string): {
       lang: project.lang,
       preview_path: preview,
       meta_json: JSON.stringify({
-        engine: "mira-local-corpus-v1",
+        engine: "mira-voice-pack-v1",
         trainedAt: stamp,
         quality,
         browserDemo: true,
@@ -556,7 +556,7 @@ export function localTrainVoiceModel(projectId: string): {
       lang: project.lang,
       preview_path: preview,
       meta_json: JSON.stringify({
-        engine: "mira-local-corpus-v1",
+        engine: "mira-voice-pack-v1",
         trainedAt: stamp,
         quality,
         browserDemo: true,

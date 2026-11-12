@@ -639,7 +639,13 @@ interface MiraBridge {
   listCustomVoices: () => Promise<MiraCustomVoice[]>;
   getCustomVoiceCorpus: (voiceId: string) => Promise<{
     voice: MiraCustomVoice;
-    units: Array<{ phraseId: string; text: string; filePath: string }>;
+    units: Array<{
+      phraseId: string;
+      text: string;
+      filePath: string;
+      startFrac?: number;
+      endFrac?: number;
+    }>;
   }>;
   createVoiceProject: (payload?: {
     name?: string;
