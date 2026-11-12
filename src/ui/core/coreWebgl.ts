@@ -1,10 +1,10 @@
 /**
  * Plasma / filament holographic core for Mira.
  *
- * Visual target (1:1 with ref): white-yellow nucleus → dense tangled orange
- * inner nest → prominent turbulent CYAN/TEAL mid-shell ring → outer wispy
- * orange filaments + sparks. Soft bloom, organic silhouette (no hard CSS
- * circle clip). Theme may tint; structure stays orange/cyan layered.
+ * Structure (filament topology): bright nucleus → dense inner nest →
+ * turbulent mid-shell ring → outer wispy filaments + sparks.
+ * Soft bloom, organic silhouette (no hard CSS circle clip).
+ * Band hues follow the active Mira theme (--core-* / --accent…), live.
  */
 
 import { normalizeCoreLevel } from "../coreLevel";
@@ -12,11 +12,11 @@ import { normalizeCoreLevel } from "../coreLevel";
 export type CoreVoice = "idle" | "listening" | "thinking" | "speaking";
 
 export type CorePalette = {
-  /** Cool filament — cyan / teal mid-shell */
+  /** Cool filament — mid-shell (--core-cool) */
   cool: [number, number, number];
-  /** Warm filament — amber / orange nest + outer shell */
+  /** Warm filament — nest + outer (--core-warm) */
   warm: [number, number, number];
-  /** Hot nucleus highlight — white-yellow */
+  /** Hot nucleus highlight (--core-glow) */
   glow: [number, number, number];
 };
 
@@ -164,17 +164,15 @@ void main(){
   float a = (core * 0.92 + bloom * 0.42) * vAlpha * uGain;
   if (a < 0.0035) discard;
 
+  // Hot tips lift toward white — hue stays on theme uColor (no fixed cyan/amber)
   vec3 col = uColor;
   if (uBandKind > 1.5) {
-    // Nucleus: push toward white-yellow
-    col = mix(uColor, vec3(1.0, 0.97, 0.82), 0.55 + vHot * 0.35);
+    col = mix(uColor, vec3(1.0), 0.55 + vHot * 0.35);
   } else if (uBandKind > 0.5) {
-    // Cool cyan: keep saturated; only slight white at hot tips
-    col = mix(uColor, vec3(0.75, 1.0, 0.98), vHot * 0.22);
+    col = mix(uColor, vec3(1.0), vHot * 0.22);
     col = mix(col, uColor * 1.15, vBandMix * 0.15);
   } else {
-    // Warm orange: amber → near-white at hottest filament cores
-    col = mix(uColor, vec3(1.0, 0.92, 0.55), vHot * 0.48);
+    col = mix(uColor, vec3(1.0), vHot * 0.42);
     col = mix(col, uColor * 1.25, vBandMix * 0.2);
   }
   outColor = vec4(col * a, a);
@@ -1196,8 +1194,12 @@ export function createCoreWebgl(
   };
 }
 
-export function parseCssRgb(raw: string): [number, number, number] {
+export function parseCssRgb(
+  raw: string,
+  fallback: [number, number, number] = [0.9, 0.76, 0.2],
+): [number, number, number] {
   const s = raw.trim();
+  if (!s) return fallback;
   const hex = s.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
   if (hex) {
     let h = hex[1];
@@ -1218,7 +1220,7 @@ export function parseCssRgb(raw: string): [number, number, number] {
     if (a > 1 || b > 1 || c > 1) return [a / 255, b / 255, c / 255];
     return [a, b, c];
   }
-  return [0.2, 0.9, 0.88];
+  return fallback;
 }
 
 function mixRgb(
@@ -1242,27 +1244,30 @@ function lift(rgb: [number, number, number], amount: number): [number, number, n
 }
 
 /**
- * Cool/warm plasma bands anchored to the holographic reference
- * (cyan mid-shell + amber nest), lightly tinted by theme tokens.
+ * Cool/warm/nucleus plasma bands from the active Mira theme.
+ * Prefers --core-* (written by applyTheme); falls back to
+ * --accent / --success / --warning / --border. No fixed orange/cyan anchors.
  */
 export function paletteFromElement(el: Element): CorePalette {
   const cs = getComputedStyle(el);
-  const accent = parseCssRgb(cs.getPropertyValue("--accent") || "#3af0e0");
-  const success = parseCssRgb(cs.getPropertyValue("--success") || "#5dffb1");
-  const warning = parseCssRgb(cs.getPropertyValue("--warning") || "#ff9a3c");
+  const coreCool = cs.getPropertyValue("--core-cool").trim();
+  const coreWarm = cs.getPropertyValue("--core-warm").trim();
+  const coreGlow = cs.getPropertyValue("--core-glow").trim();
 
-  // Reference anchors
-  const refCyan: [number, number, number] = [0.18, 0.92, 0.88];
-  const refAmber: [number, number, number] = [1.0, 0.55, 0.18];
-  const refHot: [number, number, number] = [1.0, 0.96, 0.72];
+  if (coreCool && coreWarm && coreGlow) {
+    return {
+      cool: parseCssRgb(coreCool),
+      warm: parseCssRgb(coreWarm),
+      glow: parseCssRgb(coreGlow),
+    };
+  }
 
-  const coolTheme = lift(mixRgb(accent, success, 0.3), 0.08);
-  const warmTheme = lift(mixRgb(warning, accent, 0.18), 0.05);
-
-  // Strong ref bias so structure reads orange/cyan even under theme tint
-  const cool = mixRgb(refCyan, coolTheme, 0.28);
-  const warm = mixRgb(refAmber, warmTheme, 0.28);
-  const glow = mixRgb(refHot, lift(mixRgb(warm, cool, 0.25), 0.65), 0.2);
-
+  const accent = parseCssRgb(cs.getPropertyValue("--accent"), [1, 0.76, 0]);
+  const success = parseCssRgb(cs.getPropertyValue("--success"), [0.2, 0.83, 0.6]);
+  const warning = parseCssRgb(cs.getPropertyValue("--warning"), [0.98, 0.75, 0.14]);
+  const border = parseCssRgb(cs.getPropertyValue("--border"), accent);
+  const cool = lift(mixRgb(mixRgb(accent, success, 0.35), border, 0.12), 0.12);
+  const warm = lift(mixRgb(warning, accent, 0.25), 0.08);
+  const glow = lift(mixRgb(mixRgb(warm, cool, 0.35), accent, 0.2), 0.55);
   return { cool, warm, glow };
 }

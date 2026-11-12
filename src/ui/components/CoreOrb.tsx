@@ -6,6 +6,7 @@ import {
   type CoreVoice,
 } from "../core/coreWebgl";
 import { normalizeCoreLevel } from "../coreLevel";
+import { MIRA_THEME_EVENT } from "../themes";
 import type { VoiceState } from "../voiceState";
 import { CoreOrbSvgFallback } from "./CoreOrbSvgFallback";
 
@@ -56,10 +57,23 @@ export function CoreOrb({
     handleRef.current = handle;
     setUseFallback(false);
 
+    const syncPalette = () => {
+      handleRef.current?.setPalette(paletteFromElement(wrap));
+    };
+    // Theme changes: CSS vars on <html>, plus explicit mira:theme event
+    const mo = new MutationObserver(syncPalette);
+    mo.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme", "class", "style"],
+    });
+    window.addEventListener(MIRA_THEME_EVENT, syncPalette);
+
     const ro = new ResizeObserver(() => handle.resize());
     ro.observe(wrap);
 
     return () => {
+      mo.disconnect();
+      window.removeEventListener(MIRA_THEME_EVENT, syncPalette);
       ro.disconnect();
       handle.destroy();
       handleRef.current = null;
@@ -73,20 +87,6 @@ export function CoreOrb({
   useEffect(() => {
     handleRef.current?.setVoice(toCoreVoice(voiceState));
   }, [voiceState]);
-
-  useEffect(() => {
-    const wrap = wrapRef.current;
-    if (!wrap || !handleRef.current) return;
-    const sync = () =>
-      handleRef.current?.setPalette(paletteFromElement(wrap));
-    sync();
-    const mo = new MutationObserver(sync);
-    mo.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["data-theme", "class", "style"],
-    });
-    return () => mo.disconnect();
-  }, []);
 
   return (
     <div

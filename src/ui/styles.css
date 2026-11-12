@@ -9,6 +9,10 @@
   --danger: #f87171;
   --warning: #fbbf24;
   --success: #34d399;
+  /* Core plasma bands (overwritten by applyTheme from accent/success/warning) */
+  --core-cool: #c0cf4e;
+  --core-warm: #fcc52d;
+  --core-glow: #f4e7a6;
   --load-ram: #38bdf8;
   --terminal-bg: #000814;
   --terminal-fg: #f8fafc;
@@ -837,30 +841,28 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   pointer-events: none;
   position: absolute;
   /* Soft atmospheric bloom; oversized so rim never reads as a hard circle */
-  inset: -14%;
+  inset: -12%;
   border-radius: 50%;
   z-index: 0;
   background:
-    /* Warm nucleus haze (amber) */
     radial-gradient(
       circle at 50% 48%,
-      color-mix(in srgb, var(--warning) 34%, transparent),
-      transparent 38%
+      color-mix(in srgb, var(--core-glow, var(--warning)) 30%, transparent),
+      transparent 40%
     ),
-    /* Cyan mid-shell atmospheric tint */
     radial-gradient(
       circle at 50% 46%,
-      transparent 28%,
-      color-mix(in srgb, var(--accent) 22%, transparent) 48%,
-      transparent 68%
+      color-mix(in srgb, var(--core-warm, var(--warning)) 22%, transparent),
+      transparent 52%
     ),
     radial-gradient(
       circle at 50% 45%,
-      color-mix(in srgb, var(--accent) 14%, transparent),
+      color-mix(in srgb, var(--core-cool, var(--accent)) 24%, transparent),
+      color-mix(in srgb, var(--core-cool, var(--accent)) 8%, transparent) 52%,
       transparent 78%
     );
-  filter: blur(30px);
-  opacity: 0.78;
+  filter: blur(28px);
+  opacity: 0.72;
   animation: pulse-core 3.2s ease-in-out infinite;
 }
 

@@ -31,14 +31,14 @@ export function CoreOrbSvgFallback({ level, voiceState }: Props) {
     >
       <defs>
         <radialGradient id="coreGlowFb" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.45" />
-          <stop offset="55%" stopColor="var(--border)" stopOpacity="0.18" />
+          <stop offset="0%" stopColor="var(--core-glow, var(--accent))" stopOpacity="0.45" />
+          <stop offset="55%" stopColor="var(--core-cool, var(--border))" stopOpacity="0.18" />
           <stop offset="100%" stopColor="transparent" stopOpacity="0" />
         </radialGradient>
         <radialGradient id="coreCenterFb" cx="50%" cy="45%" r="55%">
           <stop offset="0%" stopColor="#ffffff" stopOpacity="0.95" />
-          <stop offset="35%" stopColor="var(--accent)" stopOpacity="0.85" />
-          <stop offset="70%" stopColor="var(--border)" stopOpacity="0.5" />
+          <stop offset="35%" stopColor="var(--core-warm, var(--accent))" stopOpacity="0.85" />
+          <stop offset="70%" stopColor="var(--core-cool, var(--border))" stopOpacity="0.5" />
           <stop offset="100%" stopColor="transparent" stopOpacity="0" />
         </radialGradient>
       </defs>
