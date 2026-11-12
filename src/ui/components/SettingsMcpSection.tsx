@@ -13,15 +13,9 @@ import {
   type McpConnectorDraft,
 } from "../mcp/catalog";
 
-const STAGE_CHIP: Record<McpStageId, string> = {
-  1: "Задачи",
-  2: "Календарь",
-  3: "Почта",
-  4: "Заметки",
-  5: "Офис",
-  6: "CRM",
-  7: "Браузер",
-};
+const STAGE_CHIP: Record<McpStageId, string> = Object.fromEntries(
+  MCP_STAGES.map((s) => [s.stage, s.chip]),
+) as Record<McpStageId, string>;
 
 export function SettingsMcpSection() {
   const [stageFilter, setStageFilter] = useState<McpStageId | "all">("all");
@@ -257,6 +251,12 @@ function McpConnectorModal(props: {
 
         <div className="modal-body mcp-modal-body">
           <p className="mcp-modal-summary">{c.summary}</p>
+
+          {c.builtinHint ? (
+            <p className="mcp-modal-builtin" role="note">
+              {c.builtinHint}
+            </p>
+          ) : null}
 
           <div className="mcp-modal-block">
             <h4>Голосовые команды</h4>

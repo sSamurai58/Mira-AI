@@ -1,16 +1,24 @@
-/** MCP connector catalog for Settings → MCP (staged tiles). */
+/** MCP connector catalog for Settings → MCP (staged by docs/MCP.md catalog #). */
 
 export type McpAuthKind = "oauth" | "api-key" | "local" | "bridge";
 
-export type McpConnectorStatus = "catalog" | "planned" | "wiring" | "partial" | "done";
+export type McpConnectorStatus =
+  | "catalog"
+  | "planned"
+  | "wiring"
+  | "partial"
+  | "done";
 
-export type McpStageId = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+/** Matches docs/MCP.md section numbers (4 docs still backlog). */
+export type McpStageId = 1 | 2 | 3 | 5 | 6 | 7 | 8 | 9 | 10;
 
 export type McpCategoryId =
   | "tasks"
   | "calendar"
   | "comms"
   | "notes"
+  | "dev"
+  | "design"
   | "office"
   | "crm"
   | "browser";
@@ -40,6 +48,17 @@ export type McpIconId =
   | "bear"
   | "logseq"
   | "mem"
+  | "github"
+  | "gitlab"
+  | "vscode"
+  | "docker"
+  | "sentry"
+  | "vercel"
+  | "figma"
+  | "canva"
+  | "miro"
+  | "blender"
+  | "excalidraw"
   | "gsheets"
   | "excel"
   | "gdocs"
@@ -60,7 +79,6 @@ export type McpConnector = {
   id: string;
   name: string;
   icon: McpIconId;
-  /** Brand accent for tile badge */
   color: string;
   category: McpCategoryId;
   stage: McpStageId;
@@ -70,6 +88,8 @@ export type McpConnector = {
   envKeys: string[];
   voiceExamples: string[];
   docsUrl?: string;
+  /** Built-in Mira tool already covers part of this */
+  builtinHint?: string;
 };
 
 export type McpStageMeta = {
@@ -77,6 +97,7 @@ export type McpStageMeta = {
   category: McpCategoryId;
   catalogNo: number;
   title: string;
+  chip: string;
   blurb: string;
 };
 
@@ -86,6 +107,7 @@ export const MCP_STAGES: McpStageMeta[] = [
     category: "tasks",
     catalogNo: 1,
     title: "Задачи и проекты",
+    chip: "Задачи",
     blurb: "Тикеты, списки дел, спринты — голосом «создай задачу».",
   },
   {
@@ -93,6 +115,7 @@ export const MCP_STAGES: McpStageMeta[] = [
     category: "calendar",
     catalogNo: 2,
     title: "Календарь и время",
+    chip: "Календарь",
     blurb: "Встречи, слоты, трекинг времени.",
   },
   {
@@ -100,40 +123,61 @@ export const MCP_STAGES: McpStageMeta[] = [
     category: "comms",
     catalogNo: 3,
     title: "Почта и коммуникации",
+    chip: "Почта",
     blurb: "Письма, Slack/Teams/Telegram без ручного кликера.",
   },
   {
-    stage: 4,
+    stage: 5,
     category: "notes",
     catalogNo: 5,
     title: "Заметки и личная база",
+    chip: "Заметки",
     blurb: "PKM и быстрые заметки рядом с памятью Mira.",
   },
   {
-    stage: 5,
-    category: "office",
-    catalogNo: 8,
-    title: "Офис и таблицы",
-    blurb: "Sheets/Excel, документы, Airtable.",
-  },
-  {
     stage: 6,
-    category: "crm",
-    catalogNo: 9,
-    title: "CRM, продажи, финансы",
-    blurb: "Сделки, счета, платежные статусы.",
+    category: "dev",
+    catalogNo: 6,
+    title: "Разработка",
+    chip: "Dev",
+    blurb: "GitHub/GitLab, IDE, Docker, observability.",
   },
   {
     stage: 7,
+    category: "design",
+    catalogNo: 7,
+    title: "Дизайн и креатив",
+    chip: "Дизайн",
+    blurb: "Figma, Canva, Miro, Blender и скетчи.",
+  },
+  {
+    stage: 8,
+    category: "office",
+    catalogNo: 8,
+    title: "Офис и таблицы",
+    chip: "Офис",
+    blurb: "Sheets/Excel, документы, Airtable.",
+  },
+  {
+    stage: 9,
+    category: "crm",
+    catalogNo: 9,
+    title: "CRM, продажи, финансы",
+    chip: "CRM",
+    blurb: "Сделки, счета, платежные статусы.",
+  },
+  {
+    stage: 10,
     category: "browser",
     catalogNo: 10,
     title: "Браузер и веб",
+    chip: "Браузер",
     blurb: "Вкладки, bookmarks, read-later — усиление built-in browser.",
   },
 ];
 
 export const MCP_CONNECTORS: McpConnector[] = [
-  // Stage 1 — tasks
+  // 1 — tasks
   {
     id: "todoist",
     name: "Todoist",
@@ -170,7 +214,7 @@ export const MCP_CONNECTORS: McpConnector[] = [
     id: "notion-tasks",
     name: "Notion",
     icon: "notion",
-    color: "#FFFFFF",
+    color: "#000000",
     category: "tasks",
     stage: 1,
     status: "catalog",
@@ -225,7 +269,7 @@ export const MCP_CONNECTORS: McpConnector[] = [
     id: "ms-todo",
     name: "Microsoft To Do",
     icon: "ms-todo",
-    color: "#3CC5F7",
+    color: "#2564CF",
     category: "tasks",
     stage: 1,
     status: "catalog",
@@ -248,7 +292,7 @@ export const MCP_CONNECTORS: McpConnector[] = [
     voiceExamples: ["Что в TickTick на завтра?"],
   },
 
-  // Stage 2 — calendar
+  // 2 — calendar
   {
     id: "google-calendar",
     name: "Google Calendar",
@@ -306,7 +350,7 @@ export const MCP_CONNECTORS: McpConnector[] = [
   },
   {
     id: "toggl",
-    name: "Toggl",
+    name: "Toggl Track",
     icon: "toggl",
     color: "#E57CD8",
     category: "calendar",
@@ -318,7 +362,7 @@ export const MCP_CONNECTORS: McpConnector[] = [
     voiceExamples: ["Старт таймера Toggl на Mira UI"],
   },
 
-  // Stage 3 — comms
+  // 3 — comms
   {
     id: "gmail",
     name: "Gmail",
@@ -352,7 +396,7 @@ export const MCP_CONNECTORS: McpConnector[] = [
     id: "slack",
     name: "Slack",
     icon: "slack",
-    color: "#E01E5A",
+    color: "#4A154B",
     category: "comms",
     stage: 3,
     status: "catalog",
@@ -365,7 +409,7 @@ export const MCP_CONNECTORS: McpConnector[] = [
     id: "telegram",
     name: "Telegram",
     icon: "telegram",
-    color: "#2AABEE",
+    color: "#26A5E4",
     category: "comms",
     stage: 3,
     status: "catalog",
@@ -373,6 +417,7 @@ export const MCP_CONNECTORS: McpConnector[] = [
     summary: "Bot API / усиление built-in messaging Mira.",
     envKeys: ["TELEGRAM_BOT_TOKEN"],
     voiceExamples: ["Отправь в Telegram Ивану: буду через 10 минут"],
+    builtinHint: "Частично уже в Интеграциях (Telegram Bot).",
   },
   {
     id: "discord",
@@ -391,7 +436,7 @@ export const MCP_CONNECTORS: McpConnector[] = [
     id: "teams",
     name: "Microsoft Teams",
     icon: "teams",
-    color: "#6264A7",
+    color: "#5059C9",
     category: "comms",
     stage: 3,
     status: "catalog",
@@ -414,14 +459,14 @@ export const MCP_CONNECTORS: McpConnector[] = [
     voiceExamples: ["Отправь в WhatsApp клиенту подтверждение"],
   },
 
-  // Stage 4 — notes (catalog #5)
+  // 5 — notes
   {
     id: "obsidian",
     name: "Obsidian",
     icon: "obsidian",
     color: "#7C3AED",
     category: "notes",
-    stage: 4,
+    stage: 5,
     status: "catalog",
     auth: "local",
     summary: "Локальный vault Markdown как память рядом с Mira.",
@@ -434,7 +479,7 @@ export const MCP_CONNECTORS: McpConnector[] = [
     icon: "apple-notes",
     color: "#FFD60A",
     category: "notes",
-    stage: 4,
+    stage: 5,
     status: "catalog",
     auth: "local",
     summary: "Быстрые заметки через OS bridge.",
@@ -447,7 +492,7 @@ export const MCP_CONNECTORS: McpConnector[] = [
     icon: "bear",
     color: "#C65E4A",
     category: "notes",
-    stage: 4,
+    stage: 5,
     status: "catalog",
     auth: "bridge",
     summary: "Markdown-заметки macOS/iOS.",
@@ -460,7 +505,7 @@ export const MCP_CONNECTORS: McpConnector[] = [
     icon: "logseq",
     color: "#86C0FF",
     category: "notes",
-    stage: 4,
+    stage: 5,
     status: "catalog",
     auth: "local",
     summary: "Outliner / graph PKM.",
@@ -473,7 +518,7 @@ export const MCP_CONNECTORS: McpConnector[] = [
     icon: "mem",
     color: "#111111",
     category: "notes",
-    stage: 4,
+    stage: 5,
     status: "catalog",
     auth: "api-key",
     summary: "AI-заметки с быстрым захватом.",
@@ -481,14 +526,171 @@ export const MCP_CONNECTORS: McpConnector[] = [
     voiceExamples: ["Сохрани в Mem: созвон про MCP"],
   },
 
-  // Stage 5 — office (catalog #8)
+  // 6 — development
+  {
+    id: "github",
+    name: "GitHub",
+    icon: "github",
+    color: "#24292F",
+    category: "dev",
+    stage: 6,
+    status: "catalog",
+    auth: "oauth",
+    summary: "Issues, PR, Actions, релизы — рабочий контур разработки.",
+    envKeys: ["MCP_GITHUB_TOKEN"],
+    voiceExamples: [
+      "Создай issue в Mira-AI: починить MCP иконки",
+      "Какой статус CI на ветке 0.1.4?",
+    ],
+  },
+  {
+    id: "gitlab",
+    name: "GitLab",
+    icon: "gitlab",
+    color: "#FC6D26",
+    category: "dev",
+    stage: 6,
+    status: "catalog",
+    auth: "oauth",
+    summary: "Merge requests, pipelines, issues.",
+    envKeys: ["MCP_GITLAB_TOKEN", "MCP_GITLAB_URL"],
+    voiceExamples: ["Открой мой MR в GitLab"],
+  },
+  {
+    id: "vscode",
+    name: "VS Code / Cursor",
+    icon: "vscode",
+    color: "#007ACC",
+    category: "dev",
+    stage: 6,
+    status: "catalog",
+    auth: "local",
+    summary: "Открыть файл/папку проекта, дифф, терминал IDE.",
+    envKeys: ["MCP_EDITOR_CLI"],
+    voiceExamples: ["Открой в Cursor файл SettingsMcpSection.tsx"],
+  },
+  {
+    id: "docker",
+    name: "Docker",
+    icon: "docker",
+    color: "#2496ED",
+    category: "dev",
+    stage: 6,
+    status: "catalog",
+    auth: "local",
+    summary: "Контейнеры, compose, логи — через локальный Docker socket.",
+    envKeys: [],
+    voiceExamples: ["Какие контейнеры Docker сейчас запущены?"],
+  },
+  {
+    id: "sentry",
+    name: "Sentry",
+    icon: "sentry",
+    color: "#362D59",
+    category: "dev",
+    stage: 6,
+    status: "catalog",
+    auth: "api-key",
+    summary: "Ошибки продакшена, релизы, issue triage.",
+    envKeys: ["MCP_SENTRY_TOKEN", "MCP_SENTRY_ORG"],
+    voiceExamples: ["Сколько новых ошибок в Sentry за сутки?"],
+  },
+  {
+    id: "vercel",
+    name: "Vercel",
+    icon: "vercel",
+    color: "#000000",
+    category: "dev",
+    stage: 6,
+    status: "catalog",
+    auth: "api-key",
+    summary: "Деплои, preview URL, статус проектов.",
+    envKeys: ["MCP_VERCEL_TOKEN"],
+    voiceExamples: ["Какой последний деплой Vercel?"],
+  },
+
+  // 7 — design / creative (incl. Blender)
+  {
+    id: "figma",
+    name: "Figma",
+    icon: "figma",
+    color: "#F24E1E",
+    category: "design",
+    stage: 7,
+    status: "catalog",
+    auth: "oauth",
+    summary: "Файлы, комментарии, экспорт фреймов, Dev Mode links.",
+    envKeys: ["MCP_FIGMA_TOKEN"],
+    voiceExamples: ["Найди в Figma экран настроек MCP"],
+  },
+  {
+    id: "blender",
+    name: "Blender",
+    icon: "blender",
+    color: "#E87D0D",
+    category: "design",
+    stage: 7,
+    status: "catalog",
+    auth: "local",
+    summary:
+      "3D-сцены, моделирование, материалы, рендер. Связь с built-in Blender bridge Mira (P10).",
+    envKeys: ["BLENDER_PATH", "BLENDER_ENABLED"],
+    voiceExamples: [
+      "Собери в Blender сцену с кубом и светом",
+      "Запусти demo scene в Blender",
+    ],
+    builtinHint:
+      "Уже есть в Интеграциях / P10: bpy bridge, demo scene, skills on-demand.",
+    docsUrl: "docs/PRD.md#13",
+  },
+  {
+    id: "canva",
+    name: "Canva",
+    icon: "canva",
+    color: "#00C4CC",
+    category: "design",
+    stage: 7,
+    status: "catalog",
+    auth: "oauth",
+    summary: "Быстрые макеты, презентации, соцсети.",
+    envKeys: ["MCP_CANVA_TOKEN"],
+    voiceExamples: ["Создай в Canva обложку для релиза Mira"],
+  },
+  {
+    id: "miro",
+    name: "Miro",
+    icon: "miro",
+    color: "#FFD02F",
+    category: "design",
+    stage: 7,
+    status: "catalog",
+    auth: "oauth",
+    summary: "Доски, стикеры, воркшопы.",
+    envKeys: ["MCP_MIRO_TOKEN"],
+    voiceExamples: ["Добавь стикер на доску Miro: идея MCP"],
+  },
+  {
+    id: "excalidraw",
+    name: "Excalidraw",
+    icon: "excalidraw",
+    color: "#6965DB",
+    category: "design",
+    stage: 7,
+    status: "catalog",
+    auth: "local",
+    summary: "Локальные/облачные скетчи и схемы.",
+    envKeys: ["MCP_EXCALIDRAW_PATH"],
+    voiceExamples: ["Открой схему архитектуры в Excalidraw"],
+  },
+
+  // 8 — office
   {
     id: "google-sheets",
     name: "Google Sheets",
     icon: "gsheets",
     color: "#0F9D58",
     category: "office",
-    stage: 5,
+    stage: 8,
     status: "catalog",
     auth: "oauth",
     summary: "Чтение/запись ячеек, сводки.",
@@ -501,7 +703,7 @@ export const MCP_CONNECTORS: McpConnector[] = [
     icon: "excel",
     color: "#217346",
     category: "office",
-    stage: 5,
+    stage: 8,
     status: "catalog",
     auth: "oauth",
     summary: "Microsoft Excel / 365 таблицы.",
@@ -514,7 +716,7 @@ export const MCP_CONNECTORS: McpConnector[] = [
     icon: "gdocs",
     color: "#4285F4",
     category: "office",
-    stage: 5,
+    stage: 8,
     status: "catalog",
     auth: "oauth",
     summary: "Документы: черновики и вставки текста.",
@@ -525,9 +727,9 @@ export const MCP_CONNECTORS: McpConnector[] = [
     id: "airtable",
     name: "Airtable",
     icon: "airtable",
-    color: "#FCBA02",
+    color: "#18BFFF",
     category: "office",
-    stage: 5,
+    stage: 8,
     status: "catalog",
     auth: "api-key",
     summary: "Базы-таблицы для операций и контента.",
@@ -540,7 +742,7 @@ export const MCP_CONNECTORS: McpConnector[] = [
     icon: "onedrive",
     color: "#094AB2",
     category: "office",
-    stage: 5,
+    stage: 8,
     status: "catalog",
     auth: "oauth",
     summary: "Файлы Microsoft 365 / SharePoint-adjacent.",
@@ -548,14 +750,14 @@ export const MCP_CONNECTORS: McpConnector[] = [
     voiceExamples: ["Найди в OneDrive презентацию Q4"],
   },
 
-  // Stage 6 — crm (catalog #9)
+  // 9 — crm
   {
     id: "hubspot",
     name: "HubSpot",
     icon: "hubspot",
     color: "#FF7A59",
     category: "crm",
-    stage: 6,
+    stage: 9,
     status: "catalog",
     auth: "oauth",
     summary: "Контакты, сделки, воронка.",
@@ -568,7 +770,7 @@ export const MCP_CONNECTORS: McpConnector[] = [
     icon: "salesforce",
     color: "#00A1E0",
     category: "crm",
-    stage: 6,
+    stage: 9,
     status: "catalog",
     auth: "oauth",
     summary: "Enterprise CRM объекты и отчёты.",
@@ -581,7 +783,7 @@ export const MCP_CONNECTORS: McpConnector[] = [
     icon: "amocrm",
     color: "#4C8BF5",
     category: "crm",
-    stage: 6,
+    stage: 9,
     status: "catalog",
     auth: "oauth",
     summary: "RU CRM: сделки и контакты.",
@@ -594,7 +796,7 @@ export const MCP_CONNECTORS: McpConnector[] = [
     icon: "bitrix",
     color: "#2FC6F6",
     category: "crm",
-    stage: 6,
+    stage: 9,
     status: "catalog",
     auth: "oauth",
     summary: "CRM + задачи + чаты Bitrix24.",
@@ -607,7 +809,7 @@ export const MCP_CONNECTORS: McpConnector[] = [
     icon: "stripe",
     color: "#635BFF",
     category: "crm",
-    stage: 6,
+    stage: 9,
     status: "catalog",
     auth: "api-key",
     summary: "Платежи, подписки, баланс (read + осторожный write).",
@@ -615,19 +817,20 @@ export const MCP_CONNECTORS: McpConnector[] = [
     voiceExamples: ["Сколько успешных платежей Stripe за неделю?"],
   },
 
-  // Stage 7 — browser (catalog #10)
+  // 10 — browser
   {
     id: "chrome",
     name: "Google Chrome",
     icon: "chrome",
     color: "#4285F4",
     category: "browser",
-    stage: 7,
+    stage: 10,
     status: "catalog",
     auth: "local",
     summary: "Вкладки, история, bookmarks — рядом с built-in browser tools.",
     envKeys: [],
     voiceExamples: ["Открой в Chrome документацию MCP"],
+    builtinHint: "Частично уже в Интеграциях (browser open / history).",
   },
   {
     id: "firefox",
@@ -635,7 +838,7 @@ export const MCP_CONNECTORS: McpConnector[] = [
     icon: "firefox",
     color: "#FF7139",
     category: "browser",
-    stage: 7,
+    stage: 10,
     status: "catalog",
     auth: "local",
     summary: "Профили Firefox и история.",
@@ -648,7 +851,7 @@ export const MCP_CONNECTORS: McpConnector[] = [
     icon: "edge",
     color: "#0078D7",
     category: "browser",
-    stage: 7,
+    stage: 10,
     status: "catalog",
     auth: "local",
     summary: "Edge на Windows как основной браузер.",
@@ -657,11 +860,11 @@ export const MCP_CONNECTORS: McpConnector[] = [
   },
   {
     id: "raindrop",
-    name: "Raindrop",
+    name: "Raindrop.io",
     icon: "raindrop",
     color: "#0A64FF",
     category: "browser",
-    stage: 7,
+    stage: 10,
     status: "catalog",
     auth: "api-key",
     summary: "Закладки и коллекции read-later.",
@@ -674,7 +877,7 @@ export const MCP_CONNECTORS: McpConnector[] = [
     icon: "pocket",
     color: "#EF4056",
     category: "browser",
-    stage: 7,
+    stage: 10,
     status: "catalog",
     auth: "oauth",
     summary: "Отложенное чтение статей.",

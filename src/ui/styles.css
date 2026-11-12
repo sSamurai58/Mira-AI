@@ -4106,6 +4106,16 @@ body.mira-hud-root *::-webkit-scrollbar {
   line-height: 1.45;
 }
 
+.mcp-modal-builtin {
+  margin: 0.65rem 0 0;
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--mcp-brand, var(--accent)) 35%, transparent);
+  background: color-mix(in srgb, var(--mcp-brand, var(--accent)) 14%, transparent);
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
 .mcp-modal-block h4 {
   margin: 0 0 0.4rem;
   font-size: 0.82rem;

@@ -16,20 +16,23 @@ MCP — стандартный слой «подключи сервер → по
 
 ## Этапы UI (в 0.1.4)
 
-В настройках MCP показываем **плитки приложений** для категорий:
+В настройках MCP показываем **плитки приложений** для категорий  
+(номера этапов = номера каталога; **4 Documents** пока backlog):
 
-| Этап UI | # из каталога | Категория |
-|---------|---------------|-----------|
-| **1** | 1 | Задачи и проекты |
-| **2** | 2 | Календарь и время |
-| **3** | 3 | Почта и коммуникации |
-| **4** | 5 | Заметки и личная база |
-| **5** | 8 | Офис и таблицы |
-| **6** | 9 | CRM, продажи, финансы |
-| **7** | 10 | Браузер и веб-продуктивность |
+| Этап UI | # из каталога | Категория | Chip |
+|---------|---------------|-----------|------|
+| **1** | 1 | Задачи и проекты | Задачи |
+| **2** | 2 | Календарь и время | Календарь |
+| **3** | 3 | Почта и коммуникации | Почта |
+| **5** | 5 | Заметки и личная база | Заметки |
+| **6** | 6 | Разработка | Dev |
+| **7** | 7 | Дизайн и креатив (Figma, Blender, …) | Дизайн |
+| **8** | 8 | Офис и таблицы | Офис |
+| **9** | 9 | CRM, продажи, финансы | CRM |
+| **10** | 10 | Браузер и веб-продуктивность | Браузер |
 
 Каждая плитка: **логотип/иконка + название**. Клик → модалка с данными коннектора  
-(описание, auth, env-ключи, примеры голосовых команд, статус этапа).
+(описание, auth, env-ключи, примеры голосовых команд, `builtinHint` если есть, статус этапа).
 
 ## Полный каталог (roadmap)
 
@@ -49,23 +52,23 @@ Mattermost, Rocket.Chat, Intercom, Zendesk, Help Scout
 Google Docs/Drive, Word/OneDrive/SharePoint, Notion, Obsidian, Logseq, RemNote,  
 Confluence, Outline, BookStack, Dropbox, Box
 
-### 5. Заметки и личная база — этап UI 4
+### 5. Заметки и личная база — этап UI 5
 Apple Notes, Bear, Drafts, Mem, Reflect, локальные Markdown/PKM-папки, Obsidian, Logseq
 
-### 6. Разработка — backlog
+### 6. Разработка — этап UI 6
 GitHub, GitLab, Bitbucket, VS Code/Cursor/JetBrains, Docker, K8s, Sentry, Datadog,  
 Grafana, PagerDuty, Vercel, Netlify, Cloudflare, DB clients, Postman/Bruno
 
-### 7. Дизайн и креатив — backlog
-Figma, FigJam, Canva, Miro, Excalidraw, Blender (частично built-in), Resolve, ComfyUI
+### 7. Дизайн и креатив — этап UI 7
+Figma, FigJam, Canva, Miro, Excalidraw, Blender (частично built-in / P10), Resolve, ComfyUI
 
-### 8. Офис и таблицы — этап UI 5
+### 8. Офис и таблицы — этап UI 8
 Google Sheets, Excel / Microsoft 365, Airtable, Smartsheet, Rows, Power BI, Metabase
 
-### 9. CRM, продажи, финансы — этап UI 6
+### 9. CRM, продажи, финансы — этап UI 9
 HubSpot, Salesforce, Pipedrive, amoCRM, Bitrix24, Stripe, QuickBooks, Xero, МойСклад, 1С
 
-### 10. Браузер и веб — этап UI 7
+### 10. Браузер и веб — этап UI 10
 Chrome, Edge, Firefox, Brave/Arc, Raindrop, Pocket, Readwise, Typeform, Google Forms  
 (+ усиление built-in browser tools Mira)
 
@@ -104,8 +107,8 @@ Zapier, Make, n8n, Activepieces, Shortcuts, Power Automate, AHK
 
 - [x] Документ-план (`docs/MCP.md`)
 - [x] Раздел **Настройки → MCP**
-- [x] Плитки этапов 1–7 (категории 1,2,3,5,8,9,10) с иконками
-- [x] Модалка с данными коннектора
+- [x] Плитки этапов 1,2,3,5,6,7,8,9,10 (вкл. Dev + Design/Blender) с brand-иконками
+- [x] Модалка с данными коннектора (+ `builtinHint` где есть)
 - [ ] Реальный MCP runtime / OAuth — **не** в 0.1.4 (следующий релиз после явной команды)
 
 ## Связанные docs

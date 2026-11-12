@@ -1,434 +1,505 @@
+import type { ReactNode } from "react";
 import type { McpIconId } from "../mcp/catalog";
 
-/** Compact brand mark for MCP tiles (simplified monograms, not official trademarks). */
-export function McpBrandIcon(props: {
-  id: McpIconId;
-  color: string;
-  size?: number;
-}) {
-  const size = props.size ?? 28;
+type IconProps = { id: McpIconId; color: string; size?: number };
+
+/**
+ * Recognizable brand marks (simplified official geometries / Simple Icons–style).
+ * Decorative UI only — not trademark endorsement.
+ */
+export function McpBrandIcon({ id, color, size = 28 }: IconProps) {
+  const s = size;
   const common = {
-    width: size,
-    height: size,
-    viewBox: "0 0 32 32",
+    width: s,
+    height: s,
+    viewBox: "0 0 24 24",
     "aria-hidden": true as const,
   };
-  const fill = props.color;
 
-  switch (props.id) {
+  const Frame = ({
+    bg,
+    children,
+  }: {
+    bg: string;
+    children: ReactNode;
+  }) => (
+    <svg {...common}>
+      <rect width="24" height="24" rx="6" fill={bg} />
+      {children}
+    </svg>
+  );
+
+  switch (id) {
     case "todoist":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill={fill} />
+        <Frame bg={color}>
           <path
-            d="M9 16.2l4.2 4.2L23 10.5"
-            fill="none"
-            stroke="#fff"
-            strokeWidth="2.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+            fill="#fff"
+            d="M12 1.5A10.5 10.5 0 1 0 22.5 12 10.51 10.51 0 0 0 12 1.5Zm-1.06 14.2-3.54-3.54 1.28-1.28 2.26 2.26 5.18-5.18 1.28 1.28Z"
           />
-        </svg>
+        </Frame>
       );
     case "linear":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill={fill} />
-          <path d="M8 22 L22 8 L24 10 L10 24 Z" fill="#fff" />
-        </svg>
+        <Frame bg={color}>
+          <path
+            fill="#fff"
+            d="M2.86 12.75a9.14 9.14 0 0 0 8.39 8.39L2.86 12.75Zm3.1-4.84 10.13 10.13a9.14 9.14 0 0 0 1.64-2.48L8.44 5.27a9.2 9.2 0 0 0-2.48 1.64ZM12.75 2.86 21.14 11.25A9.14 9.14 0 0 0 12.75 2.86Z"
+          />
+        </Frame>
       );
     case "notion":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill="#111" />
+        <Frame bg="#ffffff">
           <path
-            d="M11 8h7l5 16h-3.2l-1-3.4h-5.6L12.2 24H9L11 8zm3.1 10.2h3.7L16 12.4l-1.9 5.8z"
-            fill="#fff"
+            fill="#000"
+            d="M4.5 4.2h2.1l.35 1.1h.05c.4-.7 1.15-1.3 2.25-1.3 1.7 0 2.85 1.2 2.85 3.25V16.8H9.4V8.55c0-.95-.4-1.55-1.25-1.55-.85 0-1.5.65-1.5 1.75V16.8H4.5V4.2Zm10.2-.2c2.35 0 3.95 1.5 3.95 3.75 0 2.55-1.75 3.95-4.05 3.95h-.85V16.8h-2.65V4H14.7Zm-.75 5.55h.65c1.15 0 1.85-.65 1.85-1.7 0-1-.65-1.6-1.75-1.6h-.75v3.3Z"
           />
-        </svg>
+        </Frame>
       );
     case "asana":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill={fill} />
-          <circle cx="16" cy="11" r="3.2" fill="#fff" />
-          <circle cx="10.5" cy="20" r="3.2" fill="#fff" />
-          <circle cx="21.5" cy="20" r="3.2" fill="#fff" />
-        </svg>
+        <Frame bg="#F06A6A">
+          <circle cx="12" cy="7.2" r="2.6" fill="#fff" />
+          <circle cx="7.2" cy="15.4" r="2.6" fill="#fff" />
+          <circle cx="16.8" cy="15.4" r="2.6" fill="#fff" />
+        </Frame>
       );
     case "clickup":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill={fill} />
+        <Frame bg="#7B68EE">
           <path
-            d="M8 14l8 8 8-8"
             fill="none"
             stroke="#fff"
-            strokeWidth="2.8"
+            strokeWidth="2.2"
             strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M5 11.5 12 18l7-6.5"
           />
-        </svg>
+          <path
+            fill="none"
+            stroke="#fff"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            opacity="0.55"
+            d="M7.5 8.5 12 12.5 16.5 8.5"
+          />
+        </Frame>
       );
     case "jira":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill={fill} />
-          <path d="M16 6l8 10-8 10-8-10 8-10z" fill="#fff" opacity="0.95" />
-          <path d="M16 12l4 4-4 4-4-4 4-4z" fill={fill} />
-        </svg>
+        <Frame bg="#2684FF">
+          <path
+            fill="#fff"
+            d="M12.2 3.2 20.8 12l-8.6 8.8L3.6 12l8.6-8.8Zm0 4.4L8 12l4.2 4.4L16.4 12 12.2 7.6Z"
+          />
+        </Frame>
       );
     case "ms-todo":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill={fill} />
+        <Frame bg="#2564CF">
           <path
-            d="M8 16l5 5 11-12"
             fill="none"
-            stroke="#083"
-            strokeWidth="2.6"
+            stroke="#fff"
+            strokeWidth="2.2"
             strokeLinecap="round"
+            strokeLinejoin="round"
+            d="m5.5 12 4 4 9-10"
           />
-        </svg>
+        </Frame>
       );
     case "ticktick":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill={fill} />
+        <Frame bg="#4772FA">
           <path
-            d="M9 16l5 5 10-11"
             fill="none"
             stroke="#fff"
-            strokeWidth="2.6"
+            strokeWidth="2.2"
             strokeLinecap="round"
+            strokeLinejoin="round"
+            d="m5.5 12.2 4.2 4.2L18.5 7.5"
           />
-        </svg>
+        </Frame>
       );
     case "gcal":
       return (
         <svg {...common}>
-          <rect width="32" height="32" rx="8" fill="#fff" />
-          <rect x="6" y="8" width="20" height="18" rx="3" fill={fill} />
-          <rect x="6" y="8" width="20" height="5" fill="#1A73E8" />
-          <text x="16" y="23" textAnchor="middle" fontSize="10" fill="#fff" fontFamily="system-ui">
+          <rect width="24" height="24" rx="6" fill="#fff" />
+          <path fill="#1A73E8" d="M5 4.5h14a1.5 1.5 0 0 1 1.5 1.5v3H3.5V6A1.5 1.5 0 0 1 5 4.5Z" />
+          <path fill="#EA4335" d="M3.5 9.5H9v11H5A1.5 1.5 0 0 1 3.5 19Z" />
+          <path fill="#34A853" d="M15 9.5h5.5V19a1.5 1.5 0 0 1-1.5 1.5h-4Z" />
+          <path fill="#FBBC04" d="M9 15.5h6V20.5H9Z" />
+          <path fill="#4285F4" d="M9 9.5h6v6H9Z" />
+          <text x="12" y="17.2" textAnchor="middle" fontSize="7.5" fontWeight="700" fill="#fff" fontFamily="Arial,sans-serif">
             31
           </text>
         </svg>
       );
     case "outlook":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill={fill} />
-          <rect x="7" y="9" width="18" height="14" rx="2" fill="#fff" />
-          <path d="M7 11l9 7 9-7" fill="none" stroke={fill} strokeWidth="1.8" />
-        </svg>
+        <Frame bg="#0078D4">
+          <rect x="4" y="6" width="16" height="12" rx="1.5" fill="#fff" />
+          <path d="M4 8.2 12 14l8-5.8" fill="none" stroke="#0078D4" strokeWidth="1.6" />
+        </Frame>
       );
     case "apple-cal":
       return (
         <svg {...common}>
-          <rect width="32" height="32" rx="8" fill="#fff" />
-          <rect x="6" y="7" width="20" height="19" rx="3" fill="#F2F2F7" />
-          <rect x="6" y="7" width="20" height="6" fill={fill} />
-          <circle cx="11" cy="10" r="1.2" fill="#fff" />
-          <circle cx="21" cy="10" r="1.2" fill="#fff" />
+          <rect width="24" height="24" rx="6" fill="#F2F2F7" />
+          <path fill="#FF3B30" d="M4 5.5h16A1.5 1.5 0 0 1 21.5 7v3.2H2.5V7A1.5 1.5 0 0 1 4 5.5Z" />
+          <circle cx="7.5" cy="7.2" r="0.9" fill="#fff" />
+          <circle cx="16.5" cy="7.2" r="0.9" fill="#fff" />
+          <text x="12" y="17.5" textAnchor="middle" fontSize="8" fontWeight="700" fill="#1C1C1E" fontFamily="Arial,sans-serif">
+            12
+          </text>
         </svg>
       );
     case "calendly":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill={fill} />
-          <circle cx="16" cy="16" r="8" fill="none" stroke="#fff" strokeWidth="2.2" />
-          <path d="M16 10v7l4 2" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" />
-        </svg>
+        <Frame bg="#006BFF">
+          <circle cx="12" cy="12" r="7" fill="none" stroke="#fff" strokeWidth="1.8" />
+          <path d="M12 7.5v5.2l3.2 1.8" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" />
+        </Frame>
       );
     case "toggl":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill={fill} />
-          <circle cx="16" cy="17" r="7" fill="none" stroke="#fff" strokeWidth="2.2" />
-          <path d="M16 8v5" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" />
-        </svg>
+        <Frame bg="#E57CD8">
+          <circle cx="12" cy="13" r="6.2" fill="none" stroke="#fff" strokeWidth="1.8" />
+          <path d="M12 4.8v4.5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" />
+        </Frame>
       );
     case "gmail":
       return (
         <svg {...common}>
-          <rect width="32" height="32" rx="8" fill="#fff" />
-          <path d="M6 10l10 8 10-8v12H6V10z" fill={fill} />
-          <path d="M6 10l10 8 10-8" fill="none" stroke="#fff" strokeWidth="1.6" />
+          <rect width="24" height="24" rx="6" fill="#fff" />
+          <path fill="#EA4335" d="M3.5 6.5 12 13l8.5-6.5V18.5H3.5Z" />
+          <path fill="#C5221F" d="M3.5 6.5 12 13l-.5 4.5L3.5 12Z" />
+          <path fill="#FBBC04" d="M20.5 6.5 12 13l.5 4.5 8-5.5Z" />
+          <path fill="#34A853" d="M3.5 18.5V12l8 5.5Z" />
+          <path fill="#4285F4" d="M20.5 18.5V12l-8 5.5Z" />
         </svg>
       );
     case "slack":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill="#4A154B" />
-          <rect x="13" y="7" width="3.2" height="10" rx="1.5" fill="#E01E5A" />
-          <rect x="7" y="13" width="10" height="3.2" rx="1.5" fill="#36C5F0" />
-          <rect x="15.8" y="15" width="3.2" height="10" rx="1.5" fill="#2EB67D" />
-          <rect x="15" y="15.8" width="10" height="3.2" rx="1.5" fill="#ECB22E" />
-        </svg>
+        <Frame bg="#4A154B">
+          <path fill="#E01E5A" d="M8.5 3.8a1.7 1.7 0 0 0 0 3.4h1.7V5.5A1.7 1.7 0 0 0 8.5 3.8Z" />
+          <path fill="#E01E5A" d="M8.5 8.2H3.8a1.7 1.7 0 1 0 0 3.4h4.7a1.7 1.7 0 0 0 0-3.4Z" />
+          <path fill="#36C5F0" d="M20.2 8.5a1.7 1.7 0 0 0-3.4 0v1.7h1.7a1.7 1.7 0 0 0 1.7-1.7Z" />
+          <path fill="#36C5F0" d="M15.8 8.5v-4.7a1.7 1.7 0 1 0-3.4 0v4.7a1.7 1.7 0 0 0 3.4 0Z" />
+          <path fill="#2EB67D" d="M15.5 20.2a1.7 1.7 0 0 0 0-3.4h-1.7v1.7a1.7 1.7 0 0 0 1.7 1.7Z" />
+          <path fill="#2EB67D" d="M15.5 15.8h4.7a1.7 1.7 0 1 0 0-3.4h-4.7a1.7 1.7 0 0 0 0 3.4Z" />
+          <path fill="#ECB22E" d="M3.8 15.5a1.7 1.7 0 0 0 3.4 0v-1.7H5.5a1.7 1.7 0 0 0-1.7 1.7Z" />
+          <path fill="#ECB22E" d="M8.2 15.5v4.7a1.7 1.7 0 1 0 3.4 0v-4.7a1.7 1.7 0 0 0-3.4 0Z" />
+        </Frame>
       );
     case "telegram":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill={fill} />
-          <path d="M8 15.5l16-6-3.5 14-5-3.5-3 3-0.5-5.5L20 12z" fill="#fff" />
-        </svg>
+        <Frame bg="#26A5E4">
+          <path
+            fill="#fff"
+            d="M9.4 13.7 18.2 6.9c.4-.3.8.1.6.5l-2.1 9.9c-.2.7-.6.9-1.2.6l-3.3-2.4-1.6 1.5c-.2.2-.3.3-.6.3l.2-3.4 6.2-5.6c.3-.2 0-.4-.3-.2l-7.7 4.8-3.3-1c-.7-.2-.7-.7.2-1.1l12.8-4.9c.6-.3 1.2.2 1 .9L14.2 17c-.2.9-.8 1.1-1.5.7l-3.3-2.4"
+          />
+        </Frame>
       );
     case "discord":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill={fill} />
+        <Frame bg="#5865F2">
           <path
-            d="M10 12c2-2 10-2 12 0 1 4 1 8-1 10-1-1-2-1.5-3-2 1-.3 2-1 2.5-2-2 1-4 1.5-6.5 1.5S10 17 8 16c.5 1 1.5 1.7 2.5 2-1 .5-2 1-3 2-2-2-2-6-1-10z"
             fill="#fff"
+            d="M18.6 6.3A14.5 14.5 0 0 0 15.2 5l-.3.6a13.3 13.3 0 0 0-5.8 0L8.8 5a14.4 14.4 0 0 0-3.4 1.3C2.9 10.1 2.3 13.8 2.6 17.5A14.6 14.6 0 0 0 7 19.7l.7-1.1a9.5 9.5 0 0 1-1.5-.7l.3-.3c2.9 1.3 6 1.3 8.8 0l.3.3c-.5.3-1 .5-1.5.7l.7 1.1a14.5 14.5 0 0 0 4.4-2.2c.4-4-.7-7.6-2.6-11.2ZM9.5 14.8c-.9 0-1.6-.8-1.6-1.8s.7-1.8 1.6-1.8 1.6.8 1.6 1.8-.7 1.8-1.6 1.8Zm5 0c-.9 0-1.6-.8-1.6-1.8s.7-1.8 1.6-1.8 1.6.8 1.6 1.8-.7 1.8-1.6 1.8Z"
           />
-          <circle cx="13" cy="16" r="1.3" fill={fill} />
-          <circle cx="19" cy="16" r="1.3" fill={fill} />
-        </svg>
+        </Frame>
       );
     case "teams":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill={fill} />
-          <rect x="8" y="12" width="10" height="10" rx="2" fill="#fff" />
-          <circle cx="22" cy="11" r="3" fill="#fff" />
-          <rect x="18" y="14" width="7" height="8" rx="2" fill="#fff" opacity="0.85" />
-        </svg>
+        <Frame bg="#5059C9">
+          <circle cx="16.5" cy="7.5" r="2.2" fill="#fff" />
+          <rect x="5" y="9" width="9.5" height="9" rx="1.5" fill="#fff" />
+          <path fill="#7B83EB" d="M13.2 11.2h6.3A1.5 1.5 0 0 1 21 12.7v5.2a1.5 1.5 0 0 1-1.5 1.5h-6.3v-8.2Z" />
+        </Frame>
       );
     case "whatsapp":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill={fill} />
+        <Frame bg="#25D366">
           <path
-            d="M16 7a9 9 0 00-7.7 13.5L7 25l4.7-1.2A9 9 0 1016 7zm4.6 12.3c-.2.6-1.2 1.1-1.9 1.2-.5.1-1.1.1-1.8-.1-1.1-.3-2.5-.9-3.7-2.1-2.2-2.1-2.8-3.7-3-4.3-.2-.6.1-1.2.4-1.5.2-.2.5-.3.7-.3h.5c.2 0 .4 0 .5.4l.8 1.9c.1.2 0 .4-.1.6l-.3.4c-.1.2-.3.4-.1.7.2.3.7 1.2 1.6 1.9 1.1.9 2 1.2 2.3 1.3.3.1.5.1.7-.1l.5-.6c.2-.2.4-.2.6-.1l1.8.8c.2.1.4.2.4.4 0 .1 0 .6-.4 1.1z"
             fill="#fff"
+            d="M12 3.5a8.5 8.5 0 0 0-7.3 12.8L3.5 20.5l4.3-1.1A8.5 8.5 0 1 0 12 3.5Zm4.9 12.1c-.2.6-1.2 1.1-1.9 1.2-.5.1-1.1.1-1.8-.1-2.4-.7-5-3.1-5.5-5.4-.2-.7.1-1.4.5-1.7.2-.2.5-.3.7-.3h.5c.2 0 .4 0 .6.5l.7 1.7c.1.2 0 .4-.2.6l-.4.5c-.1.2-.3.3-.1.6.5.8 1.5 2 2.7 2.6.3.2.5.1.7-.1l.5-.6c.2-.2.4-.2.6-.1l1.7.8c.2.1.4.2.5.5-.1.1 0 .5-.3 1Z"
           />
-        </svg>
+        </Frame>
       );
     case "obsidian":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill="#1A1A2E" />
-          <path d="M16 6l8 8-3 12h-10l-3-12 8-8z" fill={fill} />
-          <path d="M16 10l4 5-1.5 8h-5L12 15l4-5z" fill="#C4B5FD" />
-        </svg>
+        <Frame bg="#1E1E2E">
+          <path fill="#A78BFA" d="M12 2.8 19.5 10.5 16.2 21H7.8L4.5 10.5 12 2.8Z" />
+          <path fill="#7C3AED" d="M12 6.2 16.2 11.5 14.5 18h-5L8 11.5 12 6.2Z" />
+        </Frame>
       );
     case "apple-notes":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill={fill} />
-          <rect x="8" y="7" width="16" height="18" rx="2" fill="#FFF8DC" />
-          <path d="M10 12h12M10 16h12M10 20h8" stroke="#B8860B" strokeWidth="1.4" />
-        </svg>
+        <Frame bg="#FFD60A">
+          <rect x="5.5" y="4" width="13" height="16" rx="1.5" fill="#FFF9E6" />
+          <path stroke="#C9A227" strokeWidth="1.2" d="M8 9h8M8 12.2h8M8 15.4h5.5" />
+        </Frame>
       );
     case "bear":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill={fill} />
-          <circle cx="11" cy="12" r="3" fill="#fff" />
-          <circle cx="21" cy="12" r="3" fill="#fff" />
-          <ellipse cx="16" cy="19" rx="7" ry="6" fill="#fff" />
-          <circle cx="13.5" cy="18" r="1" fill={fill} />
-          <circle cx="18.5" cy="18" r="1" fill={fill} />
-        </svg>
+        <Frame bg="#C65E4A">
+          <circle cx="8.2" cy="8.5" r="2.3" fill="#fff" />
+          <circle cx="15.8" cy="8.5" r="2.3" fill="#fff" />
+          <ellipse cx="12" cy="14.5" rx="5.5" ry="4.5" fill="#fff" />
+          <circle cx="10" cy="14" r="0.7" fill="#C65E4A" />
+          <circle cx="14" cy="14" r="0.7" fill="#C65E4A" />
+        </Frame>
       );
     case "logseq":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill="#0B1C2D" />
-          <circle cx="10" cy="12" r="2.5" fill={fill} />
-          <circle cx="22" cy="12" r="2.5" fill={fill} />
-          <circle cx="16" cy="22" r="2.5" fill={fill} />
-          <path d="M12 13l3 7M20 13l-3 7M12 12h8" stroke={fill} strokeWidth="1.5" />
-        </svg>
+        <Frame bg="#002B36">
+          <circle cx="7.5" cy="8" r="2" fill="#86C0FF" />
+          <circle cx="16.5" cy="8" r="2" fill="#86C0FF" />
+          <circle cx="12" cy="16.5" r="2" fill="#86C0FF" />
+          <path stroke="#86C0FF" strokeWidth="1.3" d="M9 9.2 11 14.5M15 9.2 13 14.5M9.5 8h5" />
+        </Frame>
       );
     case "mem":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill={fill} />
-          <text
-            x="16"
-            y="21"
-            textAnchor="middle"
-            fontSize="12"
-            fontWeight="700"
-            fill="#fff"
-            fontFamily="system-ui"
-          >
-            M
+        <Frame bg="#111">
+          <text x="12" y="15.5" textAnchor="middle" fontSize="9" fontWeight="700" fill="#fff" fontFamily="Arial,sans-serif">
+            Mem
           </text>
-        </svg>
+        </Frame>
+      );
+    case "github":
+      return (
+        <Frame bg="#24292F">
+          <path
+            fill="#fff"
+            d="M12 2.2a9.8 9.8 0 0 0-3.1 19.1c.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.2-3.4-1.2-.4-1.1-1.1-1.4-1.1-1.4-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.7.4-1.1.6-1.3-2.2-.3-4.5-1.1-4.5-4.9 0-1.1.4-2 1-2.7-.1-.2-.4-1.3.1-2.6 0 0 .8-.3 2.8 1a9.6 9.6 0 0 1 5 0c1.9-1.3 2.7-1 2.7-1 .5 1.3.2 2.4.1 2.6.7.7 1.1 1.6 1.1 2.7 0 3.8-2.3 4.6-4.5 4.9.3.3.7.9.7 1.9v2.8c0 .3.2.6.7.5A9.8 9.8 0 0 0 12 2.2Z"
+          />
+        </Frame>
+      );
+    case "gitlab":
+      return (
+        <Frame bg="#FC6D26">
+          <path
+            fill="#fff"
+            d="m12 19.5 3.4-10.4h2.3L12 21.5 6.3 9.1h2.3L12 19.5Zm-5.8-10.4L4.5 14.2 2.2 9.1h4Zm11.6 0h4l-2.3 5.1-1.7-5.1ZM8.6 9.1h6.8L12 19.5 8.6 9.1Z"
+          />
+        </Frame>
+      );
+    case "vscode":
+      return (
+        <Frame bg="#007ACC">
+          <path
+            fill="#fff"
+            d="m4.2 7.1 6.3-3.1 9.3 7.1-9.3 7.1-6.3-3.1 6.1-4ZM4.2 7.1 10.5 12 4.2 16.9"
+          />
+        </Frame>
+      );
+    case "docker":
+      return (
+        <Frame bg="#2496ED">
+          <path
+            fill="#fff"
+            d="M4 13.2h2.1v2.1H4zm2.5 0H8.6v2.1H6.5zm2.5 0h2.1v2.1H9zm2.5 0h2.1v2.1H11.5zm-5-2.5H8.6v2.1H6.5zm2.5 0h2.1v2.1H9zm2.5 0h2.1v2.1H11.5zm2.5 0H16.6v2.1H14zm-5-2.5H8.6V10.3H6.5zm2.5 0h2.1v2.1H9Zm8.3 4.2c-.2-.2-.5-.2-.9-.1-.1-.8-.5-1.5-1.4-1.9l-.3-.1-.2.3c-.5.6-.4 1.5.1 2 .2.2.5.4.9.5-.1.2-.1.3-.1.5 0 .5.2 1 .6 1.4.4.4.9.6 1.5.6H21v-.4c0-1.2-.5-2.1-1.7-2.5l.1-.3Zm-1.5 2.5c-.2 0-.3-.1-.3-.3s.1-.3.3-.3.3.1.3.3-.1.3-.3.3Z"
+          />
+        </Frame>
+      );
+    case "sentry":
+      return (
+        <Frame bg="#362D59">
+          <path
+            fill="#fff"
+            d="M12.8 4.2 21 18.5H15.7L12.8 13 9.9 18.5H3L12.8 4.2Zm0 5.2L9.2 16.2h7.2l-3.6-6.8Z"
+          />
+        </Frame>
+      );
+    case "vercel":
+      return (
+        <Frame bg="#000">
+          <path fill="#fff" d="m12 5 9 14H3l9-14Z" />
+        </Frame>
+      );
+    case "figma":
+      return (
+        <Frame bg="#1E1E1E">
+          <path fill="#F24E1E" d="M8.5 2.8h3.5v5.2H8.5a2.6 2.6 0 0 1 0-5.2Z" />
+          <path fill="#FF7262" d="M12 2.8h3.5a2.6 2.6 0 0 1 0 5.2H12V2.8Z" />
+          <path fill="#A259FF" d="M8.5 8h3.5v5.2H8.5a2.6 2.6 0 1 1 0-5.2Z" />
+          <path fill="#1ABCFE" d="M12 8h3.5a2.6 2.6 0 1 1 0 5.2H12V8Z" />
+          <path fill="#0ACF83" d="M8.5 13.2H12V18.4a2.6 2.6 0 1 1-3.5-2.4 2.6 2.6 0 0 1 0-2.8Z" />
+        </Frame>
+      );
+    case "blender":
+      return (
+        <Frame bg="#E87D0D">
+          {/* Blender-like orange circle + blue claw approximation */}
+          <circle cx="12" cy="12" r="7.2" fill="#1D1D1D" />
+          <circle cx="12" cy="12" r="4.2" fill="#E87D0D" />
+          <path
+            fill="#265787"
+            d="M12 3.5c2.2 0 4.1.9 5.4 2.3L15.8 8A4.4 4.4 0 0 0 12 6.6 5.4 5.4 0 0 0 6.6 12c0 1.4.5 2.7 1.4 3.7L5.6 17.7A7.2 7.2 0 0 1 12 3.5Z"
+          />
+          <circle cx="16.8" cy="7.4" r="1.5" fill="#265787" />
+        </Frame>
+      );
+    case "canva":
+      return (
+        <Frame bg="#00C4CC">
+          <path
+            fill="#fff"
+            d="M12 3.5c-4.7 0-8.5 2.9-8.5 6.5 0 2.4 1.6 4.5 4 5.5L6.2 20l4.2-2.2c.5.1 1 .1 1.6.1 4.7 0 8.5-2.9 8.5-6.5S16.7 3.5 12 3.5Zm-1.2 9.7c-1.4 0-2.5-1.4-2.5-3.1S9.4 7 10.8 7s2.5 1.4 2.5 3.1-1.1 3.1-2.5 3.1Zm4.6 0c-1.4 0-2.5-1.4-2.5-3.1S14 7 15.4 7s2.5 1.4 2.5 3.1-1.1 3.1-2.5 3.1Z"
+          />
+        </Frame>
+      );
+    case "miro":
+      return (
+        <Frame bg="#FFD02F">
+          <path fill="#050038" d="M5 18.5V5.5l4.2 6.2L13.5 5.5 18 12l1 6.5H5Z" />
+        </Frame>
+      );
+    case "excalidraw":
+      return (
+        <Frame bg="#6965DB">
+          <path
+            fill="none"
+            stroke="#fff"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            d="M6 16c2-5 5-8 10-9M8 18c3-2 7-3 10-2"
+          />
+          <circle cx="7.5" cy="16.5" r="1.3" fill="#fff" />
+        </Frame>
       );
     case "gsheets":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill={fill} />
-          <rect x="8" y="7" width="16" height="18" rx="2" fill="#fff" />
-          <path d="M8 13h16M8 19h16M16 7v18" stroke={fill} strokeWidth="1.4" />
-        </svg>
+        <Frame bg="#0F9D58">
+          <rect x="5.5" y="3.5" width="13" height="17" rx="1.5" fill="#fff" />
+          <path stroke="#0F9D58" strokeWidth="1.2" d="M5.5 9h13M5.5 14h13M12 9v11.5" />
+        </Frame>
       );
     case "excel":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill={fill} />
-          <text
-            x="16"
-            y="21"
-            textAnchor="middle"
-            fontSize="11"
-            fontWeight="700"
-            fill="#fff"
-            fontFamily="system-ui"
-          >
+        <Frame bg="#217346">
+          <text x="12" y="15.8" textAnchor="middle" fontSize="9" fontWeight="800" fill="#fff" fontFamily="Arial,sans-serif">
             X
           </text>
-        </svg>
+        </Frame>
       );
     case "gdocs":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill={fill} />
-          <rect x="9" y="6" width="14" height="20" rx="2" fill="#fff" />
-          <path d="M12 12h8M12 16h8M12 20h5" stroke={fill} strokeWidth="1.4" />
-        </svg>
+        <Frame bg="#4285F4">
+          <rect x="6" y="3.5" width="12" height="17" rx="1.5" fill="#fff" />
+          <path stroke="#4285F4" strokeWidth="1.3" d="M8.5 9h7M8.5 12h7M8.5 15h5" />
+        </Frame>
       );
     case "airtable":
       return (
         <svg {...common}>
-          <rect width="32" height="32" rx="8" fill="#fff" />
-          <path d="M6 22 L16 6l10 16H6z" fill={fill} />
-          <circle cx="16" cy="18" r="3" fill="#18BFFF" />
+          <rect width="24" height="24" rx="6" fill="#fff" />
+          <path fill="#FFBF00" d="M3.8 18.5 12 4.5l8.2 14H3.8Z" />
+          <circle cx="12" cy="15.2" r="2.6" fill="#18BFFF" />
+          <path fill="#F82B60" d="M12 4.5 8.2 11h7.6L12 4.5Z" />
         </svg>
       );
     case "onedrive":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill={fill} />
+        <Frame bg="#094AB2">
           <path
-            d="M10 20c-2 0-4-1.5-4-3.5S8 13 10 13c.3-2.5 2.5-4 5-4 2.2 0 4 1.2 4.7 3C22 12 24 13.5 24 16c0 2-1.8 4-5 4H10z"
             fill="#fff"
+            d="M7.2 15.8c-1.8 0-3.2-1.3-3.2-3s1.4-3.1 3.2-3.1c.2-2.1 2-3.7 4.2-3.7 1.9 0 3.5 1.1 4.1 2.7 1.8-.1 3.3 1.3 3.3 3.1 0 1.8-1.5 3.2-3.4 3.2H7.2Z"
           />
-        </svg>
+        </Frame>
       );
     case "hubspot":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill={fill} />
-          <circle cx="16" cy="18" r="5" fill="#fff" />
-          <path d="M16 7v6" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" />
-          <circle cx="22" cy="12" r="2.2" fill="#fff" />
-        </svg>
+        <Frame bg="#FF7A59">
+          <circle cx="12" cy="14.2" r="4.2" fill="#fff" />
+          <path stroke="#fff" strokeWidth="2" strokeLinecap="round" d="M12 4.5v5.2" />
+          <circle cx="17" cy="8.2" r="1.7" fill="#fff" />
+        </Frame>
       );
     case "salesforce":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill={fill} />
+        <Frame bg="#00A1E0">
           <path
-            d="M12 14c0-2 1.5-3.5 3.5-3.5 1 0 1.8.3 2.4.9A3.5 3.5 0 0122 15.5c0 2.2-1.8 4-4.2 4H12.5C10 19.5 8 17.6 8 15.2c0-2 1.4-3.5 3.2-3.8.2.9.5 1.7.8 2.6z"
             fill="#fff"
+            d="M9.2 10.2c0-1.7 1.3-3 3-3 .8 0 1.5.3 2 .8A3 3 0 0 1 19 11.5c0 1.9-1.5 3.4-3.5 3.4H9.8c-2 0-3.6-1.6-3.6-3.6 0-1.7 1.2-3.1 2.8-3.4.1.8.2 1.5.2 2.3Z"
           />
-        </svg>
+        </Frame>
       );
     case "amocrm":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill={fill} />
-          <text
-            x="16"
-            y="21"
-            textAnchor="middle"
-            fontSize="9"
-            fontWeight="700"
-            fill="#fff"
-            fontFamily="system-ui"
-          >
+        <Frame bg="#4C8BF5">
+          <text x="12" y="15.2" textAnchor="middle" fontSize="7" fontWeight="800" fill="#fff" fontFamily="Arial,sans-serif">
             amo
           </text>
-        </svg>
+        </Frame>
       );
     case "bitrix":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill={fill} />
-          <text
-            x="16"
-            y="21"
-            textAnchor="middle"
-            fontSize="14"
-            fontWeight="700"
-            fill="#fff"
-            fontFamily="system-ui"
-          >
-            B
+        <Frame bg="#2FC6F6">
+          <text x="12" y="15.5" textAnchor="middle" fontSize="11" fontWeight="800" fill="#fff" fontFamily="Arial,sans-serif">
+            B24
           </text>
-        </svg>
+        </Frame>
       );
     case "stripe":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill={fill} />
+        <Frame bg="#635BFF">
           <path
-            d="M13 12c0-1.2 1-1.7 2.6-1.7 2.4 0 3.4.8 3.4 2.6v7.6h-3.1v-7c0-.8-.4-1.1-1.1-1.1-.8 0-1.8.4-1.8 1.8v6.3H10V12.2C10.8 11.7 11.9 12 13 12z"
             fill="#fff"
+            d="M10.4 9.8c0-.9.7-1.3 1.9-1.3 1.7 0 2.5.6 2.5 2v5.7h-2.3v-5.2c0-.6-.3-.9-.9-.9-.6 0-1.3.3-1.3 1.4v4.7H7.9V9.9c.6-.4 1.5-.2 2.5-.1Z"
           />
-        </svg>
+        </Frame>
       );
     case "chrome":
       return (
         <svg {...common}>
-          <rect width="32" height="32" rx="8" fill="#fff" />
-          <circle cx="16" cy="16" r="10" fill="none" stroke="#EA4335" strokeWidth="3" />
-          <circle cx="16" cy="16" r="4" fill={fill} />
-          <path d="M16 6l5 9H11L16 6z" fill="#FBBC05" />
-          <path d="M6.5 22.5 L16 16l5 9z" fill="#34A853" opacity="0.9" />
+          <rect width="24" height="24" rx="6" fill="#fff" />
+          <circle cx="12" cy="12" r="3.2" fill="#4285F4" />
+          <path fill="#EA4335" d="M12 4.5a7.5 7.5 0 0 1 6.5 3.75L12 12 5.5 8.25A7.5 7.5 0 0 1 12 4.5Z" />
+          <path fill="#FBBC05" d="M18.5 8.25A7.5 7.5 0 0 1 12 19.5L12 12l6.5-3.75Z" />
+          <path fill="#34A853" d="M5.5 8.25 12 12l0 7.5A7.5 7.5 0 0 1 5.5 8.25Z" />
+          <circle cx="12" cy="12" r="2.1" fill="#fff" />
+          <circle cx="12" cy="12" r="1.5" fill="#4285F4" />
         </svg>
       );
     case "firefox":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill="#1E1E2E" />
-          <circle cx="16" cy="17" r="8" fill={fill} />
-          <path d="M10 14c3-4 10-4 13 1-2 5-8 7-12 4 1-1 2-2 2-4z" fill="#FFD08A" />
-        </svg>
+        <Frame bg="#20123A">
+          <path
+            fill="#FF7139"
+            d="M19.5 9.2c-.3-1.2-1.7-2.4-2.3-2.7.5 1 .6 1.7.5 2.1-1.3-1-2.7-1.5-4.3-1.5-1.2 0-2 .2-2.6.3C9.3 5.5 11 3.8 13.6 3.5c-2.4-.7-5 .2-6.4 1.8C5.6 4 5.2 2.8 5.2 2.8c-1.6 2.1-1.5 5-.8 6.6-1 .8-1.6 2.1-1.6 3.5 0 3.6 3.4 7.1 8.2 7.1 5.3 0 8.5-3.5 8.5-7.2 0-.7-.1-1.6-.4-2.4.3.1.4.2.4.2Z"
+          />
+        </Frame>
       );
     case "edge":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill={fill} />
+        <Frame bg="#0078D7">
           <path
-            d="M8 18c1-6 8-10 14-7-1 5-5 7-10 7H8zm4 2c3 3 10 2 12-3-4 1-7 1-10 0l-2 3z"
             fill="#fff"
+            d="M12 4c3.2 0 6.1 1.7 7.6 4.3-1.6-.3-3.2-.1-4.5.5C13.7 7.5 11 7.7 9 9.4 7.4 10.7 6.5 12.6 6.5 14.6c0 2.7 1.8 4.9 4.6 5.7-3.9-.5-6.6-3.3-6.6-7C4.5 8.1 7.8 4 12 4Zm8.2 6.3c.2.6.3 1.3.3 2 0 3.7-2.5 6.4-6.5 6.4-2.2 0-3.9-.8-4.9-2 2.8.2 5.6-.8 7.1-2.8.9-1.2 1.1-2.4 1-3.6Z"
           />
-        </svg>
+        </Frame>
       );
     case "raindrop":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill={fill} />
-          <path d="M16 6c5 6 8 10 8 14a8 8 0 11-16 0c0-4 3-8 8-14z" fill="#fff" />
-        </svg>
+        <Frame bg="#0A64FF">
+          <path fill="#fff" d="M12 3.5c3.8 4.5 6.2 7.6 6.2 10.6a6.2 6.2 0 1 1-12.4 0c0-3 2.4-6.1 6.2-10.6Z" />
+        </Frame>
       );
     case "pocket":
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill={fill} />
-          <path
-            d="M8 10h16v6c0 5-3.5 9-8 9s-8-4-8-9v-6z"
-            fill="#fff"
-          />
-          <path
-            d="M12 15l4 4 4-4"
-            fill="none"
-            stroke={fill}
-            strokeWidth="2.2"
-            strokeLinecap="round"
-          />
-        </svg>
+        <Frame bg="#EF4056">
+          <path fill="#fff" d="M5 6.5h14v5.2c0 3.9-2.9 7-7 7s-7-3.1-7-7V6.5Z" />
+          <path fill="none" stroke="#EF4056" strokeWidth="1.8" strokeLinecap="round" d="m8.2 11.2 3.8 3.5 3.8-3.5" />
+        </Frame>
       );
     default:
       return (
-        <svg {...common}>
-          <rect width="32" height="32" rx="8" fill="#555" />
-        </svg>
+        <Frame bg="#555">
+          <circle cx="12" cy="12" r="3" fill="#fff" />
+        </Frame>
       );
   }
 }
