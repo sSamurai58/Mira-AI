@@ -322,15 +322,17 @@ UX: **Создать → фразы → загрузить → Mira сама о�
 - [x] Публикация GitHub Release **0.1.4** — https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.4 (tag `v0.1.4` @ `3493529`)
 - [ ] MCP runtime / OAuth (не в 0.1.4; следующий релиз после явной команды)
 
-## 2026-11-12 — 0.1.5 WIP (no publish yet)
+## 2026-11-12 — Релиз 0.1.5 ✅
 
-Ветка `cursor/release-0-1-5-6838` от tip `cursor/release-0-1-4-6838` (`185c3cb`).
-Версия пакета **0.1.5**. Накопление изменений здесь.
+Ветка `cursor/release-0-1-5-6838` @ `f1b8424`. Пакет **0.1.5**. Latest GitHub Release.
 
 - [x] Bump `package.json` / `package-lock.json` → 0.1.5 (`__MIRA_VERSION__` / UI)
-- [x] In-app confirm modals (`AppConfirm` / `ConfirmModal`) вместо native `window.confirm` — Voice Studio «Перезагрузить», удаление проекта/фраз, Workshop голоса/skills, Library delete
-- [ ] Накопление фич по командам
-- [ ] **Не** tag / GitHub Release `v0.1.5`, пока явно не скажут «релиз 0.1.5»
+- [x] In-app confirm modals (`AppConfirm` / `ConfirmModal`) вместо native `window.confirm`
+- [x] Frameless themed `TitleBar` (window chrome follows theme tokens)
+- [x] Integrations blank-UI fix (hide/show screen control, opaque shell, portal confirms, Settings hash)
+- [x] ThemeSelect phrase-bind dropdown close fix (Voice Studio)
+- [x] Публикация GitHub Release **0.1.5** — https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.5 (tag `v0.1.5` @ `f1b8424`)
+- [ ] MCP runtime / OAuth (по-прежнему later; после явной команды)
 
 ## Шаблон новой темы
 
