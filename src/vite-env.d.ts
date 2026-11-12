@@ -720,6 +720,10 @@ interface MiraBridge {
         neural: string;
         mira: string;
         status: string;
+        title?: string;
+        meaning?: string;
+        miraPlain?: string;
+        group?: string;
       }>;
       griffinLimPreview?: string | null;
     };

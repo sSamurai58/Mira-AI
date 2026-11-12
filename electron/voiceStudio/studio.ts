@@ -1341,7 +1341,7 @@ export async function trainVoiceModel(
     finalLoss: melTrain?.finalLoss ?? null,
     melTargets: melTrain?.melTargets ?? 0,
     griffinLimPreview: melTrain?.griffinLimPreview ?? null,
-    synthesis: `${VOICE_PACK_ENGINE}: unit-selection + mel-refine — склейка единиц с mel L1 эпохами; не neural mel-decoder/Adam. Непокрытые токены — Web Speech.`,
+    synthesis: `${VOICE_PACK_ENGINE}: склейка записанных кусочков + несколько проходов подгонки (не нейросеть на GPU). Слова без записи — системный TTS.`,
     curriculum: NEURAL_TTS_CURRICULUM,
     pipeline: [
       "1. Пары текст↔аудио + QA (шум/тишина/клиппинг/mismatch)",

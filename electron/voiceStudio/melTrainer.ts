@@ -25,104 +25,187 @@ import {
 
 export const DEFAULT_TRAIN_EPOCHS = 4;
 
-export type CurriculumRow = {
-  concept: string;
-  neural: string;
-  mira: string;
-  status: "mapped" | "proxy" | "deferred";
+/** UI grouping for the plain-language Studio report. */
+export type CurriculumGroup = "record_train" | "speak" | "later";
+
+export const CURRICULUM_GROUP_LABEL: Record<CurriculumGroup, string> = {
+  record_train: "Запись и обучение",
+  speak: "Сборка речи",
+  later: "Что позже",
 };
 
-/** Honest neural TTS → Mira mapping shown in Studio. */
+export type CurriculumRow = {
+  /** Stable technical id (kept for docs / smoke). */
+  concept: string;
+  /** Short neural-TTS jargon line (collapsed «для разработчиков»). */
+  neural: string;
+  /** Short Mira jargon line (collapsed «для разработчиков»). */
+  mira: string;
+  status: "mapped" | "proxy" | "deferred";
+  /** Plain RU title shown first. */
+  title: string;
+  /** One-line: what this means for a non-ML user. */
+  meaning: string;
+  /** Plain RU: what Mira does today. */
+  miraPlain: string;
+  group: CurriculumGroup;
+};
+
+/** Honest neural TTS → Mira mapping shown in Studio (plain-first + tech detail). */
 export const NEURAL_TTS_CURRICULUM: CurriculumRow[] = [
   {
     concept: "spectrogram / mel target",
     neural: "Целевой mel-спектрограмм из речи",
     mira: "FFT→mel filterbank (JS) на PCM WAV; mel summary в pack",
     status: "mapped",
+    title: "Картина звука",
+    meaning: "Как Mira «видит» вашу запись по частотам",
+    miraPlain:
+      "Берёт WAV и строит частотную карту; краткую сводку кладёт в голос-пак",
+    group: "record_train",
   },
   {
     concept: "encoder",
     neural: "Текстовый encoder (символы→скрытые состояния)",
     mira: "Токенизация фраз + нормализация ключей лексикона",
     status: "proxy",
+    title: "Разбор текста",
+    meaning: "Как фраза превращается в список слов для поиска записей",
+    miraPlain: "Режет текст на слова и приводит их к ключам словаря",
+    group: "record_train",
   },
   {
     concept: "attention",
     neural: "Attention текст↔mel кадры",
     mira: "Spectral-flux + energy valley выравнивание слов (zero-cross slice)",
     status: "proxy",
+    title: "Где в записи каждое слово",
+    meaning: "Находит начало и конец слова в аудио",
+    miraPlain: "Ищет границы по энергии звука — без нейросети",
+    group: "record_train",
   },
   {
     concept: "decoder (frame-by-frame mel)",
     neural: "Авторегрессивный mel-decoder",
     mira: "Склейка unit mel-срезов → proxy mel по времени",
     status: "proxy",
+    title: "Склейка кусочков",
+    meaning: "Как из записанных фрагментов собирается черновик фразы",
+    miraPlain: "Склеивает куски ваших записей подряд по времени",
+    group: "record_train",
   },
   {
     concept: "stop token",
     neural: "Предсказание конца высказывания",
     mira: "Штраф за тишину/длительность на хвосте клипа",
     status: "proxy",
+    title: "Чистый конец фразы",
+    meaning: "Чтобы в хвосте клипа не было лишней тишины или обрыва",
+    miraPlain: "Штрафует слишком длинную тишину или резкий обрыв в конце",
+    group: "record_train",
   },
   {
     concept: "teacher forcing",
     neural: "Подстановка ground-truth mel на train",
     mira: "Целевой mel всегда из записи; proxy только для loss",
     status: "proxy",
+    title: "Сверка с настоящей записью",
+    meaning: "Эталон всегда — ваш голос, не сгенерированный звук",
+    miraPlain: "Сравнивает склейку с реальной записью; «угаданный» звук не подставляет",
+    group: "record_train",
   },
   {
     concept: "L1/L2 mel loss",
     neural: "Скалярный loss mel pred vs target",
     mira: "Mel L1 + duration/stop penalty по эпохам",
     status: "mapped",
+    title: "Оценка похожести",
+    meaning: "Насколько собранный звук близок к оригиналу",
+    miraPlain:
+      "Считает расхождение частотных карт и длительности за несколько проходов",
+    group: "record_train",
   },
   {
     concept: "backprop + Adam",
     neural: "Градиенты по миллионам весов",
     mira: "Gradient-free обновление priors/gain/duration bias",
     status: "proxy",
+    title: "Лёгкая подстройка",
+    meaning: "Как Mira слегка улучшает выбор кусочков",
+    miraPlain:
+      "Правит приоритеты кусков и громкость простыми числами — без миллионов весов",
+    group: "record_train",
   },
   {
     concept: "epochs / steps",
     neural: "Проходы по датасету",
     mira: "Несколько эпох refinement над корпусом (реальный CPU)",
     status: "mapped",
-  },
-  {
-    concept: "vocoder",
-    neural: "HiFi-GAN / WaveNet",
-    mira: "Опциональный Griffin-Lim preview (не prod речь)",
-    status: "proxy",
+    title: "Несколько проходов",
+    meaning: "Повторные просмотры всех записей для улучшения",
+    miraPlain: "Несколько эпох подгонки на CPU по вашим клипам",
+    group: "record_train",
   },
   {
     concept: "data quality",
     neural: "Чистый корпус без шума/клиппинга",
     mira: "QA: тишина, RMS, клиппинг, noise, text↔audio mismatch",
     status: "mapped",
+    title: "Проверка записей",
+    meaning: "Отсев плохих клипов до сборки голоса",
+    miraPlain: "Тишина, громкость, клиппинг, шум, несовпадение текста и аудио",
+    group: "record_train",
   },
   {
     concept: "ASR / LLM / TTS separation",
     neural: "Раздельные модули пайплайна",
     mira: "Студия только TTS pack; ASR и LLM отдельно",
     status: "mapped",
+    title: "Голос отдельно от чата",
+    meaning: "Студия делает только голос; распознавание и чат — другие модули",
+    miraPlain: "Здесь только голос-пак; ASR и LLM живут отдельно",
+    group: "record_train",
+  },
+  {
+    concept: "vocoder",
+    neural: "HiFi-GAN / WaveNet",
+    mira: "Опциональный Griffin-Lim preview (не prod речь)",
+    status: "proxy",
+    title: "Черновой прослушиватель",
+    meaning: "Сырой звук из частотной карты — только для проверки",
+    miraPlain: "Опциональный preview; в каталог как рабочая речь не идёт",
+    group: "speak",
   },
   {
     concept: "inference path",
     neural: "text→encoder→decoder→vocoder",
     mira: "text→lexicon lookup→unit stitch (+ system TTS fallback)",
     status: "mapped",
+    title: "Как говорит готовый голос",
+    meaning: "Что происходит, когда Mira произносит фразу",
+    miraPlain:
+      "Текст → поиск в словаре → склейка кусков; нет слова — системный TTS",
+    group: "speak",
   },
   {
     concept: "full neural net + CUDA",
     neural: "Tacotron/FastSpeech на GPU",
     mira: "Не в Electron desktop — отложено",
     status: "deferred",
+    title: "Полная нейросеть на GPU",
+    meaning: "Обучение «настоящей» модели речи как в лаборатории",
+    miraPlain: "В десктопном приложении пока нет — отложено",
+    group: "later",
   },
   {
     concept: "neural vocoder / RLHF voice",
     neural: "HiFi-GAN + RLHF",
     mira: "Отложено",
     status: "deferred",
+    title: "Нейро-синтез и донастройка голоса",
+    meaning: "Высококачественный нейросинтез и подстройка под предпочтения",
+    miraPlain: "Отложено на потом",
+    group: "later",
   },
 ];
 

@@ -32,6 +32,80 @@ function statusLabel(status: string) {
   return STATUS_LABEL[status] ?? status;
 }
 
+type CurriculumUiRow = {
+  concept: string;
+  neural: string;
+  mira: string;
+  status: string;
+  title?: string;
+  meaning?: string;
+  miraPlain?: string;
+  group?: string;
+};
+
+const CURRICULUM_STATUS_RU: Record<string, string> = {
+  mapped: "работает",
+  proxy: "упрощённо",
+  deferred: "позже",
+};
+
+const CURRICULUM_GROUP_ORDER = [
+  "record_train",
+  "speak",
+  "later",
+] as const;
+
+const CURRICULUM_GROUP_RU: Record<string, string> = {
+  record_train: "Запись и обучение",
+  speak: "Сборка речи",
+  later: "Что позже",
+};
+
+function curriculumStatusRu(status: string): string {
+  return CURRICULUM_STATUS_RU[status] ?? status;
+}
+
+function curriculumTitle(row: CurriculumUiRow): string {
+  return row.title?.trim() || row.concept;
+}
+
+function groupCurriculumRows(rows: CurriculumUiRow[]): Array<{
+  key: string;
+  label: string;
+  rows: CurriculumUiRow[];
+}> {
+  const buckets = new Map<string, CurriculumUiRow[]>();
+  for (const row of rows) {
+    const key = row.group?.trim() || "record_train";
+    const list = buckets.get(key) ?? [];
+    list.push(row);
+    buckets.set(key, list);
+  }
+  const ordered: Array<{ key: string; label: string; rows: CurriculumUiRow[] }> =
+    [];
+  for (const key of CURRICULUM_GROUP_ORDER) {
+    const list = buckets.get(key);
+    if (list?.length) {
+      ordered.push({
+        key,
+        label: CURRICULUM_GROUP_RU[key] ?? key,
+        rows: list,
+      });
+      buckets.delete(key);
+    }
+  }
+  for (const [key, list] of buckets) {
+    if (list.length) {
+      ordered.push({
+        key,
+        label: CURRICULUM_GROUP_RU[key] ?? key,
+        rows: list,
+      });
+    }
+  }
+  return ordered;
+}
+
 /** 1-based index in the full phrase array — never renumber a visible subset. */
 function phraseDisplayNo(all: MiraVoicePhrase[], phraseId: string): number {
   const i = all.findIndex((p) => p.id === phraseId);
@@ -112,6 +186,10 @@ export function VoiceStudioPanel(props: {
       neural: string;
       mira: string;
       status: string;
+      title?: string;
+      meaning?: string;
+      miraPlain?: string;
+      group?: string;
     }>
   >([]);
   const [lastTrainMetrics, setLastTrainMetrics] = useState<{
@@ -123,12 +201,12 @@ export function VoiceStudioPanel(props: {
   } | null>(null);
 
   const TRAIN_STEP_RU: Record<string, string> = {
-    validate: "пары QA",
-    features: "mel / признаки",
-    segment: "выравнивание",
-    lexicon: "лексикон",
-    epochs: "эпохи / loss",
-    pack: "pack",
+    validate: "проверка записей",
+    features: "разбор звука",
+    segment: "границы слов",
+    lexicon: "словарь",
+    epochs: "проходы подгонки",
+    pack: "голос-пак",
     publish: "каталог",
     done: "готово",
     error: "ошибка",
@@ -283,7 +361,7 @@ export function VoiceStudioPanel(props: {
     setTrainProgress({
       step: "validate",
       pct: 2,
-      label: "Старт сборки unit-selection + mel-эпохи…",
+      label: "Старт сборки голоса из записей…",
     });
     const unsub = electron
       ? window.mira?.onVoiceTrainProgress?.((ev) => {
@@ -687,32 +765,29 @@ export function VoiceStudioPanel(props: {
         <span className="muted mono">P9 #15 · unit-selection</span>
       </div>
       <p className="muted" style={{ margin: 0 }}>
-        Mira собирает{" "}
-        <strong>unit-selection + mel-refine</strong> голос: mel-спектрограмм
-        (FFT→filterbank), эпохи с mel L1 loss, priors единиц. Это{" "}
-        <strong>не GPU neural TTS</strong> (нет миллионов Adam-весов /
-        HiFi-GAN). Непокрытые слова — системный TTS, пока не запишете.
+        Сейчас Mira собирает речь из записанных кусочков вашего голоса: режет
+        фразы на слова, находит их в аудио и склеивает. Несколько проходов
+        слегка подгоняют выбор кусков. Это не «нейросеть на видеокарте» —
+        слова без записи пока говорит системный голос.
       </p>
       <details className="muted" style={{ margin: 0 }}>
         <summary style={{ cursor: "pointer" }}>
-          Учебный план: neural TTS → шаги Mira
+          Что уже умеет студия (простыми словами)
         </summary>
         <ul style={{ margin: "0.4rem 0 0", paddingLeft: "1.2rem" }}>
           <li>
-            Mel target / loss / эпохи — есть (JS FFT→mel, mel L1, несколько
-            эпох refinement).
+            <strong>Работает:</strong> проверка записей, частотная карта звука,
+            оценка похожести склейки, несколько проходов по корпусу, сборка
+            речи из словаря (+ системный TTS для дыр).
           </li>
           <li>
-            Encoder / attention / decoder / stop / teacher forcing —
-            прокси: токены, energy-align, склейка mel-срезов, штрафы
-            длительности.
+            <strong>Упрощённо:</strong> разбор текста, поиск границ слов,
+            склейка кусков, чистый хвост клипа, сверка с записью, лёгкая
+            подстройка без нейросети, черновой preview.
           </li>
           <li>
-            Backprop+Adam, neural vocoder, RLHF — отложены (нет CUDA-стека
-            в Electron).
-          </li>
-          <li>
-            QA: тишина, клиппинг, шум, text↔audio mismatch. ASR/LLM отдельно.
+            <strong>Позже:</strong> полная нейросеть на GPU и нейро-синтез
+            голоса — в десктопе пока нет.
           </li>
         </ul>
       </details>
@@ -727,8 +802,9 @@ export function VoiceStudioPanel(props: {
           тишина, клиппинг и mismatch отсекаются QA.
         </li>
         <li>
-          ≥3 принятых пар — «Собрать голос»: QA → mel → выравнивание →
-          лексикон → эпохи/loss → pack → каталог.
+          ≥3 принятых пар — «Собрать голос»: проверка записей → разбор звука →
+          границы слов → словарь → несколько проходов подгонки → голос в
+          каталог.
         </li>
         <li>
           В каталоге: склейка из аудио-единиц; слова без записи — системный
@@ -826,7 +902,7 @@ export function VoiceStudioPanel(props: {
                 onClick={() => void trainModel()}
                 title={
                   canTrain
-                    ? "QA → mel → выравнивание → лексикон → эпохи/loss → pack → каталог"
+                    ? "Проверка → разбор звука → границы слов → словарь → проходы подгонки → каталог"
                     : "Нужно ≥1 фраза и ≥3 принятых записей, привязанных к фразам"
                 }
               >
@@ -900,41 +976,111 @@ export function VoiceStudioPanel(props: {
                 <details
                   className="muted"
                   style={{ flex: "1 1 100%", margin: 0 }}
+                  open
                 >
                   <summary style={{ cursor: "pointer" }}>
-                    Отчёт curriculum ({lastCurriculum.length} концептов)
+                    Как устроен голос Mira ({lastCurriculum.length} шагов)
                   </summary>
-                  <table
-                    style={{
-                      width: "100%",
-                      borderCollapse: "collapse",
-                      fontSize: "0.8rem",
-                      marginTop: "0.35rem",
-                    }}
+                  <p style={{ margin: "0.45rem 0 0.35rem", fontSize: "0.9rem" }}>
+                    Сейчас Mira собирает речь из записанных кусочков: режет
+                    текст на слова, находит их в аудио и склеивает. Ниже —
+                    что уже работает, что сделано упрощённо, что отложено.
+                  </p>
+                  <div
+                    className="stack"
+                    style={{ gap: "0.75rem", marginTop: "0.25rem" }}
                   >
-                    <thead>
-                      <tr>
-                        <th align="left">Концепт</th>
-                        <th align="left">В Mira</th>
-                        <th align="left">Статус</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {lastCurriculum.map((row) => (
-                        <tr key={row.concept}>
-                          <td>{row.concept}</td>
-                          <td>{row.mira}</td>
-                          <td>
-                            {row.status === "mapped"
-                              ? "есть"
-                              : row.status === "proxy"
-                                ? "прокси"
-                                : "отложено"}
-                          </td>
+                    {groupCurriculumRows(lastCurriculum).map((section) => (
+                      <div key={section.key} className="stack" style={{ gap: "0.35rem" }}>
+                        <strong style={{ fontSize: "0.9rem" }}>
+                          {section.label}
+                        </strong>
+                        <ul
+                          style={{
+                            margin: 0,
+                            paddingLeft: 0,
+                            listStyle: "none",
+                            display: "grid",
+                            gap: "0.45rem",
+                          }}
+                        >
+                          {section.rows.map((row) => (
+                            <li
+                              key={row.concept}
+                              style={{
+                                borderTop:
+                                  "1px solid color-mix(in oklab, var(--fg) 10%, transparent)",
+                                paddingTop: "0.4rem",
+                              }}
+                            >
+                              <div
+                                className="row"
+                                style={{
+                                  flexWrap: "wrap",
+                                  gap: "0.35rem 0.65rem",
+                                  alignItems: "baseline",
+                                }}
+                              >
+                                <strong style={{ fontSize: "0.9rem" }}>
+                                  {curriculumTitle(row)}
+                                </strong>
+                                <span
+                                  className="mono"
+                                  style={{ fontSize: "0.75rem", opacity: 0.9 }}
+                                >
+                                  {curriculumStatusRu(row.status)}
+                                </span>
+                              </div>
+                              {row.meaning ? (
+                                <div style={{ fontSize: "0.82rem", marginTop: "0.15rem" }}>
+                                  {row.meaning}
+                                </div>
+                              ) : null}
+                              <div style={{ fontSize: "0.82rem", marginTop: "0.15rem" }}>
+                                {row.miraPlain?.trim() || row.mira}
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </div>
+                  <details style={{ marginTop: "0.65rem" }}>
+                    <summary style={{ cursor: "pointer", fontSize: "0.85rem" }}>
+                      Для разработчиков (жаргон neural TTS)
+                    </summary>
+                    <table
+                      style={{
+                        width: "100%",
+                        borderCollapse: "collapse",
+                        fontSize: "0.78rem",
+                        marginTop: "0.35rem",
+                      }}
+                    >
+                      <thead>
+                        <tr>
+                          <th align="left">Концепт</th>
+                          <th align="left">В Mira</th>
+                          <th align="left">Статус</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {lastCurriculum.map((row) => (
+                          <tr key={`tech-${row.concept}`}>
+                            <td>{row.concept}</td>
+                            <td>{row.mira}</td>
+                            <td>
+                              {row.status === "mapped"
+                                ? "есть"
+                                : row.status === "proxy"
+                                  ? "прокси"
+                                  : "отложено"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </details>
                 </details>
               ) : null}
               <button

@@ -859,18 +859,30 @@ const LOCAL_CURRICULUM = [
     neural: "Целевой mel",
     mira: "Browser-demo: метрики без полного FFT pack",
     status: "proxy",
+    title: "Картина звука",
+    meaning: "Как Mira «видит» запись по частотам",
+    miraPlain: "В браузер-демо — упрощённые метрики без полного FFT-пака",
+    group: "record_train",
   },
   {
     concept: "epochs / L1 loss",
     neural: "Эпохи + mel loss",
     mira: "Симулированные эпохи loss в browser-demo",
     status: "proxy",
+    title: "Несколько проходов",
+    meaning: "Повторные просмотры записей для улучшения",
+    miraPlain: "В браузер-демо эпохи и оценка похожести симулируются",
+    group: "record_train",
   },
   {
     concept: "full neural net + CUDA",
     neural: "Tacotron на GPU",
     mira: "Отложено",
     status: "deferred",
+    title: "Полная нейросеть на GPU",
+    meaning: "Обучение «настоящей» модели речи как в лаборатории",
+    miraPlain: "В десктопе пока нет — отложено",
+    group: "later",
   },
 ] as const;
 
@@ -914,6 +926,10 @@ export async function localTrainVoiceModel(
       neural: string;
       mira: string;
       status: string;
+      title?: string;
+      meaning?: string;
+      miraPlain?: string;
+      group?: string;
     }>;
   };
 }> {

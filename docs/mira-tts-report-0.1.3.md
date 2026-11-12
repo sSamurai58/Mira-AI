@@ -6,42 +6,78 @@
 **PR:** создать с base `main` — https://github.com/sSamurai58/Mira-AI/compare/main...cursor/release-0-1-3-6838?expand=1 (gh integration 403; нужен ManagePullRequest у parent)  
 **Дата:** 2026-11-12
 
-## Что сделано
+## Что сделано (простыми словами)
 
-В Electron/React Voice Studio доведён учебный/продуктовый контур максимально близко к mental model neural TTS **без** PyTorch/CUDA:
+Сейчас Mira собирает речь из **записанных кусочков** вашего голоса: режет текст на слова, находит их в аудио и склеивает. Несколько проходов слегка подгоняют выбор кусков. Это **не** нейросеть на видеокарте — слова без записи пока говорит системный голос.
 
-1. **Mel spectrogram pipeline (pure TS)** — FFT → mel filterbank (40 bands) → log-mel; summary в `mel-features/` pack.
-2. **Итеративный trainer** — 4 эпохи по корпусу: proxy mel из unit-срезов, **mel L1 + duration/stop penalty**, обновление unit priors / gain / duration bias (gradient-free, не Adam).
-3. **Curriculum UI** — после обучения таблица «neural концепт → шаг Mira» + loss/эпохи в прогрессе (RU).
-4. **QA расширен** — noise likeness, text length mismatch, clip too slow; прежние silence/clipping/RMS.
-5. **Griffin-Lim** — реализован как optional micro-vocoder; пишется preview только при прохождении RMS/peak gate (иначе отложен как prod-качество).
+В Electron/React Voice Studio доведён учебный/продуктовый контур близко к mental model neural TTS **без** PyTorch/CUDA:
 
-## Gap matrix: neural TTS → Mira
+1. Частотная карта записи (mel) — чистый TypeScript, FFT → mel filterbank.
+2. Несколько проходов подгонки: сравнение склейки с записью + штрафы за хвост/длительность; правка приоритетов кусков (без Adam).
+3. В Студии — понятный отчёт «что работает / упрощённо / позже» + свёрнутый жаргон для разработчиков.
+4. QA: тишина, клиппинг, шум, несовпадение текста и аудио.
+5. Черновой Griffin-Lim preview — только для проверки, не как prod-речь.
+
+## Как устроен голос Mira
+
+Статусы: **работает** · **упрощённо** · **позже**
+
+### Запись и обучение
+
+| Шаг | Что это значит | В Mira | Статус |
+|-----|----------------|--------|--------|
+| Картина звука | Как Mira «видит» запись по частотам | WAV → частотная карта в голос-пак | работает |
+| Разбор текста | Фраза → список слов для поиска | Токенизация + ключи словаря | упрощённо |
+| Где в записи каждое слово | Начало/конец слова в аудио | Поиск границ по энергии звука | упрощённо |
+| Склейка кусочков | Черновик фразы из фрагментов | Склейка кусков записей по времени | упрощённо |
+| Чистый конец фразы | Без лишней тишины/обрыва в хвосте | Штраф за плохой хвост клипа | упрощённо |
+| Сверка с настоящей записью | Эталон — ваш голос | Сравнение склейки с реальной записью | упрощённо |
+| Оценка похожести | Насколько склейка близка к оригиналу | Расхождение частотных карт за проходы | работает |
+| Лёгкая подстройка | Улучшение выбора кусочков | Правка приоритетов/громкости без нейросети | упрощённо |
+| Несколько проходов | Повторные просмотры корпуса | Эпохи подгонки на CPU | работает |
+| Проверка записей | Отсев плохих клипов | Тишина, RMS, клиппинг, шум, mismatch | работает |
+| Голос отдельно от чата | Студия только про голос | TTS-пак; ASR и LLM отдельно | работает |
+
+### Сборка речи
+
+| Шаг | Что это значит | В Mira | Статус |
+|-----|----------------|--------|--------|
+| Черновой прослушиватель | Сырой звук из частотной карты | Опциональный Griffin-Lim preview | упрощённо |
+| Как говорит готовый голос | Что происходит при произнесении | Словарь → склейка; дыры — системный TTS | работает |
+
+### Что позже
+
+| Шаг | Что это значит | В Mira | Статус |
+|-----|----------------|--------|--------|
+| Полная нейросеть на GPU | Лабораторная модель речи | Нет в Electron desktop | позже |
+| Нейро-синтез и донастройка | HiFi-GAN / RLHF | Отложено | позже |
+
+### Для разработчиков (жаргон neural TTS)
 
 | Концепт | Статус | В Mira 0.1.3 |
 |--------|--------|--------------|
-| Spectrogram / mel target | **добавлено** | FFT→mel filterbank, mel JSON в pack |
+| Spectrogram / mel target | **есть** | FFT→mel filterbank, mel JSON в pack |
 | Encoder | прокси | токенизация + lexicon keys |
 | Attention | прокси | energy / equal-time alignment |
 | Decoder frame-by-frame mel | прокси | concat unit mel slices |
 | Stop token | прокси | хвост mel / duration penalty |
 | Teacher forcing | прокси | target mel всегда из записи |
-| L1/L2 mel loss | **добавлено** | mel L1 + penalties, видно в UI |
-| Backprop + Adam | прокси / отложено full | gradient-free priors (не миллионы весов) |
-| Epochs / steps | **добавлено** | 4 эпохи, шаги в progress |
+| L1/L2 mel loss | **есть** | mel L1 + penalties, видно в UI |
+| Backprop + Adam | прокси | gradient-free priors (не миллионы весов) |
+| Epochs / steps | **есть** | 4 эпохи, шаги в progress |
 | Vocoder Griffin-Lim | прокси (optional) | код есть; preview при quality gate |
-| Neural vocoder (HiFi-GAN) | **отложено** | нет |
-| Data quality gates | **расширено** | silence, clipping, noise, mismatch |
+| Neural vocoder (HiFi-GAN) | **позже** | нет |
+| Data quality gates | **есть** | silence, clipping, noise, mismatch |
 | ASR / LLM / TTS separation | есть | студия только TTS pack |
 | Inference path | есть | lexicon → unit stitch + Web Speech |
-| Full Tacotron/CUDA | **отложено** | нет GPU Python stack |
-| RLHF for voice | **отложено** | нет |
+| Full Tacotron/CUDA | **позже** | нет GPU Python stack |
+| RLHF for voice | **позже** | нет |
 
 ## Что увидеть в Студии после обновления
 
-1. Текст: «unit-selection + mel-refine», не «нет эпох/loss».
+1. Вводный текст: речь из записанных кусочков, не «GPU neural TTS».
 2. Кнопка «Собрать голос» → прогресс с шагом **эпохи / loss**, числа `loss` / `mel L1` / `эпоха N/M`.
-3. После обучения — блок метрик и раскрывающийся **Отчёт curriculum**.
+3. После обучения — блок метрик и раскрывающийся отчёт **«Как устроен голос Mira»** (группы + статусы работает/упрощённо/позже; жаргон — в «Для разработчиков»).
 4. В pack: `train-metrics.json`, `mel-features/*.mel.json`, обновлённый `model-pack.json` с `trainMetrics`.
 
 ## Тесты
