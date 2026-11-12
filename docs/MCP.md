@@ -13,6 +13,10 @@ MCP — стандартный слой «подключи сервер → по
 3. Секреты только через `.env` / безопасное хранилище настроек (RULES).
 4. Не имитировать «подключено», пока нет реального MCP-runtime.
 5. Этапы A → … закрываем по порядку; остальные категории — backlog.
+6. Карточка коннектора должна быть **максимально понятной**: что делает Mira,
+   3+ голосовых примера, где взять Client ID/token, официальные ссылки
+   (`docsUrl` / `setupUrl` / `oauthHelpUrl` / `apiDocsUrl`), подсказки к полям
+   (`hint` / `help`), для локальных приложений — `builtinHint`.
 
 ## Этапы UI (в 0.1.4)
 
@@ -31,8 +35,16 @@ MCP — стандартный слой «подключи сервер → по
 | **9** | 9 | CRM, продажи, финансы | CRM |
 | **10** | 10 | Браузер и веб-продуктивность | Браузер |
 
-Каждая плитка: **логотип/иконка + название**. Клик → модалка с данными коннектора  
-(описание, auth, env-ключи, примеры голосовых команд, `builtinHint` если есть, статус этапа).
+Каждая плитка: **логотип/иконка + название**. Клик → модалка:
+
+- длинное описание (`description`) + краткий `summary`;
+- блок **Ссылки** (docs / setup / OAuth / API) — `target=_blank` + `rel=noopener`;
+- **≥3** голосовых примера;
+- поля подключения с `hint` (и опционально `help`);
+- `builtinHint` (Telegram, Chrome, Blender/P10, …);
+- футер: runtime/OAuth в 0.1.4 ещё не активны — только локальный черновик.
+
+У каждого этапа в UI — короткий explainer (`blurb`) под заголовком секции.
 
 ## Полный каталог (roadmap)
 
@@ -60,7 +72,8 @@ GitHub, GitLab, Bitbucket, VS Code/Cursor/JetBrains, Docker, K8s, Sentry, Datado
 Grafana, PagerDuty, Vercel, Netlify, Cloudflare, DB clients, Postman/Bruno
 
 ### 7. Дизайн и креатив — этап UI 7
-Figma, FigJam, Canva, Miro, Excalidraw, Blender (частично built-in / P10), Resolve, ComfyUI
+Figma, FigJam, Canva, Miro, Excalidraw, **Blender** (built-in / P10 + путь к бинарнику;
+ссылки blender.org / Blender Python API), Resolve, ComfyUI
 
 ### 8. Офис и таблицы — этап UI 8
 Google Sheets, Excel / Microsoft 365, Airtable, Smartsheet, Rows, Power BI, Metabase
@@ -108,7 +121,7 @@ Zapier, Make, n8n, Activepieces, Shortcuts, Power Automate, AHK
 - [x] Документ-план (`docs/MCP.md`)
 - [x] Раздел **Настройки → MCP**
 - [x] Плитки этапов 1,2,3,5,6,7,8,9,10 (вкл. Dev + Design/Blender) с brand-иконками
-- [x] Модалка с данными коннектора (+ `builtinHint` где есть)
+- [x] Модалка: описание, ≥3 voice examples, hints полей, внешние ссылки, `builtinHint`, draft-only footer
 - [ ] Реальный MCP runtime / OAuth — **не** в 0.1.4 (следующий релиз после явной команды)
 
 ## Связанные docs

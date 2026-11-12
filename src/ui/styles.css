@@ -4104,6 +4104,14 @@ body.mira-hud-root *::-webkit-scrollbar {
 .mcp-modal-summary {
   margin: 0;
   line-height: 1.45;
+  font-weight: 600;
+}
+
+.mcp-modal-description {
+  margin: 0.55rem 0 0;
+  line-height: 1.5;
+  font-size: 0.92rem;
+  color: color-mix(in srgb, var(--text) 88%, transparent);
 }
 
 .mcp-modal-builtin {
@@ -4116,12 +4124,57 @@ body.mira-hud-root *::-webkit-scrollbar {
   line-height: 1.4;
 }
 
+.mcp-modal-block {
+  margin-top: 1rem;
+}
+
 .mcp-modal-block h4 {
   margin: 0 0 0.4rem;
   font-size: 0.82rem;
   letter-spacing: 0.03em;
   text-transform: uppercase;
   color: var(--text-muted);
+}
+
+.mcp-link-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.75rem;
+}
+
+.mcp-ext-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  color: color-mix(in srgb, var(--mcp-brand, var(--accent)) 70%, var(--text));
+  text-decoration: none;
+  font-size: 0.88rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--mcp-brand, var(--accent)) 35%, transparent);
+}
+
+.mcp-ext-link:hover {
+  color: var(--text);
+  border-bottom-color: currentColor;
+}
+
+.mcp-ext-link-icon {
+  font-size: 0.75rem;
+  opacity: 0.75;
+}
+
+.mcp-field-hint {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.mcp-field-help {
+  color: color-mix(in srgb, var(--text-muted) 90%, transparent);
+  font-size: 0.76rem;
+  line-height: 1.4;
 }
 
 .mcp-voice-list {

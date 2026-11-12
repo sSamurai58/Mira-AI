@@ -17,6 +17,22 @@ const STAGE_CHIP: Record<McpStageId, string> = Object.fromEntries(
   MCP_STAGES.map((s) => [s.stage, s.chip]),
 ) as Record<McpStageId, string>;
 
+function ExternalLink(props: { href: string; children: string }) {
+  return (
+    <a
+      className="mcp-ext-link"
+      href={props.href}
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      {props.children}
+      <span className="mcp-ext-link-icon" aria-hidden>
+        ↗
+      </span>
+    </a>
+  );
+}
+
 export function SettingsMcpSection() {
   const [stageFilter, setStageFilter] = useState<McpStageId | "all">("all");
   const [openId, setOpenId] = useState<string | null>(null);
@@ -65,7 +81,8 @@ export function SettingsMcpSection() {
           </div>
           <p className="mcp-hero-lead">
             Подключения сайтов и программ для продуктивности. Выберите плитку —
-            откроется карточка с данными коннектора.
+            карточка с описанием, ссылками на docs/API и полями черновика.
+            Runtime и OAuth в 0.1.4 ещё не активны.
           </p>
         </div>
         <div className="mcp-hero-stats" aria-label="Сводка каталога">
@@ -192,6 +209,15 @@ export function SettingsMcpSection() {
   );
 }
 
+function connectorLinks(c: McpConnector): { label: string; href: string }[] {
+  const links: { label: string; href: string }[] = [];
+  if (c.docsUrl) links.push({ label: "Документация", href: c.docsUrl });
+  if (c.setupUrl) links.push({ label: "Как подключить", href: c.setupUrl });
+  if (c.oauthHelpUrl) links.push({ label: "OAuth / доступ", href: c.oauthHelpUrl });
+  if (c.apiDocsUrl) links.push({ label: "API", href: c.apiDocsUrl });
+  return links;
+}
+
 function McpConnectorModal(props: {
   connector: McpConnector;
   draft: McpConnectorDraft;
@@ -203,11 +229,12 @@ function McpConnectorModal(props: {
   const [notes, setNotes] = useState(draft.notes);
   const [fields, setFields] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = { ...draft.fields };
-    for (const key of c.envKeys) {
-      if (init[key] === undefined) init[key] = "";
+    for (const f of c.envFields) {
+      if (init[f.key] === undefined) init[f.key] = "";
     }
     return init;
   });
+  const links = connectorLinks(c);
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
@@ -251,11 +278,25 @@ function McpConnectorModal(props: {
 
         <div className="modal-body mcp-modal-body">
           <p className="mcp-modal-summary">{c.summary}</p>
+          <p className="mcp-modal-description">{c.description}</p>
 
           {c.builtinHint ? (
             <p className="mcp-modal-builtin" role="note">
               {c.builtinHint}
             </p>
+          ) : null}
+
+          {links.length > 0 ? (
+            <div className="mcp-modal-block">
+              <h4>Ссылки</h4>
+              <ul className="mcp-link-list">
+                {links.map((l) => (
+                  <li key={l.href + l.label}>
+                    <ExternalLink href={l.href}>{l.label}</ExternalLink>
+                  </li>
+                ))}
+              </ul>
+            </div>
           ) : null}
 
           <div className="mcp-modal-block">
@@ -269,30 +310,34 @@ function McpConnectorModal(props: {
             </ul>
           </div>
 
-          {c.envKeys.length > 0 ? (
+          {c.envFields.length > 0 ? (
             <div className="mcp-modal-block">
               <h4>Данные для подключения</h4>
               <div className="mcp-fields">
-                {c.envKeys.map((key) => (
-                  <label key={key} className="mcp-field">
-                    <span className="mono">{key}</span>
+                {c.envFields.map((f) => (
+                  <label key={f.key} className="mcp-field">
+                    <span className="mono">{f.key}</span>
                     <input
                       className="input"
                       type={
-                        /TOKEN|SECRET|KEY|WEBHOOK/i.test(key)
+                        /TOKEN|SECRET|KEY|WEBHOOK|PASSWORD/i.test(f.key)
                           ? "password"
                           : "text"
                       }
                       autoComplete="off"
                       placeholder="черновик · не в git"
-                      value={fields[key] ?? ""}
+                      value={fields[f.key] ?? ""}
                       onChange={(e) =>
                         setFields((prev) => ({
                           ...prev,
-                          [key]: e.target.value,
+                          [f.key]: e.target.value,
                         }))
                       }
                     />
+                    <span className="mcp-field-hint">{f.hint}</span>
+                    {f.help ? (
+                      <span className="mcp-field-help">{f.help}</span>
+                    ) : null}
                   </label>
                 ))}
               </div>
@@ -310,7 +355,7 @@ function McpConnectorModal(props: {
               rows={3}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Workspace URL, id доски, комментарий…"
+              placeholder="Workspace URL, id доски, spreadsheet id, комментарий…"
             />
           </label>
 

@@ -314,10 +314,11 @@ UX: **Создать → фразы → загрузить → Mira сама о�
 ## 2026-11-12 — MCP каталог (0.1.4, без публикации)
 
 План правды: `docs/MCP.md`. UI: Настройки → MCP, этапы 1/2/3/5/6/7/8/9/10 как плитки  
-(6 Dev, 7 Design/креатив с Blender + `builtinHint`).
+(6 Dev, 7 Design/креатив с Blender + `builtinHint`). Карточки: длинное описание,
+ссылки docs/setup/OAuth/API, hints полей, ≥3 voice examples; draft-only 0.1.4.
 
 - [x] Документ плана всех категорий
-- [x] Раздел MCP + плитки + модалка (brand icons, stages 6+7)
+- [x] Раздел MCP + плитки + подробные модалки (brand icons, stages 6+7, links/hints)
 - [ ] MCP runtime / OAuth (не в 0.1.4 cut без команды «релиз»)
 - [ ] Публикация GitHub Release 0.1.4 — **только по явной команде**
 
