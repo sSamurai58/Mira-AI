@@ -62,8 +62,7 @@ export function SettingsPage({
   healthText,
   onOpenDoctor,
 }: SettingsPageProps) {
-  const [section, setSection] = useState<SectionId>(() => {
-    const hash = typeof window !== "undefined" ? window.location.hash : "";
+  function sectionFromHash(hash: string): SectionId {
     if (hash.includes("mcp")) return "mcp";
     if (hash.includes("integrations")) return "integrations";
     if (hash.includes("api")) return "api";
@@ -72,8 +71,33 @@ export function SettingsPage({
     if (hash.includes("data")) return "data";
     if (hash.includes("updates")) return "updates";
     if (hash.includes("general")) return "general";
+    if (hash.includes("appearance")) return "appearance";
     return "appearance";
-  });
+  }
+
+  function hashForSection(id: SectionId): string {
+    return id === "appearance" ? "#/settings" : `#/settings/${id}`;
+  }
+
+  const [section, setSectionState] = useState<SectionId>(() =>
+    sectionFromHash(typeof window !== "undefined" ? window.location.hash : ""),
+  );
+
+  function setSection(id: SectionId) {
+    setSectionState(id);
+    const next = hashForSection(id);
+    if (typeof window !== "undefined" && window.location.hash !== next) {
+      window.location.hash = next;
+    }
+  }
+
+  useEffect(() => {
+    function onHash() {
+      setSectionState(sectionFromHash(window.location.hash));
+    }
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
   const [voices, setVoices] = useState<VoiceInfo[]>([]);
   const [activeVoiceId, setActiveVoiceIdState] = useState<string | null>(null);
   const [engineDetail, setEngineDetail] = useState("");
@@ -326,7 +350,10 @@ export function SettingsPage({
         ) : null}
         {section === "api" ? <SettingsApiSection /> : null}
         {section === "integrations" ? (
-          <ErrorBoundary fallbackTitle="Интеграции сбойнули">
+          <ErrorBoundary
+            key="integrations"
+            fallbackTitle="Интеграции сбойнули"
+          >
             <SettingsIntegrationsSection />
           </ErrorBoundary>
         ) : null}

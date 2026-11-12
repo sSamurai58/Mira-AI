@@ -97,9 +97,13 @@ export function parseTypeText(text: string): string | null {
 }
 
 /**
- * Temporarily minimize Mira windows so a desktop click/type cannot hit Mira
+ * Temporarily hide Mira windows so a desktop click/type cannot hit Mira
  * itself (which previously blanked the UI when the confirm modal / chrome
  * received the synthetic click).
+ *
+ * Prefer hide/show over minimize/restore: frameless themed TitleBar windows
+ * on Windows GPU drivers often come back from restore() as a solid blank
+ * frame (Integrations / confirm triggers looked "broken after click").
  */
 async function withMiraWindowsAside<T>(fn: () => Promise<T>): Promise<T> {
   if (!isElectronRuntime()) return fn();
@@ -113,16 +117,17 @@ async function withMiraWindowsAside<T>(fn: () => Promise<T>): Promise<T> {
     wasFocused: w.isFocused(),
   }));
 
-  for (const { win } of snapshot) {
+  for (const { win, wasMinimized } of snapshot) {
     try {
-      if (!win.isMinimized()) win.minimize();
+      if (wasMinimized) continue;
+      if (win.isVisible()) win.hide();
     } catch {
       /* ignore */
     }
   }
 
-  // Let the OS finish the minimize animation before sending input.
-  await new Promise((r) => setTimeout(r, 280));
+  // Brief pause so the compositor drops Mira before synthetic input.
+  await new Promise((r) => setTimeout(r, 160));
 
   try {
     return await fn();
@@ -131,7 +136,13 @@ async function withMiraWindowsAside<T>(fn: () => Promise<T>): Promise<T> {
       if (win.isDestroyed()) continue;
       try {
         if (!wasMinimized && wasVisible) {
-          win.restore();
+          win.show();
+          // Nudge frameless GPU layers so atmosphere/chrome repaint after hide.
+          try {
+            win.webContents.invalidate();
+          } catch {
+            /* older Electron */
+          }
           if (wasFocused) win.focus();
         }
       } catch {
@@ -313,7 +324,7 @@ export async function clickAt(
     actionClass: "screen",
     risk: "high",
     title: "Подтверждение контроля экрана",
-    body: `Mira хочет выполнить клик по координатам (${Math.round(x)}, ${Math.round(y)}).\nОкно Mira будет свёрнуто на момент клика.\nРазрешить?`,
+    body: `Mira хочет выполнить клик по координатам (${Math.round(x)}, ${Math.round(y)}).\nОкно Mira будет временно скрыто на момент клика.\nРазрешить?`,
     confirmLabel: "Кликнуть",
   });
   if (!ok) {
@@ -369,7 +380,7 @@ export async function typeText(text: string): Promise<ScreenTypeResult> {
     actionClass: "screen",
     risk: "high",
     title: "Подтверждение ввода с клавиатуры",
-    body: `Mira хочет ввести текст:\n«${text.slice(0, 200)}»\nОкно Mira будет свёрнуто на момент ввода.\nРазрешить?`,
+    body: `Mira хочет ввести текст:\n«${text.slice(0, 200)}»\nОкно Mira будет временно скрыто на момент ввода.\nРазрешить?`,
     confirmLabel: "Ввести",
   });
   if (!ok) {

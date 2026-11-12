@@ -92,8 +92,16 @@ export function SettingsIntegrationsSection() {
             )
             .join("\n") || "Пока нет сохранённых контактов",
         );
-        if (installed?.length) {
-          setBrowsers(installed.filter((b) => b.installed));
+        if (Array.isArray(installed) && installed.length) {
+          setBrowsers(
+            installed.filter(
+              (b): b is InstalledBrowser =>
+                Boolean(b) &&
+                typeof b === "object" &&
+                typeof (b as InstalledBrowser).id === "string" &&
+                Boolean((b as InstalledBrowser).installed),
+            ),
+          );
         }
       } catch {
         if (!cancelled) setContactsText("Не удалось загрузить контакты");
@@ -106,7 +114,7 @@ export function SettingsIntegrationsSection() {
   }, []);
 
   function setField(key: string, value: string) {
-    setDraft((prev) => ({ ...prev, [key]: value }));
+    setDraft((prev) => ({ ...prev, [key]: String(value ?? "") }));
   }
 
   async function handleSave(group: string, keys: string[]) {
@@ -124,8 +132,14 @@ export function SettingsIntegrationsSection() {
         patch[key] = value;
       }
       const res = await saveSettingsEnv(patch);
-      const values = res.snap?.values ?? {};
-      const secretsSet = res.snap?.secretsSet ?? {};
+      const values =
+        res.snap?.values && typeof res.snap.values === "object"
+          ? res.snap.values
+          : {};
+      const secretsSet =
+        res.snap?.secretsSet && typeof res.snap.secretsSet === "object"
+          ? res.snap.secretsSet
+          : {};
       setSnap({
         values,
         secretsSet,
@@ -402,11 +416,22 @@ export function SettingsIntegrationsSection() {
             aria-label="Предпочтительный браузер"
             value={
               browsers.some((b) => b.id === draft.BROWSER_PREFERRED)
-                ? draft.BROWSER_PREFERRED
+                ? draft.BROWSER_PREFERRED!
                 : "system"
             }
             onChange={(v) => setField("BROWSER_PREFERRED", v)}
-            options={browsers.map((b) => ({
+            options={(browsers.some((b) => b.id === "system")
+              ? browsers
+              : [
+                  {
+                    id: "system",
+                    name: "Системный по умолчанию",
+                    path: null,
+                    installed: true,
+                  },
+                  ...browsers,
+                ]
+            ).map((b) => ({
               value: b.id,
               label: b.path ? `${b.name} · ${b.path}` : b.name,
             }))}

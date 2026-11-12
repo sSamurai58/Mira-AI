@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 
 export type SkillProposeForm = {
   defaultId: string;
@@ -88,7 +89,9 @@ export function ConfirmModal({
   const confirmClass =
     tone === "danger" ? "btn btn-danger" : "btn btn-primary";
 
-  return (
+  // Portal to <body> so frameless TitleBar / atmosphere stacking never covers
+  // integration confirms or Workshop trigger dialogs.
+  const modal = (
     <div className="modal-backdrop" role="presentation" onClick={onCancel}>
       <div
         className={`modal ${skillPropose ? "modal-wide" : ""}`}
@@ -178,4 +181,7 @@ export function ConfirmModal({
       </div>
     </div>
   );
+
+  if (typeof document === "undefined") return modal;
+  return createPortal(modal, document.body);
 }

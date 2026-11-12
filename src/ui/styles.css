@@ -127,6 +127,12 @@ strong {
   padding-top: calc(var(--pad-screen) - 4px);
   box-sizing: border-box;
   overflow: hidden;
+  /* Opaque + isolated so atmosphere (z=0) cannot blank Integrations after toggle/save. */
+  background: var(--bg);
+  isolation: isolate;
+  /* Frameless TitleBar drag must never capture clicks in the workspace. */
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 /* Themed frameless window chrome (Electron only; TitleBar returns null in browser). */
@@ -143,6 +149,7 @@ strong {
   padding: 0 8px 0 12px;
   box-sizing: border-box;
   user-select: none;
+  overflow: hidden;
   color: var(--text);
   border-bottom: 1px solid var(--panel-line);
   background:
@@ -2496,6 +2503,8 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   place-items: center;
   background: rgba(0, 0, 0, 0.72);
   animation: fade-in 160ms var(--ease-out);
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 .modal {

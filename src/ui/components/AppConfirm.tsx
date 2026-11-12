@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { ConfirmModal } from "./ConfirmModal";
+import { ErrorBoundary } from "./ErrorBoundary";
 
 export type AppConfirmOptions = {
   title: string;
@@ -56,17 +57,19 @@ export function AppConfirmProvider({ children }: { children: ReactNode }) {
   return (
     <AppConfirmContext.Provider value={value}>
       {children}
-      <ConfirmModal
-        open={Boolean(pending)}
-        title={pending?.title ?? "Подтверждение"}
-        body={pending?.body ?? ""}
-        confirmLabel={pending?.confirmLabel ?? "OK"}
-        cancelLabel={pending?.cancelLabel ?? "Отмена"}
-        tone={pending?.tone ?? "danger"}
-        bridgeHint={false}
-        onCancel={() => close(false)}
-        onConfirm={() => close(true)}
-      />
+      <ErrorBoundary fallbackTitle="Диалог подтверждения сбойнул">
+        <ConfirmModal
+          open={Boolean(pending)}
+          title={pending?.title ?? "Подтверждение"}
+          body={pending?.body ?? ""}
+          confirmLabel={pending?.confirmLabel ?? "OK"}
+          cancelLabel={pending?.cancelLabel ?? "Отмена"}
+          tone={pending?.tone ?? "danger"}
+          bridgeHint={false}
+          onCancel={() => close(false)}
+          onConfirm={() => close(true)}
+        />
+      </ErrorBoundary>
     </AppConfirmContext.Provider>
   );
 }
