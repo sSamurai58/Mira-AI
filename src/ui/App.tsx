@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { APP_NAME, APP_PHASE } from "../config";
+import { APP_NAME, APP_VERSION } from "../config";
 import {
   installActionLogBridge,
   logAppError,
@@ -361,7 +361,9 @@ export function App() {
               aria-hidden
             />
             <div className="brand-name">{APP_NAME}</div>
-            <div className="brand-phase">{APP_PHASE}</div>
+            <div className="brand-phase" title={`Mira ${APP_VERSION}`}>
+              v{APP_VERSION}
+            </div>
           </div>
 
           <button

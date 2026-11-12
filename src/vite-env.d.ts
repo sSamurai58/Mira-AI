@@ -1,5 +1,8 @@
 /// <reference types="vite/client" />
 
+/** Injected from package.json by Vite `define` in vite.config.ts */
+declare const __MIRA_VERSION__: string;
+
 interface SpeechRecognition extends EventTarget {
   lang: string;
   interimResults: boolean;

@@ -1,11 +1,19 @@
 import path from "node:path";
+import { readFileSync } from "node:fs";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+
+const miraVersion = JSON.parse(
+  readFileSync(path.resolve(__dirname, "package.json"), "utf8"),
+).version as string;
 
 export default defineConfig({
   // Relative asset URLs so Electron loadFile(file://) can resolve CSS/JS.
   base: "./",
   plugins: [react()],
+  define: {
+    __MIRA_VERSION__: JSON.stringify(miraVersion),
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),
