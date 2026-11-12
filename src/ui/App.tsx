@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { APP_NAME, APP_PHASE } from "../config";
+import {
+  installActionLogBridge,
+  logAppError,
+  logConfirmResolved,
+  logVoiceState,
+} from "./actionLog";
 import { installAutoGrowTextareas } from "./autoGrowTextareas";
 import { ConfirmModal } from "./components/ConfirmModal";
 import { ErrorBanner } from "./components/ErrorBanner";
@@ -168,9 +174,16 @@ export function App() {
 
   useEffect(() => installAutoGrowTextareas(), []);
 
+  useEffect(() => installActionLogBridge(), []);
+
   useEffect(() => {
     localStorage.setItem("mira.voiceState", voiceState);
+    logVoiceState(voiceState);
   }, [voiceState]);
+
+  useEffect(() => {
+    if (errorMessage) logAppError(errorMessage);
+  }, [errorMessage]);
 
   useEffect(() => {
     function onHash() {
@@ -470,14 +483,24 @@ export function App() {
         confirmLabel={pendingConfirm?.confirmLabel ?? "Подтвердить"}
         skillPropose={pendingConfirm?.skillPropose ?? null}
         onCancel={() => {
-          if (pendingConfirm && window.mira) {
-            void window.mira.respondConfirm(pendingConfirm.id, false);
+          if (pendingConfirm) {
+            logConfirmResolved(pendingConfirm.id, false, pendingConfirm.title);
+            if (window.mira) {
+              void window.mira.respondConfirm(pendingConfirm.id, false);
+            }
           }
           setPendingConfirm(null);
         }}
         onConfirm={(fields) => {
-          if (pendingConfirm && window.mira) {
-            void window.mira.respondConfirm(pendingConfirm.id, true, fields);
+          if (pendingConfirm) {
+            logConfirmResolved(pendingConfirm.id, true, pendingConfirm.title);
+            if (window.mira) {
+              void window.mira.respondConfirm(
+                pendingConfirm.id,
+                true,
+                fields,
+              );
+            }
           }
           setPendingConfirm(null);
         }}

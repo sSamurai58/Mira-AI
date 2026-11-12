@@ -6,6 +6,7 @@ import {
   type DragEvent,
   type FormEvent,
 } from "react";
+import { emitActionLog } from "../actionLog";
 import { getBrowserLlmLabel, streamBrowserChat } from "../browserLlm";
 import {
   filesToPendingAttachments,
@@ -223,6 +224,12 @@ export function ChatPage({
         (files.length
           ? `📎 ${files.map((f) => f.name).join(", ")}`
           : "");
+      emitActionLog({
+        title: "Сообщение отправлено",
+        reason: (display || trimmed || "вложения").slice(0, 120),
+        tag: "Чат",
+        tone: "accent",
+      });
       setBubbles((prev) => [
         ...prev,
         {
@@ -242,6 +249,14 @@ export function ChatPage({
       let libraryHint: string | null = null;
       if (toLibrary && files.length) {
         libraryHint = await importPendingToLocalLibrary(files);
+        if (libraryHint) {
+          emitActionLog({
+            title: "В библиотеку",
+            reason: libraryHint.slice(0, 120),
+            tag: "Обучение",
+            tone: "success",
+          });
+        }
       }
 
       const history = bubbles
@@ -277,6 +292,12 @@ export function ChatPage({
                   ? `browser · ${label} · library`
                   : `browser · ${label}`,
               );
+              emitActionLog({
+                title: "Ответ готов",
+                reason: `browser · ${label}`,
+                tag: "Чат",
+                tone: "success",
+              });
               setBusy(false);
               speakAssistant(full);
             },
@@ -284,6 +305,12 @@ export function ChatPage({
               setBusy(false);
               onVoiceState("error");
               onError(err.message);
+              emitActionLog({
+                title: "Сбой диалога",
+                reason: err.message.slice(0, 120),
+                tag: "Ошибка",
+                tone: "danger",
+              });
               setBubbles((prev) => prev.filter((b) => !b.pending));
             },
           },

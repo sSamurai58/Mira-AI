@@ -1,3 +1,4 @@
+import { emitActionLog } from "../actionLog";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   deleteLocalSkill,
@@ -274,6 +275,12 @@ export function WorkshopPage() {
     }
     await refreshCatalogs();
     setNote(`Сохранён skill ${payload.id}`);
+    emitActionLog({
+      title: "Skill сохранён",
+      reason: `${payload.id} · ${payload.name}`,
+      tag: "Мастерская",
+      tone: "success",
+    });
   }
 
   async function saveProtocol(e: FormEvent) {

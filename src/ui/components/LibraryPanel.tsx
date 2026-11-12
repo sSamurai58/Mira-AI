@@ -1,3 +1,4 @@
+import { emitActionLog } from "../actionLog";
 import { useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
 import {
   localDeleteLibraryItem,
@@ -83,6 +84,12 @@ export function LibraryPanel() {
           })
         : localImportLibraryText({ title: title.trim(), text });
       setNote(`Импортировано: ${item.title} (${item.status})`);
+      emitActionLog({
+        title: "Материал в библиотеку",
+        reason: `${item.title} (${item.status})`,
+        tag: "Обучение",
+        tone: "success",
+      });
       await refresh();
       await selectItem(item.id);
     } finally {

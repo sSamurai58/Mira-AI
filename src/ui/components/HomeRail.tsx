@@ -1,39 +1,9 @@
 import { useEffect, useId, useRef, useState } from "react";
+import {
+  formatActionLogTime,
+  useActionLog,
+} from "../actionLog";
 import type { VoiceState } from "../voiceState";
-
-type JournalItem = {
-  title: string;
-  time: string;
-  reason: string;
-  tag: string;
-  tone: "accent" | "success" | "warning" | "danger";
-  pending?: boolean;
-};
-
-const DEMO_JOURNAL: JournalItem[] = [
-  {
-    title: "Диалог открыт",
-    time: "сейчас",
-    reason: "Главный экран готов к голосу и тексту.",
-    tag: "Система",
-    tone: "accent",
-  },
-  {
-    title: "Голос",
-    time: "локально",
-    reason: "TTS/ASR зависят от системных голосов и настроек.",
-    tag: "Голос",
-    tone: "success",
-  },
-  {
-    title: "Ждёт подтверждения",
-    time: "политика",
-    reason: "Опасные действия — через ConfirmModal (always).",
-    tag: "Голосом",
-    tone: "warning",
-    pending: true,
-  },
-];
 
 const SAMPLE_COUNT = 24;
 
@@ -50,6 +20,13 @@ export function HomeRail({
   voiceState = "idle",
 }: HomeRailProps) {
   const load = useLiveLoad(voiceState);
+  const journal = useActionLog();
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 4_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   return (
     <aside className="home-rail">
@@ -79,23 +56,41 @@ export function HomeRail({
       <section className="glass-card journal-card">
         <h3 className="card-kicker">Журнал действий</h3>
         <ol className="journal-list hide-scroll">
-          {DEMO_JOURNAL.map((item) => (
-            <li
-              key={item.title}
-              className={`journal-item ${item.pending ? "is-pending" : ""}`}
-              data-tone={item.tone}
-            >
+          {journal.length === 0 ? (
+            <li className="journal-item" data-tone="accent">
               <div className="journal-dot" />
               <div className="journal-body">
                 <div className="journal-title-row">
-                  <span className="journal-title">{item.title}</span>
-                  <span className="mono tiny">{item.time}</span>
+                  <span className="journal-title">Пока тихо</span>
+                  <span className="mono tiny">—</span>
                 </div>
-                <p className="journal-reason">{item.reason}</p>
-                <span className={`tag tag-${item.tone}`}>{item.tag}</span>
+                <p className="journal-reason">
+                  Действия чата, голоса и подтверждений появятся здесь.
+                </p>
+                <span className="tag tag-accent">Система</span>
               </div>
             </li>
-          ))}
+          ) : (
+            journal.map((item) => (
+              <li
+                key={item.id}
+                className={`journal-item ${item.pending ? "is-pending" : ""}`}
+                data-tone={item.tone}
+              >
+                <div className="journal-dot" />
+                <div className="journal-body">
+                  <div className="journal-title-row">
+                    <span className="journal-title">{item.title}</span>
+                    <span className="mono tiny">
+                      {formatActionLogTime(item.at, now)}
+                    </span>
+                  </div>
+                  <p className="journal-reason">{item.reason}</p>
+                  <span className={`tag tag-${item.tone}`}>{item.tag}</span>
+                </div>
+              </li>
+            ))
+          )}
         </ol>
       </section>
     </aside>
