@@ -36,6 +36,11 @@ export function isTtsAvailable(): boolean {
   // Corpus / neural-pack is selected as ready even without speechSynthesis
   // (Electron clip playback; headless smoke still reports engine ready).
   if (engine === "neural-pack") return true;
+  if (engine === "elevenlabs") {
+    return Boolean(
+      typeof window !== "undefined" && window.mira?.synthesizeElevenLabs,
+    );
+  }
   return typeof window !== "undefined" && "speechSynthesis" in window;
 }
 
@@ -549,6 +554,81 @@ async function speakCustomVoice(
   }
 }
 
+async function speakElevenLabs(
+  text: string,
+  handlers: SpeakHandlers,
+  isCurrent: () => boolean,
+): Promise<void> {
+  const clean = text.trim();
+  if (!clean) {
+    handlers.onEnd?.();
+    return;
+  }
+  if (!window.mira?.synthesizeElevenLabs) {
+    handlers.onError?.(
+      "ElevenLabs доступен только в приложении Electron. Ключ API не уходит в браузер.",
+    );
+    return;
+  }
+
+  handlers.onStatus?.("ElevenLabs: синтез…");
+  let result: Awaited<ReturnType<NonNullable<typeof window.mira.synthesizeElevenLabs>>>;
+  try {
+    result = await window.mira.synthesizeElevenLabs({ text: clean });
+  } catch (err) {
+    if (!isCurrent()) return;
+    handlers.onError?.(
+      err instanceof Error
+        ? `ElevenLabs: ${err.message}`
+        : "ElevenLabs: ошибка запроса",
+    );
+    return;
+  }
+  if (!isCurrent()) return;
+  if (!result.ok || !result.dataUrl) {
+    handlers.onError?.(
+      result.detail ||
+        "ElevenLabs не ответил. Проверьте ключ, квоту и сеть — или выберите Web Speech.",
+    );
+    return;
+  }
+
+  handlers.onStatus?.(result.detail || "ElevenLabs");
+  const audio = new Audio(result.dataUrl);
+  activeCustomAudio = audio;
+  audio.onplay = () => {
+    if (!isCurrent()) {
+      try {
+        audio.pause();
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    handlers.onStart?.();
+  };
+  audio.onended = () => {
+    if (activeCustomAudio === audio) activeCustomAudio = null;
+    if (!isCurrent()) return;
+    handlers.onEnd?.();
+  };
+  audio.onerror = () => {
+    if (activeCustomAudio === audio) activeCustomAudio = null;
+    if (!isCurrent()) return;
+    handlers.onError?.("Не удалось воспроизвести аудио ElevenLabs");
+  };
+  try {
+    await audio.play();
+  } catch (err) {
+    if (!isCurrent()) return;
+    handlers.onError?.(
+      err instanceof Error
+        ? `Воспроизведение: ${err.message}`
+        : "Воспроизведение ElevenLabs заблокировано",
+    );
+  }
+}
+
 export function speakText(
   text: string,
   voiceId: string | null,
@@ -557,7 +637,7 @@ export function speakText(
   const engine = getActiveTtsEngine();
   if (engine === "edge-stub") {
     handlers.onError?.(
-      "Edge neural TTS — stub. Выберите Web Speech или Neural pack в Настройках.",
+      "Edge stub заменён на ElevenLabs. Выберите ElevenLabs в Настройках → Голос.",
     );
     return;
   }
@@ -585,6 +665,11 @@ export function speakText(
       /* ignore */
     }
     activeBufferSource = null;
+  }
+
+  if (engine === "elevenlabs") {
+    void speakElevenLabs(text, handlers, isCurrent);
+    return;
   }
 
   if (isCustomVoiceId(voiceId) && voiceId) {

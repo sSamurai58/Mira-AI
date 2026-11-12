@@ -31,6 +31,9 @@ type MiraPublicConfig = {
   hasAnthropicKey?: boolean;
   hasGeminiKey?: boolean;
   hasXaiKey?: boolean;
+  hasElevenLabsKey?: boolean;
+  elevenLabsVoiceId?: string;
+  elevenLabsModelId?: string;
   openaiBaseUrl: string;
   xaiBaseUrl?: string;
   databasePath: string;
@@ -780,6 +783,32 @@ interface MiraBridge {
     durationMs?: number;
     method?: string;
   }>;
+  getElevenLabsStatus?: (probe?: boolean) => Promise<{
+    hasKey: boolean;
+    voiceId: string;
+    modelId: string;
+    connected: boolean;
+    detail: string;
+    subscription?: string | null;
+  }>;
+  synthesizeElevenLabs?: (payload: {
+    text: string;
+    voiceId?: string;
+    modelId?: string;
+  }) => Promise<{
+    ok: boolean;
+    detail: string;
+    mimeType?: string;
+    audioBase64?: string;
+    dataUrl?: string;
+    tempPath?: string | null;
+    bytes?: number;
+    modelId?: string;
+    voiceId?: string;
+  }>;
+  listElevenLabsModels?: () => Promise<
+    Array<{ id: string; label: string; detail: string }>
+  >;
   onVoiceTrainProgress?: (
     handler: (payload: {
       projectId: string;

@@ -32,8 +32,8 @@ Future **F1–F13** — только после стабилизации must (�
 | Поле | Значение |
 |------|----------|
 | Текущая фаза | **Realize-all ✅** |
-| Следующее действие | Publish mira (private) — ждать подтверждения пользователя |
-| Запрещено сейчас | Republish без явного OK |
+| Следующее действие | 0.1.8 ElevenLabs WIP — нужен API-ключ пользователя; publish только после OK |
+| Запрещено сейчас | Republish / tag 0.1.8 без явного OK |
 
 
 ### Стартовые допущения стека (подтвердить в P0 → MEMORY)
@@ -344,6 +344,18 @@ UX: **Создать → фразы → загрузить → Mira сама о�
 - [x] Voice Studio phrase generate: corpus word-frequency novelty — avoid recycling saturated words; cover missing prepositions/particles; diversify intonation seeds (`phraseNovelty.ts`)
 - [x] Публикация GitHub Release **0.1.6** — https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.6 (tag `v0.1.6` @ `8baa1da`)
 - [ ] MCP runtime / OAuth (по-прежнему later; после явной команды)
+
+## 2026-11-12 — Релиз 0.1.8 WIP (ElevenLabs TTS)
+
+Ветка `cursor/release-0-1-8-6838` от tip 0.1.7. Пакет **0.1.8**. **Не публиковать** без OK.
+
+- [x] Bump 0.1.8
+- [x] Electron main: `POST /v1/text-to-speech/{voice_id}` + status (`electron/tts/elevenlabs.ts`)
+- [x] Settings: ключ save/delete, Voice ID пресет `YjESejviApN7SHrbfnA2`, модель, тест, статус
+- [x] Движок TTS `elevenlabs` (замена `edge-stub`); speak path в chat/voice
+- [x] `.env.example` + Doctor finding; smoke `elevenlabs:smoke`
+- [ ] Пользователь: **ELEVENLABS_API_KEY** из кабинета + план/кредиты + сеть
+- [ ] Publish GitHub Release — только после явного OK
 
 ## 2026-11-12 — Релиз 0.1.7 ✅
 

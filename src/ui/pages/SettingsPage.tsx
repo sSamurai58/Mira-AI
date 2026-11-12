@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 import { StubBadge } from "../components/StubBadge";
 import { SettingsApiSection } from "../components/SettingsApiSection";
+import { SettingsElevenLabsSection } from "../components/SettingsElevenLabsSection";
 import { ToggleRow } from "../components/SettingsFormBits";
 import { SettingsIntegrationsSection } from "../components/SettingsIntegrationsSection";
 import { SettingsMcpSection } from "../components/SettingsMcpSection";
@@ -236,7 +237,7 @@ export function SettingsPage({
                 value={ttsEngine}
                 options={listTtsEngines().map((eng) => ({
                   value: eng.id,
-                  label: `${eng.label}${eng.ready ? "" : " (stub)"}`,
+                  label: `${eng.label}${eng.ready ? "" : eng.id === "elevenlabs" ? " (нужен Electron)" : " (недоступен)"}`,
                 }))}
                 onChange={(id) => {
                   setTtsEngine(setActiveTtsEngine(id as TtsEngineId));
@@ -247,6 +248,9 @@ export function SettingsPage({
             <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
               {listTtsEngines().find((e) => e.id === ttsEngine)?.detail}
             </p>
+            {ttsEngine === "elevenlabs" ? (
+              <SettingsElevenLabsSection compact />
+            ) : null}
             <ToggleRow
               label="Автоозвучка ответов"
               hint="Озвучивать ответы Миры автоматически"

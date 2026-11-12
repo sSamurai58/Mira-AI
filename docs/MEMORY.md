@@ -13,7 +13,7 @@
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
 | Дорожная карта | Must + future F* закрыты (partial→done stubs where noted) |
 
-**Сейчас:** **0.1.7 опубликован** (Latest). Ветка `cursor/release-0-1-7-6838` @ `d75191a`. Release: https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.7
+**Сейчас:** **0.1.8 WIP** (не публиковать). Ветка `cursor/release-0-1-8-6838`. База: 0.1.7 / `v0.1.7`. Latest остаётся 0.1.7 до явной публикации.
 
 
 ## Решения
@@ -22,6 +22,7 @@
 
 | Дата | Решение | Почему |
 |------|---------|--------|
+| 2026-11-12 | **0.1.8 WIP: ElevenLabs TTS** (voice_id `YjESejviApN7SHrbfnA2`) | Облачный TTS в Electron main (`xi-api-key` из `ELEVENLABS_API_KEY`); stub `edge-stub` → `elevenlabs`; ключ нужен от пользователя — Voice ID ≠ API key |
 | 2026-11-12 | **Релиз 0.1.7 опубликован** (`v0.1.7`, Latest) | Neural TTS CPU curriculum; Voice Studio slice/stitch; core XP growth; chat diversity; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.7 |
 | 2026-11-12 | **0.1.7: Voice Studio neural TTS CPU** (encoder/attention/decoder/Adam/vocoder/RLHF) | Curriculum proxies→real TS-MLP; CUDA kernels not bundled — CPU path + optional CUDA detect; unit-stitch fallback; docs/mira-tts-report-0.1.7.md |
 | 2026-11-12 | **0.1.7: Voice Studio нарезка/сращивание** (+ chat diversity) | 0.1.4 spectral-flux+10ms fade всё ещё резал mid-phoneme / криво склеивал; text-weighted + island boundaries, hysteresis, pad, min duration, OLA+RMS stitch; после обновления — re-import + полная пересборка |

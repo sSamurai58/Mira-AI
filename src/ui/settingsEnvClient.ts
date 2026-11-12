@@ -7,6 +7,7 @@ export const SETTINGS_SECRET_KEYS = new Set([
   "ANTHROPIC_API_KEY",
   "GEMINI_API_KEY",
   "XAI_API_KEY",
+  "ELEVENLABS_API_KEY",
   "TELEGRAM_BOT_TOKEN",
 ]);
 
@@ -29,6 +30,9 @@ const DEFAULTS: Record<string, string> = {
   ANTHROPIC_API_KEY: "",
   GEMINI_API_KEY: "",
   XAI_API_KEY: "",
+  ELEVENLABS_API_KEY: "",
+  ELEVENLABS_VOICE_ID: "YjESejviApN7SHrbfnA2",
+  ELEVENLABS_MODEL_ID: "eleven_multilingual_v2",
   VISION_ENABLED: "false",
   WEB_ENABLED: "true",
   WEB_ALLOWLIST: "duckduckgo.com,api.duckduckgo.com",

@@ -7,6 +7,9 @@ export type MiraPublicConfig = {
   hasAnthropicKey?: boolean;
   hasGeminiKey?: boolean;
   hasXaiKey?: boolean;
+  hasElevenLabsKey?: boolean;
+  elevenLabsVoiceId?: string;
+  elevenLabsModelId?: string;
   openaiBaseUrl: string;
   xaiBaseUrl?: string;
   databasePath: string;
@@ -319,6 +322,14 @@ contextBridge.exposeInMainWorld("mira", {
   }) => call("mira:submit-voice-preference", payload),
   synthesizeCustomVoiceNeural: (voiceId: string, text: string) =>
     call("mira:synthesize-custom-voice-neural", voiceId, text),
+  getElevenLabsStatus: (probe?: boolean) =>
+    call("mira:elevenlabs-status", probe ?? false),
+  synthesizeElevenLabs: (payload: {
+    text: string;
+    voiceId?: string;
+    modelId?: string;
+  }) => call("mira:elevenlabs-synthesize", payload),
+  listElevenLabsModels: () => call("mira:elevenlabs-models"),
   onVoiceTrainProgress: (
     handler: (payload: {
       projectId: string;

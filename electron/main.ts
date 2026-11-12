@@ -108,6 +108,11 @@ import {
   updateVoiceProject,
 } from "./voiceStudio/studio";
 import {
+  ELEVENLABS_MODELS,
+  getElevenLabsStatus,
+  synthesizeElevenLabs,
+} from "./tts/elevenlabs";
+import {
   getBlenderPolicy,
   runDemoScene,
 } from "./tools/blender";
@@ -826,6 +831,24 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
     "mira:synthesize-custom-voice-neural",
     (_e, voiceId: string, text: string) =>
       synthesizeCustomVoiceNeural(voiceId, text),
+  );
+  on("mira:elevenlabs-status", (_e, probe?: boolean) =>
+    getElevenLabsStatus(Boolean(probe)),
+  );
+  on(
+    "mira:elevenlabs-synthesize",
+    (
+      _e,
+      payload: { text: string; voiceId?: string; modelId?: string },
+    ) =>
+      synthesizeElevenLabs({
+        text: payload?.text ?? "",
+        voiceId: payload?.voiceId,
+        modelId: payload?.modelId,
+      }),
+  );
+  on("mira:elevenlabs-models", () =>
+    ELEVENLABS_MODELS.map((m) => ({ ...m })),
   );
   on(
     "mira:generate-voice-phrases",
