@@ -496,7 +496,6 @@ export function VoiceStudioPanel(props: {
     project?.status === "ready" ||
     project?.status === "ready_partial";
   const recordedCount = phrases.filter((p) => p.recorded).length;
-  const collapseCorpus = Boolean(project && isTrained && phrases.length > 0);
   const corpusReadyLabel =
     recordedCount === phrases.length
       ? "готово"
@@ -674,113 +673,136 @@ export function VoiceStudioPanel(props: {
           </div>
 
           <div
-            className="row"
-            style={{
-              flexWrap: "wrap",
-              gap: "0.5rem",
-              alignItems: "center",
-            }}
+            className="panel stack"
+            style={{ gap: "0.55rem" }}
+            data-testid="voice-generate-range"
           >
-            <label
-              className="muted"
+            <strong>Генерация текстов для обучения</strong>
+            <p className="muted" style={{ margin: 0 }}>
+              Задайте сколько текстов добавить и диапазон слов (от–до) — так можно
+              набирать длинный корпус. Непокрытые слова пока говорит системный
+              TTS.
+            </p>
+            <div
+              className="row"
               style={{
-                display: "inline-flex",
+                flexWrap: "wrap",
+                gap: "0.5rem",
                 alignItems: "center",
-                gap: "0.35rem",
-                fontSize: "0.85rem",
               }}
-              title="Сколько текстов добавить за один запуск"
             >
-              шт.
-              <input
-                type="number"
-                min={1}
-                max={40}
-                value={genCount}
+              <label
+                className="field-label"
+                style={{
+                  display: "inline-flex",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                  margin: 0,
+                }}
+                title="Сколько текстов добавить за один запуск"
+              >
+                шт.
+                <input
+                  type="number"
+                  min={1}
+                  max={40}
+                  value={genCount}
+                  disabled={Boolean(busy)}
+                  onChange={(e) =>
+                    setGenCount(
+                      Math.max(1, Math.min(40, Number(e.target.value) || 1)),
+                    )
+                  }
+                  style={{ width: "3.5rem" }}
+                  aria-label="Количество текстов"
+                />
+              </label>
+              <label
+                className="field-label"
+                style={{
+                  display: "inline-flex",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                  margin: 0,
+                }}
+                title="Минимум слов в каждом тексте"
+              >
+                слов от
+                <input
+                  type="number"
+                  min={1}
+                  max={400}
+                  value={genMinWords}
+                  disabled={Boolean(busy)}
+                  onChange={(e) =>
+                    setGenMinWords(
+                      Math.max(1, Math.min(400, Number(e.target.value) || 1)),
+                    )
+                  }
+                  style={{ width: "3.75rem" }}
+                  aria-label="Минимум слов"
+                />
+              </label>
+              <label
+                className="field-label"
+                style={{
+                  display: "inline-flex",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                  margin: 0,
+                }}
+                title="Максимум слов в каждом тексте"
+              >
+                до
+                <input
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={genMaxWords}
+                  disabled={Boolean(busy)}
+                  onChange={(e) =>
+                    setGenMaxWords(
+                      Math.max(1, Math.min(500, Number(e.target.value) || 1)),
+                    )
+                  }
+                  style={{ width: "3.75rem" }}
+                  aria-label="Максимум слов"
+                />
+              </label>
+              <button
+                type="button"
+                className="btn btn-primary"
                 disabled={Boolean(busy)}
-                onChange={(e) =>
-                  setGenCount(
-                    Math.max(1, Math.min(40, Number(e.target.value) || 1)),
-                  )
-                }
-                style={{ width: "3.25rem" }}
-              />
-            </label>
-            <label
-              className="muted"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.35rem",
-                fontSize: "0.85rem",
-              }}
-              title="Минимум слов в каждом тексте — для длинного корпуса обучения"
+                onClick={() => void morePhrases()}
+                title="Сначала тексты из речи ассистента в заданном диапазоне слов"
+              >
+                {busy === "phrases" ? "Генерация…" : "Сгенерировать фразы"}
+              </button>
+            </div>
+            <div
+              className="row"
+              style={{ flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}
             >
-              слов от
-              <input
-                type="number"
-                min={1}
-                max={400}
-                value={genMinWords}
-                disabled={Boolean(busy)}
-                onChange={(e) =>
-                  setGenMinWords(
-                    Math.max(1, Math.min(400, Number(e.target.value) || 1)),
-                  )
-                }
-                style={{ width: "3.5rem" }}
-              />
-            </label>
-            <label
-              className="muted"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.35rem",
-                fontSize: "0.85rem",
-              }}
-              title="Максимум слов в каждом тексте"
-            >
-              до
-              <input
-                type="number"
-                min={1}
-                max={500}
-                value={genMaxWords}
-                disabled={Boolean(busy)}
-                onChange={(e) =>
-                  setGenMaxWords(
-                    Math.max(1, Math.min(500, Number(e.target.value) || 1)),
-                  )
-                }
-                style={{ width: "3.5rem" }}
-              />
-            </label>
-            <button
-              type="button"
-              className="btn"
-              disabled={Boolean(busy)}
-              onClick={() => void morePhrases()}
-              title="Сначала тексты из речи ассистента в заданном диапазоне слов"
-            >
-              {busy === "phrases" ? "Генерация…" : "Сгенерировать фразы"}
-            </button>
-            <button
-              type="button"
-              className={`btn ${recording ? "btn-primary" : ""}`}
-              disabled={Boolean(busy) && !recording}
-              onClick={() => void toggleRecord()}
-            >
-              {recording ? "Стоп запись" : "Запись mic"}
-            </button>
-            <button
-              type="button"
-              className="btn"
-              disabled={!project.custom_voice_id || Boolean(busy)}
-              onClick={() => void previewCustom()}
-            >
-              Превью модели
-            </button>
+              <button
+                type="button"
+                className={`btn ${recording ? "btn-primary" : ""}`}
+                disabled={Boolean(busy) && !recording}
+                onClick={() => void toggleRecord()}
+              >
+                {recording ? "Стоп запись" : "Запись mic"}
+              </button>
+              <button
+                type="button"
+                className="btn"
+                disabled={!project.custom_voice_id || Boolean(busy)}
+                onClick={() => void previewCustom()}
+              >
+                Превью модели
+              </button>
+            </div>
           </div>
 
           <div
@@ -867,95 +889,83 @@ export function VoiceStudioPanel(props: {
             </div>
           </div>
 
-          {collapseCorpus ? (
-            <div className="voice-phrases-summary panel stack" style={{ gap: "0.55rem" }}>
-              <div className="row" style={{ flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
-                <strong style={{ margin: 0 }}>
-                  {phrases.length} фраз · {corpusReadyLabel}
-                </strong>
-                <span className="muted mono" style={{ fontSize: "0.85rem" }}>
-                  аудио {acceptedClips} · покрытие {coveragePct}%
-                </span>
-              </div>
-              <p className="muted" style={{ margin: 0 }}>
-                Список фраз свёрнут после обучения. Нумерация 1…N сохраняется —
-                откройте просмотр, чтобы прослушать аудио, перезагрузить
-                отдельные фразы или переобучить модель целиком. Свою фразу можно
-                добавить выше в любой момент.
-              </p>
-              <div className="row" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={() => setPhrasesOpen(true)}
-                >
-                  Просмотр фраз
-                </button>
+          <div
+            className="panel stack"
+            style={{ gap: "0.5rem" }}
+            data-testid="voice-phrases-list"
+          >
+            <div
+              className="row"
+              style={{
+                flexWrap: "wrap",
+                gap: "0.5rem",
+                alignItems: "center",
+              }}
+            >
+              <strong style={{ margin: 0 }}>
+                Фразы ({phrases.length})
+                {phrases.length > 0 ? ` · ${corpusReadyLabel}` : ""}
+              </strong>
+              {isTrained ? (
                 <button
                   type="button"
                   className="btn"
-                  disabled={Boolean(busy) || !canTrain}
-                  onClick={() => void trainModel()}
-                  title={
-                    canTrain
-                      ? "Полное переобучение по текущему корпусу"
-                      : "Нужно ≥1 фраза и ≥3 принятых записей"
-                  }
+                  onClick={() => setPhrasesOpen(true)}
+                  title="Прослушать и перезагрузить отдельные фразы"
                 >
-                  {busy === "train" ? "Обучение…" : "Переобучить"}
+                  Подробный просмотр
                 </button>
-              </div>
+              ) : null}
             </div>
-          ) : (
-            <>
-              <div className="stack" style={{ gap: "0.35rem" }}>
-                <strong>Фразы ({phrases.length})</strong>
-                {phrases.length === 0 ? (
-                  <span className="muted">
-                    Нажмите «Сгенерировать фразы» или добавьте свою выше
-                  </span>
-                ) : (
-                  phrases.map((p) => (
-                    <div key={p.id} className="muted mono">
-                      {phraseDisplayNo(phrases, p.id)}.{" "}
-                      {p.recorded ? "✓" : "○"} {p.text}
-                    </div>
-                  ))
-                )}
+            {phrases.length === 0 ? (
+              <span className="muted">
+                Нажмите «Сгенерировать фразы» или добавьте свою выше
+              </span>
+            ) : (
+              <div
+                className="stack voice-phrases-inline-list"
+                style={{ gap: "0.35rem", maxHeight: "22rem", overflow: "auto" }}
+              >
+                {phrases.map((p) => (
+                  <div key={p.id} className="muted mono">
+                    {phraseDisplayNo(phrases, p.id)}.{" "}
+                    {p.recorded ? "✓" : "○"} {p.text}
+                  </div>
+                ))}
               </div>
+            )}
+          </div>
 
-              <div className="stack" style={{ gap: "0.35rem" }}>
-                <strong>Аудио фраз ({clips.length})</strong>
-                {clips.length === 0 ? (
-                  <span className="muted">Пока нет загрузок / записей</span>
-                ) : (
-                  clips.slice(0, 6).map((c) => {
-                    let qa = "";
-                    try {
-                      const parsed = c.qa_json
-                        ? (JSON.parse(c.qa_json) as {
-                            accepted?: boolean;
-                            issues?: string[];
-                            approxSec?: number;
-                          })
-                        : null;
-                      qa = parsed
-                        ? `${parsed.accepted ? "accept" : "reject"} · ${parsed.approxSec ?? "?"}s · ${(parsed.issues ?? []).join(",") || "ok"}`
-                        : "pending";
-                    } catch {
-                      qa = "qa?";
-                    }
-                    const phraseLink = clipPhraseLinkLabel(phrases, c.phrase_id);
-                    return (
-                      <div key={c.id} className="muted mono">
-                        {c.accepted ? "✓" : "×"} {phraseLink} · {qa}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </>
-          )}
+          <div className="stack" style={{ gap: "0.35rem" }}>
+            <strong>Аудио фраз ({clips.length})</strong>
+            {clips.length === 0 ? (
+              <span className="muted">Пока нет загрузок / записей</span>
+            ) : (
+              clips.slice(0, 6).map((c) => {
+                let qa = "";
+                try {
+                  const parsed = c.qa_json
+                    ? (JSON.parse(c.qa_json) as {
+                        accepted?: boolean;
+                        issues?: string[];
+                        approxSec?: number;
+                      })
+                    : null;
+                  qa = parsed
+                    ? `${parsed.accepted ? "accept" : "reject"} · ${parsed.approxSec ?? "?"}s · ${(parsed.issues ?? []).join(",") || "ok"}`
+                    : "pending";
+                } catch {
+                  qa = "qa?";
+                }
+                const phraseLink = clipPhraseLinkLabel(phrases, c.phrase_id);
+                return (
+                  <div key={c.id} className="muted mono">
+                    {c.accepted ? "✓" : "×"} {phraseLink} · {qa}
+                  </div>
+                );
+              })
+            )}
+          </div>
         </>
       ) : null}
 
