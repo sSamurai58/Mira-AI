@@ -2,6 +2,12 @@ import fs from "node:fs";
 import path from "node:path";
 import { openStore } from "../store";
 import { getOwnerId } from "../owner";
+import {
+  VOICE_PACK_ENGINE,
+  buildVoiceModelPack,
+  readVoiceModelPack,
+  type LinkedTrainClip,
+} from "./modelPack";
 
 export type VoiceProjectRow = {
   id: string;
@@ -582,8 +588,8 @@ export function trainVoiceModel(projectId: string): {
     };
   }
 
-  // Local corpus-pack model: inventory of phrase↔audio units for compositional
-  // (word/fragment) synthesis; uncovered tokens fall back to Web Speech.
+  // Real local model pack: segment linked clips into phrase/word/fragment units
+  // + lexicon for compositional TTS (uncovered tokens → Web Speech fallback).
   const project = getVoiceProject(projectId)!;
   const store = openStore();
   const voiceId =
@@ -600,21 +606,68 @@ export function trainVoiceModel(projectId: string): {
       : qa.acceptedCount >= TARGET_TRAIN_CLIPS
         ? "medium"
         : "draft";
+
+  const phraseById = new Map(
+    listPhrases(projectId).map((p) => [p.id, p] as const),
+  );
+  const linkedClips: LinkedTrainClip[] = [];
+  for (const clip of refreshed) {
+    if (clip.accepted !== 1 || !clip.phrase_id) continue;
+    const phrase = phraseById.get(clip.phrase_id);
+    if (!phrase) continue;
+    linkedClips.push({
+      clipId: clip.id,
+      phraseId: phrase.id,
+      phraseText: phrase.text,
+      filePath: clip.file_path,
+    });
+  }
+
+  touchProject(projectId, {
+    status: "training",
+    recommendation: `Сегментация корпуса: ${linkedClips.length} клипов → слова/фрагменты…`,
+  });
+
+  const packDir = studioRoot(projectId, "model-pack");
+  const pack = buildVoiceModelPack({
+    packDir,
+    projectId,
+    voiceId,
+    name: project.name,
+    lang: project.lang,
+    quality,
+    linkedAccepted: qa.linkedAccepted,
+    phraseCount: qa.phraseCount,
+    coveragePct,
+    clips: linkedClips,
+    onProgress: (pct, label) => {
+      touchProject(projectId, {
+        status: "training",
+        recommendation: `Обучение ${pct}% · ${label}`,
+      });
+    },
+  });
+
   const meta = {
-    engine: "mira-local-corpus-v1",
+    engine: VOICE_PACK_ENGINE,
+    legacyEngine: "mira-local-corpus-v1",
     trainedAt: stamp,
     quality,
     acceptedClips: qa.acceptedCount,
     linkedAccepted: qa.linkedAccepted,
     phraseCount: qa.phraseCount,
     coveragePct,
+    packDir,
+    wordUnitCount: pack.wordUnitCount,
+    fragmentUnitCount: pack.fragmentUnitCount,
+    unitCount: pack.units.length,
     synthesis:
-      "Корпусный пакет (mira-local-corpus-v1): unit-selection TTS — склейка слов/фрагментов из обученных клипов; непокрытые токены — запасной Web Speech.",
+      `${VOICE_PACK_ENGINE}: unit-selection TTS — склейка слов/фрагментов из обученных клипов; непокрытые токены — запасной Web Speech.`,
     curriculum: [
       "1. Фразы (речь ассистента / банк / свои)",
       "2. Аудио 1…N к фразам",
       "3. QA клипов",
-      "4. Сборка модели (инвентарь фрагментов)",
+      "4. Сборка model-pack (фразы + lexicon)",
       "5. Публикация в каталог",
     ],
   };
@@ -664,8 +717,8 @@ export function trainVoiceModel(projectId: string): {
 
   const needMore = qa.acceptedCount < TARGET_TRAIN_CLIPS || coveragePct < 80;
   const detail = needMore
-    ? `Модель «${project.name}» обучена (${quality}). Для лучшего качества: ещё ${Math.max(0, TARGET_TRAIN_CLIPS - qa.acceptedCount)} клипов и привязка к фразам (покрытие ${coveragePct}%).`
-    : `Модель «${project.name}» обучена (${quality}). Голос в каталоге; можно донабирать фразы и переобучать.`;
+    ? `Модель «${project.name}» обучена (${quality}, ${pack.wordUnitCount} слов / ${pack.fragmentUnitCount} фрагм.). Для лучшего качества: ещё ${Math.max(0, TARGET_TRAIN_CLIPS - qa.acceptedCount)} клипов и привязка к фразам (покрытие ${coveragePct}%).`
+    : `Модель «${project.name}» обучена (${quality}, ${pack.wordUnitCount} слов / ${pack.fragmentUnitCount} фрагм.). Голос в каталоге; можно донабирать фразы и переобучать.`;
 
   const updated = touchProject(projectId, {
     status: needMore ? "ready_partial" : "ready",
@@ -860,6 +913,9 @@ export type CustomVoiceCorpusUnit = {
   phraseId: string;
   text: string;
   filePath: string;
+  /** Pre-aligned slice from model pack (optional). */
+  startFrac?: number;
+  endFrac?: number;
 };
 
 export type CustomVoiceCorpus = {
@@ -867,10 +923,52 @@ export type CustomVoiceCorpus = {
   units: CustomVoiceCorpusUnit[];
 };
 
-/** Accepted phrase→clip units for corpus / neural-pack TTS. */
+/** Phrase + word/fragment units for compositional corpus TTS. */
 export function getCustomVoiceCorpus(voiceId: string): CustomVoiceCorpus {
   const voice = getCustomVoice(voiceId);
   if (!voice) throw new Error("Голос не найден");
+
+  const packDir = studioRoot(voice.project_id, "model-pack");
+  const pack = readVoiceModelPack(packDir);
+  if (pack && pack.units.length) {
+    const phraseDur = new Map<string, number>();
+    for (const u of pack.units) {
+      if (u.kind === "phrase") phraseDur.set(u.sourcePhraseId, u.endMs || 1);
+    }
+    const units: CustomVoiceCorpusUnit[] = [];
+    for (const u of pack.units) {
+      if (u.kind === "phrase") {
+        units.push({
+          phraseId: u.sourcePhraseId,
+          text: u.text,
+          filePath: u.file,
+        });
+        continue;
+      }
+      // Word / fragment: sliced WAV → full file; else frac into phrase clip.
+      const sliced = u.kind === "word" && u.file.endsWith(".wav");
+      if (sliced) {
+        units.push({
+          phraseId: u.sourcePhraseId,
+          text: u.text,
+          filePath: u.file,
+          startFrac: 0,
+          endFrac: 1,
+        });
+      } else {
+        const total = Math.max(1, phraseDur.get(u.sourcePhraseId) ?? u.endMs);
+        units.push({
+          phraseId: u.sourcePhraseId,
+          text: u.text,
+          filePath: u.file,
+          startFrac: Math.max(0, u.startMs / total),
+          endFrac: Math.min(1, Math.max(u.startMs + 1, u.endMs) / total),
+        });
+      }
+    }
+    return { voice, units };
+  }
+
   const rows = openStore()
     .prepare(
       `SELECT c.phrase_id AS phraseId, p.text AS text, c.file_path AS filePath, c.created_at AS createdAt

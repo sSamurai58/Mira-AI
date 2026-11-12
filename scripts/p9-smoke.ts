@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import path from "node:path";
 import { loadConfig } from "../electron/config";
 import {
@@ -92,6 +93,22 @@ async function main() {
   assert.ok(trained.project.llm_profile, "llm profile missing");
   assert.ok(["ready", "ready_partial"].includes(trained.project.status));
   assert.ok(trained.report.linkedAccepted >= 3);
+  const trainMeta = JSON.parse(trained.voice!.meta_json ?? "{}") as {
+    engine?: string;
+    packDir?: string;
+    wordUnitCount?: number;
+    unitCount?: number;
+  };
+  assert.equal(trainMeta.engine, "mira-voice-pack-v1");
+  assert.ok(trainMeta.packDir, "model pack dir missing");
+  assert.ok(
+    (trainMeta.wordUnitCount ?? 0) + (trainMeta.unitCount ?? 0) > 0,
+    "trained pack should contain segmented units",
+  );
+  assert.ok(
+    fs.existsSync(path.join(trainMeta.packDir!, "model-pack.json")),
+    "model-pack.json should exist after train",
+  );
 
   // retrain after another clip keeps stable voice id
   importClip({

@@ -4,6 +4,12 @@ export type CorpusUnit = {
   phraseId: string;
   text: string;
   filePath: string;
+  /**
+   * Optional pre-alignment from the trained model pack.
+   * When set, the unit is used as-is (no further equal-time split).
+   */
+  startFrac?: number;
+  endFrac?: number;
 };
 
 /** Slice of a trained clip aligned to one or more words/fragments. */
@@ -244,6 +250,24 @@ export function buildFragmentInventory(units: CorpusUnit[]): CorpusFragment[] {
     const tokens = tokenizeSpeech(unit.text).map((t) => t.norm);
     if (!tokens.length) continue;
     const n = tokens.length;
+    const preAligned =
+      typeof unit.startFrac === "number" &&
+      typeof unit.endFrac === "number" &&
+      unit.endFrac > unit.startFrac;
+
+    if (preAligned) {
+      // Model-pack word/fragment slice — already time-aligned.
+      out.push({
+        phraseId: unit.phraseId,
+        phraseText: unit.text,
+        filePath: unit.filePath,
+        tokens: [...tokens],
+        startFrac: Math.max(0, Math.min(1, unit.startFrac!)),
+        endFrac: Math.max(0, Math.min(1, unit.endFrac!)),
+      });
+      continue;
+    }
+
     // Whole phrase — preferred when the reply matches the trained line.
     out.push({
       phraseId: unit.phraseId,
