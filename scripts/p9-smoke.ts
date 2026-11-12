@@ -26,17 +26,22 @@ import {
   buildCorpusLexStats,
   scorePhraseNovelty,
 } from "../electron/voiceStudio/phraseNovelty";
-import { normalizeLexKey, tokenizeSpeechWords } from "../electron/voiceStudio/modelPack";
 import {
   estimateWordBoundariesByEnergy,
   extractClipAudioFeatures,
+  MIN_WORD_MS,
   noiseLikeness,
+  relativeWordDurationWeights,
   textAudioMismatch,
 } from "../electron/voiceStudio/audioFeatures";
 import {
   convertAudioToPcmWav,
+  normalizeLexKey,
   parseWavInfo,
+  pcmInt16Rms,
   sliceWavToFile,
+  stitchPcmInt16OverlapAdd,
+  tokenizeSpeechWords,
 } from "../electron/voiceStudio/modelPack";
 import {
   extractMelFromWav,
@@ -220,9 +225,22 @@ async function main() {
   assert.equal(sampleFeat.format, "pcm-wav");
   assert.ok(sampleFeat.durationMs > 200, "sample duration");
   assert.ok(sampleFeat.speechScore > 0.1, "sample should look like speech");
-  const bounds = estimateWordBoundariesByEnergy(sample, 4);
+  const bounds = estimateWordBoundariesByEnergy(sample, 4, undefined, [
+    "раз",
+    "два",
+    "три",
+    "четыре",
+  ]);
   assert.equal(bounds.length, 4);
   assert.ok(bounds[0]!.endMs > bounds[0]!.startMs);
+  for (const b of bounds) {
+    assert.ok(
+      b.endMs - b.startMs >= Math.min(MIN_WORD_MS, 45) * 0.35,
+      `word unit too tiny: ${b.endMs - b.startMs}ms`,
+    );
+  }
+  const rel = relativeWordDurationWeights(["в", "гиперболоид", "и"]);
+  assert.ok(rel[1]! > rel[0]! * 2, "long word should outweigh short particle");
 
   // Synthetic bursts with silence gaps: cuts should land in quiet valleys,
   // not mid-burst (old equal-energy mid-waveform chops).
@@ -232,6 +250,23 @@ async function main() {
     "voice-studio",
     "_smoke-bursts.wav",
   );
+  const writeWavMono = (filePath: string, sr: number, pcm: Buffer) => {
+    const header = Buffer.alloc(44);
+    header.write("RIFF", 0);
+    header.writeUInt32LE(36 + pcm.length, 4);
+    header.write("WAVE", 8);
+    header.write("fmt ", 12);
+    header.writeUInt32LE(16, 16);
+    header.writeUInt16LE(1, 20);
+    header.writeUInt16LE(1, 22);
+    header.writeUInt32LE(sr, 24);
+    header.writeUInt32LE(sr * 2, 28);
+    header.writeUInt16LE(2, 32);
+    header.writeUInt16LE(16, 34);
+    header.write("data", 36);
+    header.writeUInt32LE(pcm.length, 40);
+    fs.writeFileSync(filePath, Buffer.concat([header, pcm]));
+  };
   {
     const sr = 16000;
     const total = sr * 2; // 2s
@@ -253,23 +288,13 @@ async function main() {
     writeTone(0, Math.floor(sr * 0.35), 440);
     writeTone(Math.floor(sr * 0.6), Math.floor(sr * 0.95), 660);
     writeTone(Math.floor(sr * 1.2), Math.floor(sr * 1.55), 880);
-    const header = Buffer.alloc(44);
-    header.write("RIFF", 0);
-    header.writeUInt32LE(36 + pcm.length, 4);
-    header.write("WAVE", 8);
-    header.write("fmt ", 12);
-    header.writeUInt32LE(16, 16);
-    header.writeUInt16LE(1, 20);
-    header.writeUInt16LE(1, 22);
-    header.writeUInt32LE(sr, 24);
-    header.writeUInt32LE(sr * 2, 28);
-    header.writeUInt16LE(2, 32);
-    header.writeUInt16LE(16, 34);
-    header.write("data", 36);
-    header.writeUInt32LE(pcm.length, 40);
-    fs.writeFileSync(burstPath, Buffer.concat([header, pcm]));
+    writeWavMono(burstPath, sr, pcm);
   }
-  const burstBounds = estimateWordBoundariesByEnergy(burstPath, 3);
+  const burstBounds = estimateWordBoundariesByEnergy(burstPath, 3, undefined, [
+    "один",
+    "два",
+    "три",
+  ]);
   assert.equal(burstBounds.length, 3);
   // Internal cuts should sit in silence windows (~350–600ms and ~950–1200ms).
   assert.ok(
@@ -279,6 +304,54 @@ async function main() {
   assert.ok(
     burstBounds[1]!.endMs >= 900 && burstBounds[1]!.endMs <= 1250,
     `cut1 in second silence, got ${burstBounds[1]!.endMs}`,
+  );
+  // Unequal text lengths: short + long + short against unequal burst energy
+  // must not assign the long word a crumb mid-burst (0.1.4 equal-energy failure).
+  const unevenPath = path.resolve(
+    process.cwd(),
+    "seed",
+    "voice-studio",
+    "_smoke-uneven.wav",
+  );
+  {
+    const sr = 16000;
+    const total = sr * 3;
+    const pcm = Buffer.alloc(total * 2);
+    const writeTone = (from: number, to: number, hz: number, amp = 0.4) => {
+      for (let i = from; i < to; i++) {
+        const t = i / sr;
+        const env =
+          i < from + 120
+            ? (i - from) / 120
+            : i > to - 120
+              ? (to - i) / 120
+              : 1;
+        const s = Math.sin(2 * Math.PI * hz * t) * amp * env;
+        pcm.writeInt16LE((s * 32767) | 0, i * 2);
+      }
+    };
+    // Short loud · long quiet-ish · short loud, with clear silences.
+    writeTone(0, Math.floor(sr * 0.28), 500, 0.5);
+    writeTone(Math.floor(sr * 0.45), Math.floor(sr * 1.85), 220, 0.28);
+    writeTone(Math.floor(sr * 2.05), Math.floor(sr * 2.4), 660, 0.5);
+    writeWavMono(unevenPath, sr, pcm);
+  }
+  const unevenBounds = estimateWordBoundariesByEnergy(
+    unevenPath,
+    3,
+    undefined,
+    ["в", "путешествие", "да"],
+  );
+  assert.equal(unevenBounds.length, 3);
+  const midDur = unevenBounds[1]!.endMs - unevenBounds[1]!.startMs;
+  const short0 = unevenBounds[0]!.endMs - unevenBounds[0]!.startMs;
+  assert.ok(
+    midDur > short0 * 1.6,
+    `long word should get longer span (${midDur} vs ${short0})`,
+  );
+  assert.ok(
+    unevenBounds[0]!.endMs >= 250 && unevenBounds[0]!.endMs <= 520,
+    `uneven cut0 in silence, got ${unevenBounds[0]!.endMs}`,
   );
 
   // Sliced unit edges must be near-zero after fade + zero-cross snap.
@@ -292,6 +365,11 @@ async function main() {
     sliceWavToFile(burstPath, sliceOut, 100, 400),
     true,
     "sliceWavToFile should succeed",
+  );
+  assert.equal(
+    sliceWavToFile(burstPath, sliceOut + ".tiny.wav", 100, 130),
+    false,
+    "tiny/truncated crumb slices must be rejected",
   );
   {
     const info = parseWavInfo(sliceOut);
@@ -307,6 +385,65 @@ async function main() {
     } finally {
       fs.closeSync(fd);
     }
+  }
+
+  // Stitch: RMS-matched overlap-add should not hard-click at the join.
+  const stitchA = path.resolve(
+    process.cwd(),
+    "seed",
+    "voice-studio",
+    "_smoke-stitch-a.wav",
+  );
+  const stitchB = path.resolve(
+    process.cwd(),
+    "seed",
+    "voice-studio",
+    "_smoke-stitch-b.wav",
+  );
+  {
+    const sr = 16000;
+    const mk = (hz: number, amp: number, sec: number) => {
+      const n = Math.floor(sr * sec);
+      const pcm = Buffer.alloc(n * 2);
+      for (let i = 0; i < n; i++) {
+        const env =
+          i < 200 ? i / 200 : i > n - 200 ? (n - i) / 200 : 1;
+        const s = Math.sin(2 * Math.PI * hz * (i / sr)) * amp * env;
+        pcm.writeInt16LE((s * 32767) | 0, i * 2);
+      }
+      return pcm;
+    };
+    writeWavMono(stitchA, sr, mk(440, 0.55, 0.35));
+    writeWavMono(stitchB, sr, mk(554, 0.22, 0.35));
+    const ia = parseWavInfo(stitchA)!;
+    const ib = parseWavInfo(stitchB)!;
+    const pa = Buffer.alloc(ia.dataSize);
+    const pb = Buffer.alloc(ib.dataSize);
+    const fda = fs.openSync(stitchA, "r");
+    const fdb = fs.openSync(stitchB, "r");
+    try {
+      fs.readSync(fda, pa, 0, pa.length, ia.dataOffset);
+      fs.readSync(fdb, pb, 0, pb.length, ib.dataOffset);
+    } finally {
+      fs.closeSync(fda);
+      fs.closeSync(fdb);
+    }
+    const stitched = stitchPcmInt16OverlapAdd([
+      { pcm: pa, sampleRate: ia.sampleRate, channels: ia.channels },
+      { pcm: pb, sampleRate: ib.sampleRate, channels: ib.channels },
+    ]);
+    assert.ok(stitched, "stitch overlap-add must return PCM");
+    const mid = Math.floor(stitched!.pcm.length / 4);
+    const joinRms = pcmInt16Rms(stitched!.pcm, 1, mid - 80, 160);
+    assert.ok(
+      joinRms < 0.55,
+      `join should not spike after RMS match + OLA, rms=${joinRms}`,
+    );
+    assert.ok(
+      stitched!.pcm.length / 2 >
+        (pa.length + pb.length) / 2 - sr * 0.08,
+      "stitched length should keep most of both units",
+    );
   }
 
   // Compressed → PCM path (user m4a / AyuGram clips). Requires ffmpeg on PATH
@@ -365,7 +502,16 @@ async function main() {
     assert.ok(converted, "ffmpeg m4a→wav conversion must succeed");
     assert.ok(parseWavInfo(converted!), "converted must be PCM wav");
   } finally {
-    for (const p of [burstPath, sliceOut, m4aPath, m4aWav]) {
+    for (const p of [
+      burstPath,
+      unevenPath,
+      sliceOut,
+      `${sliceOut}.tiny.wav`,
+      stitchA,
+      stitchB,
+      m4aPath,
+      m4aWav,
+    ]) {
       try {
         fs.unlinkSync(p);
       } catch {

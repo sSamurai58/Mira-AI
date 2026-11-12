@@ -31,6 +31,12 @@ export type WordBoundary = {
 
 const FRAME_MS = 20;
 const HOP_MS = 10;
+/** Pad cuts into silence so consonants at word edges are not truncated. */
+export const BOUNDARY_PAD_MS = 18;
+/** Absolute floor for a keepable word unit (rejects mid-phoneme crumbs). */
+export const MIN_WORD_MS = 90;
+/** Soften equal-energy bias with text length / syllable proxies when provided. */
+export const MIN_RELATIVE_WORD_WEIGHT = 0.55;
 
 function readPcmMonoNormalized(filePath: string): {
   samples: Float32Array;
@@ -257,34 +263,260 @@ function frameIndexToMs(
   usable: number,
 ): number {
   if (frameCount <= 0) return padMs;
-  return padMs + (frame / frameCount) * usable;
+  return padMs + (frame / Math.max(1, frameCount)) * usable;
+}
+
+/** Relative duration prior from orthography (letters + vowel/syllable proxy). */
+export function relativeWordDurationWeights(words: string[]): number[] {
+  if (!words.length) return [];
+  return words.map((raw) => {
+    const letters = raw.replace(/[^\p{L}\p{N}]+/gu, "");
+    const vowels =
+      letters.match(/[аеёиоуыэюяaeiouyáéíóúäöü]/gi)?.length ?? 0;
+    const len = Math.max(1, letters.length);
+    return Math.max(
+      MIN_RELATIVE_WORD_WEIGHT,
+      len * 0.55 + vowels * 0.95 + (len <= 2 ? -0.15 : 0),
+    );
+  });
 }
 
 /**
- * Spectral/energy word boundaries (forced-alignment proxy).
+ * Speech / silence mask with hysteresis so brief dips mid-phoneme do not
+ * open a cut window, and brief spikes in noise do not look like onsets.
+ */
+function speechMaskHysteresis(
+  energies: number[],
+  floor: number,
+  dyn: number,
+): boolean[] {
+  const enter = floor + dyn * 0.3;
+  const leave = floor + dyn * 0.12;
+  let inSpeech = false;
+  return energies.map((e) => {
+    if (!inSpeech && e >= enter) inSpeech = true;
+    else if (inSpeech && e <= leave) inSpeech = false;
+    return inSpeech;
+  });
+}
+
+type SpeechIsland = { start: number; end: number };
+
+/** Contiguous speech runs from a hysteresis mask; merge tiny gaps. */
+function findSpeechIslands(
+  mask: boolean[],
+  minFrames: number,
+  mergeGapFrames: number,
+): SpeechIsland[] {
+  const raw: SpeechIsland[] = [];
+  let i = 0;
+  while (i < mask.length) {
+    while (i < mask.length && !mask[i]) i += 1;
+    if (i >= mask.length) break;
+    const start = i;
+    while (i < mask.length && mask[i]) i += 1;
+    raw.push({ start, end: i });
+  }
+  if (!raw.length) return raw;
+  const merged: SpeechIsland[] = [{ ...raw[0]! }];
+  for (let k = 1; k < raw.length; k++) {
+    const prev = merged[merged.length - 1]!;
+    const cur = raw[k]!;
+    if (cur.start - prev.end <= mergeGapFrames) {
+      prev.end = cur.end;
+    } else {
+      merged.push({ ...cur });
+    }
+  }
+  return merged.filter((isl) => isl.end - isl.start >= minFrames);
+}
+
+/** Local valley depth: how much quieter this frame is vs ±radius neighbors. */
+function valleyDepth(energies: number[], i: number, radius: number): number {
+  const e = energies[i]!;
+  let peak = e;
+  const lo = Math.max(0, i - radius);
+  const hi = Math.min(energies.length - 1, i + radius);
+  for (let j = lo; j <= hi; j++) {
+    if (energies[j]! > peak) peak = energies[j]!;
+  }
+  return Math.max(0, peak - e);
+}
+
+/**
+ * Enforce minimum unit duration by nudging internal cuts (never shrink the
+ * whole phrase). Tiny / truncated crumbs are merged into neighbors.
+ */
+function enforceMinWordMs(
+  bounds: WordBoundary[],
+  minMs: number,
+  windowStart: number,
+  windowEnd: number,
+): WordBoundary[] {
+  if (bounds.length <= 1) return bounds;
+  const out = bounds.map((b) => ({ ...b }));
+  for (let i = 0; i < out.length; i++) {
+    const b = out[i]!;
+    if (b.endMs - b.startMs >= minMs) continue;
+    const need = minMs - (b.endMs - b.startMs);
+    if (i < out.length - 1) {
+      const next = out[i + 1]!;
+      const give = Math.min(need, Math.max(0, next.endMs - next.startMs - minMs));
+      const take = give > 0 ? give : need * 0.5;
+      b.endMs += take;
+      next.startMs = b.endMs;
+    } else if (i > 0) {
+      const prev = out[i - 1]!;
+      const take = Math.min(
+        need,
+        Math.max(0, prev.endMs - prev.startMs - minMs * 0.5),
+      );
+      b.startMs -= take;
+      prev.endMs = b.startMs;
+    }
+  }
+  out[0]!.startMs = Math.max(windowStart, out[0]!.startMs);
+  out[out.length - 1]!.endMs = Math.min(
+    windowEnd,
+    Math.max(out[out.length - 1]!.endMs, windowEnd),
+  );
+  for (let i = 1; i < out.length; i++) {
+    if (out[i]!.startMs < out[i - 1]!.endMs) out[i]!.startMs = out[i - 1]!.endMs;
+    if (out[i]!.endMs <= out[i]!.startMs) {
+      out[i]!.endMs = Math.min(windowEnd, out[i]!.startMs + minMs);
+    }
+  }
+  return out;
+}
+
+/**
+ * Pad onsets earlier / offsets later into silence valleys so cuts do not sit
+ * on phoneme attacks. Does not cross neighboring cuts.
+ */
+function applyBoundaryPadding(
+  bounds: WordBoundary[],
+  energies: number[],
+  speechMask: boolean[],
+  padMs: number,
+  usablePadMs: number,
+  usable: number,
+  frameCount: number,
+): WordBoundary[] {
+  if (!bounds.length || padMs <= 0) return bounds;
+  const out = bounds.map((b) => ({ ...b }));
+  const msPerFrame = usable / Math.max(1, frameCount);
+  const padFrames = Math.max(1, Math.round(padMs / Math.max(1e-6, msPerFrame)));
+
+  for (let i = 0; i < out.length; i++) {
+    const b = out[i]!;
+    const startFrame = Math.round(
+      ((b.startMs - usablePadMs) / usable) * frameCount,
+    );
+    const endFrame = Math.round(
+      ((b.endMs - usablePadMs) / usable) * frameCount,
+    );
+    if (i > 0) {
+      let s = Math.max(0, Math.min(frameCount - 1, startFrame));
+      const limit = Math.max(
+        0,
+        Math.round(((out[i - 1]!.endMs - usablePadMs) / usable) * frameCount) +
+          1,
+      );
+      let walkedSilence = 0;
+      for (let step = 0; step < padFrames && s - 1 >= limit; step++) {
+        const prev = s - 1;
+        if (speechMask[prev] && energies[prev]! > energies[s]! * 1.2) break;
+        s = prev;
+        if (!speechMask[prev]) {
+          walkedSilence += 1;
+          if (walkedSilence >= Math.ceil(padFrames * 0.6)) break;
+        }
+      }
+      b.startMs = frameIndexToMs(s, frameCount, usablePadMs, usable);
+    }
+    if (i < out.length - 1) {
+      let e = Math.max(0, Math.min(frameCount, endFrame));
+      const limit = Math.min(
+        frameCount,
+        Math.round(
+          ((out[i + 1]!.startMs - usablePadMs) / usable) * frameCount,
+        ) - 1,
+      );
+      let walkedSilence = 0;
+      for (let step = 0; step < padFrames && e + 1 <= limit; step++) {
+        const next = e + 1;
+        if (speechMask[next] && energies[next]! > energies[e]! * 1.2) break;
+        e = next;
+        if (!speechMask[next]) {
+          walkedSilence += 1;
+          if (walkedSilence >= Math.ceil(padFrames * 0.6)) break;
+        }
+      }
+      b.endMs = frameIndexToMs(e, frameCount, usablePadMs, usable);
+    }
+  }
+  for (let i = 1; i < out.length; i++) {
+    if (out[i]!.startMs < out[i - 1]!.endMs) {
+      const mid = (out[i]!.startMs + out[i - 1]!.endMs) / 2;
+      out[i - 1]!.endMs = mid;
+      out[i]!.startMs = mid;
+    }
+  }
+  return out;
+}
+
+/**
+ * Spectral/energy word boundaries (forced-alignment proxy) — v0.1.7.
  *
- * 1) Partition by cumulative speech energy (rough equal-energy slots).
- * 2) Snap each internal cut to the best nearby frame: low RMS (pause) and
- *    high spectral flux (frequency-band transition) — avoids mid-vowel chops.
+ * Why 0.1.4 still cut early/crooked: equal-energy slots ignore that short
+ * function words ≠ long content words; valley search was narrow; no
+ * hysteresis (mid-phoneme dips looked like pauses); no onset/offset margin;
+ * 12 ms crumbs survived into the lexicon.
+ *
+ * 1) Relative duration prior from word text (letters/vowels) blended with
+ *    cumulative speech energy — not pure equal-energy.
+ * 2) Snap each internal cut with a wide window: silence (hysteresis mask),
+ *    energy valley depth, spectral flux, penalty for rising energy (attack).
+ * 3) Pad onsets/offsets into silence; enforce min word duration.
  * Falls back to equal-time if energy is flat / unusable.
  */
 export function estimateWordBoundariesByEnergy(
   filePath: string,
   wordCount: number,
   durationMsHint?: number,
+  wordTexts?: string[],
 ): WordBoundary[] {
   const n = Math.max(1, wordCount);
   const pcm = readPcmMonoNormalized(filePath);
   const durationMs = pcm?.durationMs ?? durationMsHint ?? 800;
   const padMs = Math.min(40, durationMs * 0.04);
   const usable = Math.max(80, durationMs - padMs * 2);
+  const minWordMs = Math.min(
+    MIN_WORD_MS,
+    Math.max(45, usable / Math.max(2, n * 1.35)),
+  );
 
   const equal = (): WordBoundary[] => {
-    const slot = usable / n;
-    return Array.from({ length: n }, (_, i) => ({
-      startMs: padMs + slot * i,
-      endMs: padMs + slot * (i + 1),
-    }));
+    const texts =
+      wordTexts && wordTexts.length === n
+        ? wordTexts
+        : Array.from({ length: n }, () => "x");
+    const rel = relativeWordDurationWeights(texts);
+    const relSum = rel.reduce((a, b) => a + b, 0) || n;
+    const bounds: WordBoundary[] = [];
+    let acc = 0;
+    for (let i = 0; i < n; i++) {
+      const startMs = padMs + (acc / relSum) * usable;
+      acc += rel[i]!;
+      const endMs = padMs + (acc / relSum) * usable;
+      bounds.push({
+        startMs,
+        endMs: Math.max(startMs + minWordMs * 0.5, endMs),
+      });
+    }
+    const last = bounds[bounds.length - 1];
+    if (last) last.endMs = padMs + usable;
+    return enforceMinWordMs(bounds, minWordMs, padMs, padMs + usable);
   };
 
   if (!pcm || n === 1) {
@@ -302,82 +534,191 @@ export function estimateWordBoundariesByEnergy(
   const floor = sorted[Math.floor(sorted.length * 0.15)] ?? 0;
   const ceiling = sorted[Math.floor(sorted.length * 0.85)] ?? floor + 1e-6;
   const dyn = Math.max(1e-6, ceiling - floor * 0.5);
-  const weights = energies.map((e) => Math.max(1e-6, e - floor * 0.5));
-  const total = weights.reduce((a, b) => a + b, 0);
-  if (total <= 1e-5) return equal();
+  const energyWeights = energies.map((e) => Math.max(1e-6, e - floor * 0.5));
+  const energyTotal = energyWeights.reduce((a, b) => a + b, 0);
+  if (energyTotal <= 1e-5) return equal();
 
-  const maxFlux = Math.max(...flux, 1e-9);
-  // Lower score = better cut: prefer quiet frames with a band-mix jump.
-  const cutScore = (i: number): number => {
-    const eNorm = Math.max(0, (energies[i]! - floor * 0.5) / dyn);
-    const fNorm = flux[i]! / maxFlux;
-    return eNorm * 1.15 - fNorm * 0.55;
-  };
+  const texts =
+    wordTexts && wordTexts.length === n
+      ? wordTexts
+      : Array.from({ length: n }, () => "xx");
+  const rel = relativeWordDurationWeights(texts);
+  const relSum = rel.reduce((a, b) => a + b, 0) || n;
 
-  const searchRadius = Math.max(
-    2,
-    Math.min(18, Math.floor(energies.length / (n * 3))),
+  const targetShares: number[] = [];
+  {
+    let accShare = 0;
+    for (let w = 0; w < n - 1; w++) {
+      accShare += rel[w]! / relSum;
+      targetShares.push(accShare);
+    }
+  }
+
+  const speechMask = speechMaskHysteresis(energies, floor, dyn);
+  const minGapFrames = Math.max(3, Math.round(minWordMs / HOP_MS));
+  const islands = findSpeechIslands(
+    speechMask,
+    Math.max(2, Math.round(40 / HOP_MS)),
+    Math.max(2, Math.round(40 / HOP_MS)),
   );
 
-  // Nominal cut frames from cumulative energy, then snap to best valley/flux.
-  const cutFrames: number[] = [];
-  let acc = 0;
-  let nextTarget = 1;
-  for (let i = 0; i < weights.length && nextTarget < n; i++) {
-    acc += weights[i]!;
-    if (acc < (total / n) * nextTarget) continue;
-    const nominal = i;
-    const lo = Math.max(
-      cutFrames.length ? cutFrames[cutFrames.length - 1]! + 2 : 1,
-      nominal - searchRadius,
-    );
-    const hi = Math.min(weights.length - 2, nominal + searchRadius);
-    let best = nominal;
-    let bestScore = Number.POSITIVE_INFINITY;
-    for (let f = lo; f <= hi; f++) {
-      const s = cutScore(f);
-      if (s < bestScore) {
-        bestScore = s;
-        best = f;
+  // When clear speech islands match word count, map 1:1 (best anti-chop path).
+  let bounds: WordBoundary[];
+  if (islands.length === n) {
+    bounds = islands.map((isl, idx) => {
+      const startMs = frameIndexToMs(isl.start, energyWeights.length, padMs, usable);
+      const endMs = frameIndexToMs(isl.end, energyWeights.length, padMs, usable);
+      // Share silence midpoint with neighbors so pads have room.
+      let s = startMs;
+      let e = endMs;
+      if (idx > 0) {
+        const prevEnd = frameIndexToMs(
+          islands[idx - 1]!.end,
+          energyWeights.length,
+          padMs,
+          usable,
+        );
+        s = (prevEnd + startMs) / 2;
+      } else {
+        s = padMs;
       }
-    }
-    cutFrames.push(best);
-    nextTarget += 1;
-  }
-  while (cutFrames.length < n - 1) {
-    const prev = cutFrames[cutFrames.length - 1] ?? 0;
-    const rem = n - 1 - cutFrames.length;
-    const step = Math.max(
-      2,
-      Math.floor((weights.length - prev - 1) / (rem + 1)),
-    );
-    cutFrames.push(Math.min(weights.length - 2, prev + step));
-  }
-
-  const bounds: WordBoundary[] = [];
-  let startFrame = 0;
-  for (let w = 0; w < n; w++) {
-    const endFrame = w === n - 1 ? weights.length : cutFrames[w]!;
-    const startMs = frameIndexToMs(startFrame, weights.length, padMs, usable);
-    const endMs = frameIndexToMs(endFrame, weights.length, padMs, usable);
-    bounds.push({
-      startMs,
-      endMs: Math.max(startMs + 12, endMs),
+      if (idx < n - 1) {
+        const nextStart = frameIndexToMs(
+          islands[idx + 1]!.start,
+          energyWeights.length,
+          padMs,
+          usable,
+        );
+        e = (endMs + nextStart) / 2;
+      } else {
+        e = padMs + usable;
+      }
+      return { startMs: s, endMs: Math.max(s + minWordMs * 0.4, e) };
     });
-    startFrame = endFrame;
+  } else {
+    const maxFlux = Math.max(...flux, 1e-9);
+    // Keep snap local (~40–150 ms). A wide window jumps to the *next* silence
+    // valley and steals whole words.
+    const searchRadius = Math.max(
+      4,
+      Math.min(15, Math.floor(energies.length / Math.max(4, n * 4))),
+    );
+
+    const cutScore = (i: number, nominal: number): number => {
+      const eNorm = Math.max(0, (energies[i]! - floor * 0.5) / dyn);
+      const fNorm = flux[i]! / maxFlux;
+      const valley = valleyDepth(energies, i, 3) / dyn;
+      const silent = speechMask[i] ? 0 : 1;
+      const prev = energies[Math.max(0, i - 1)]!;
+      const next = energies[Math.min(energies.length - 1, i + 1)]!;
+      const rising = Math.max(0, next - prev) / dyn;
+      const dist = Math.abs(i - nominal) / Math.max(1, searchRadius);
+      // Prefer cutting at/after nominal (end of allotted share) over early chops.
+      const early = Math.max(0, nominal - i) / Math.max(1, searchRadius);
+      return (
+        eNorm * 1.35 -
+        fNorm * 0.65 -
+        valley * 0.9 -
+        silent * 1.25 +
+        rising * 1.1 +
+        dist * 0.85 +
+        early * 0.55
+      );
+    };
+
+    const cutFrames: number[] = [];
+    let energyAcc = 0;
+    let shareIdx = 0;
+    for (
+      let i = 0;
+      i < energyWeights.length && shareIdx < targetShares.length;
+      i++
+    ) {
+      energyAcc += energyWeights[i]!;
+      const energyShare = energyAcc / energyTotal;
+      if (energyShare < targetShares[shareIdx]!) continue;
+      const nominal = i;
+      const prevCut = cutFrames.length ? cutFrames[cutFrames.length - 1]! : 0;
+      const lo = Math.max(prevCut + minGapFrames, nominal - searchRadius);
+      const hi = Math.min(
+        energyWeights.length -
+          2 -
+          (targetShares.length - shareIdx - 1) * minGapFrames,
+        nominal + searchRadius,
+      );
+      let best = Math.max(lo, Math.min(hi, nominal));
+      let bestScore = Number.POSITIVE_INFINITY;
+      if (lo <= hi) {
+        for (let f = lo; f <= hi; f++) {
+          const s = cutScore(f, nominal);
+          if (s < bestScore) {
+            bestScore = s;
+            best = f;
+          }
+        }
+      }
+      cutFrames.push(best);
+      shareIdx += 1;
+    }
+    while (cutFrames.length < n - 1) {
+      const prev = cutFrames[cutFrames.length - 1] ?? 0;
+      const rem = n - 1 - cutFrames.length;
+      const step = Math.max(
+        minGapFrames,
+        Math.floor((energyWeights.length - prev - 1) / (rem + 1)),
+      );
+      cutFrames.push(Math.min(energyWeights.length - 2, prev + step));
+    }
+
+    bounds = [];
+    let startFrame = 0;
+    for (let w = 0; w < n; w++) {
+      const endFrame = w === n - 1 ? energyWeights.length : cutFrames[w]!;
+      const startMs = frameIndexToMs(
+        startFrame,
+        energyWeights.length,
+        padMs,
+        usable,
+      );
+      const endMs = frameIndexToMs(
+        endFrame,
+        energyWeights.length,
+        padMs,
+        usable,
+      );
+      bounds.push({
+        startMs,
+        endMs: Math.max(startMs + minWordMs * 0.4, endMs),
+      });
+      startFrame = endFrame;
+    }
   }
-  // Ensure monotonic non-overlapping coverage of the usable window.
   for (let i = 1; i < bounds.length; i++) {
     if (bounds[i]!.startMs < bounds[i - 1]!.endMs) {
       bounds[i]!.startMs = bounds[i - 1]!.endMs;
     }
     if (bounds[i]!.endMs <= bounds[i]!.startMs) {
-      bounds[i]!.endMs = bounds[i]!.startMs + 12;
+      bounds[i]!.endMs = bounds[i]!.startMs + minWordMs * 0.4;
     }
   }
   const last = bounds[bounds.length - 1];
   if (last) last.endMs = Math.max(last.endMs, padMs + usable);
-  return bounds.slice(0, n);
+
+  const padded = applyBoundaryPadding(
+    bounds,
+    energies,
+    speechMask,
+    BOUNDARY_PAD_MS,
+    padMs,
+    usable,
+    energyWeights.length,
+  );
+  return enforceMinWordMs(
+    padded.slice(0, n),
+    minWordMs,
+    padMs,
+    padMs + usable,
+  );
 }
 
 /**

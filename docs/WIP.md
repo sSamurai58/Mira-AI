@@ -347,16 +347,15 @@ UX: **Создать → фразы → загрузить → Mira сама о�
 
 ## 2026-11-12 — Релиз 0.1.7 WIP (не публиковать)
 
-Ветка `cursor/release-0-1-7-6838`. Пакет **0.1.7**.
+Ветка `cursor/release-0-1-7-6838`. Пакет **0.1.7** (bump уже на ветке).
 
-Контекст: пользователь прислал озвучку ответа «меню идей» (Хабаровск / план дня / мини-проект / «что ближе»).  
-Это **чат LLM → TTS**, не Voice Studio «Сгенерировать фразы». 0.1.4–0.1.6 это не чинили.
+Контекст: Voice Studio **нарезка** всё ещё режет слова рано/криво, **нет нормального сращивания** после 0.1.4 (`02ad96d`). Не про chat text templates.
 
-- [x] Bump `package.json` / `package-lock.json` → 0.1.7
-- [x] `electron/chatDiversity.ts` + browser mirror: детект canned menu + anti-repeat system block
-- [x] Orchestrator + browser LLM system rules: запрет повторного брошюрного меню
-- [x] Smoke `npm run chat-diversity:smoke`
-- [ ] Публикация — **только после явной команды**
+- [x] Boundaries: speech-island map when gaps match words; else text-weighted prior + hysteresis valley/flux snap; onset/offset pad; min word duration; reject tiny crumbs
+- [x] Stitch: zero-cross OLA, adaptive 22–55 ms crossfade, RMS level-match (`tts.ts` + `stitchPcmInt16OverlapAdd`)
+- [x] UI note: после обновления — re-import + полная пересборка
+- [x] p9 smoke: uneven words, tiny-slice reject, stitch RMS
+- [ ] Публикация / tag — **только после явной команды**
 
 ## Шаблон новой темы
 

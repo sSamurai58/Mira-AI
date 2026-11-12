@@ -22,7 +22,7 @@
 
 | Дата | Решение | Почему |
 |------|---------|--------|
-| 2026-11-12 | **0.1.7 WIP: разнообразие чат-ответов** (не Voice Studio) | Жалоба: озвученный ответ снова «меню» Хабаровск/план/мини-проект — это chat LLM + TTS, а novelty 0.1.6 только «Сгенерировать фразы»; фиксим system + anti-repeat блок (`chatDiversity`) |
+| 2026-11-12 | **0.1.7 WIP: Voice Studio нарезка/сращивание** (+ chat diversity earlier on branch; не публиковать) | 0.1.4 spectral-flux+10ms fade всё ещё резал mid-phoneme / криво склеивал; text-weighted + island boundaries, hysteresis, pad, min duration, OLA+RMS stitch; после обновления — re-import + полная пересборка |
 | 2026-11-12 | **Релиз 0.1.6 опубликован** (`v0.1.6`, Latest) | Portal Workshop overlays; plain-language TTS curriculum table; phrase-generation lexical novelty/coverage; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.6 |
 | 2026-11-12 | Voice Studio: новые генерации фраз → новизна словаря (частоты корпуса, предлоги/частицы, soft-filter повторов) | Учиться = расширять покрытие, а не повторять одни и те же слова десятки/сотни раз |
 | 2026-11-12 | Workshop overlays (`Обученные фразы`, CatalogEdit) → `createPortal(document.body)` | Sticky `.workshop-layout > .settings-nav` z-index 2 sits above `.workshop-main` (z=0); in-tree `modal-backdrop` z=40 was trapped |

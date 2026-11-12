@@ -25,8 +25,10 @@ let activeCustomAudio: HTMLAudioElement | null = null;
 let activeBufferSource: AudioBufferSourceNode | null = null;
 let sharedAudioCtx: AudioContext | null = null;
 
-/** Slightly longer equal-power join — pairs with faded word-unit edges. */
-const CROSSFADE_SEC = 0.028;
+/** Default join length; adaptive path stretches 22–55 ms by edge energy. */
+const CROSSFADE_SEC = 0.036;
+const CROSSFADE_MIN_SEC = 0.022;
+const CROSSFADE_MAX_SEC = 0.055;
 
 export function isTtsAvailable(): boolean {
   const engine = getActiveTtsEngine();
@@ -210,7 +212,53 @@ function resampleBuffer(
   return out;
 }
 
-/** Concatenate buffers with a short equal-power crossfade. */
+function channelRms(data: Float32Array, from = 0, count?: number): number {
+  const n = Math.min(data.length - from, count ?? data.length);
+  if (n <= 0) return 0;
+  let sum = 0;
+  for (let i = 0; i < n; i++) {
+    const v = data[from + i]!;
+    sum += v * v;
+  }
+  return Math.sqrt(sum / n);
+}
+
+function snapZeroCrossFloat(
+  data: Float32Array,
+  around: number,
+  window: number,
+): number {
+  const lo = Math.max(1, around - window);
+  const hi = Math.min(data.length - 1, around + window);
+  let best = around;
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (let i = lo; i <= hi; i++) {
+    const a = data[i - 1]!;
+    const b = data[i]!;
+    const crosses = (a <= 0 && b >= 0) || (a >= 0 && b <= 0);
+    const mag = Math.min(Math.abs(a), Math.abs(b));
+    const score = (crosses ? 0 : 2) + mag + Math.abs(i - around) * 0.0004;
+    if (score < bestScore) {
+      bestScore = score;
+      best = i;
+    }
+  }
+  return best;
+}
+
+function scaleBufferInPlace(buf: AudioBuffer, gain: number): void {
+  if (Math.abs(gain - 1) < 0.02) return;
+  for (let ch = 0; ch < buf.numberOfChannels; ch++) {
+    const d = buf.getChannelData(ch);
+    for (let i = 0; i < d.length; i++) d[i]! *= gain;
+  }
+}
+
+/**
+ * Concatenate buffers with adaptive equal-power overlap-add:
+ * resample → RMS level-match → zero-cross aligned crossfade (22–55 ms).
+ * Fixed short fades in 0.1.4 still clicked when unit levels / phases differed.
+ */
 export function concatenateWithCrossfade(
   ctx: AudioContext,
   buffers: AudioBuffer[],
@@ -224,45 +272,93 @@ export function concatenateWithCrossfade(
   const channels = Math.max(...buffers.map((b) => b.numberOfChannels));
   const rate = buffers[0]!.sampleRate;
   const normalized = buffers.map((b) => resampleBuffer(ctx, b, rate));
-  const xf = Math.max(1, Math.floor(crossfadeSec * rate));
 
-  let total = normalized[0]!.length;
-  for (let i = 1; i < normalized.length; i++) {
-    total += Math.max(0, normalized[i]!.length - xf);
+  // Match each unit toward median RMS so joins are not stepped in loudness.
+  const rmsList = normalized.map((b) => channelRms(b.getChannelData(0)));
+  const sortedRms = [...rmsList].sort((a, b) => a - b);
+  const targetRms = Math.max(
+    1e-5,
+    sortedRms[Math.floor(sortedRms.length / 2)] ?? rmsList[0] ?? 0.05,
+  );
+  for (let i = 0; i < normalized.length; i++) {
+    const r = Math.max(1e-5, rmsList[i]!);
+    const gain = Math.max(0.65, Math.min(1.45, targetRms / r));
+    scaleBufferInPlace(normalized[i]!, gain);
   }
 
-  const out = ctx.createBuffer(channels, Math.max(1, total), rate);
-  const outs: Float32Array[] = [];
-  for (let ch = 0; ch < channels; ch++) outs.push(out.getChannelData(ch));
+  const minXf = Math.max(1, Math.floor(CROSSFADE_MIN_SEC * rate));
+  const maxXf = Math.max(
+    minXf,
+    Math.floor(Math.max(crossfadeSec, CROSSFADE_MAX_SEC) * rate),
+  );
 
-  let writeAt = 0;
-  for (let i = 0; i < normalized.length; i++) {
+  // Grow per-channel accumulators (length changes with ZC-aligned overlaps).
+  const acc: Float32Array[] = [];
+  for (let ch = 0; ch < channels; ch++) {
+    const src0 =
+      ch < normalized[0]!.numberOfChannels
+        ? normalized[0]!.getChannelData(ch)
+        : new Float32Array(normalized[0]!.length);
+    acc.push(Float32Array.from(src0));
+  }
+
+  for (let i = 1; i < normalized.length; i++) {
     const buf = normalized[i]!;
-    const fade = i === 0 ? 0 : Math.min(xf, buf.length, writeAt);
+    const edgePrev = channelRms(
+      acc[0]!,
+      Math.max(0, acc[0]!.length - minXf),
+      minXf,
+    );
+    const edgeNext = channelRms(
+      buf.numberOfChannels > 0
+        ? buf.getChannelData(0)
+        : new Float32Array(buf.length),
+      0,
+      minXf,
+    );
+    const edge = Math.max(edgePrev, edgeNext);
+    const t = Math.max(0, Math.min(1, (edge - 0.02) / 0.12));
+    let xf = Math.round(minXf + (maxXf - minXf) * (0.35 + 0.65 * t));
+    xf = Math.min(
+      xf,
+      Math.floor(acc[0]!.length * 0.45),
+      Math.floor(buf.length * 0.45),
+    );
+    xf = Math.max(1, xf);
+
+    const joinAt = snapZeroCrossFloat(
+      acc[0]!,
+      acc[0]!.length - xf,
+      Math.min(64, xf),
+    );
+    const start = Math.max(0, joinAt);
+    const useOverlap = Math.min(xf, acc[0]!.length - start, buf.length);
+    const nextLen = start + buf.length;
     for (let ch = 0; ch < channels; ch++) {
+      const prev = acc[ch]!;
       const src =
         ch < buf.numberOfChannels
           ? buf.getChannelData(ch)
           : new Float32Array(buf.length);
-      const dst = outs[ch]!;
-      if (i === 0) {
-        dst.set(src, 0);
-      } else {
-        const overlapStart = writeAt - fade;
-        for (let n = 0; n < fade; n++) {
-          const t = fade <= 1 ? 1 : n / (fade - 1);
-          // equal-power crossfade
-          const a = Math.cos(t * 0.5 * Math.PI);
-          const b = Math.sin(t * 0.5 * Math.PI);
-          const idx = overlapStart + n;
-          dst[idx] = (dst[idx] ?? 0) * a + src[n]! * b;
-        }
-        if (buf.length > fade) {
-          dst.set(src.subarray(fade), writeAt);
-        }
+      const grown = new Float32Array(nextLen);
+      grown.set(prev.subarray(0, start + useOverlap), 0);
+      for (let n = 0; n < useOverlap; n++) {
+        const u = useOverlap <= 1 ? 1 : n / (useOverlap - 1);
+        const a = Math.cos(u * 0.5 * Math.PI);
+        const b = Math.sin(u * 0.5 * Math.PI);
+        grown[start + n] = (prev[start + n] ?? 0) * a + src[n]! * b;
       }
+      if (buf.length > useOverlap) {
+        grown.set(src.subarray(useOverlap), start + useOverlap);
+      }
+      acc[ch] = grown;
     }
-    writeAt += i === 0 ? buf.length : buf.length - fade;
+  }
+
+  const out = ctx.createBuffer(channels, Math.max(1, acc[0]!.length), rate);
+  for (let ch = 0; ch < channels; ch++) {
+    const dst = out.getChannelData(ch);
+    dst.set(acc[ch]!);
   }
   return out;
 }

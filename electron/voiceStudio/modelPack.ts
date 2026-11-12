@@ -229,10 +229,15 @@ function writePcmWav(
   fs.writeFileSync(outPath, Buffer.concat([header, pcm]));
 }
 
-/** Edge fade applied to sliced word units (reduces click on reassembly). */
-export const SLICE_EDGE_FADE_MS = 10;
-/** Search window for zero-crossing snap around cut points. */
-export const SLICE_ZERO_CROSS_MS = 6;
+/**
+ * Soft edge fade on sliced units. Keep shorter than stitch crossfade so
+ * overlap-add (not double-mute) does the real join.
+ */
+export const SLICE_EDGE_FADE_MS = 6;
+/** Search window for quiet zero-crossing snap around cut points. */
+export const SLICE_ZERO_CROSS_MS = 14;
+/** Reject / skip word slices shorter than this after snap (truncated crumb). */
+export const MIN_SLICE_MS = 70;
 
 function readPcmInt16MonoFrame(
   pcm: Buffer,
@@ -258,7 +263,10 @@ function writePcmInt16MonoFrame(
   }
 }
 
-/** Snap a frame index to the nearest zero-crossing within ±windowFrames. */
+/**
+ * Snap a frame index to the nearest quiet zero-crossing within ±windowFrames.
+ * Prefers true polarity flips with low |sample| (not mid-phoneme loud ZCs).
+ */
 export function snapToZeroCrossing(
   pcm: Buffer,
   frame: number,
@@ -279,9 +287,16 @@ export function snapToZeroCrossing(
     const b = readPcmInt16MonoFrame(pcm, f, channels);
     const crosses = (a <= 0 && b >= 0) || (a >= 0 && b <= 0);
     const mag = Math.min(Math.abs(a), Math.abs(b));
+    // Local loudness over ±2 samples — avoid snapping onto a voiced crest.
+    let local = Math.abs(b);
+    for (let k = -2; k <= 2; k++) {
+      const idx = f + k;
+      if (idx < 0 || idx >= frameCount) continue;
+      local = Math.max(local, Math.abs(readPcmInt16MonoFrame(pcm, idx, channels)));
+    }
     const dist = Math.abs(f - frame);
-    // Prefer true zero-crossings; otherwise lowest |sample| near target.
-    const score = (crosses ? 0 : 1000) + mag + dist * 0.25;
+    const score =
+      (crosses ? 0 : 1400) + mag * 1.1 + local * 0.35 + dist * 0.2;
     if (score < bestScore) {
       bestScore = score;
       best = f;
@@ -310,8 +325,9 @@ function applyEdgeFadeInt16(
 
 /**
  * Slice a PCM WAV by millisecond range into a new WAV file.
- * Snaps cuts to nearby zero-crossings and applies short cosine edge fades
- * so unit-selection reassembly does not click/buzz at joins.
+ * Snaps cuts to nearby quiet zero-crossings and applies short cosine edge
+ * fades so unit-selection reassembly does not click/buzz at joins.
+ * Rejects tiny / truncated crumbs (caller keeps phrase fragment instead).
  * Returns false if source is not slicable PCM (caller should fall back).
  */
 export function sliceWavToFile(
@@ -319,13 +335,16 @@ export function sliceWavToFile(
   outPath: string,
   startMs: number,
   endMs: number,
-  opts?: { fadeMs?: number; zeroCrossMs?: number },
+  opts?: { fadeMs?: number; zeroCrossMs?: number; minMs?: number },
 ): boolean {
   const info = parseWavInfo(srcPath);
   if (!info) return false;
   const bytesPerSample = (info.bitsPerSample / 8) * info.channels;
   const frameCountTotal = Math.floor(info.dataSize / bytesPerSample);
   if (frameCountTotal <= 0) return false;
+
+  const minMs = opts?.minMs ?? MIN_SLICE_MS;
+  if (endMs - startMs < minMs * 0.55) return false;
 
   let startFrame = Math.floor((startMs / 1000) * info.sampleRate);
   let endFrame = Math.ceil((endMs / 1000) * info.sampleRate);
@@ -375,26 +394,49 @@ export function sliceWavToFile(
           info.bitsPerSample,
           zcFrames,
         );
-      if (endFrame <= startFrame) endFrame = Math.min(frameCountTotal, startFrame + 1);
+      if (endFrame <= startFrame) {
+        endFrame = Math.min(frameCountTotal, startFrame + 1);
+      }
     }
 
-    const length = (endFrame - startFrame) * bytesPerSample;
+    const frameLen = endFrame - startFrame;
+    const durationMs = (frameLen / info.sampleRate) * 1000;
+    if (durationMs < minMs * 0.55) return false;
+
+    const length = frameLen * bytesPerSample;
     if (length <= 0) return false;
     const pcm = Buffer.alloc(length);
     fs.readSync(fd, pcm, 0, length, info.dataOffset + startFrame * bytesPerSample);
 
     if (info.bitsPerSample === 16) {
+      // Reject units that still look truncated: hot energy right at both
+      // edges with almost no interior (chopped mid-phoneme crumb).
+      if (frameLen >= 32) {
+        const edge = Math.max(4, Math.floor(frameLen * 0.08));
+        let edgeAcc = 0;
+        let midAcc = 0;
+        let midN = 0;
+        for (let f = 0; f < frameLen; f++) {
+          const a = Math.abs(readPcmInt16MonoFrame(pcm, f, info.channels));
+          if (f < edge || f >= frameLen - edge) edgeAcc += a;
+          else {
+            midAcc += a;
+            midN += 1;
+          }
+        }
+        const edgeMean = edgeAcc / Math.max(1, edge * 2);
+        const midMean = midAcc / Math.max(1, midN);
+        if (midMean > 200 && edgeMean > midMean * 1.35 && durationMs < minMs * 1.2) {
+          return false;
+        }
+      }
+
       const fadeMs = opts?.fadeMs ?? SLICE_EDGE_FADE_MS;
       const fadeFrames = Math.max(
         1,
         Math.floor((fadeMs / 1000) * info.sampleRate),
       );
-      applyEdgeFadeInt16(
-        pcm,
-        endFrame - startFrame,
-        info.channels,
-        fadeFrames,
-      );
+      applyEdgeFadeInt16(pcm, frameLen, info.channels, fadeFrames);
     }
 
     fs.mkdirSync(path.dirname(outPath), { recursive: true });
@@ -403,6 +445,140 @@ export function sliceWavToFile(
   } finally {
     fs.closeSync(fd);
   }
+}
+
+/** Mono float RMS of int16 interleaved PCM. */
+export function pcmInt16Rms(
+  pcm: Buffer,
+  channels: number,
+  fromFrame = 0,
+  frameCount?: number,
+): number {
+  const totalFrames = Math.floor(pcm.length / (2 * channels));
+  const n = Math.min(totalFrames - fromFrame, frameCount ?? totalFrames);
+  if (n <= 0) return 0;
+  let sum = 0;
+  for (let f = 0; f < n; f++) {
+    const s = readPcmInt16MonoFrame(pcm, fromFrame + f, channels) / 32768;
+    sum += s * s;
+  }
+  return Math.sqrt(sum / n);
+}
+
+function snapFloatZeroCross(
+  samples: Float32Array,
+  around: number,
+  window: number,
+): number {
+  const lo = Math.max(1, around - window);
+  const hi = Math.min(samples.length - 1, around + window);
+  let best = around;
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (let i = lo; i <= hi; i++) {
+    const a = samples[i - 1]!;
+    const b = samples[i]!;
+    const crosses = (a <= 0 && b >= 0) || (a >= 0 && b <= 0);
+    const mag = Math.min(Math.abs(a), Math.abs(b));
+    const score = (crosses ? 0 : 2) + mag + Math.abs(i - around) * 0.0005;
+    if (score < bestScore) {
+      bestScore = score;
+      best = i;
+    }
+  }
+  return best;
+}
+
+/**
+ * Overlap-add stitch for int16 mono/multi PCM units (Node / smoke mirror of
+ * browser concatenateWithCrossfade). Adaptive crossfade length, RMS match
+ * between adjacent units, zero-crossing aligned overlap.
+ */
+export function stitchPcmInt16OverlapAdd(
+  parts: Array<{ pcm: Buffer; sampleRate: number; channels: number }>,
+  opts?: { minCrossfadeMs?: number; maxCrossfadeMs?: number },
+): { pcm: Buffer; sampleRate: number; channels: number } | null {
+  if (!parts.length) return null;
+  const sampleRate = parts[0]!.sampleRate;
+  const channels = parts[0]!.channels;
+  const minXf = Math.max(8, Math.floor(((opts?.minCrossfadeMs ?? 22) / 1000) * sampleRate));
+  const maxXf = Math.max(
+    minXf,
+    Math.floor(((opts?.maxCrossfadeMs ?? 55) / 1000) * sampleRate),
+  );
+
+  const toFloat = (pcm: Buffer, ch: number): Float32Array => {
+    const frames = Math.floor(pcm.length / (2 * ch));
+    const out = new Float32Array(frames);
+    for (let f = 0; f < frames; f++) {
+      out[f] = readPcmInt16MonoFrame(pcm, f, ch) / 32768;
+    }
+    return out;
+  };
+
+  let acc = toFloat(parts[0]!.pcm, parts[0]!.channels);
+  let refRms = Math.max(1e-5, pcmInt16Rms(parts[0]!.pcm, parts[0]!.channels));
+
+  for (let i = 1; i < parts.length; i++) {
+    const part = parts[i]!;
+    if (part.sampleRate !== sampleRate) continue;
+    let next = toFloat(part.pcm, part.channels);
+    const nextRms = Math.max(1e-5, pcmInt16Rms(part.pcm, part.channels));
+    // Level-match next unit toward running reference (avoid stepped loudness).
+    const gain = Math.max(0.65, Math.min(1.45, refRms / nextRms));
+    if (Math.abs(gain - 1) > 0.04) {
+      for (let s = 0; s < next.length; s++) next[s]! *= gain;
+    }
+    refRms = refRms * 0.7 + nextRms * gain * 0.3;
+
+    const edgePrev = pcmInt16Rms(
+      parts[i - 1]!.pcm,
+      parts[i - 1]!.channels,
+      Math.max(
+        0,
+        Math.floor(parts[i - 1]!.pcm.length / (2 * parts[i - 1]!.channels)) -
+          minXf,
+      ),
+      minXf,
+    );
+    const edgeNext = pcmInt16Rms(part.pcm, part.channels, 0, minXf);
+    const edge = Math.max(edgePrev, edgeNext);
+    // Louder / mismatched joins → longer adaptive crossfade.
+    const t = Math.max(0, Math.min(1, (edge - 0.02) / 0.12));
+    let xf = Math.round(minXf + (maxXf - minXf) * (0.35 + 0.65 * t));
+    xf = Math.min(
+      xf,
+      Math.floor(acc.length * 0.45),
+      Math.floor(next.length * 0.45),
+    );
+    xf = Math.max(1, xf);
+
+    // Snap the overlap *start* near acc.length - xf (do not subtract xf twice).
+    const start = snapFloatZeroCross(
+      acc,
+      Math.max(0, acc.length - xf),
+      Math.min(48, xf),
+    );
+    const useOverlap = Math.min(xf, acc.length - start, next.length);
+
+    const out = new Float32Array(start + next.length);
+    out.set(acc.subarray(0, start + useOverlap), 0);
+    for (let n = 0; n < useOverlap; n++) {
+      const u = useOverlap <= 1 ? 1 : n / (useOverlap - 1);
+      const a = Math.cos(u * 0.5 * Math.PI);
+      const b = Math.sin(u * 0.5 * Math.PI);
+      out[start + n] = (acc[start + n] ?? 0) * a + next[n]! * b;
+    }
+    if (next.length > useOverlap) {
+      out.set(next.subarray(useOverlap), start + useOverlap);
+    }
+    acc = out;
+  }
+
+  const pcm = Buffer.alloc(acc.length * channels * 2);
+  for (let f = 0; f < acc.length; f++) {
+    writePcmInt16MonoFrame(pcm, f, channels, acc[f]! * 32767);
+  }
+  return { pcm, sampleRate, channels };
 }
 
 /**
@@ -564,12 +740,13 @@ export function buildVoiceModelPack(opts: {
       return;
     }
 
-    // Spectral-flux + energy valley alignment when PCM WAV is available;
-    // else equal-time. (Not neural attention — desktop unit-selection proxy.)
+    // Text-weighted + valley/silence alignment when PCM WAV is available;
+    // else text-weighted equal-time. (Not neural attention — unit-selection.)
     const bounds = estimateWordBoundariesByEnergy(
       clip.filePath,
       words.length,
       durationMs,
+      words,
     );
 
     words.forEach((word, wIdx) => {
@@ -594,9 +771,14 @@ export function buildVoiceModelPack(opts: {
       if (sliceWavToFile(clip.filePath, outFile, startMs, endMs)) {
         file = outFile;
       } else {
-        // Non-WAV (webm/mp3): keep phrase file + time metadata; still index word.
+        // Non-WAV, tiny, or truncated crumb: keep phrase span as fragment.
         kind = "fragment";
         file = phrasePath;
+        try {
+          if (fs.existsSync(outFile)) fs.unlinkSync(outFile);
+        } catch {
+          /* ignore */
+        }
       }
 
       const unit: VoicePackUnit = {
