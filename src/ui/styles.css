@@ -9,6 +9,7 @@
   --danger: #f87171;
   --warning: #fbbf24;
   --success: #34d399;
+  --load-ram: #38bdf8;
   --terminal-bg: #000814;
   --terminal-fg: #f8fafc;
   --track: #253745;
@@ -1895,10 +1896,63 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
 
 .load-chart {
   display: block;
+  cursor: crosshair;
 }
 
 .load-card {
   overflow: hidden;
+}
+
+.load-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 2px;
+}
+
+.load-card-head .card-kicker {
+  margin: 0;
+}
+
+.load-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.load-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.load-legend li::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.load-legend li[data-series="cpu"] {
+  color: var(--success);
+}
+
+.load-legend li[data-series="gpu"] {
+  color: var(--accent);
+}
+
+.load-legend li[data-series="ram"] {
+  color: var(--load-ram);
 }
 
 .load-chart-live .load-line,

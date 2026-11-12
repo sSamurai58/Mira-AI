@@ -288,8 +288,21 @@ type MiraUpdateStatus = {
   releasesUrl?: string;
 };
 
+type MiraSystemLoad = {
+  cpu: number;
+  ram: number;
+  ramUsedGb: number;
+  ramTotalGb: number;
+  gpu: number | null;
+  vramUsedGb: number | null;
+  vramTotalGb: number | null;
+  gpuSource: "nvidia-smi" | "windows-counter" | "drm" | "none";
+  ts: number;
+};
+
 interface MiraBridge {
   getHealth: () => Promise<MiraHealth>;
+  getSystemLoad: () => Promise<MiraSystemLoad>;
   getConfig: () => Promise<MiraPublicConfig>;
   getSettingsEnv: () => Promise<{
     values: Record<string, string>;

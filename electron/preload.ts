@@ -121,6 +121,17 @@ const call = (channel: string, ...args: unknown[]) =>
 
 contextBridge.exposeInMainWorld("mira", {
   getHealth: () => call("mira:get-health"),
+  getSystemLoad: (): Promise<{
+    cpu: number;
+    ram: number;
+    ramUsedGb: number;
+    ramTotalGb: number;
+    gpu: number | null;
+    vramUsedGb: number | null;
+    vramTotalGb: number | null;
+    gpuSource: "nvidia-smi" | "windows-counter" | "drm" | "none";
+    ts: number;
+  }> => call("mira:get-system-load"),
   getConfig: (): Promise<MiraPublicConfig> => call("mira:get-config"),
   getSettingsEnv: (): Promise<{
     values: Record<string, string>;

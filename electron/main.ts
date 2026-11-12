@@ -27,6 +27,7 @@ import {
   searchLearnedUnits,
 } from "./library/learn";
 import { runMemorySearch, sendChatMessage } from "./orchestrator";
+import { sampleSystemLoad, warmSystemMetrics } from "./systemMetrics";
 import {
   clearTerminalHistory,
   createTerminalSession,
@@ -281,6 +282,12 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
     console.error("[mira] updater init failed", err);
   }
 
+  try {
+    warmSystemMetrics();
+  } catch (err) {
+    console.error("[mira] system metrics warm failed", err);
+  }
+
   const on = (
     channel: string,
     fn: (...args: any[]) => unknown,
@@ -288,6 +295,8 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
   ) => {
     ipcMain.handle(channel, authed(fn as any, opts));
   };
+
+  on("mira:get-system-load", () => sampleSystemLoad());
 
   on("mira:get-health", () => {
     const health = getStoreHealth();
