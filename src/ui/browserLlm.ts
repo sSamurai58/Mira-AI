@@ -2,6 +2,10 @@ import {
   resolveBrowserLlmConfig,
   type BrowserLlmConfig,
 } from "./settingsEnvClient";
+import {
+  buildReplyDiversityBlock,
+  CHAT_DIVERSITY_SYSTEM_RULES,
+} from "./chat/diversity";
 
 export type BrowserChatHandlers = {
   onToken: (chunk: string) => void;
@@ -9,20 +13,32 @@ export type BrowserChatHandlers = {
   onError: (err: Error) => void;
 };
 
-const SYSTEM_PROMPT = [
+const SYSTEM_PROMPT_BASE = [
   "Ты Mira — локальный голосовой ИИ-ассистент.",
   "Отвечай по-русски, если пользователь пишет по-русски.",
   "Пиши выразительно: несколько коротких абзацев, не одна длинная строка.",
   "Используй Markdown: **жирный**, *курсив*, __подчёркнутый__, списки через «- ».",
   "Если данных для ответа ещё нет — лучше коротко скажи, что уточняешь, а не выдумывай отказ.",
+  CHAT_DIVERSITY_SYSTEM_RULES,
 ].join(" ");
+
+function systemPromptForHistory(
+  history: Array<{ role: "user" | "assistant"; content: string }>,
+): string {
+  const diversity = buildReplyDiversityBlock(history);
+  return diversity
+    ? `${SYSTEM_PROMPT_BASE}\n\n${diversity}`
+    : SYSTEM_PROMPT_BASE;
+}
 
 function openAiCompatibleMessages(
   history: Array<{ role: "user" | "assistant"; content: string }>,
   userText: string,
 ) {
+  const diversity = buildReplyDiversityBlock(history);
   return [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: SYSTEM_PROMPT_BASE },
+    ...(diversity ? [{ role: "system" as const, content: diversity }] : []),
     ...history.slice(-12).map((m) => ({ role: m.role, content: m.content })),
     { role: "user", content: userText },
   ];
@@ -106,7 +122,7 @@ async function streamAnthropic(
       model: cfg.model,
       max_tokens: 1024,
       stream: true,
-      system: SYSTEM_PROMPT,
+      system: systemPromptForHistory(history),
       messages: [
         ...history.slice(-12).map((m) => ({
           role: m.role,
@@ -176,7 +192,9 @@ async function streamGemini(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+      systemInstruction: {
+        parts: [{ text: systemPromptForHistory(history) }],
+      },
       contents,
     }),
     signal,

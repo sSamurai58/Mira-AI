@@ -1,6 +1,6 @@
 {
   "name": "mira-ai",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "private": true,
   "description": "Mira — local voice AI assistant",
   "author": "Mira",
@@ -18,6 +18,7 @@
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "db:check": "tsx scripts/db-check.ts",
     "p1:smoke": "tsx scripts/p1-smoke.ts",
+    "chat-diversity:smoke": "tsx scripts/chat-diversity-smoke.ts",
     "p2:smoke": "tsx scripts/p2-smoke.ts",
     "p3:smoke": "tsx scripts/p3-smoke.ts",
     "p4:smoke": "tsx scripts/p4-smoke.ts",

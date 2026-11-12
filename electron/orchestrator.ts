@@ -89,6 +89,10 @@ import { handleIotFromChat, looksLikeIotIntent } from "./future/iot";
 import { handleMailFromChat, looksLikeMailIntent } from "./future/mail";
 import { handleMediaFromChat, looksLikeMediaIntent } from "./future/media";
 import { handleNotesFromChat, looksLikeNotesIntent } from "./future/notes";
+import {
+  buildReplyDiversityBlock,
+  CHAT_DIVERSITY_SYSTEM_RULES,
+} from "./chatDiversity";
 
 const SYSTEM_PROMPT = [
   "Ты Mira — локальный голосовой ИИ-помощник.",
@@ -97,6 +101,7 @@ const SYSTEM_PROMPT = [
   "Если в контексте есть интернет/погода/память/инструменты — опирайся только на них и дождись их данных: не пиши заранее, что данных нет, пока блок инструментов пуст или помечен как ошибка.",
   "Если блок погоды или поиска уже содержит цифры — используй их как актуальные и не предлагай «проверьте сайт» без нужды.",
   "Skills подключаются только по необходимости.",
+  CHAT_DIVERSITY_SYSTEM_RULES,
 ].join(" ");
 
 export type ChatStreamEvent =
@@ -630,9 +635,15 @@ export async function sendChatMessage(
     : [];
   const memoryBlock = buildMemoryBlock(memoryHits);
   const skillsBlock = buildSkillsBlock(skills);
+  const diversityBlock = buildReplyDiversityBlock(history, {
+    memorySnippets: memoryHits.map((h) => h.content),
+  });
 
   const messages: ChatMessage[] = [{ role: "system", content: SYSTEM_PROMPT }];
   if (memoryBlock) messages.push({ role: "system", content: memoryBlock });
+  if (diversityBlock) {
+    messages.push({ role: "system", content: diversityBlock });
+  }
   if (skillsBlock) messages.push({ role: "system", content: skillsBlock });
   if (protocol) {
     messages.push({ role: "system", content: buildProtocolBlock(protocol) });

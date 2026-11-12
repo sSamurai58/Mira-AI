@@ -345,6 +345,19 @@ UX: **Создать → фразы → загрузить → Mira сама о�
 - [x] Публикация GitHub Release **0.1.6** — https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.6 (tag `v0.1.6` @ `8baa1da`)
 - [ ] MCP runtime / OAuth (по-прежнему later; после явной команды)
 
+## 2026-11-12 — Релиз 0.1.7 WIP (не публиковать)
+
+Ветка `cursor/release-0-1-7-6838`. Пакет **0.1.7**.
+
+Контекст: пользователь прислал озвучку ответа «меню идей» (Хабаровск / план дня / мини-проект / «что ближе»).  
+Это **чат LLM → TTS**, не Voice Studio «Сгенерировать фразы». 0.1.4–0.1.6 это не чинили.
+
+- [x] Bump `package.json` / `package-lock.json` → 0.1.7
+- [x] `electron/chatDiversity.ts` + browser mirror: детект canned menu + anti-repeat system block
+- [x] Orchestrator + browser LLM system rules: запрет повторного брошюрного меню
+- [x] Smoke `npm run chat-diversity:smoke`
+- [ ] Публикация — **только после явной команды**
+
 ## Шаблон новой темы
 
 ```markdown
