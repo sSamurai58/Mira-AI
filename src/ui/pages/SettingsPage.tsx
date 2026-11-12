@@ -4,6 +4,7 @@ import { StubBadge } from "../components/StubBadge";
 import { SettingsApiSection } from "../components/SettingsApiSection";
 import { ToggleRow } from "../components/SettingsFormBits";
 import { SettingsIntegrationsSection } from "../components/SettingsIntegrationsSection";
+import { SettingsMcpSection } from "../components/SettingsMcpSection";
 import { SettingsUpdatesSection } from "../components/SettingsUpdatesSection";
 import { ThemeSelect } from "../components/ThemeSelect";
 import { BG_PATTERNS, type BgPatternId } from "../backgrounds";
@@ -36,6 +37,7 @@ const SECTIONS = [
   { id: "voice", label: "Голос и аудио" },
   { id: "api", label: "API и модели" },
   { id: "integrations", label: "Интеграции" },
+  { id: "mcp", label: "MCP" },
   { id: "terminal", label: "Терминал" },
   { id: "data", label: "Данные и приватность" },
   { id: "updates", label: "Обновления" },
@@ -62,6 +64,7 @@ export function SettingsPage({
 }: SettingsPageProps) {
   const [section, setSection] = useState<SectionId>(() => {
     const hash = typeof window !== "undefined" ? window.location.hash : "";
+    if (hash.includes("mcp")) return "mcp";
     if (hash.includes("integrations")) return "integrations";
     if (hash.includes("api")) return "api";
     if (hash.includes("voice")) return "voice";
@@ -325,6 +328,11 @@ export function SettingsPage({
         {section === "integrations" ? (
           <ErrorBoundary fallbackTitle="Интеграции сбойнули">
             <SettingsIntegrationsSection />
+          </ErrorBoundary>
+        ) : null}
+        {section === "mcp" ? (
+          <ErrorBoundary fallbackTitle="MCP сбойнул">
+            <SettingsMcpSection />
           </ErrorBoundary>
         ) : null}
         {section === "terminal" ? <TerminalSettingsSection /> : null}

@@ -3760,6 +3760,51 @@ body.mira-hud-root *::-webkit-scrollbar {
   text-align: right;
 }
 
+/* —— Settings → MCP tiles (theme-card pattern) —— */
+.mcp-section {
+  gap: 1.35rem;
+}
+
+.mcp-stage-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.mcp-stage-block {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.mcp-tile-grid {
+  margin-top: 0.15rem;
+}
+
+.mcp-tile-ribbon {
+  display: grid;
+  place-items: center;
+  height: 64px;
+  width: 100%;
+  background: color-mix(in srgb, var(--bg) 55%, var(--bg-elevated));
+  border-bottom: 1px solid color-mix(in srgb, var(--text-muted) 12%, transparent);
+}
+
+.mcp-tile-body strong {
+  font-size: 0.9rem;
+}
+
+.mcp-voice-list {
+  margin: 0.35rem 0 0;
+  padding-left: 1.15rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.mcp-connector-modal .modal-body {
+  max-height: min(58vh, 520px);
+  overflow: auto;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
