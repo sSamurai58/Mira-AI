@@ -61,7 +61,7 @@ export async function createOrFocusHud(opts?: {
     fullscreenable: false,
     skipTaskbar: true,
     alwaysOnTop: policy.alwaysOnTop,
-    hasShadow: true,
+    hasShadow: false,
     backgroundColor: "#00000000",
     title: "Mira HUD",
     webPreferences: {
