@@ -355,6 +355,8 @@ UX: **Создать → фразы → загрузить → Mira сама о�
 - [x] Stitch: zero-cross OLA, adaptive 22–55 ms crossfade, RMS level-match (`tts.ts` + `stitchPcmInt16OverlapAdd`)
 - [x] UI note: после обновления — re-import + полная пересборка
 - [x] p9 smoke: uneven words, tiny-slice reject, stitch RMS
+- [x] Neural TTS curriculum: encoder/attention/decoder/stop/TF/Adam/vocoder/RLHF/CPU path — все «есть»; CUDA kernels честно optional
+- [x] Inference: synthesizeCustomVoiceNeural + A/B RLHF IPC; docs/mira-tts-report-0.1.7.md
 - [ ] Публикация / tag — **только после явной команды**
 
 ## Шаблон новой темы

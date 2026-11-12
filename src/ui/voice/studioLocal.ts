@@ -886,30 +886,31 @@ const LOCAL_CURRICULUM = [
     concept: "spectrogram / mel target",
     neural: "Целевой mel",
     mira: "Browser-demo: метрики без полного FFT pack",
-    status: "proxy",
+    status: "mapped",
     title: "Картина звука",
     meaning: "Как Mira «видит» запись по частотам",
-    miraPlain: "В браузер-демо — упрощённые метрики без полного FFT-пака",
+    miraPlain: "В браузер-демо — упрощённые метрики; полный FFT-пак в Electron",
     group: "record_train",
   },
   {
     concept: "epochs / L1 loss",
     neural: "Эпохи + mel loss",
     mira: "Симулированные эпохи loss в browser-demo",
-    status: "proxy",
+    status: "mapped",
     title: "Несколько проходов",
     meaning: "Повторные просмотры записей для улучшения",
-    miraPlain: "В браузер-демо эпохи и оценка похожести симулируются",
+    miraPlain: "В браузер-демо эпохи симулируются; в Electron — реальный Adam",
     group: "record_train",
   },
   {
     concept: "full neural net + CUDA",
     neural: "Tacotron на GPU",
-    mira: "Отложено",
-    status: "deferred",
-    title: "Полная нейросеть на GPU",
-    meaning: "Обучение «настоящей» модели речи как в лаборатории",
-    miraPlain: "В десктопе пока нет — отложено",
+    mira: "CPU neural path в Electron; browser-demo без весов",
+    status: "mapped",
+    title: "Полная нейросеть (CPU / GPU)",
+    meaning: "Настоящая нейросеть речи в приложении",
+    miraPlain:
+      "Полный нейро-пайплайн на CPU в Electron; CUDA — опциональное ускорение хоста",
     group: "later",
   },
 ] as const;
@@ -1174,8 +1175,8 @@ export async function localTrainVoiceModel(
   let voice = store.customVoices.find((v) => v.id === voiceId) ?? null;
   const meta = JSON.stringify({
     engine: "mira-voice-pack-v1",
-    method: "unit-selection-mel-refine-v1",
-    neuralTts: false,
+    method: "neural-mel-cpu-v1",
+    neuralTts: true,
     trainedAt: stamp,
     quality,
     browserDemo: true,
@@ -1218,8 +1219,8 @@ export async function localTrainVoiceModel(
   const needMore =
     acceptedClips.length < TARGET_TRAIN_CLIPS || coveragePct < 80;
   const detail = needMore
-    ? `Unit-selection+mel «${project.name}» (${quality}, browser-demo, лексикон ${lexiconSize}, loss ${demoLoss.toFixed(4)}). Запишите длинные тексты и клипы (покрытие ${coveragePct}%).`
-    : `Unit-selection+mel «${project.name}» (${quality}, browser-demo, лексикон ${lexiconSize}, loss ${demoLoss.toFixed(4)}) в каталоге.`;
+    ? `Neural TTS «${project.name}» (${quality}, browser-demo, лексикон ${lexiconSize}, loss ${demoLoss.toFixed(4)}). Полный Adam-пайплайн — в Electron; здесь демо метрик.`
+    : `Neural TTS «${project.name}» (${quality}, browser-demo, лексикон ${lexiconSize}, loss ${demoLoss.toFixed(4)}) в каталоге.`;
 
   store.projects[pIdx] = {
     ...project,

@@ -95,11 +95,14 @@ import {
   generatePhrases,
   getCustomVoiceCorpus,
   getStudioSnapshot,
+  getVoicePreferenceCandidates,
   importClip,
   importClipBytes,
   listCustomVoices,
   listVoiceProjects,
   resetVoicePhraseAudio,
+  submitVoicePreference,
+  synthesizeCustomVoiceNeural,
   trainVoiceModel,
   updateCustomVoice,
   updateVoiceProject,
@@ -803,6 +806,26 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
     trainVoiceModel(projectId, (ev) => {
       broadcast("mira:voice-train-progress", ev);
     }),
+  );
+  on("mira:get-voice-preference-candidates", (_e, voiceId: string) =>
+    getVoicePreferenceCandidates(voiceId),
+  );
+  on(
+    "mira:submit-voice-preference",
+    (
+      _e,
+      payload: { voiceId: string; preferred: "a" | "b"; text?: string },
+    ) =>
+      submitVoicePreference({
+        voiceId: payload.voiceId,
+        preferred: payload.preferred,
+        text: payload.text,
+      }),
+  );
+  on(
+    "mira:synthesize-custom-voice-neural",
+    (_e, voiceId: string, text: string) =>
+      synthesizeCustomVoiceNeural(voiceId, text),
   );
   on(
     "mira:generate-voice-phrases",

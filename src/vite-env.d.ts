@@ -726,8 +726,59 @@ interface MiraBridge {
         group?: string;
       }>;
       griffinLimPreview?: string | null;
+      neuralPreview?: string | null;
+      method?: string;
+      neuralTts?: boolean;
+      teacherForceFinal?: number;
+      vocoderSteps?: number;
+      cudaAvailable?: boolean;
+      accelDetail?: string;
+      weightsPath?: string;
     };
     pack?: unknown;
+  }>;
+  getVoicePreferenceCandidates: (voiceId: string) => Promise<{
+    voiceId: string;
+    packDir: string | null;
+    aPath: string | null;
+    bPath: string | null;
+    labelA: string;
+    labelB: string;
+    sampleText: string;
+    preferences: {
+      version: number;
+      pairs: Array<{
+        id: string;
+        text: string;
+        preferred: "a" | "b";
+        createdAt: string;
+        lossBefore?: number;
+        lossAfter?: number;
+      }>;
+      updatesApplied: number;
+    };
+  }>;
+  submitVoicePreference: (payload: {
+    voiceId: string;
+    preferred: "a" | "b";
+    text?: string;
+  }) => Promise<{
+    ok: boolean;
+    detail: string;
+    unitPriorsUpdated: number;
+    lossBefore: number;
+    lossAfter: number;
+  }>;
+  synthesizeCustomVoiceNeural: (
+    voiceId: string,
+    text: string,
+  ) => Promise<{
+    ok: boolean;
+    wavPath: string | null;
+    detail: string;
+    frameCount?: number;
+    durationMs?: number;
+    method?: string;
   }>;
   onVoiceTrainProgress?: (
     handler: (payload: {

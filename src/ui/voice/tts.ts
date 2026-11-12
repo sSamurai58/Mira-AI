@@ -428,6 +428,33 @@ async function speakCustomVoice(
     return;
   }
 
+  // Prefer real neural inference path when weights exist.
+  if (window.mira?.readVoicePreview) {
+    try {
+      const neural = await window.mira.synthesizeCustomVoiceNeural(
+        voiceId,
+        clean,
+      );
+      if (!isCurrent()) return;
+      if (neural.ok && neural.wavPath) {
+        handlers.onStatus?.(
+          neural.detail || "Нейро-синтез (encoder→decoder→vocoder)",
+        );
+        const ctx = getAudioContext();
+        const cache = new Map<string, AudioBuffer>();
+        const buf = await decodeClip(ctx, neural.wavPath, cache);
+        if (!isCurrent()) return;
+        handlers.onStart?.();
+        await playAudioBuffer(ctx, buf, isCurrent);
+        if (!isCurrent()) return;
+        handlers.onEnd?.();
+        return;
+      }
+    } catch {
+      // Fall through to unit-stitch / Web Speech.
+    }
+  }
+
   let plan: CorpusSpeechPlan;
   try {
     const corpus = await loadCustomVoiceCorpus(voiceId);

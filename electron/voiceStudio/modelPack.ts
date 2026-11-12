@@ -1,10 +1,9 @@
 /**
  * Local voice model pack (mira-voice-pack-v1).
  *
- * Unit-selection / concatenative TTS (NOT neural mel encoder→decoder).
- * Training builds phrase units + word/fragment slices + a lexicon index so
- * runtime TTS can stitch novel replies from trained units instead of only
- * replaying exact phrases. Uncovered words fall back to system TTS.
+ * Builds phrase/word/fragment units + lexicon for unit-stitch fallback.
+ * Primary synthesis after 0.1.7 is neural (encoder→decoder→vocoder);
+ * uncovered / missing-weights paths still stitch units or use system TTS.
  */
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";

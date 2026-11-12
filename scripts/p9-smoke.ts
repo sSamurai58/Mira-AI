@@ -49,6 +49,11 @@ import {
   melToSummary,
 } from "../electron/voiceStudio/melSpectrogram";
 import { NEURAL_TTS_CURRICULUM } from "../electron/voiceStudio/melTrainer";
+import {
+  synthesizeCustomVoiceNeural,
+  submitVoicePreference,
+  getVoicePreferenceCandidates,
+} from "../electron/voiceStudio/studio";
 import { execFileSync } from "node:child_process";
 
 loadConfig(true);
@@ -530,6 +535,10 @@ async function main() {
   assert.ok(melL1(mel!, mel!) < 1e-6, "identical mel L1 ~ 0");
   assert.ok(NEURAL_TTS_CURRICULUM.length >= 10, "curriculum rows");
   assert.ok(
+    NEURAL_TTS_CURRICULUM.every((r) => r.status === "mapped"),
+    "curriculum must not leave proxy/deferred rows",
+  );
+  assert.ok(
     textAudioMismatch("один два три четыре пять шесть семь восемь девять десять", 200)
       .length > 0,
     "short clip vs long text should warn",
@@ -674,8 +683,8 @@ async function main() {
     finalLoss?: number;
   };
   assert.equal(trainMeta.engine, "mira-voice-pack-v1");
-  assert.equal(trainMeta.method, "unit-selection-mel-refine-v1");
-  assert.equal(trainMeta.neuralTts, false);
+  assert.equal(trainMeta.method, "neural-mel-cpu-v1");
+  assert.equal(trainMeta.neuralTts, true);
   assert.ok(trainMeta.packDir, "model pack dir missing");
   assert.ok(
     (trainMeta.wordUnitCount ?? 0) + (trainMeta.unitCount ?? 0) > 0,
@@ -692,6 +701,21 @@ async function main() {
   assert.ok(
     fs.existsSync(path.join(trainMeta.packDir!, "mel-features")),
     "mel-features dir should exist",
+  );
+  assert.ok(
+    fs.existsSync(path.join(trainMeta.packDir!, "neural-weights.json")),
+    "neural-weights.json should exist after neural train",
+  );
+  const curriculumStatuses = (trained.report.curriculum ?? []).map(
+    (r) => r.status,
+  );
+  assert.ok(
+    curriculumStatuses.every((s) => s === "mapped"),
+    "all curriculum rows should be mapped (no proxy/deferred left)",
+  );
+  assert.ok(
+    (trained.report.neuralTts ?? trainMeta.neuralTts) === true,
+    "report should mark neuralTts",
   );
   assert.ok(
     (trained.report.wordUnitCount ?? 0) > 0,
@@ -743,6 +767,27 @@ async function main() {
     corpus.units.length >= 3,
     "trained voice corpus should expose accepted phrase clips",
   );
+
+  // Neural inference path must produce a WAV.
+  const synth = synthesizeCustomVoiceNeural(
+    trained.voice!.id,
+    "Проверка нейро синтеза.",
+  );
+  assert.equal(synth.ok, true, synth.detail);
+  assert.ok(synth.wavPath && fs.existsSync(synth.wavPath), "neural wav");
+  assert.equal(synth.method, "neural-mel-cpu-v1");
+
+  // RLHF preference loop (A/B) when previews exist.
+  const prefs = getVoicePreferenceCandidates(trained.voice!.id);
+  if (prefs.aPath && prefs.bPath) {
+    const pref = submitVoicePreference({
+      voiceId: trained.voice!.id,
+      preferred: "a",
+      text: prefs.sampleText,
+    });
+    assert.equal(pref.ok, true, pref.detail);
+    assert.ok(pref.lossAfter <= pref.lossBefore + 0.5, "preference applied");
+  }
 
   // «Перезагрузить»: drop audio, keep phrase text in corpus, prune pack units.
   const reloadTarget = phrases[0]!;

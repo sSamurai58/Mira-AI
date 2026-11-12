@@ -21,10 +21,17 @@ import {
 } from "./audioFeatures";
 import {
   DEFAULT_TRAIN_EPOCHS,
+  NEURAL_METHOD,
   NEURAL_TTS_CURRICULUM,
   runMelRefinement,
   type MelTrainResult,
 } from "./melTrainer";
+import {
+  applyVoicePreference,
+  listPreferenceCandidates,
+  loadPreferences,
+} from "./neural/rlhf";
+import { synthesizeNeuralSpeech } from "./neural/infer";
 import {
   accumulatePhraseIntoStats,
   buildCorpusLexStats,
@@ -1133,6 +1140,14 @@ export type VoiceTrainReport = {
   melTargets?: number;
   curriculum?: typeof NEURAL_TTS_CURRICULUM;
   griffinLimPreview?: string | null;
+  neuralPreview?: string | null;
+  method?: string;
+  neuralTts?: boolean;
+  teacherForceFinal?: number;
+  vocoderSteps?: number;
+  cudaAvailable?: boolean;
+  accelDetail?: string;
+  weightsPath?: string;
 };
 
 export type VoiceTrainProgressHandler = (ev: TrainProgressEvent) => void;
@@ -1151,9 +1166,9 @@ function trainStepBudgetMs(linkedAccepted: number, wordsHint = 8): number {
 }
 
 /**
- * Train / rebuild local unit-selection voice pack from phrase↔audio pairs.
- * NOT neural TTS (no mel encoder/decoder, epochs, or vocoder).
- * Pipeline: pairs QA → features → energy alignment → lexicon → pack → publish.
+ * Train / rebuild local voice pack from phrase↔audio pairs.
+ * Pipeline: QA → features → alignment → lexicon → neural mel train (Adam) →
+ * neural vocoder → publish. Unit-selection stitch remains as fallback.
  */
 export async function trainVoiceModel(
   projectId: string,
@@ -1186,7 +1201,7 @@ export async function trainVoiceModel(
   emit(
     "validate",
     4,
-    "Пары текст↔аудио: проверка клипов и привязок (unit-selection)…",
+    "Пары текст↔аудио: проверка клипов и привязок (neural TTS + unit fallback)…",
   );
   await sleep(trainStepBudgetMs(1, 0));
 
@@ -1327,7 +1342,7 @@ export async function trainVoiceModel(
   emit(
     "segment",
     24,
-    `Выравнивание единиц (spectral/energy + zero-cross ≈ attention): ${linkedClips.length} клипов, ${allPhraseTexts.length} текстов, ~${corpusWordHint} слов…`,
+    `Выравнивание единиц (DTW/attention + zero-cross): ${linkedClips.length} клипов, ${allPhraseTexts.length} текстов, ~${corpusWordHint} слов…`,
   );
   await sleep(
     Math.max(
@@ -1372,7 +1387,7 @@ export async function trainVoiceModel(
   emit(
     "epochs",
     56,
-    `Mel-целевые признаки + эпохи refinement (${DEFAULT_TRAIN_EPOCHS} эпох)…`,
+    `Нейро encoder→decoder→vocoder · Adam · ${DEFAULT_TRAIN_EPOCHS} эпох…`,
   );
 
   let melTrain: MelTrainResult | null = null;
@@ -1414,8 +1429,8 @@ export async function trainVoiceModel(
   const stamp = pack.trainedAt;
   const meta = {
     engine: VOICE_PACK_ENGINE,
-    method: "unit-selection-mel-refine-v1",
-    neuralTts: false,
+    method: melTrain?.method ?? NEURAL_METHOD,
+    neuralTts: true,
     legacyEngine: "mira-local-corpus-v1",
     trainedAt: stamp,
     quality,
@@ -1437,15 +1452,22 @@ export async function trainVoiceModel(
     finalLoss: melTrain?.finalLoss ?? null,
     melTargets: melTrain?.melTargets ?? 0,
     griffinLimPreview: melTrain?.griffinLimPreview ?? null,
-    synthesis: `${VOICE_PACK_ENGINE}: склейка записанных кусочков + несколько проходов подгонки (не нейросеть на GPU). Слова без записи — системный TTS.`,
+    neuralPreview: melTrain?.neuralPreview ?? null,
+    hqPreview: melTrain?.hqPreview ?? null,
+    teacherForceFinal: melTrain?.teacherForceFinal ?? null,
+    vocoderSteps: melTrain?.vocoderSteps ?? 0,
+    cudaAvailable: melTrain?.cudaAvailable ?? false,
+    accelDetail: melTrain?.accelDetail ?? null,
+    weightsPath: melTrain?.weightsPath ?? null,
+    synthesis: `${VOICE_PACK_ENGINE}: neural text→encoder→mel decoder→vocoder (CPU Adam); unit-stitch fallback; слова без записи — системный TTS. CUDA kernels не бандлятся — GPU только если детектирован на хосте.`,
     curriculum: NEURAL_TTS_CURRICULUM,
     pipeline: [
       "1. Пары текст↔аудио + QA (шум/тишина/клиппинг/mismatch)",
       "2. Mel spectrogram (FFT→filterbank) + RMS признаки",
-      "3. Выравнивание единиц (spectral/energy + zero-cross ≈ attention proxy)",
+      "3. Выравнивание (DTW grapheme↔mel + soft attention) + unit slices",
       "4. Лексикон (аудио + provisional TTS)",
-      "5. Эпохи mel L1 refinement + priors/gain/duration",
-      "6. model-pack + публикация в каталог",
+      "5. Нейро эпохи: encoder/decoder Adam + TF schedule + stop BCE + vocoder",
+      "6. model-pack + neural-weights + публикация в каталог",
     ],
   };
   const existing = store
@@ -1500,10 +1522,10 @@ export async function trainVoiceModel(
     ? `, эпох ${melTrain.epochs}, loss ${melTrain.finalLoss.toFixed(4)}`
     : "";
   const detail = needMore
-    ? `Unit-selection+mel «${project.name}» (${quality}, ${lexiconSummary}, wav ${pack.wordUnitCount}${lossNote}` +
+    ? `Neural TTS «${project.name}» (${quality}, ${lexiconSummary}, wav ${pack.wordUnitCount}${lossNote}` +
       (warnCount ? `, QA-warn ${warnCount}` : "") +
-      `). Запишите чистые длинные тексты и ещё ${Math.max(0, TARGET_TRAIN_CLIPS - qa.acceptedCount)} клипов (покрытие ${coveragePct}%). Не GPU neural TTS.`
-    : `Unit-selection+mel «${project.name}» (${quality}, ${lexiconSummary}, wav ${pack.wordUnitCount}${lossNote}). Голос в каталоге; донабирайте и переобучайте.`;
+      `). Запишите чистые длинные тексты и ещё ${Math.max(0, TARGET_TRAIN_CLIPS - qa.acceptedCount)} клипов (покрытие ${coveragePct}%). CPU нейро-пайплайн; CUDA опционально.`
+    : `Neural TTS «${project.name}» (${quality}, ${lexiconSummary}, wav ${pack.wordUnitCount}${lossNote}). Голос в каталоге; A/B донастройка и переобучение доступны.`;
 
   const updated = touchProject(projectId, {
     status: needMore ? "ready_partial" : "ready",
@@ -1548,6 +1570,14 @@ export async function trainVoiceModel(
       melTargets: melTrain?.melTargets,
       curriculum: NEURAL_TTS_CURRICULUM,
       griffinLimPreview: melTrain?.griffinLimPreview ?? null,
+      neuralPreview: melTrain?.neuralPreview ?? null,
+      method: melTrain?.method ?? NEURAL_METHOD,
+      neuralTts: true,
+      teacherForceFinal: melTrain?.teacherForceFinal,
+      vocoderSteps: melTrain?.vocoderSteps,
+      cudaAvailable: melTrain?.cudaAvailable,
+      accelDetail: melTrain?.accelDetail,
+      weightsPath: melTrain?.weightsPath,
     },
   };
 }
@@ -1581,9 +1611,9 @@ function prepareCorpusAfterImport(projectId: string): {
   const project = touchProject(projectId, {
     status: ready ? "ready_to_train" : "collecting",
     recommendation: ready
-      ? `Корпус готов к unit-selection: ${qa.linkedAccepted} клипов ↔ фразы, покрытие ${coveragePct}%` +
+      ? `Корпус готов к neural TTS: ${qa.linkedAccepted} клипов ↔ фразы, покрытие ${coveragePct}%` +
         (warnCount ? ` · предупреждений QA: ${warnCount}` : "") +
-        `. Нажмите «Собрать голос» (не neural TTS).`
+        `. Нажмите «Собрать голос».`
       : `Нужно ≥${MIN_TRAIN_CLIPS} принятых клипов с привязкой к фразам (сейчас linked=${qa.linkedAccepted}). Чистая речь + длинные тексты.`,
   });
   return { project, analysis: qa.analyses, voice: null };
@@ -2100,5 +2130,95 @@ export function getStudioSnapshot(projectId?: string) {
     phrases: project ? listPhrases(project.id) : [],
     clips: project ? listClips(project.id) : [],
     customVoices: listCustomVoices(),
+  };
+}
+
+/** A/B preference candidates for RLHF UI (neural vs griffin/HQ). */
+export function getVoicePreferenceCandidates(voiceId: string): {
+  voiceId: string;
+  packDir: string | null;
+  aPath: string | null;
+  bPath: string | null;
+  labelA: string;
+  labelB: string;
+  preferences: ReturnType<typeof loadPreferences>;
+  sampleText: string;
+} {
+  const voice = getCustomVoice(voiceId);
+  if (!voice) throw new Error("Голос не найден");
+  const packDir = studioRoot(voice.project_id, "model-pack");
+  const c = listPreferenceCandidates(packDir);
+  const phrases = listPhrases(voice.project_id);
+  const sampleText =
+    phrases.find((p) => p.recorded)?.text ??
+    phrases[0]?.text ??
+    voice.name;
+  return {
+    voiceId,
+    packDir: fs.existsSync(packDir) ? packDir : null,
+    ...c,
+    preferences: loadPreferences(packDir),
+    sampleText,
+  };
+}
+
+/** Apply user A/B preference (RLHF) to neural weights + unit priors. */
+export function submitVoicePreference(opts: {
+  voiceId: string;
+  preferred: "a" | "b";
+  text?: string;
+}): ReturnType<typeof applyVoicePreference> {
+  const voice = getCustomVoice(opts.voiceId);
+  if (!voice) throw new Error("Голос не найден");
+  const packDir = studioRoot(voice.project_id, "model-pack");
+  const pack = readVoiceModelPack(packDir);
+  if (!pack) throw new Error("model-pack не найден — сначала соберите голос");
+  const c = listPreferenceCandidates(packDir);
+  if (!c.aPath || !c.bPath) {
+    throw new Error(
+      "Нет пары A/B для сравнения (нужны neural и griffin/HQ preview после обучения)",
+    );
+  }
+  return applyVoicePreference({
+    packDir,
+    pack,
+    text: (opts.text ?? "").trim() || voice.name,
+    aPath: c.aPath,
+    bPath: c.bPath,
+    preferred: opts.preferred,
+  });
+}
+
+/** Neural inference: text → encoder → decoder → vocoder WAV. */
+export function synthesizeCustomVoiceNeural(
+  voiceId: string,
+  text: string,
+): {
+  ok: boolean;
+  wavPath: string | null;
+  detail: string;
+  frameCount?: number;
+  durationMs?: number;
+  method?: string;
+} {
+  const voice = getCustomVoice(voiceId);
+  if (!voice) throw new Error("Голос не найден");
+  const packDir = studioRoot(voice.project_id, "model-pack");
+  const result = synthesizeNeuralSpeech(packDir, text);
+  if (!result) {
+    return {
+      ok: false,
+      wavPath: null,
+      detail:
+        "Нейро-веса не найдены или текст пуст. Соберите голос (neural-weights.json).",
+    };
+  }
+  return {
+    ok: true,
+    wavPath: result.wavPath,
+    frameCount: result.frameCount,
+    durationMs: result.durationMs,
+    method: result.method,
+    detail: `Нейро-синтез ${result.frameCount} кадров · ${Math.round(result.durationMs)} мс`,
   };
 }

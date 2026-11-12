@@ -58,7 +58,7 @@ const CURRICULUM_GROUP_ORDER = [
 const CURRICULUM_GROUP_RU: Record<string, string> = {
   record_train: "Запись и обучение",
   speak: "Сборка речи",
-  later: "Что позже",
+  later: "Ускорение и донастройка",
 };
 
 function curriculumStatusRu(status: string): string {
@@ -205,12 +205,21 @@ export function VoiceStudioPanel(props: {
     features: "разбор звука",
     segment: "границы слов",
     lexicon: "словарь",
-    epochs: "проходы подгонки",
+    epochs: "нейро-эпохи Adam",
     pack: "голос-пак",
     publish: "каталог",
     done: "готово",
     error: "ошибка",
   };
+  const [rlhfNote, setRlhfNote] = useState<string | null>(null);
+  const [rlhfBusy, setRlhfBusy] = useState(false);
+  const [rlhfInfo, setRlhfInfo] = useState<{
+    labelA: string;
+    labelB: string;
+    sampleText: string;
+    updatesApplied: number;
+    hasPair: boolean;
+  } | null>(null);
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -427,6 +436,22 @@ export function VoiceStudioPanel(props: {
       if (res.voice) {
         setActiveVoiceId(res.voice.id);
         props.onCatalogChanged?.();
+        if (electron && window.mira?.getVoicePreferenceCandidates) {
+          try {
+            const pref = await window.mira.getVoicePreferenceCandidates(
+              res.voice.id,
+            );
+            setRlhfInfo({
+              labelA: pref.labelA,
+              labelB: pref.labelB,
+              sampleText: pref.sampleText,
+              updatesApplied: pref.preferences.updatesApplied,
+              hasPair: Boolean(pref.aPath && pref.bPath),
+            });
+          } catch {
+            setRlhfInfo(null);
+          }
+        }
       }
       // Keep the main phrase list visible — do not send corpus into a modal.
       await refresh(project.id);
@@ -807,13 +832,12 @@ export function VoiceStudioPanel(props: {
           тишина, клиппинг и mismatch отсекаются QA.
         </li>
         <li>
-          ≥3 принятых пар — «Собрать голос»: проверка записей → разбор звука →
-          границы слов → словарь → несколько проходов подгонки → голос в
-          каталог.
+          ≥3 принятых пар — «Собрать голос»: QA → mel → DTW/attention →
+          нейро encoder/decoder (Adam) → вокодер → голос в каталог.
         </li>
         <li>
-          В каталоге: склейка из аудио-единиц; слова без записи — системный
-          TTS. Донабирайте и пересобирайте.
+          В каталоге: нейро-синтез (text→mel→wave); запасной путь — склейка
+          кусков / системный TTS. A/B донастройка после сборки.
         </li>
       </ol>
 
@@ -987,9 +1011,10 @@ export function VoiceStudioPanel(props: {
                     Как устроен голос Mira ({lastCurriculum.length} шагов)
                   </summary>
                   <p style={{ margin: "0.45rem 0 0.35rem", fontSize: "0.9rem" }}>
-                    Сейчас Mira собирает речь из записанных кусочков: режет
-                    текст на слова, находит их в аудио и склеивает. Ниже —
-                    что уже работает, что сделано упрощённо, что отложено.
+                    Mira обучает нейросеть на CPU: encoder текста, выравнивание,
+                    mel-decoder с teacher forcing, stop-токен, Adam и
+                    нейро-вокодер. Склейка кусков — запасной путь. Ниже —
+                    актуальный статус каждого шага.
                   </p>
                   <div
                     className="stack"
@@ -1087,6 +1112,108 @@ export function VoiceStudioPanel(props: {
                     </table>
                   </details>
                 </details>
+              ) : null}
+              {electron && project?.custom_voice_id && rlhfInfo?.hasPair ? (
+                <div
+                  className="stack"
+                  style={{
+                    flex: "1 1 100%",
+                    gap: "0.4rem",
+                    borderTop:
+                      "1px solid color-mix(in oklab, var(--fg) 10%, transparent)",
+                    paddingTop: "0.55rem",
+                  }}
+                >
+                  <strong style={{ fontSize: "0.9rem" }}>
+                    Донастройка голоса (A/B · RLHF)
+                  </strong>
+                  <p className="muted" style={{ margin: 0, fontSize: "0.82rem" }}>
+                    Сравните {rlhfInfo.labelA} и {rlhfInfo.labelB}, выберите
+                    что звучит лучше — Mira обновит нейро-веса и приоритеты
+                    кусков. Учтено предпочтений: {rlhfInfo.updatesApplied}.
+                  </p>
+                  <div className="row" style={{ flexWrap: "wrap", gap: "0.45rem" }}>
+                    <button
+                      type="button"
+                      className="btn"
+                      disabled={rlhfBusy || Boolean(busy)}
+                      onClick={() => {
+                        void (async () => {
+                          const voiceId = project?.custom_voice_id;
+                          if (!voiceId || !window.mira?.submitVoicePreference)
+                            return;
+                          setRlhfBusy(true);
+                          try {
+                            const res = await window.mira.submitVoicePreference({
+                              voiceId,
+                              preferred: "a",
+                              text: rlhfInfo.sampleText,
+                            });
+                            setRlhfNote(res.detail);
+                            setRlhfInfo((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    updatesApplied: prev.updatesApplied + 1,
+                                  }
+                                : prev,
+                            );
+                          } catch (err) {
+                            setRlhfNote(
+                              err instanceof Error ? err.message : String(err),
+                            );
+                          } finally {
+                            setRlhfBusy(false);
+                          }
+                        })();
+                      }}
+                    >
+                      Лучше A · {rlhfInfo.labelA}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
+                      disabled={rlhfBusy || Boolean(busy)}
+                      onClick={() => {
+                        void (async () => {
+                          const voiceId = project?.custom_voice_id;
+                          if (!voiceId || !window.mira?.submitVoicePreference)
+                            return;
+                          setRlhfBusy(true);
+                          try {
+                            const res = await window.mira.submitVoicePreference({
+                              voiceId,
+                              preferred: "b",
+                              text: rlhfInfo.sampleText,
+                            });
+                            setRlhfNote(res.detail);
+                            setRlhfInfo((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    updatesApplied: prev.updatesApplied + 1,
+                                  }
+                                : prev,
+                            );
+                          } catch (err) {
+                            setRlhfNote(
+                              err instanceof Error ? err.message : String(err),
+                            );
+                          } finally {
+                            setRlhfBusy(false);
+                          }
+                        })();
+                      }}
+                    >
+                      Лучше B · {rlhfInfo.labelB}
+                    </button>
+                  </div>
+                  {rlhfNote ? (
+                    <p className="muted" style={{ margin: 0, fontSize: "0.82rem" }}>
+                      {rlhfNote}
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
               <button
                 type="button"

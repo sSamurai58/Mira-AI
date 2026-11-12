@@ -310,6 +310,15 @@ contextBridge.exposeInMainWorld("mira", {
     call("mira:reset-voice-phrase-audio", phraseId),
   trainVoiceModel: (projectId: string) =>
     call("mira:train-voice-model", projectId),
+  getVoicePreferenceCandidates: (voiceId: string) =>
+    call("mira:get-voice-preference-candidates", voiceId),
+  submitVoicePreference: (payload: {
+    voiceId: string;
+    preferred: "a" | "b";
+    text?: string;
+  }) => call("mira:submit-voice-preference", payload),
+  synthesizeCustomVoiceNeural: (voiceId: string, text: string) =>
+    call("mira:synthesize-custom-voice-neural", voiceId, text),
   onVoiceTrainProgress: (
     handler: (payload: {
       projectId: string;
