@@ -3760,49 +3760,414 @@ body.mira-hud-root *::-webkit-scrollbar {
   text-align: right;
 }
 
-/* —— Settings → MCP tiles (theme-card pattern) —— */
+/* —— Settings → MCP catalog —— */
 .mcp-section {
-  gap: 1.35rem;
+  display: grid;
+  gap: 1.25rem;
 }
 
-.mcp-stage-filters {
+.mcp-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) auto;
+  gap: 1rem 1.25rem;
+  align-items: end;
+  padding: 1rem 1.1rem;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 16%, transparent);
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--bg-elevated) 88%, var(--accent) 8%),
+      color-mix(in srgb, var(--bg-elevated) 70%, transparent)
+    );
+}
+
+.mcp-hero-title {
+  margin: 0;
+  font-size: 1.2rem;
+  letter-spacing: 0.02em;
+}
+
+.mcp-hero-lead {
+  margin: 0.45rem 0 0;
+  max-width: 42rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.mcp-hero-stats {
+  display: flex;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.mcp-stat {
+  min-width: 4.6rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 14%, transparent);
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  display: grid;
+  gap: 0.15rem;
+  text-align: center;
+}
+
+.mcp-stat-value {
+  font-size: 1.05rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.mcp-stat-label {
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.mcp-stage-rail {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
 }
 
-.mcp-stage-block {
+.mcp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.7rem 0.35rem 0.35rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 20%, transparent);
+  background: color-mix(in srgb, var(--bg-elevated) 75%, transparent);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  transition:
+    border-color 150ms var(--ease-out),
+    background 150ms var(--ease-out),
+    transform 150ms var(--ease-out);
+}
+
+.mcp-chip:hover {
+  border-color: color-mix(in srgb, var(--text-muted) 40%, transparent);
+  transform: translateY(-1px);
+}
+
+.mcp-chip.is-active {
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-elevated));
+}
+
+.mcp-chip-num {
+  display: inline-grid;
+  place-items: center;
+  width: 1.45rem;
+  height: 1.45rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--text-muted) 16%, transparent);
+}
+
+.mcp-chip.is-active .mcp-chip-num {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+.mcp-chip-text {
+  padding-right: 0.15rem;
+}
+
+.mcp-stages {
   display: grid;
-  gap: 0.65rem;
+  gap: 1rem;
+}
+
+.mcp-stage-panel {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 14%, transparent);
+  background: color-mix(in srgb, var(--bg-elevated) 55%, transparent);
+}
+
+.mcp-stage-kicker {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.mcp-stage-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent-fg);
+  background: var(--accent);
+}
+
+.mcp-stage-cat {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.mcp-stage-title {
+  margin: 0.35rem 0 0;
+  font-size: 1.02rem;
+}
+
+.mcp-stage-blurb {
+  margin: 0.25rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.86rem;
+  line-height: 1.4;
 }
 
 .mcp-tile-grid {
-  margin-top: 0.15rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
+  gap: 0.75rem;
 }
 
-.mcp-tile-ribbon {
+.mcp-tile {
+  --mcp-brand: var(--accent);
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 0;
+  min-height: 148px;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 16%, transparent);
+  background: color-mix(in srgb, var(--bg) 40%, var(--bg-elevated));
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  transition:
+    border-color 160ms var(--ease-out),
+    transform 160ms var(--ease-out),
+    box-shadow 160ms var(--ease-out);
+}
+
+.mcp-tile:hover {
+  border-color: color-mix(in srgb, var(--mcp-brand) 45%, var(--text-muted));
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px color-mix(in srgb, #000 28%, transparent);
+}
+
+.mcp-tile.is-marked {
+  border-color: color-mix(in srgb, var(--accent) 65%, transparent);
+}
+
+.mcp-tile-glow {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 78px;
+  background:
+    radial-gradient(
+      120% 90% at 50% 0%,
+      color-mix(in srgb, var(--mcp-brand) 34%, transparent),
+      transparent 70%
+    );
+  pointer-events: none;
+}
+
+.mcp-tile-logo {
+  position: relative;
+  z-index: 1;
   display: grid;
   place-items: center;
-  height: 64px;
-  width: 100%;
-  background: color-mix(in srgb, var(--bg) 55%, var(--bg-elevated));
-  border-bottom: 1px solid color-mix(in srgb, var(--text-muted) 12%, transparent);
+  height: 78px;
 }
 
-.mcp-tile-body strong {
+.mcp-tile-meta {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.7rem 0.85rem 0.95rem;
+  border-top: 1px solid color-mix(in srgb, var(--text-muted) 12%, transparent);
+  background: color-mix(in srgb, var(--bg-elevated) 70%, transparent);
+}
+
+.mcp-tile-name {
   font-size: 0.9rem;
+  letter-spacing: 0.01em;
+}
+
+.mcp-tile-sub {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.mcp-tile-check,
+.mcp-tile-open {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  width: 22px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.mcp-tile-check {
+  color: var(--accent-fg);
+  background: var(--accent);
+}
+
+.mcp-tile-open {
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--bg) 50%, transparent);
+  opacity: 0;
+  transition: opacity 140ms var(--ease-out);
+}
+
+.mcp-tile:hover .mcp-tile-open {
+  opacity: 1;
+}
+
+.mcp-toast {
+  margin: 0;
+}
+
+.mcp-modal-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+}
+
+.mcp-modal-logo {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  background:
+    radial-gradient(
+      circle at 30% 20%,
+      color-mix(in srgb, var(--mcp-brand, var(--accent)) 35%, transparent),
+      color-mix(in srgb, var(--bg) 40%, transparent)
+    );
+  border: 1px solid color-mix(in srgb, var(--text-muted) 14%, transparent);
+}
+
+.mcp-modal-heading {
+  flex: 1;
+  min-width: 0;
+}
+
+.mcp-modal-heading h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.mcp-modal-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+}
+
+.mcp-tag {
+  display: inline-flex;
+  padding: 0.18rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 20%, transparent);
+  color: var(--text-muted);
+}
+
+.mcp-modal-body {
+  display: grid;
+  gap: 0.9rem;
+  max-height: min(56vh, 520px);
+  overflow: auto;
+  margin-top: 0.85rem;
+}
+
+.mcp-modal-summary {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.mcp-modal-block h4 {
+  margin: 0 0 0.4rem;
+  font-size: 0.82rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
 .mcp-voice-list {
-  margin: 0.35rem 0 0;
-  padding-left: 1.15rem;
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
   display: grid;
-  gap: 0.25rem;
+  gap: 0.35rem;
 }
 
-.mcp-connector-modal .modal-body {
-  max-height: min(58vh, 520px);
-  overflow: auto;
+.mcp-voice-q {
+  display: block;
+  padding: 0.45rem 0.65rem;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text-muted) 12%, transparent);
+  font-size: 0.88rem;
+}
+
+.mcp-fields {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.mcp-field {
+  display: grid;
+  gap: 0.28rem;
+  font-size: 0.82rem;
+}
+
+.mcp-field .mono {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}
+
+.mcp-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.9rem;
+}
+
+.mcp-modal-note,
+.mcp-modal-foot {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 720px) {
+  .mcp-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .mcp-hero-stats {
+    justify-content: flex-start;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

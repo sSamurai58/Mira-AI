@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { StubBadge } from "./StubBadge";
 import { McpBrandIcon } from "./McpBrandIcon";
 import {
@@ -12,6 +12,16 @@ import {
   saveMcpDraft,
   type McpConnectorDraft,
 } from "../mcp/catalog";
+
+const STAGE_CHIP: Record<McpStageId, string> = {
+  1: "Задачи",
+  2: "Календарь",
+  3: "Почта",
+  4: "Заметки",
+  5: "Офис",
+  6: "CRM",
+  7: "Браузер",
+};
 
 export function SettingsMcpSection() {
   const [stageFilter, setStageFilter] = useState<McpStageId | "all">("all");
@@ -28,6 +38,8 @@ export function SettingsMcpSection() {
     stageFilter === "all"
       ? MCP_STAGES
       : MCP_STAGES.filter((s) => s.stage === stageFilter);
+
+  const markedCount = Object.values(drafts).filter((d) => d.enabled).length;
 
   function closeModal() {
     setOpenId(null);
@@ -50,90 +62,115 @@ export function SettingsMcpSection() {
   }
 
   return (
-    <div className="appearance-stack mcp-section">
-      <header className="appearance-block-head">
-        <div className="row">
-          <h2 style={{ margin: 0, fontSize: "1.05rem" }}>MCP</h2>
-          <StubBadge label="0.1.4" />
+    <div className="mcp-section">
+      <header className="mcp-hero">
+        <div className="mcp-hero-copy">
+          <div className="row" style={{ gap: "0.45rem", alignItems: "center" }}>
+            <h2 className="mcp-hero-title">MCP</h2>
+            <StubBadge label="0.1.4" />
+          </div>
+          <p className="mcp-hero-lead">
+            Подключения сайтов и программ для продуктивности. Выберите плитку —
+            откроется карточка с данными коннектора.
+          </p>
         </div>
-        <p className="muted" style={{ margin: 0 }}>
-          Каталог подключений сайтов и программ. Плитки как у тем: иконка +
-          название → окно с данными. Runtime/OAuth подключается по этапам (см.{" "}
-          <span className="mono">docs/MCP.md</span>).
-        </p>
+        <div className="mcp-hero-stats" aria-label="Сводка каталога">
+          <div className="mcp-stat">
+            <span className="mcp-stat-value">{MCP_CONNECTORS.length}</span>
+            <span className="mcp-stat-label">в каталоге</span>
+          </div>
+          <div className="mcp-stat">
+            <span className="mcp-stat-value">{MCP_STAGES.length}</span>
+            <span className="mcp-stat-label">этапов</span>
+          </div>
+          <div className="mcp-stat">
+            <span className="mcp-stat-value">{markedCount}</span>
+            <span className="mcp-stat-label">к подключению</span>
+          </div>
+        </div>
       </header>
 
-      <div className="mcp-stage-filters" role="tablist" aria-label="Этапы MCP">
+      <nav className="mcp-stage-rail" aria-label="Этапы MCP">
         <button
           type="button"
-          className={`btn ${stageFilter === "all" ? "btn-primary" : ""}`}
+          role="tab"
+          aria-selected={stageFilter === "all"}
+          className={`mcp-chip ${stageFilter === "all" ? "is-active" : ""}`}
           onClick={() => setStageFilter("all")}
         >
-          Все этапы
+          <span className="mcp-chip-num">∗</span>
+          <span className="mcp-chip-text">Все</span>
         </button>
         {MCP_STAGES.map((s) => (
           <button
             key={s.stage}
             type="button"
-            className={`btn ${stageFilter === s.stage ? "btn-primary" : ""}`}
+            role="tab"
+            aria-selected={stageFilter === s.stage}
+            className={`mcp-chip ${stageFilter === s.stage ? "is-active" : ""}`}
             onClick={() => setStageFilter(s.stage)}
-            title={`Каталог #${s.catalogNo}`}
+            title={`${s.title} · каталог #${s.catalogNo}`}
           >
-            {s.stage}. {s.title}
+            <span className="mcp-chip-num">{s.stage}</span>
+            <span className="mcp-chip-text">{STAGE_CHIP[s.stage]}</span>
           </button>
         ))}
+      </nav>
+
+      <div className="mcp-stages">
+        {stages.map((stage) => {
+          const items = MCP_CONNECTORS.filter((c) => c.stage === stage.stage);
+          return (
+            <section key={stage.stage} className="mcp-stage-panel">
+              <header className="mcp-stage-head">
+                <div className="mcp-stage-kicker">
+                  <span className="mcp-stage-badge">Этап {stage.stage}</span>
+                  <span className="mcp-stage-cat mono">#{stage.catalogNo}</span>
+                </div>
+                <h3 className="mcp-stage-title">{stage.title}</h3>
+                <p className="mcp-stage-blurb">{stage.blurb}</p>
+              </header>
+
+              <div className="mcp-tile-grid">
+                {items.map((c) => {
+                  const draft = drafts[c.id];
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      className={`mcp-tile ${draft?.enabled ? "is-marked" : ""}`}
+                      onClick={() => setOpenId(c.id)}
+                      style={{ "--mcp-brand": c.color } as CSSProperties}
+                    >
+                      <span className="mcp-tile-glow" aria-hidden />
+                      <span className="mcp-tile-logo" aria-hidden>
+                        <McpBrandIcon id={c.icon} color={c.color} size={40} />
+                      </span>
+                      <span className="mcp-tile-meta">
+                        <strong className="mcp-tile-name">{c.name}</strong>
+                        <span className="mcp-tile-sub">
+                          {MCP_AUTH_LABEL[c.auth]}
+                        </span>
+                      </span>
+                      {draft?.enabled ? (
+                        <span className="mcp-tile-check" aria-label="К подключению">
+                          ✓
+                        </span>
+                      ) : (
+                        <span className="mcp-tile-open" aria-hidden>
+                          →
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          );
+        })}
       </div>
 
-      {stages.map((stage) => {
-        const items = MCP_CONNECTORS.filter((c) => c.stage === stage.stage);
-        return (
-          <section key={stage.stage} className="mcp-stage-block">
-            <header className="appearance-block-head">
-              <div className="row" style={{ flexWrap: "wrap", gap: "0.4rem" }}>
-                <h3 style={{ margin: 0, fontSize: "0.98rem" }}>
-                  Этап {stage.stage} · {stage.title}
-                </h3>
-                <span className="muted mono" style={{ fontSize: "0.75rem" }}>
-                  каталог #{stage.catalogNo}
-                </span>
-              </div>
-              <p className="muted" style={{ margin: 0 }}>
-                {stage.blurb}
-              </p>
-            </header>
-            <div className="theme-grid mcp-tile-grid">
-              {items.map((c) => {
-                const draft = drafts[c.id];
-                return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    className={`theme-card mcp-tile ${draft?.enabled ? "active" : ""}`}
-                    onClick={() => setOpenId(c.id)}
-                  >
-                    <span className="mcp-tile-ribbon" aria-hidden>
-                      <McpBrandIcon id={c.icon} color={c.color} size={36} />
-                    </span>
-                    <span className="theme-card-body mcp-tile-body">
-                      <strong>{c.name}</strong>
-                      <span className="mono muted">
-                        {MCP_AUTH_LABEL[c.auth]} · {MCP_STATUS_LABEL[c.status]}
-                      </span>
-                    </span>
-                    {draft?.enabled ? (
-                      <span className="appearance-check" aria-hidden>
-                        ✓
-                      </span>
-                    ) : null}
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        );
-      })}
-
-      {note ? <p className="muted">{note}</p> : null}
+      {note ? <p className="mcp-toast muted">{note}</p> : null}
 
       {open ? (
         <McpConnectorModal
@@ -151,8 +188,8 @@ export function SettingsMcpSection() {
             upsertDraft(open.id, next);
             setNote(
               next.enabled
-                ? `Черновик «${open.name}» сохранён (ожидает MCP runtime).`
-                : `Черновик «${open.name}» обновлён.`,
+                ? `«${open.name}» помечен к подключению (черновик).`
+                : `Черновик «${open.name}» сохранён.`,
             );
           }}
         />
@@ -186,17 +223,19 @@ function McpConnectorModal(props: {
         aria-modal="true"
         aria-labelledby="mcp-connector-title"
         onClick={(e) => e.stopPropagation()}
+        style={{ "--mcp-brand": c.color } as CSSProperties}
       >
-        <div className="row" style={{ alignItems: "flex-start", gap: "0.75rem" }}>
-          <McpBrandIcon id={c.icon} color={c.color} size={44} />
-          <div style={{ flex: 1 }}>
-            <h2 id="mcp-connector-title" style={{ margin: 0 }}>
-              {c.name}
-            </h2>
-            <p className="muted" style={{ margin: "0.35rem 0 0" }}>
-              Этап {c.stage} · {MCP_AUTH_LABEL[c.auth]} ·{" "}
-              {MCP_STATUS_LABEL[c.status]}
-            </p>
+        <div className="mcp-modal-top">
+          <span className="mcp-modal-logo" aria-hidden>
+            <McpBrandIcon id={c.icon} color={c.color} size={48} />
+          </span>
+          <div className="mcp-modal-heading">
+            <h2 id="mcp-connector-title">{c.name}</h2>
+            <div className="mcp-modal-tags">
+              <span className="mcp-tag">Этап {c.stage}</span>
+              <span className="mcp-tag">{MCP_AUTH_LABEL[c.auth]}</span>
+              <span className="mcp-tag">{MCP_STATUS_LABEL[c.status]}</span>
+            </div>
           </div>
           <button
             type="button"
@@ -216,77 +255,77 @@ function McpConnectorModal(props: {
           </button>
         </div>
 
-        <div className="modal-body stack" style={{ gap: "0.85rem" }}>
-          <p style={{ margin: 0 }}>{c.summary}</p>
+        <div className="modal-body mcp-modal-body">
+          <p className="mcp-modal-summary">{c.summary}</p>
 
-          <div>
-            <strong style={{ fontSize: "0.85rem" }}>Голосовые команды</strong>
+          <div className="mcp-modal-block">
+            <h4>Голосовые команды</h4>
             <ul className="mcp-voice-list">
               {c.voiceExamples.map((ex) => (
-                <li key={ex}>{ex}</li>
+                <li key={ex}>
+                  <span className="mcp-voice-q">«{ex}»</span>
+                </li>
               ))}
             </ul>
           </div>
 
           {c.envKeys.length > 0 ? (
-            <div className="stack" style={{ gap: "0.45rem" }}>
-              <strong style={{ fontSize: "0.85rem" }}>
-                Данные для подключения
-              </strong>
-              {c.envKeys.map((key) => (
-                <label key={key} className="stack" style={{ gap: "0.2rem" }}>
-                  <span className="muted mono" style={{ fontSize: "0.78rem" }}>
-                    {key}
-                  </span>
-                  <input
-                    className="input"
-                    type={
-                      key.includes("TOKEN") || key.includes("SECRET") || key.includes("KEY")
-                        ? "password"
-                        : "text"
-                    }
-                    autoComplete="off"
-                    placeholder="черновик (не публикуется в git)"
-                    value={fields[key] ?? ""}
-                    onChange={(e) =>
-                      setFields((prev) => ({ ...prev, [key]: e.target.value }))
-                    }
-                  />
-                </label>
-              ))}
+            <div className="mcp-modal-block">
+              <h4>Данные для подключения</h4>
+              <div className="mcp-fields">
+                {c.envKeys.map((key) => (
+                  <label key={key} className="mcp-field">
+                    <span className="mono">{key}</span>
+                    <input
+                      className="input"
+                      type={
+                        /TOKEN|SECRET|KEY|WEBHOOK/i.test(key)
+                          ? "password"
+                          : "text"
+                      }
+                      autoComplete="off"
+                      placeholder="черновик · не в git"
+                      value={fields[key] ?? ""}
+                      onChange={(e) =>
+                        setFields((prev) => ({
+                          ...prev,
+                          [key]: e.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                ))}
+              </div>
             </div>
           ) : (
-            <p className="muted" style={{ margin: 0 }}>
-              Отдельный API-ключ не нужен — локальный / OS bridge (когда runtime
-              будет готов).
+            <p className="muted mcp-modal-note">
+              API-ключ не нужен — локальный / OS bridge (когда runtime готов).
             </p>
           )}
 
-          <label className="stack" style={{ gap: "0.2rem" }}>
-            <span className="muted" style={{ fontSize: "0.85rem" }}>
-              Заметки
-            </span>
+          <label className="mcp-field">
+            <span>Заметки</span>
             <textarea
               className="input"
               rows={3}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Например: workspace URL, id доски…"
+              placeholder="Workspace URL, id доски, комментарий…"
             />
           </label>
 
-          <label className="row" style={{ gap: "0.5rem" }}>
+          <label className="mcp-toggle-row">
             <input
               type="checkbox"
               checked={enabled}
               onChange={(e) => setEnabled(e.target.checked)}
             />
-            <span>Пометить к подключению (черновик каталога)</span>
+            <span>Пометить к подключению</span>
           </label>
 
-          <p className="muted" style={{ margin: 0, fontSize: "0.8rem" }}>
-            Реальный MCP-runtime и OAuth в 0.1.4 ещё не активны — сохраняется
-            только локальный черновик настроек.
+          <p className="muted mcp-modal-foot">
+            MCP-runtime и OAuth в 0.1.4 ещё не активны — только локальный
+            черновик.
           </p>
         </div>
 
