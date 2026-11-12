@@ -2383,6 +2383,54 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   overflow: auto;
 }
 
+.voice-phrases-summary {
+  gap: 0.55rem;
+}
+
+.voice-phrases-modal {
+  display: grid;
+  gap: 12px;
+  width: min(720px, calc(100vw - 40px));
+  max-height: min(92vh, 880px);
+  overflow: auto;
+}
+
+.voice-phrases-modal-list {
+  display: grid;
+  gap: 8px;
+  max-height: min(42vh, 360px);
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.voice-phrase-row {
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--panel-line) 80%, transparent);
+  border-radius: calc(var(--radius) - 2px);
+  background: color-mix(in srgb, var(--bg-elevated) 55%, transparent);
+}
+
+.voice-phrase-row.is-active {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--panel-line));
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-elevated));
+}
+
+.voice-phrase-row-main {
+  display: grid;
+  gap: 4px;
+}
+
+.voice-phrase-row-meta {
+  opacity: 0.75;
+  font-size: 0.82em;
+}
+
+.voice-phrases-reload {
+  margin: 0;
+}
+
 .modal:has(.auto-grow-textarea) {
   max-height: min(92vh, 860px);
   overflow: auto;
