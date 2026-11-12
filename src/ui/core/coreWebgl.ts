@@ -51,43 +51,67 @@ out float vBandMix;
 
 float hash(float n){ return fract(sin(n)*43758.5453123); }
 
+// Cheap curl-ish displacement so filaments weave instead of sit as a disc
+vec3 plasmaCurl(vec3 p, float t, float s){
+  float a = sin(p.y * 5.4 + t * 1.7 + s);
+  float b = cos(p.z * 4.8 + t * 2.1 + s * 1.3);
+  float c = sin(p.x * 6.1 + t * 1.3 + s * 0.7);
+  float d = cos(p.x * 3.2 + p.y * 2.7 - t * 2.4 + s);
+  float e = sin(p.z * 3.8 + p.x * 2.1 + t * 1.9);
+  float f = cos(p.y * 4.1 - p.z * 3.3 + t * 2.7 + s * 2.0);
+  return vec3(b - c, c - a, a - b) * 0.5
+       + vec3(e - f, f - d, d - e) * 0.35;
+}
+
 void main(){
   float t = uTime;
   float s = aSeed * 6.28318;
-  // multi-frequency plasma curl (living filaments)
   float turb = uTurbulence * uJitter;
   vec3 p = aPos;
   float r0 = length(p);
   vec3 nrm = r0 > 1e-4 ? p / r0 : vec3(0.0, 1.0, 0.0);
 
-  float w1 = sin(t * 1.9 + s + p.y * 7.0) * cos(t * 1.1 + p.z * 5.0);
-  float w2 = cos(t * 2.7 + s * 1.7 + p.x * 6.0);
-  float w3 = sin(t * 3.4 + s * 0.6 + p.z * 8.0 + p.x * 3.0);
-  vec3 drift = nrm * (w1 * 0.045)
-    + vec3(w2, w3, -w1) * 0.055
+  // Multi-scale living filament motion
+  vec3 curl = plasmaCurl(p * 1.15, t, s);
+  vec3 curl2 = plasmaCurl(p * 2.4 + curl * 0.4, t * 1.35, s + 2.1);
+  float w1 = sin(t * 2.15 + s + p.y * 8.0) * cos(t * 1.25 + p.z * 5.5);
+  vec3 drift = curl * 0.085
+    + curl2 * 0.04
+    + nrm * (w1 * 0.028)
     + vec3(
-        sin(t * 4.1 + s),
-        cos(t * 3.6 + s * 1.3),
-        sin(t * 2.2 + s * 2.1)
-      ) * 0.02;
+        sin(t * 4.4 + s),
+        cos(t * 3.8 + s * 1.3),
+        sin(t * 2.6 + s * 2.1)
+      ) * 0.018;
   p += drift * turb;
 
-  // radial breath
-  float breath = 1.0 + uPulse * 0.06 + sin(t * 2.2 + s) * 0.012 * turb;
+  // Soft radial breath — outer shells expand more so silhouette stays organic
+  float breath = 1.0
+    + uPulse * (0.04 + smoothstep(0.35, 1.2, r0) * 0.05)
+    + sin(t * 2.05 + s) * 0.01 * turb;
   p *= breath;
 
   vec4 world = uModel * vec4(p, 1.0);
   gl_Position = uViewProj * world;
 
-  float depth = clamp(0.42 + world.z * 0.4, 0.2, 1.0);
-  float hot = smoothstep(0.15, 0.0, r0) * 0.85 + aPhase * 0.35;
-  float sz = uPointScale * mix(1.1, 4.6, hot) * depth;
-  // outer wisps slightly larger / softer
-  sz *= mix(1.0, 1.35, smoothstep(0.9, 1.45, r0));
+  float depth = clamp(0.38 + world.z * 0.42, 0.18, 1.0);
+  float hot = smoothstep(0.18, 0.0, r0) * 0.7 + aPhase * 0.28;
+
+  // Soft spherical falloff — no hard cookie-cutter rim
+  float softEdge = 1.0 - smoothstep(0.72, 1.55, r0);
+  softEdge *= softEdge;
+
+  // Filament tips (high r, low phase) fade to wisps
+  float tipFade = mix(1.0, 0.35, smoothstep(0.85, 1.45, r0) * (1.0 - aPhase));
+
+  float sz = uPointScale * mix(0.85, 2.9, hot) * depth;
+  // Outer filaments stay thin so strands read as lines, not a filled disc
+  sz *= mix(1.0, 0.72, smoothstep(0.45, 1.1, r0));
+  sz *= mix(1.0, 1.45, tipFade < 0.55 ? 1.0 : 0.0);
   gl_PointSize = max(1.0, sz);
 
-  vAlpha = mix(0.22, 0.95, aPhase) * depth * mix(0.55, 1.0, hot);
-  vHot = clamp(hot + hash(aSeed + t * 0.01) * 0.08, 0.0, 1.0);
+  vAlpha = mix(0.18, 0.92, aPhase) * depth * mix(0.5, 1.0, hot) * softEdge * tipFade;
+  vHot = clamp(hot + hash(aSeed + t * 0.01) * 0.06, 0.0, 1.0);
   vBandMix = aPhase;
 }
 `;
@@ -103,12 +127,15 @@ out vec4 outColor;
 void main(){
   vec2 c = gl_PointCoord * 2.0 - 1.0;
   float d = length(c);
-  if (d > 1.0) discard;
-  float core = exp(-d * d * 3.2);
-  float bloom = pow(smoothstep(1.0, 0.0, d), 1.35);
-  float a = (core * 0.85 + bloom * 0.55) * vAlpha * uGain;
-  vec3 col = mix(uColor, vec3(1.0), vHot * 0.55);
-  col = mix(col, uColor * 1.15, vBandMix * 0.25);
+  // Soft sprite discard — never a hard pixel circle
+  float fall = 1.0 - smoothstep(0.55, 1.0, d);
+  if (fall <= 0.001) discard;
+  float core = exp(-d * d * 4.2);
+  float bloom = pow(fall, 1.6);
+  float a = (core * 0.9 + bloom * 0.4) * vAlpha * uGain;
+  if (a < 0.004) discard;
+  vec3 col = mix(uColor, vec3(1.0), vHot * 0.42);
+  col = mix(col, uColor * 1.2, vBandMix * 0.22);
   outColor = vec4(col * a, a);
 }
 `;
@@ -141,31 +168,38 @@ function filamentStrand(
     Math.cos(ay),
     Math.sin(ay) * Math.sin(ax),
   ];
-  let px = dir[0] * 0.06;
-  let py = dir[1] * 0.06;
-  let pz = dir[2] * 0.06;
+  // Start slightly off-center so strands braid instead of radiating as a disc
+  const startR = 0.04 + rand(seed + 2.2) * 0.1;
+  let px = dir[0] * startR + (rand(seed + 3) - 0.5) * 0.05;
+  let py = dir[1] * startR + (rand(seed + 4) - 0.5) * 0.05;
+  let pz = dir[2] * startR + (rand(seed + 5) - 0.5) * 0.05;
+
+  // Per-strand length variance → irregular soft silhouette (not a hard sphere)
+  const reach = radius * (0.62 + rand(seed + 6.1) * 0.55);
 
   for (let i = 0; i < points; i++) {
     const t = i / Math.max(1, points - 1);
-    // wander direction with chaos
-    const jx = (rand(seed + i * 3.1) - 0.5) * chaos;
-    const jy = (rand(seed + i * 5.7) - 0.5) * chaos;
-    const jz = (rand(seed + i * 9.3) - 0.5) * chaos;
+    // Stronger lateral wander for curl-noise filament look
+    const jx = (rand(seed + i * 3.1) - 0.5) * chaos * 1.35;
+    const jy = (rand(seed + i * 5.7) - 0.5) * chaos * 1.35;
+    const jz = (rand(seed + i * 9.3) - 0.5) * chaos * 1.35;
+    // Twist around the primary axis so strands form ribbons
+    const twist = Math.sin(t * Math.PI * (2.5 + rand(seed) * 3)) * chaos * 0.55;
     dir = [
-      dir[0] * 0.82 + jx + (rand(seed + i) - 0.5) * 0.08,
-      dir[1] * 0.82 + jy + (rand(seed + i + 0.2) - 0.5) * 0.08,
-      dir[2] * 0.82 + jz + (rand(seed + i + 0.4) - 0.5) * 0.08,
+      dir[0] * 0.72 + jx + (rand(seed + i) - 0.5) * 0.12 + dir[1] * twist * 0.15,
+      dir[1] * 0.72 + jy + (rand(seed + i + 0.2) - 0.5) * 0.12 + dir[2] * twist * 0.15,
+      dir[2] * 0.72 + jz + (rand(seed + i + 0.4) - 0.5) * 0.12 + dir[0] * twist * 0.15,
     ];
     const len = Math.hypot(dir[0], dir[1], dir[2]) || 1;
     dir = [dir[0] / len, dir[1] / len, dir[2] / len];
-    const step = (radius * 0.92) / points;
+    const step = reach / points;
     px += dir[0] * step;
     py += dir[1] * step;
     pz += dir[2] * step;
-    // soft spherical attraction so strands stay ball-shaped
+    // Loose spherical attraction — keep volume without a hard shell
     const r = Math.hypot(px, py, pz) || 1;
-    const targetR = 0.08 + t * radius;
-    const pull = (targetR - r) * 0.35;
+    const targetR = 0.06 + t * reach;
+    const pull = (targetR - r) * 0.22;
     px += (px / r) * pull;
     py += (py / r) * pull;
     pz += (pz / r) * pull;
@@ -173,7 +207,8 @@ function filamentStrand(
     pos[i * 3] = px;
     pos[i * 3 + 1] = py;
     pos[i * 3 + 2] = pz;
-    phase[i] = 0.25 + (1 - t) * 0.65 + rand(seed + i * 0.17) * 0.15;
+    // Tip of strand is dimmer → soft organic perimeter
+    phase[i] = 0.2 + (1 - t) * 0.7 + rand(seed + i * 0.17) * 0.12;
     seeds[i] = rand(seed + i * 0.37);
   }
   return { pos, phase, seeds };
@@ -241,11 +276,12 @@ function sparkShell(
   for (let i = 0; i < count; i++) {
     const a = rand(seed0 + i) * Math.PI * 2;
     const b = Math.acos(2 * rand(seed0 + i + 0.3) - 1);
-    const r = radius * (0.92 + rand(seed0 + i + 0.7) * 0.18);
+    // Wide radial scatter so sparks don't form a crisp spherical rim
+    const r = radius * (0.7 + rand(seed0 + i + 0.7) * 0.55);
     positions[i * 3] = Math.sin(b) * Math.cos(a) * r;
     positions[i * 3 + 1] = Math.cos(b) * r;
     positions[i * 3 + 2] = Math.sin(b) * Math.sin(a) * r;
-    phases[i] = 0.35 + rand(seed0 + i * 1.7) * 0.4;
+    phases[i] = 0.2 + rand(seed0 + i * 1.7) * 0.45;
     seeds[i] = rand(seed0 + i * 4.2);
   }
   return { positions, phases, seeds };
@@ -254,134 +290,135 @@ function sparkShell(
 function buildLayers(level: number): Layer[] {
   const lv = normalizeCoreLevel(level);
   const layers: Layer[] = [];
-  const chaos = 0.55 + Math.min(1.2, Math.log2(1 + lv) * 0.28);
+  const chaos = 0.7 + Math.min(1.35, Math.log2(1 + lv) * 0.32);
 
-  // Always: bright nucleus
+  // Compact nucleus — bright focus, not a blown-out white disc
   {
-    const n = nucleusCloud(budget(280, lv, 900), 0.22, 11.1);
+    const n = nucleusCloud(budget(140, lv, 420), 0.14, 11.1);
     layers.push({
       ...n,
       count: n.phases.length,
-      spin: 0.35,
-      tiltX: 0.2,
-      tiltZ: 0.1,
-      size: 2.8,
+      spin: 0.45,
+      tiltX: 0.25,
+      tiltZ: 0.12,
+      size: 2.1,
       band: "glow",
-      turbulence: 0.65,
+      turbulence: 0.55,
       minLevel: 1,
     });
   }
 
-  // Warm inner filaments
+  // Warm inner filaments — denser strands, thinner points
   {
-    const strands = budget(28, lv, 90);
-    const pts = budget(22, lv, 48);
-    const pack = packStrands(strands, pts, 0.85, chaos, 3.3);
+    const strands = budget(36, lv, 110);
+    const pts = budget(36, lv, 72);
+    const pack = packStrands(strands, pts, 0.78, chaos, 3.3);
     layers.push({
       ...pack,
       count: pack.phases.length,
-      spin: 0.42,
+      spin: 0.48,
       tiltX: 0.55,
       tiltZ: -0.25,
-      size: 1.7,
+      size: 1.35,
       band: "warm",
-      turbulence: 1.15,
+      turbulence: 1.35,
       minLevel: 1,
     });
   }
 
-  // Cool mid shell filaments
+  // Cool mid filaments weaving through warm
   {
-    const strands = budget(22, lv, 80);
-    const pts = budget(20, lv, 44);
-    const pack = packStrands(strands, pts, 1.05, chaos * 0.95, 7.7);
+    const strands = budget(30, lv, 100);
+    const pts = budget(34, lv, 68);
+    const pack = packStrands(strands, pts, 0.98, chaos * 1.05, 7.7);
     layers.push({
       ...pack,
       count: pack.phases.length,
-      spin: -0.33,
-      tiltX: -0.4,
-      tiltZ: 0.7,
-      size: 1.55,
+      spin: -0.38,
+      tiltX: -0.45,
+      tiltZ: 0.75,
+      size: 1.25,
       band: "cool",
-      turbulence: 1.05,
+      turbulence: 1.25,
       minLevel: 1,
     });
   }
 
   if (lv >= 2) {
     const pack = packStrands(
-      budget(18, lv, 70),
-      budget(18, lv, 40),
-      1.15,
-      chaos * 1.05,
+      budget(24, lv, 85),
+      budget(30, lv, 60),
+      1.08,
+      chaos * 1.1,
       13.2,
     );
     layers.push({
       ...pack,
       count: pack.phases.length,
-      spin: 0.28,
-      tiltX: 0.9,
-      tiltZ: 0.35,
-      size: 1.4,
+      spin: 0.32,
+      tiltX: 0.95,
+      tiltZ: 0.4,
+      size: 1.15,
       band: "warm",
-      turbulence: 1.2,
+      turbulence: 1.4,
       minLevel: 2,
     });
   }
 
   if (lv >= 3) {
     const pack = packStrands(
-      budget(24, lv, 85),
-      budget(24, lv, 52),
-      1.25,
-      chaos * 1.15,
+      budget(28, lv, 95),
+      budget(38, lv, 76),
+      1.18,
+      chaos * 1.2,
       21.5,
     );
     layers.push({
       ...pack,
       count: pack.phases.length,
-      spin: -0.48,
-      tiltX: -0.75,
-      tiltZ: -0.55,
-      size: 1.35,
+      spin: -0.52,
+      tiltX: -0.8,
+      tiltZ: -0.6,
+      size: 1.1,
       band: "cool",
-      turbulence: 1.35,
+      turbulence: 1.5,
       minLevel: 3,
     });
   }
 
   if (lv >= 4) {
-    const sparks = sparkShell(budget(400, lv, 1400), 1.38, 31);
+    // Sparse outer sparks — soft perimeter flecks, not a hard shell
+    const sparks = sparkShell(budget(180, lv, 650), 1.32, 31);
     layers.push({
       ...sparks,
       count: sparks.phases.length,
-      spin: 0.18,
-      tiltX: 0.3,
-      tiltZ: 0.5,
-      size: 1.25,
+      spin: 0.22,
+      tiltX: 0.35,
+      tiltZ: 0.55,
+      size: 1.05,
       band: "warm",
-      turbulence: 0.9,
+      turbulence: 1.05,
       minLevel: 4,
     });
   }
 
   if (lv >= 5) {
     const pack = packStrands(
-      budget(30, lv, 100),
-      budget(26, lv, 56),
-      1.42,
-      chaos * 1.25,
+      budget(34, lv, 110),
+      budget(40, lv, 80),
+      1.32,
+      chaos * 1.3,
       44.4,
     );
     layers.push({
       ...pack,
       count: pack.phases.length,
-      spin: 0.55,
-      tiltX: 1.1,
-      tiltZ: -0.9,
-      size: 1.3,
+      spin: 0.58,
+      tiltX: 1.15,
+      tiltZ: -0.95,
+      size: 1.05,
       band: "cool",
-      turbulence: 1.45,
+      turbulence: 1.55,
       minLevel: 5,
     });
   }
@@ -393,21 +430,21 @@ function buildLayers(level: number): Layer[] {
       const tier = 6 + i;
       if (lv < tier) break;
       const pack = packStrands(
-        budget(12 + i * 2, lv, 55),
-        budget(16, lv, 36),
-        1.2 + i * 0.08,
-        chaos * (1.1 + i * 0.04),
+        budget(14 + i * 2, lv, 60),
+        budget(24, lv, 48),
+        1.12 + i * 0.07,
+        chaos * (1.15 + i * 0.04),
         55 + i * 9.1,
       );
       layers.push({
         ...pack,
         count: pack.phases.length,
-        spin: (i % 2 === 0 ? 0.25 : -0.3) * (1 + i * 0.03),
-        tiltX: 0.4 + i * 0.15,
-        tiltZ: -0.3 - i * 0.1,
-        size: 1.15,
+        spin: (i % 2 === 0 ? 0.28 : -0.34) * (1 + i * 0.03),
+        tiltX: 0.45 + i * 0.15,
+        tiltZ: -0.35 - i * 0.1,
+        size: 0.95,
         band: i % 2 === 0 ? "warm" : "cool",
-        turbulence: 1.2 + i * 0.05,
+        turbulence: 1.3 + i * 0.05,
         minLevel: tier,
       });
     }
@@ -692,8 +729,9 @@ export function createCoreWebgl(
     }
 
     const aspect = canvas.width / Math.max(1, canvas.height);
-    mat4Perspective(proj, (40 * Math.PI) / 180, aspect, 0.1, 20);
-    mat4LookAt(view, [0, 0.08, 3.15], [0, 0, 0], [0, 1, 0]);
+    // Wider FOV + pulled-back camera so soft filament tips never hit a hard frame edge
+    mat4Perspective(proj, (48 * Math.PI) / 180, aspect, 0.1, 20);
+    mat4LookAt(view, [0, 0.06, 3.85], [0, 0, 0], [0, 1, 0]);
     mat4Multiply(viewProj, proj, view);
 
     gl!.disable(gl!.DEPTH_TEST);
@@ -707,16 +745,26 @@ export function createCoreWebgl(
     gl!.uniform1f(uTime, t * speed);
     gl!.uniform1f(uPulse, pulse);
     gl!.uniform1f(uJitter, jitter);
-    gl!.uniform1f(uPointScale, (canvas.height / 400) * 2.35);
+    gl!.uniform1f(uPointScale, (canvas.height / 400) * 1.85);
     gl!.uniform1f(uGain, gain);
 
     for (const layer of gpu) {
       mat4FromEuler(
         model,
-        layer.tiltX * 0.35 + Math.sin(t * 0.15) * 0.08,
+        layer.tiltX * 0.4 + Math.sin(t * 0.18) * 0.1,
         t * layer.spin * speed,
-        layer.tiltZ * 0.35,
+        layer.tiltZ * 0.4 + Math.cos(t * 0.11) * 0.06,
       );
+      // Slight overall scale-down leaves margin for soft falloff inside the canvas
+      model[0] *= 0.82;
+      model[1] *= 0.82;
+      model[2] *= 0.82;
+      model[4] *= 0.82;
+      model[5] *= 0.82;
+      model[6] *= 0.82;
+      model[8] *= 0.82;
+      model[9] *= 0.82;
+      model[10] *= 0.82;
       gl!.uniformMatrix4fv(uModel, false, model);
       gl!.uniform1f(uTurbulence, layer.turbulence);
       const rgb =
