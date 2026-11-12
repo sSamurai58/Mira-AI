@@ -5,7 +5,9 @@ import { getOwnerId } from "../owner";
 import {
   VOICE_PACK_ENGINE,
   buildVoiceModelPack,
+  normalizeLexKey,
   readVoiceModelPack,
+  tokenizeSpeechWords,
   type LinkedTrainClip,
   type TrainProgressEvent,
   type VoiceModelPack,
@@ -218,6 +220,11 @@ function isUsefulSpeechPhrase(p: string): boolean {
   if (/mock-модели|LLM_PROVIDER|API-ключ|\.env\b/i.test(p)) return false;
   if (/skills?\s+в\s+контексте|skills\s+on-demand/i.test(p)) return false;
   if (/интернет-инструменты/i.test(p)) return false;
+  // Skip chat echo / memory scaffolding — not natural assistant speech.
+  if (/^вы сказали:/i.test(p)) return false;
+  if (/дополнительных фрагментов памяти/i.test(p)) return false;
+  if (/в контекст подтянуты фрагменты/i.test(p)) return false;
+  if (/учтены интернет-данные/i.test(p)) return false;
   return true;
 }
 
@@ -230,13 +237,25 @@ function splitPhraseCandidates(text: string): string[] {
     .filter(isUsefulSpeechPhrase);
 }
 
-/** Recent assistant chat lines → phrase candidates (frequency + recency). */
-export function collectAssistantUsedPhrases(opts?: {
+export type AssistantSpeechStats = {
+  /** Phrase candidates ranked by frequency (then recency). */
+  phrases: Array<{ text: string; count: number; score: number }>;
+  /** Word tokens ranked by frequency across assistant speech. */
+  words: Array<{ word: string; key: string; count: number }>;
+};
+
+/**
+ * Assistant chat → phrase + word frequency stats.
+ * Frequency dominates; recency is a tie-break so the most-used speech wins.
+ */
+export function collectAssistantSpeechStats(opts?: {
   limitUtterances?: number;
   limitPhrases?: number;
-}): string[] {
+  limitWords?: number;
+}): AssistantSpeechStats {
   const limitU = opts?.limitUtterances ?? 80;
   const limitP = opts?.limitPhrases ?? 40;
+  const limitW = opts?.limitWords ?? 80;
   try {
     const store = openStore();
     const owner = getOwnerId();
@@ -251,25 +270,125 @@ export function collectAssistantUsedPhrases(opts?: {
       )
       .all(owner, limitU) as Array<{ content: string }>;
 
-    const freq = new Map<string, { text: string; score: number }>();
+    const phraseFreq = new Map<
+      string,
+      { text: string; count: number; recency: number }
+    >();
+    const wordFreq = new Map<string, { word: string; count: number }>();
+
     rows.forEach((row, idx) => {
       const recency = Math.max(1, limitU - idx);
       for (const part of splitPhraseCandidates(row.content)) {
         const key = part.toLowerCase();
-        const prev = freq.get(key);
-        const bump = recency + (part.length <= 80 ? 8 : 0);
-        if (prev) prev.score += bump;
-        else freq.set(key, { text: part, score: bump });
+        const prev = phraseFreq.get(key);
+        if (prev) {
+          prev.count += 1;
+          prev.recency = Math.max(prev.recency, recency);
+        } else {
+          phraseFreq.set(key, { text: part, count: 1, recency });
+        }
+      }
+      for (const raw of tokenizeSpeechWords(row.content)) {
+        const key = normalizeLexKey(raw);
+        if (!key || key.length < 2) continue;
+        const prev = wordFreq.get(key);
+        if (prev) prev.count += 1;
+        else wordFreq.set(key, { word: raw, count: 1 });
       }
     });
 
-    return [...freq.values()]
-      .sort((a, b) => b.score - a.score || a.text.length - b.text.length)
-      .slice(0, limitP)
-      .map((x) => x.text);
+    const phrases = [...phraseFreq.values()]
+      .map((p) => ({
+        text: p.text,
+        count: p.count,
+        // Frequency first (×100), short replies get a small boost, then recency.
+        score: p.count * 100 + (p.text.length <= 80 ? 8 : 0) + p.recency,
+      }))
+      .sort(
+        (a, b) =>
+          b.score - a.score ||
+          b.count - a.count ||
+          a.text.length - b.text.length,
+      )
+      .slice(0, limitP);
+
+    const words = [...wordFreq.entries()]
+      .map(([key, w]) => ({ word: w.word, key, count: w.count }))
+      .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key))
+      .slice(0, limitW);
+
+    return { phrases, words };
   } catch {
-    return [];
+    return { phrases: [], words: [] };
   }
+}
+
+/** Recent assistant chat lines → phrase candidates (frequency + recency). */
+export function collectAssistantUsedPhrases(opts?: {
+  limitUtterances?: number;
+  limitPhrases?: number;
+}): string[] {
+  return collectAssistantSpeechStats(opts).phrases.map((p) => p.text);
+}
+
+/** Words already covered by project corpus / trained lexicon (custom TTS). */
+function projectCoveredWordKeys(projectId: string): Set<string> {
+  const covered = new Set<string>();
+  for (const phrase of listPhrases(projectId)) {
+    for (const raw of tokenizeSpeechWords(phrase.text)) {
+      const key = normalizeLexKey(raw);
+      if (key) covered.add(key);
+    }
+  }
+  const project = getVoiceProject(projectId);
+  if (!project?.custom_voice_id) return covered;
+  try {
+    const packDir = studioRoot(project.id, "model-pack");
+    const pack = readVoiceModelPack(packDir);
+    if (pack?.lexicon) {
+      for (const key of Object.keys(pack.lexicon)) covered.add(key);
+    }
+  } catch {
+    // pack optional
+  }
+  return covered;
+}
+
+/**
+ * Pack most-frequent uncovered words into training sentences.
+ * Uncovered tokens keep falling back to system TTS until recorded+trained.
+ */
+function buildFrequentUncoveredSeeds(
+  words: Array<{ word: string; key: string; count: number }>,
+  covered: Set<string>,
+  lang: string,
+  minWords: number,
+  maxWords: number,
+): string[] {
+  const uncovered = words.filter((w) => !covered.has(w.key));
+  if (!uncovered.length) return [];
+  const looksEn = lang.toLowerCase().startsWith("en");
+  const lead = looksEn
+    ? "Please say clearly:"
+    : "Произнесите чётко:";
+  const seeds: string[] = [];
+  let bucket: string[] = [];
+  for (const w of uncovered) {
+    bucket.push(w.word);
+    if (bucket.length >= Math.min(12, Math.max(4, minWords))) {
+      const raw = `${lead} ${bucket.join(" ")}.`;
+      const fitted = fitPhraseToWordRange(raw, minWords, maxWords);
+      if (fitted) seeds.push(fitted);
+      bucket = [];
+      if (seeds.length >= 24) break;
+    }
+  }
+  if (bucket.length && seeds.length < 24) {
+    const raw = `${lead} ${bucket.join(" ")}.`;
+    const fitted = fitPhraseToWordRange(raw, minWords, maxWords);
+    if (fitted) seeds.push(fitted);
+  }
+  return seeds;
 }
 
 function phrasePoolForLang(lang: string): {
@@ -428,16 +547,51 @@ export function generatePhrases(
   );
   const { common, variety } = phrasePoolForLang(project.lang);
 
-  // Priority: (1) phrases Mira already speaks in chat, (2) common short
-  // replies that prevent mid-utterance Web Speech fallback, (3) variety bank.
-  // Fit each seed into the requested word range for longer training texts.
-  const used = collectAssistantUsedPhrases({
-    limitUtterances: 100,
-    limitPhrases: 80,
+  // Priority for maximum learning:
+  // (1) most-frequent assistant phrases,
+  // (2) packs of frequent uncovered words (still system TTS until trained),
+  // (3) common short replies, (4) variety bank.
+  const stats = collectAssistantSpeechStats({
+    limitUtterances: 120,
+    limitPhrases: 100,
+    limitWords: 100,
   });
+  const covered = projectCoveredWordKeys(projectId);
+  const frequentUncovered = buildFrequentUncoveredSeeds(
+    stats.words,
+    covered,
+    project.lang,
+    minWords,
+    maxWords,
+  );
+  // Phrase frequency stays primary; uncovered high-freq words are a tie-break
+  // so we close lexicon gaps without demoting the most-used replies.
+  const uncoveredRank = new Map(
+    stats.words
+      .filter((w) => !covered.has(w.key))
+      .map((w, i) => [w.key, w.count * 10 - i] as const),
+  );
+  const usedRanked = stats.phrases
+    .map((p) => {
+      const uncoveredBoost = tokenizeSpeechWords(p.text).reduce((sum, raw) => {
+        const key = normalizeLexKey(raw);
+        return sum + (uncoveredRank.get(key) ?? 0);
+      }, 0);
+      return {
+        text: p.text,
+        rank: p.score * 10_000 + uncoveredBoost,
+      };
+    })
+    .sort((a, b) => b.rank - a.rank)
+    .map((p) => p.text);
+
   const ordered: string[] = [];
   const fromChatKeys = new Set<string>();
-  const pushFresh = (list: string[], markFromChat = false) => {
+  const fromUncoveredKeys = new Set<string>();
+  const pushFresh = (
+    list: string[],
+    mark: "chat" | "uncovered" | null = null,
+  ) => {
     for (const raw of list) {
       if (ordered.length >= want) return;
       const fitted = fitPhraseToWordRange(raw, minWords, maxWords);
@@ -446,16 +600,18 @@ export function generatePhrases(
       if (existing.has(key)) continue;
       if (ordered.some((x) => x.toLowerCase() === key)) continue;
       ordered.push(fitted);
-      if (markFromChat) fromChatKeys.add(key);
+      if (mark === "chat") fromChatKeys.add(key);
+      if (mark === "uncovered") fromUncoveredKeys.add(key);
     }
   };
-  pushFresh(used, true);
+  pushFresh(usedRanked, "chat");
+  pushFresh(frequentUncovered, "uncovered");
   pushFresh(common);
   pushFresh(variety);
   // If still short of want (small banks + tight range), re-expand unique seeds
   // with slight filler rotation so long corpora can still grow.
   if (ordered.length < want) {
-    const extras = [...used, ...common, ...variety];
+    const extras = [...usedRanked, ...frequentUncovered, ...common, ...variety];
     for (const raw of extras) {
       if (ordered.length >= want) break;
       const fitted = fitPhraseToWordRange(`${raw} ${raw}`, minWords, maxWords);
@@ -483,6 +639,7 @@ export function generatePhrases(
   const baseMs = Date.now();
   const rows: VoicePhraseRow[] = [];
   let fromChat = 0;
+  let fromUncovered = 0;
   for (let i = 0; i < pick.length; i++) {
     const text = pick[i]!;
     // Stagger created_at so 1…N order stays stable across refreshes/collapse.
@@ -497,18 +654,26 @@ export function generatePhrases(
       insert.run(row.id, row.project_id, row.text, row.created_at);
       rows.push(row);
       if (fromChatKeys.has(text.toLowerCase())) fromChat += 1;
+      if (fromUncoveredKeys.has(text.toLowerCase())) fromUncovered += 1;
     } catch {
       // unique dedup race
     }
   }
+  const uncoveredWordCount = stats.words.filter(
+    (w) => !covered.has(w.key),
+  ).length;
   touchProject(projectId, {
     status: "phrases",
     recommendation: rows.length
       ? `Добавлено ${rows.length} текстов (${minWords}–${maxWords} слов)` +
-        (fromChat
-          ? ` · из диалогов ассистента: ${fromChat}`
-          : " · частые ответы Mira / банк") +
-        ". Запишите аудио — иначе TTS уйдёт в системный голос."
+        (fromChat ? ` · частые фразы диалога: ${fromChat}` : "") +
+        (fromUncovered
+          ? ` · частые непокрытые слова: ${fromUncovered}`
+          : uncoveredWordCount
+            ? ` · непокрытых частых слов в речи: ${uncoveredWordCount}`
+            : "") +
+        (!fromChat && !fromUncovered ? " · частые ответы Mira / банк" : "") +
+        ". Непокрытые слова пока говорит системный TTS — запишите и переобучите."
       : "Новых фраз нет. Добавьте свою.",
   });
   return rows;
