@@ -77,7 +77,6 @@ export function VoiceStudioPanel(props: {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
-  const [phrasesOpen, setPhrasesOpen] = useState(false);
   const [playingPhraseId, setPlayingPhraseId] = useState<string | null>(null);
   const [genCount, setGenCount] = useState(8);
   const [genMinWords, setGenMinWords] = useState(4);
@@ -182,7 +181,6 @@ export function VoiceStudioPanel(props: {
       setNote(res.detail);
       setPhraseId("");
       stopPhraseAudio();
-      setPhrasesOpen(false);
       await refresh();
       props.onCatalogChanged?.();
     } finally {
@@ -207,12 +205,6 @@ export function VoiceStudioPanel(props: {
           : `Новых текстов на ${minW}–${maxW} слов нет — добавьте свою ниже`,
       );
       await refresh(project.id);
-      // After train, corpus is collapsed — open list so generation isn't "silent".
-      const trained =
-        Boolean(project.custom_voice_id) ||
-        project.status === "ready" ||
-        project.status === "ready_partial";
-      if (rows.length && trained) setPhrasesOpen(true);
     } catch (err) {
       setNote(
         err instanceof Error
@@ -263,6 +255,7 @@ export function VoiceStudioPanel(props: {
         setActiveVoiceId(res.voice.id);
         props.onCatalogChanged?.();
       }
+      // Keep the main phrase list visible — do not send corpus into a modal.
       await refresh(project.id);
     } catch (err) {
       setNote(err instanceof Error ? err.message : String(err));
@@ -479,11 +472,6 @@ export function VoiceStudioPanel(props: {
     setNote("Перезагрузка фразы: запишите mic или загрузите аудио");
   }
 
-  function closePhrasesPanel() {
-    stopPhraseAudio();
-    setPhrasesOpen(false);
-  }
-
   const acceptedClips = clips.filter((c) => c.accepted).length;
   const linkedAccepted = clips.filter((c) => c.accepted && c.phrase_id).length;
   const coveragePct =
@@ -567,7 +555,6 @@ export function VoiceStudioPanel(props: {
             }))}
             onChange={(id) => {
               stopPhraseAudio();
-              setPhrasesOpen(false);
               void refresh(id);
             }}
           />
@@ -894,44 +881,70 @@ export function VoiceStudioPanel(props: {
             style={{ gap: "0.5rem" }}
             data-testid="voice-phrases-list"
           >
-            <div
-              className="row"
-              style={{
-                flexWrap: "wrap",
-                gap: "0.5rem",
-                alignItems: "center",
-              }}
-            >
-              <strong style={{ margin: 0 }}>
-                Фразы ({phrases.length})
-                {phrases.length > 0 ? ` · ${corpusReadyLabel}` : ""}
-              </strong>
-              {isTrained ? (
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => setPhrasesOpen(true)}
-                  title="Прослушать и перезагрузить отдельные фразы"
-                >
-                  Подробный просмотр
-                </button>
-              ) : null}
-            </div>
+            <strong style={{ margin: 0 }}>
+              Фразы ({phrases.length})
+              {phrases.length > 0 ? ` · ${corpusReadyLabel}` : ""}
+              {isTrained ? " · после обучения список остаётся здесь" : ""}
+            </strong>
             {phrases.length === 0 ? (
               <span className="muted">
                 Нажмите «Сгенерировать фразы» или добавьте свою выше
               </span>
             ) : (
               <div
-                className="stack voice-phrases-inline-list"
-                style={{ gap: "0.35rem", maxHeight: "22rem", overflow: "auto" }}
+                className="voice-phrases-inline-list"
+                style={{
+                  display: "grid",
+                  gap: "8px",
+                  maxHeight: "min(42vh, 420px)",
+                  overflow: "auto",
+                }}
               >
-                {phrases.map((p) => (
-                  <div key={p.id} className="muted mono">
-                    {phraseDisplayNo(phrases, p.id)}.{" "}
-                    {p.recorded ? "✓" : "○"} {p.text}
-                  </div>
-                ))}
+                {phrases.map((p) => {
+                  const clip = bestClipForPhrase(p.id);
+                  const activeReload = phraseId === p.id;
+                  const n = phraseDisplayNo(phrases, p.id);
+                  return (
+                    <div
+                      key={p.id}
+                      className={`voice-phrase-row${activeReload ? " is-active" : ""}`}
+                    >
+                      <div className="voice-phrase-row-main muted mono">
+                        <span>
+                          {n}. {p.recorded ? "✓" : "○"} {p.text}
+                        </span>
+                        <span className="voice-phrase-row-meta">
+                          {clip
+                            ? clip.accepted
+                              ? "аудио ✓"
+                              : "аудио ×"
+                            : "нет аудио"}
+                        </span>
+                      </div>
+                      <div
+                        className="row"
+                        style={{ flexWrap: "wrap", gap: "0.35rem" }}
+                      >
+                        <button
+                          type="button"
+                          className="btn"
+                          disabled={Boolean(busy) || !clip}
+                          onClick={() => void playPhraseAudio(p.id)}
+                        >
+                          {playingPhraseId === p.id ? "▶…" : "Слушать"}
+                        </button>
+                        <button
+                          type="button"
+                          className={`btn${activeReload ? " btn-primary" : ""}`}
+                          disabled={Boolean(busy) && !recording}
+                          onClick={() => beginReloadPhrase(p.id)}
+                        >
+                          {activeReload ? "Выбрана" : "Перезагрузить"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -971,201 +984,6 @@ export function VoiceStudioPanel(props: {
 
       {note ? <p className="muted" style={{ margin: 0 }}>{note}</p> : null}
       {busy ? <p className="muted mono">busy: {busy}</p> : null}
-
-      {phrasesOpen && project ? (
-        <div
-          className="modal-backdrop"
-          role="presentation"
-          onClick={() => closePhrasesPanel()}
-        >
-          <div
-            className="modal modal-wide voice-phrases-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="voice-phrases-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="row" style={{ alignItems: "flex-start", gap: "0.5rem" }}>
-              <div style={{ flex: 1 }}>
-                <h2 id="voice-phrases-title" style={{ margin: 0 }}>
-                  Фразы · {project.name}
-                </h2>
-                <p className="muted" style={{ margin: "0.35rem 0 0" }}>
-                  {phrases.length} фраз · номера 1…{phrases.length || "N"} ·{" "}
-                  {corpusReadyLabel} · аудио {acceptedClips}
-                </p>
-              </div>
-              <button
-                type="button"
-                className="btn catalog-edit-close"
-                aria-label="Закрыть"
-                onClick={() => closePhrasesPanel()}
-              >
-                <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden>
-                  <path
-                    d="M3.2 3.2l9.6 9.6M12.8 3.2L3.2 12.8"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </button>
-            </div>
-
-            <div className="voice-phrases-modal-list">
-              {phrases.length === 0 ? (
-                <span className="muted">Фраз пока нет</span>
-              ) : (
-                phrases.map((p) => {
-                  const clip = bestClipForPhrase(p.id);
-                  const activeReload = phraseId === p.id;
-                  const n = phraseDisplayNo(phrases, p.id);
-                  return (
-                    <div
-                      key={p.id}
-                      className={`voice-phrase-row${activeReload ? " is-active" : ""}`}
-                    >
-                      <div className="voice-phrase-row-main muted mono">
-                        <span>
-                          {n}. {p.recorded ? "✓" : "○"} {p.text}
-                        </span>
-                        <span className="voice-phrase-row-meta">
-                          {clip
-                            ? clip.accepted
-                              ? "аудио ✓"
-                              : "аудио ×"
-                            : "нет аудио"}
-                        </span>
-                      </div>
-                      <div className="row" style={{ flexWrap: "wrap", gap: "0.35rem" }}>
-                        <button
-                          type="button"
-                          className="btn"
-                          disabled={Boolean(busy) || !clip}
-                          onClick={() => void playPhraseAudio(p.id)}
-                        >
-                          {playingPhraseId === p.id ? "▶…" : "Слушать"}
-                        </button>
-                        <button
-                          type="button"
-                          className={`btn${activeReload ? " btn-primary" : ""}`}
-                          disabled={Boolean(busy) && !recording}
-                          onClick={() => beginReloadPhrase(p.id)}
-                        >
-                          {activeReload ? "Выбрана" : "Перезагрузить"}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            <div className="panel stack voice-phrases-reload" style={{ gap: "0.5rem" }}>
-              <strong>Перезагрузка / дозапись</strong>
-              <label className="stack" style={{ gap: "0.25rem" }}>
-                <span className="muted">Фраза для привязки аудио</span>
-                <ThemeSelect
-                  aria-label="Фраза для перезагрузки"
-                  value={phraseId}
-                  options={[
-                    { value: "", label: "— без привязки —" },
-                    ...phrases.map((p) => ({
-                      value: p.id,
-                      label: phraseSelectLabel(phrases, p),
-                    })),
-                  ]}
-                  onChange={setPhraseId}
-                />
-              </label>
-              <div className="row" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
-                <button
-                  type="button"
-                  className={`btn ${recording ? "btn-primary" : ""}`}
-                  disabled={Boolean(busy) && !recording}
-                  onClick={() => void toggleRecord()}
-                >
-                  {recording ? "Стоп запись" : "Запись mic"}
-                </button>
-                <label className="btn" style={{ cursor: "pointer" }}>
-                  Загрузить аудио…
-                  <input
-                    type="file"
-                    accept="audio/*,.wav,.flac,.webm,.mp3,.ogg,.m4a"
-                    hidden
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) void uploadBytes(f);
-                      e.target.value = "";
-                    }}
-                  />
-                </label>
-                {electron ? (
-                  <>
-                    <input
-                      value={filePath}
-                      onChange={(e) => setFilePath(e.target.value)}
-                      placeholder="seed/voice-studio/….wav"
-                      style={{ flex: 1, minWidth: "10rem" }}
-                    />
-                    <button
-                      type="button"
-                      className="btn"
-                      disabled={Boolean(busy)}
-                      onClick={() => void importPath()}
-                    >
-                      Загрузить путь
-                    </button>
-                  </>
-                ) : null}
-              </div>
-              <div className="row" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
-                <input
-                  value={customPhrase}
-                  onChange={(e) => setCustomPhrase(e.target.value)}
-                  placeholder="Своя фраза…"
-                  style={{ flex: 1, minWidth: "12rem" }}
-                />
-                <button
-                  type="button"
-                  className="btn"
-                  disabled={Boolean(busy) || !customPhrase.trim()}
-                  onClick={() => void addPhrase()}
-                >
-                  Добавить фразу
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  disabled={Boolean(busy)}
-                  onClick={() => void morePhrases()}
-                >
-                  +5 фраз
-                </button>
-              </div>
-            </div>
-
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="btn"
-                onClick={() => closePhrasesPanel()}
-              >
-                Закрыть
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={Boolean(busy) || !canTrain}
-                onClick={() => void trainModel()}
-              >
-                {busy === "train" ? "Обучение…" : "Полное переобучение"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
