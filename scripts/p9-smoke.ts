@@ -50,6 +50,29 @@ async function main() {
     "most frequent assistant phrase should appear in generation",
   );
 
+  // UI always sends { count, minWords, maxWords } — must not return [].
+  const optsBatch = generatePhrases(project.id, {
+    count: 4,
+    minWords: 20,
+    maxWords: 60,
+  });
+  assert.equal(optsBatch.length, 4, "opts generate should return requested count");
+  for (const p of optsBatch) {
+    const n = p.text.trim().split(/\s+/).filter(Boolean).length;
+    assert.ok(n >= 20 && n <= 60, `word range 20–60, got ${n}: ${p.text.slice(0, 80)}`);
+  }
+
+  const longBatch = generatePhrases(project.id, {
+    count: 2,
+    minWords: 80,
+    maxWords: 120,
+  });
+  assert.equal(longBatch.length, 2, "long word-range generate must not be empty");
+  for (const p of longBatch) {
+    const n = p.text.trim().split(/\s+/).filter(Boolean).length;
+    assert.ok(n >= 80 && n <= 120, `word range 80–120, got ${n}`);
+  }
+
   const batch2 = generatePhrases(project.id, 5);
   assert.ok(batch2.length >= 1);
   for (const p of batch2) {

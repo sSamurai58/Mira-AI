@@ -257,7 +257,7 @@ function localAssistantSpeechStats(): {
               typeof (item as { text?: unknown }).text === "string"
             ? String((item as { text: string }).text).trim()
             : "";
-      if (text.length < 4 || text.length > 1600) continue;
+      if (text.length < 4 || text.length > 12000) continue;
       const key = text.toLowerCase();
       const prev = phraseFreq.get(key);
       if (prev) prev.count += 1;
@@ -290,7 +290,7 @@ type LocalGeneratePhrasesOptions = {
 };
 
 const LOCAL_MAX_GENERATE = 40;
-const LOCAL_MAX_PHRASE_CHARS = 1600;
+const LOCAL_MAX_PHRASE_CHARS = 12000;
 
 function localCountWords(text: string): number {
   return text
@@ -308,23 +308,32 @@ function localClampWordRange(
   return { minWords: minW, maxWords: maxW };
 }
 
-function localExpandTowardMinWords(text: string, minWords: number): string {
+function localPhraseCharBudget(maxWords: number): number {
+  return Math.min(LOCAL_MAX_PHRASE_CHARS, Math.max(1200, maxWords * 14 + 160));
+}
+
+function localExpandTowardMinWords(
+  text: string,
+  minWords: number,
+  charBudget = LOCAL_MAX_PHRASE_CHARS,
+): string {
   let out = text.trim().replace(/\s+/g, " ");
-  if (localCountWords(out) >= minWords) return out.slice(0, LOCAL_MAX_PHRASE_CHARS);
+  if (localCountWords(out) >= minWords) return out;
   const fillers = [
     "Это помогает лучше передать интонацию и ритм речи при обучении голоса.",
     "Повторите спокойно, чётко и без спешки, сохраняя естественные паузы.",
     "Длинный фрагмент даёт модели больше материала для устойчивого тембра.",
   ];
   let i = 0;
-  while (
-    localCountWords(out) < minWords &&
-    out.length < LOCAL_MAX_PHRASE_CHARS - 40
-  ) {
-    out = `${out} ${fillers[i % fillers.length]}`.trim();
+  let guard = 0;
+  while (localCountWords(out) < minWords && guard < 800) {
+    const next = `${out} ${fillers[i % fillers.length]}`.trim();
+    if (next.length > charBudget) break;
+    out = next;
     i += 1;
+    guard += 1;
   }
-  return out.slice(0, LOCAL_MAX_PHRASE_CHARS);
+  return out;
 }
 
 function localFitPhraseToWordRange(
@@ -332,15 +341,26 @@ function localFitPhraseToWordRange(
   minWords: number,
   maxWords: number,
 ): string | null {
+  const budget = localPhraseCharBudget(maxWords);
   let out = text.trim().replace(/\s+/g, " ");
   if (!out) return null;
-  const words = out.split(/\s+/).filter(Boolean);
+  let words = out.split(/\s+/).filter(Boolean);
   if (words.length > maxWords) out = words.slice(0, maxWords).join(" ");
-  out = localExpandTowardMinWords(out, minWords);
-  const trimmed = out.split(/\s+/).filter(Boolean);
-  if (trimmed.length > maxWords) out = trimmed.slice(0, maxWords).join(" ");
-  out = out.slice(0, LOCAL_MAX_PHRASE_CHARS);
-  const n = localCountWords(out);
+  out = localExpandTowardMinWords(out, minWords, budget);
+  words = out.split(/\s+/).filter(Boolean);
+  if (words.length > maxWords) out = words.slice(0, maxWords).join(" ");
+  if (out.length > budget) {
+    out = out.slice(0, budget).replace(/\s+\S*$/, "").trim();
+    words = out.split(/\s+/).filter(Boolean);
+    if (words.length > maxWords) out = words.slice(0, maxWords).join(" ");
+  }
+  let n = localCountWords(out);
+  if (n < minWords || n > maxWords) {
+    out = localExpandTowardMinWords("Обучение голоса.", minWords, budget);
+    words = out.split(/\s+/).filter(Boolean);
+    if (words.length > maxWords) out = words.slice(0, maxWords).join(" ");
+    n = localCountWords(out);
+  }
   if (n < minWords || n > maxWords) return null;
   return out;
 }
@@ -441,6 +461,20 @@ export function localGeneratePhrases(
       if (ordered.some((x) => x.toLowerCase() === key)) continue;
       ordered.push(fitted);
     }
+  }
+  let synth = 0;
+  while (ordered.length < want && synth < want + 8) {
+    synth += 1;
+    const fitted = localFitPhraseToWordRange(
+      `Учебный текст ${synth}.`,
+      minWords,
+      maxWords,
+    );
+    if (!fitted) break;
+    const key = fitted.toLowerCase();
+    if (existing.has(key)) continue;
+    if (ordered.some((x) => x.toLowerCase() === key)) continue;
+    ordered.push(fitted);
   }
 
   const baseMs = Date.now();

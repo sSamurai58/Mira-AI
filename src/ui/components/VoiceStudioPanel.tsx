@@ -223,7 +223,7 @@ export function VoiceStudioPanel(props: {
       setNote(
         rows.length
           ? `+${rows.length} текстов (${minW}–${maxW} слов; сначала самые частые слова/фразы). Непокрытые пока — системный TTS`
-          : `Новых текстов на ${minW}–${maxW} слов нет — добавьте свою ниже`,
+          : `Не удалось собрать тексты на ${minW}–${maxW} слов — уменьшите диапазон или добавьте свою`,
       );
       await refresh(project.id);
     } catch (err) {

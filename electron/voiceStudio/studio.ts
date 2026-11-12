@@ -116,8 +116,8 @@ const PHRASE_BANK_EN = [
 ];
 
 const MIN_PHRASE_CHARS = 4;
-/** Allow long training passages (word-range generate can stretch seeds). */
-const MAX_PHRASE_CHARS = 1600;
+/** Hard ceiling for a single training passage (~500 words with room to spare). */
+const MAX_PHRASE_CHARS = 12000;
 
 function countWords(text: string): number {
   return text
@@ -135,6 +135,10 @@ function clampWordRange(
   return { minWords: minW, maxWords: maxW };
 }
 
+function phraseCharBudget(maxWords: number): number {
+  return Math.min(MAX_PHRASE_CHARS, Math.max(1200, maxWords * 14 + 160));
+}
+
 function inWordRange(
   text: string,
   minWords: number,
@@ -145,9 +149,13 @@ function inWordRange(
 }
 
 /** Stretch short seed text toward minWords without inventing unrelated topics. */
-function expandTowardMinWords(text: string, minWords: number): string {
+function expandTowardMinWords(
+  text: string,
+  minWords: number,
+  charBudget = MAX_PHRASE_CHARS,
+): string {
   let out = text.trim().replace(/\s+/g, " ");
-  if (countWords(out) >= minWords) return out.slice(0, MAX_PHRASE_CHARS);
+  if (countWords(out) >= minWords) return out;
   const fillersRu = [
     "Это помогает лучше передать интонацию и ритм речи при обучении голоса.",
     "Повторите спокойно, чётко и без спешки, сохраняя естественные паузы.",
@@ -161,12 +169,16 @@ function expandTowardMinWords(text: string, minWords: number): string {
   const looksRu = /[А-Яа-яЁё]/.test(out);
   const fillers = looksRu ? fillersRu : fillersEn;
   let i = 0;
-  while (countWords(out) < minWords && out.length < MAX_PHRASE_CHARS - 40) {
+  let guard = 0;
+  while (countWords(out) < minWords && guard < 800) {
     const add = fillers[i % fillers.length]!;
-    out = `${out} ${add}`.trim();
+    const next = `${out} ${add}`.trim();
+    if (next.length > charBudget) break;
+    out = next;
     i += 1;
+    guard += 1;
   }
-  return out.slice(0, MAX_PHRASE_CHARS);
+  return out;
 }
 
 function trimToMaxWords(text: string, maxWords: number): string {
@@ -180,11 +192,22 @@ function fitPhraseToWordRange(
   minWords: number,
   maxWords: number,
 ): string | null {
+  const budget = phraseCharBudget(maxWords);
   let out = text.trim().replace(/\s+/g, " ");
   if (!out) return null;
   out = trimToMaxWords(out, maxWords);
-  out = expandTowardMinWords(out, minWords);
-  out = trimToMaxWords(out, maxWords).slice(0, MAX_PHRASE_CHARS);
+  out = expandTowardMinWords(out, minWords, budget);
+  out = trimToMaxWords(out, maxWords);
+  if (out.length > budget) {
+    out = out.slice(0, budget).replace(/\s+\S*$/, "").trim();
+    out = trimToMaxWords(out, maxWords);
+  }
+  if (!inWordRange(out, minWords, maxWords)) {
+    // Last resort: build a filler passage that hits the requested word range.
+    const seed = /[А-Яа-яЁё]/.test(text) ? "Обучение голоса." : "Voice training.";
+    out = expandTowardMinWords(seed, minWords, budget);
+    out = trimToMaxWords(out, maxWords);
+  }
   if (!inWordRange(out, minWords, maxWords)) return null;
   return out;
 }
@@ -622,11 +645,25 @@ export function generatePhrases(
       ordered.push(fitted);
     }
   }
+  // Always be able to fill the requested count for long word ranges.
+  let synth = 0;
+  while (ordered.length < want && synth < want + 8) {
+    synth += 1;
+    const seed = project.lang.toLowerCase().startsWith("en")
+      ? `Training passage ${synth}.`
+      : `Учебный текст ${synth}.`;
+    const fitted = fitPhraseToWordRange(seed, minWords, maxWords);
+    if (!fitted) break;
+    const key = fitted.toLowerCase();
+    if (existing.has(key)) continue;
+    if (ordered.some((x) => x.toLowerCase() === key)) continue;
+    ordered.push(fitted);
+  }
   const pick = ordered.slice(0, want);
 
   if (!pick.length) {
     touchProject(projectId, {
-      recommendation: `Новых текстов на ${minWords}–${maxWords} слов нет: чат и банк уже покрыты. Добавьте свою фразу ниже.`,
+      recommendation: `Не удалось собрать тексты на ${minWords}–${maxWords} слов. Уменьшите диапазон или добавьте свою фразу ниже.`,
     });
     return [];
   }
