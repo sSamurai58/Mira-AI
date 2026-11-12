@@ -582,8 +582,8 @@ export function trainVoiceModel(projectId: string): {
     };
   }
 
-  // Local corpus-pack TTS: pack accepted clips into a custom voice for catalog
-  // synthesis (preview clips + Web Speech fallback until neural trainer ships).
+  // Local corpus-pack model: inventory of phrase↔audio units for compositional
+  // (word/fragment) synthesis; uncovered tokens fall back to Web Speech.
   const project = getVoiceProject(projectId)!;
   const store = openStore();
   const voiceId =
@@ -609,12 +609,12 @@ export function trainVoiceModel(projectId: string): {
     phraseCount: qa.phraseCount,
     coveragePct,
     synthesis:
-      "Корпусный пакет (mira-local-corpus-v1): озвучка совпадений с обученными фразами вашими клипами; новые фразы без совпадения — запасной Web Speech до neural trainer.",
+      "Корпусный пакет (mira-local-corpus-v1): unit-selection TTS — склейка слов/фрагментов из обученных клипов; непокрытые токены — запасной Web Speech.",
     curriculum: [
-      "1. Фразы (банк / свои)",
+      "1. Фразы (речь ассистента / банк / свои)",
       "2. Аудио 1…N к фразам",
       "3. QA клипов",
-      "4. Сборка модели",
+      "4. Сборка модели (инвентарь фрагментов)",
       "5. Публикация в каталог",
     ],
   };

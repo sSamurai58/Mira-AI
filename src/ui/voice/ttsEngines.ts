@@ -37,7 +37,7 @@ export function listTtsEngines(): TtsEngineInfo[] {
       label: "Neural pack (локальный)",
       ready: true,
       detail:
-        "Студийные голоса: озвучка совпадений с корпусом вашими клипами; без совпадения — запасной Web Speech (до neural trainer)",
+        "Студийные голоса: склейка слов/фрагментов из обученных клипов (unit selection); непокрытые токены — запасной Web Speech"
     },
     {
       id: "edge-stub",

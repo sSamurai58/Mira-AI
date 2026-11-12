@@ -10,8 +10,10 @@ import {
   setActiveVoiceId,
 } from "../src/ui/voice/catalog.ts";
 import {
+  buildFragmentInventory,
   phraseMatchScore,
   planCorpusSpeech,
+  tokenizeSpeech,
 } from "../src/ui/voice/corpusTts.ts";
 import { getVoiceEngineStatus } from "../src/ui/voice/engineStatus.ts";
 import { getActiveTtsEngine } from "../src/ui/voice/ttsEngines.ts";
@@ -80,9 +82,36 @@ const units = [
   },
 ];
 assert.ok(phraseMatchScore(units[0].text, units[0].text) >= 0.99);
+assert.ok(tokenizeSpeech("Привет, Mira!").length >= 2);
+
+const inventory = buildFragmentInventory(units);
+assert.ok(
+  inventory.some((f) => f.tokens.length === 1 && f.tokens[0] === "привет"),
+  "inventory should expose word units",
+);
+
 const corpusPlan = planCorpusSpeech(units[0].text, units);
 assert.equal(corpusPlan.mode, "corpus");
-assert.equal(corpusPlan.clipCount, 1);
+assert.ok(corpusPlan.clipCount >= 1);
+assert.equal(corpusPlan.webspeechCount, 0);
+assert.ok(corpusPlan.coverage >= 0.99);
+
+// Novel LLM-style reply: stitch words from multiple trained phrases.
+const composed = planCorpusSpeech(
+  "Привет, сообщение отправлено — я на связи.",
+  units,
+);
+assert.ok(
+  composed.mode === "corpus" || composed.mode === "hybrid",
+  "composition should reuse trained words",
+);
+assert.ok(composed.clipCount >= 1);
+assert.ok(composed.coveredTokens >= 3);
+assert.ok(
+  composed.segments.some((s) => s.kind === "fragment"),
+  "should emit fragment slices for stitching",
+);
+
 const hybrid = planCorpusSpeech(
   "Спасибо, сообщение отправлено. А ещё расскажи анекдот про кота.",
   units,
@@ -90,13 +119,29 @@ const hybrid = planCorpusSpeech(
 assert.equal(hybrid.mode, "hybrid");
 assert.ok(hybrid.clipCount >= 1);
 assert.ok(hybrid.webspeechCount >= 1);
-const fallback = planCorpusSpeech("Совершенно новая фраза вне корпуса.", units);
+assert.ok(hybrid.coverage > 0 && hybrid.coverage < 1);
+
+const fallback = planCorpusSpeech("Ксилофон квазар фтор", units);
 assert.equal(fallback.mode, "webspeech-fallback");
-const preview = planCorpusSpeech("Совершенно новая фраза вне корпуса.", units, {
+assert.ok(/системный TTS/i.test(fallback.status));
+
+const preview = planCorpusSpeech("Ксилофон квазар фтор", units, {
   preferPreview: true,
   previewPath: "/tmp/preview.wav",
 });
 assert.equal(preview.mode, "preview");
+
+// Meaning match: trained «хорошо» can cover synonym «ладно»
+const meaningUnits = [
+  {
+    phraseId: "p3",
+    text: "Хорошо.",
+    filePath: "/tmp/c.wav",
+  },
+];
+const meaning = planCorpusSpeech("Ладно", meaningUnits);
+assert.ok(meaning.clipCount >= 1);
+assert.ok(meaning.coveredTokens >= 1);
 
 const status = getVoiceEngineStatus();
 assert.equal(status.asr, "unavailable");
@@ -111,11 +156,14 @@ console.log(
       activeAfterSet: getActiveVoiceId(fake),
       studioEngine: getActiveTtsEngine(),
       corpusPlan: corpusPlan.mode,
+      composedPlan: composed.mode,
+      composedCoverage: composed.coverage,
       hybridPlan: hybrid.mode,
       fallbackPlan: fallback.mode,
       previewPlan: preview.mode,
+      meaningCoverage: meaning.coverage,
       engine: status,
-      note: "UI ASR/TTS require Electron/Chromium speech APIs; studio uses corpus clips",
+      note: "UI ASR/TTS require Electron/Chromium; studio uses compositional unit selection",
     },
     null,
     2,
