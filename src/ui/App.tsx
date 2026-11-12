@@ -14,7 +14,11 @@ import {
   loadStoredBgPatternId,
   type BgPatternId,
 } from "./backgrounds";
-import { coreLevelRingPct, loadCoreLevel } from "./coreLevel";
+import {
+  coreLevelRingPct,
+  loadCoreLevel,
+  syncCoreLevelFromProgress,
+} from "./coreLevel";
 import {
   applyTheme,
   loadStoredThemeId,
@@ -201,6 +205,26 @@ export function App() {
     return () => window.clearInterval(id);
   }, []);
 
+  const refreshCoreLevel = useCallback(async () => {
+    if (!window.mira?.getHealth) return;
+    try {
+      const health = await window.mira.getHealth();
+      const nextLevel = syncCoreLevelFromProgress({
+        sessions: health.sessions,
+        utterances: health.utterances,
+        learnedUnits: health.learnedUnits,
+        libraryItems: health.libraryItems,
+        skills: health.skills,
+        voiceProjects: health.voiceProjects,
+        customVoices: health.customVoices,
+        browserVisits: health.browserVisits,
+      });
+      setCoreLevel((prev) => (prev === nextLevel ? prev : nextLevel));
+    } catch {
+      /* keep last known level */
+    }
+  }, []);
+
   const refreshHealth = useCallback(async () => {
     if (!window.mira) {
       setHealthText(
@@ -212,6 +236,17 @@ export function App() {
       const health = await window.mira.getHealth();
       const voice = getVoiceEngineStatus();
       setHealthText(JSON.stringify({ ...health, voice }, null, 2));
+      const nextLevel = syncCoreLevelFromProgress({
+        sessions: health.sessions,
+        utterances: health.utterances,
+        learnedUnits: health.learnedUnits,
+        libraryItems: health.libraryItems,
+        skills: health.skills,
+        voiceProjects: health.voiceProjects,
+        customVoices: health.customVoices,
+        browserVisits: health.browserVisits,
+      });
+      setCoreLevel((prev) => (prev === nextLevel ? prev : nextLevel));
       if (health.llmOk === false && health.llmReason) {
         setErrorMessage(health.llmReason);
       }
@@ -228,6 +263,21 @@ export function App() {
   useEffect(() => {
     void refreshHealth();
   }, [refreshHealth]);
+
+  useEffect(() => {
+    void refreshCoreLevel();
+    const onProgress = () => {
+      void refreshCoreLevel();
+    };
+    window.addEventListener("mira:core-progress", onProgress);
+    window.addEventListener("focus", onProgress);
+    const id = window.setInterval(onProgress, 20_000);
+    return () => {
+      window.removeEventListener("mira:core-progress", onProgress);
+      window.removeEventListener("focus", onProgress);
+      window.clearInterval(id);
+    };
+  }, [refreshCoreLevel]);
 
   useEffect(() => {
     if (!window.mira?.onConfirmDismiss) return;

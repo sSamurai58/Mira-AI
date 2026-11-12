@@ -844,16 +844,9 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   align-items: center;
   justify-content: center;
   gap: 12px;
-}
-
-.core-level-step {
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  display: inline-grid;
-  place-items: center;
-  font-size: 1.2rem;
-  line-height: 1;
+  /* Read-only: level rises automatically from Mira progress */
+  pointer-events: none;
+  user-select: none;
 }
 
 .core-level-value {

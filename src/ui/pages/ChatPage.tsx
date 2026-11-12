@@ -20,7 +20,6 @@ import { CoreOrb } from "../components/CoreOrb";
 import { HomeRail } from "../components/HomeRail";
 import { HudCorners } from "../components/HudCorners";
 import { ThemeSelect } from "../components/ThemeSelect";
-import { saveCoreLevel } from "../coreLevel";
 import {
   localImportLibraryBytes,
   localImportLibraryText,
@@ -72,7 +71,7 @@ export function ChatPage({
   onError,
   onVoiceState,
   autoSpeak,
-  coreLevel = 4,
+  coreLevel = 1,
 }: ChatPageProps) {
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const [input, setInput] = useState("");
@@ -565,6 +564,7 @@ export function ChatPage({
         setBusy(false);
         requestIdRef.current = null;
         speakAssistant(event.utterance.content);
+        window.dispatchEvent(new Event("mira:core-progress"));
       }
 
       if (event.type === "error") {
@@ -841,36 +841,13 @@ export function ChatPage({
                 <CoreOrb level={coreLevel} voiceState={voiceState} size={320} />
                 <div
                   className="core-level-controls"
-                  role="group"
-                  aria-label="Уровень ядра"
+                  aria-live="polite"
+                  aria-label={`Уровень ядра ${coreLevel}`}
                 >
-                  <button
-                    type="button"
-                    className="btn core-level-step"
-                    aria-label="Понизить уровень"
-                    disabled={coreLevel <= 1}
-                    onClick={() => {
-                      saveCoreLevel(coreLevel - 1);
-                      window.dispatchEvent(new Event("storage"));
-                    }}
-                  >
-                    −
-                  </button>
-                  <div className="core-level-value" aria-live="polite">
+                  <div className="core-level-value">
                     <strong>{coreLevel}</strong>
                     <span className="muted">уровень</span>
                   </div>
-                  <button
-                    type="button"
-                    className="btn core-level-step"
-                    aria-label="Повысить уровень"
-                    onClick={() => {
-                      saveCoreLevel(coreLevel + 1);
-                      window.dispatchEvent(new Event("storage"));
-                    }}
-                  >
-                    +
-                  </button>
                 </div>
                 <p className="core-level-caption muted">
                   Уровень ядра {coreLevel} · без потолка · растёт с Мирой
