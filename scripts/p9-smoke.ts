@@ -243,7 +243,8 @@ async function main() {
     }
   }
 
-  // Compressed → PCM path (user m4a / AyuGram clips).
+  // Compressed → PCM path (user m4a / AyuGram clips). Requires ffmpeg on PATH
+  // (CI installs it; local runs need `ffmpeg` or the assertion fails clearly).
   const m4aPath = path.resolve(
     process.cwd(),
     "seed",
@@ -256,23 +257,46 @@ async function main() {
     "voice-studio",
     "_smoke-clip.pcm16.wav",
   );
+  const ffmpegAvailable = (() => {
+    try {
+      execFileSync("ffmpeg", ["-version"], { stdio: "ignore" });
+      return true;
+    } catch (err) {
+      const code =
+        err && typeof err === "object" && "code" in err
+          ? String((err as { code?: unknown }).code)
+          : "";
+      return code !== "ENOENT" && code !== "ENOTFOUND";
+    }
+  })();
+  assert.ok(
+    ffmpegAvailable,
+    "ffmpeg is required for p9 m4a→wav compressed-import smoke; install ffmpeg (CI apt step) or add it to PATH",
+  );
   try {
-    execFileSync(
-      "ffmpeg",
-      [
-        "-y",
-        "-f",
-        "lavfi",
-        "-i",
-        "sine=frequency=500:duration=0.6",
-        "-c:a",
-        "aac",
-        m4aPath,
-      ],
-      { stdio: "ignore" },
-    );
+    try {
+      execFileSync(
+        "ffmpeg",
+        [
+          "-y",
+          "-f",
+          "lavfi",
+          "-i",
+          "sine=frequency=500:duration=0.6",
+          "-c:a",
+          "aac",
+          m4aPath,
+        ],
+        { stdio: "ignore" },
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `ffmpeg failed to generate smoke m4a seed (compressed-import path): ${msg}`,
+      );
+    }
     const converted = convertAudioToPcmWav(m4aPath, m4aWav);
-    assert.ok(converted, "ffmpeg m4a→wav");
+    assert.ok(converted, "ffmpeg m4a→wav conversion must succeed");
     assert.ok(parseWavInfo(converted!), "converted must be PCM wav");
   } finally {
     for (const p of [burstPath, sliceOut, m4aPath, m4aWav]) {
