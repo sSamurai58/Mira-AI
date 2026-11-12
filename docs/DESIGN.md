@@ -259,8 +259,9 @@ Mira
 | `PushToTalk` | Говорить | `partial` (Web Speech ASR) |
 | `ModelVoiceChips` | Быстрый выбор модели/голоса | `partial` (voice select on Home) |
 | `WorkshopNav` | Сегменты Мастерской | `partial` |
-| `SettingsNav` | Разделы настроек | `partial` (темы работают) |
-| `ConfirmModal` | Превью опасного действия / исходящего сообщения / shell | `partial` (P4–P6: web/screen/browser/Telegram send) |
+| `SettingsNav` | Разделы настроек | `partial` (темы + MCP) |
+| `McpTileGrid` | Плитки коннекторов MCP (иконка+имя → модалка) | `partial` (каталог 0.1.4) |
+| `ConfirmModal` / `AppConfirm` | Превью опасного действия / исходящего сообщения / shell + локальные UI-подтверждения (Voice Studio, Library, Workshop) | `partial` (P4–P6 bridge + in-app confirms 0.1.5) |
 | `TerminalView` | Эмулятор + вкладки сессий | `partial` (P7: xterm + multi-tab) |
 | `StubBadge` | Заглушка | `done` |
 
@@ -274,8 +275,8 @@ Mira
 | Workshop hub + segments | `workshop` | `stub` |
 | Voice Studio (nested) | `workshop/voices` | `stub` |
 | Terminal | `workshop/terminal` (+ optional chat split) | `partial` (P7; split из Диалога — later) |
-| Settings hub + разделы | `settings` | `partial` (темы, API, голос, Интеграции: web/screen/browser/TG) |
-| Confirm modal | global | `planned` |
+| Settings hub + разделы | `settings` | `partial` (темы, API, голос, Интеграции, **MCP** плитки) |
+| Confirm modal | global | `partial` (bridge + AppConfirm in-app) |
 
 ## Stubs
 

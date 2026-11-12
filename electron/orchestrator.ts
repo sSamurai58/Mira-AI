@@ -89,6 +89,10 @@ import { handleIotFromChat, looksLikeIotIntent } from "./future/iot";
 import { handleMailFromChat, looksLikeMailIntent } from "./future/mail";
 import { handleMediaFromChat, looksLikeMediaIntent } from "./future/media";
 import { handleNotesFromChat, looksLikeNotesIntent } from "./future/notes";
+import {
+  buildReplyDiversityBlock,
+  CHAT_DIVERSITY_SYSTEM_RULES,
+} from "./chatDiversity";
 
 const SYSTEM_PROMPT = [
   "Ты Mira — локальный голосовой ИИ-помощник.",
@@ -97,6 +101,7 @@ const SYSTEM_PROMPT = [
   "Если в контексте есть интернет/погода/память/инструменты — опирайся только на них и дождись их данных: не пиши заранее, что данных нет, пока блок инструментов пуст или помечен как ошибка.",
   "Если блок погоды или поиска уже содержит цифры — используй их как актуальные и не предлагай «проверьте сайт» без нужды.",
   "Skills подключаются только по необходимости.",
+  CHAT_DIVERSITY_SYSTEM_RULES,
 ].join(" ");
 
 export type ChatStreamEvent =
@@ -271,9 +276,9 @@ function buildUserContentWithAttachments(
   return { storedText, promptText, images };
 }
 
-function maybeImportAttachmentsToLibrary(
+async function maybeImportAttachmentsToLibrary(
   attachments: ChatAttachmentInput[],
-): string[] {
+): Promise<string[]> {
   const imported: string[] = [];
   for (const a of attachments) {
     try {
@@ -288,10 +293,11 @@ function maybeImportAttachmentsToLibrary(
       }
       if (a.dataBase64) {
         const bytes = Buffer.from(a.dataBase64, "base64");
-        const item = importLibraryBytes({
+        const item = await importLibraryBytes({
           bytes,
           fileName: a.name,
           title: a.name.replace(/\.[^.]+$/, "") || a.name,
+          extractedText: a.text,
         });
         imported.push(item.title);
       }
@@ -332,7 +338,7 @@ export async function sendChatMessage(
 
   let libraryNote: string | null = null;
   if (input.addToLibrary && attachments.length) {
-    const titles = maybeImportAttachmentsToLibrary(attachments);
+    const titles = await maybeImportAttachmentsToLibrary(attachments);
     if (titles.length) {
       libraryNote = `Добавлено в материалы обучения: ${titles.join(", ")}. Workshop → Обучение → «Разобрать».`;
     }
@@ -478,19 +484,23 @@ export async function sendChatMessage(
       getScreenPolicy().controlEnabled
     ) {
       const typed = parseTypeText(text);
-      if (typed && !parseClickCoords(text)) {
+      const coords = parseClickCoords(text);
+      if (typed && !coords) {
         const typedResult = await typeText(typed);
         desktopUsed = typedResult.ok
           ? `screen-type:${typedResult.mode}`
           : "screen-type-denied";
         desktopBlock = formatScreenBlock("type", typedResult);
-      } else {
-        const coords = parseClickCoords(text) ?? { x: 100, y: 100 };
+      } else if (coords) {
         const click = await clickAt(coords.x, coords.y);
         desktopUsed = click.ok
           ? `screen-click:${click.mode}`
           : "screen-click-denied";
         desktopBlock = formatScreenBlock("click", click);
+      } else {
+        desktopUsed = "screen-control-need-coords";
+        desktopBlock =
+          "[Экран: control]\nНужны явные координаты, например: «кликни 640, 360». Без координат клик не выполняется (защита от случайного клика по окну Mira).";
       }
     } else if (looksLikeBrowserOpenIntent(text) && getBrowserPolicy().enabled) {
       const url = extractOpenUrl(text);
@@ -625,9 +635,15 @@ export async function sendChatMessage(
     : [];
   const memoryBlock = buildMemoryBlock(memoryHits);
   const skillsBlock = buildSkillsBlock(skills);
+  const diversityBlock = buildReplyDiversityBlock(history, {
+    memorySnippets: memoryHits.map((h) => h.content),
+  });
 
   const messages: ChatMessage[] = [{ role: "system", content: SYSTEM_PROMPT }];
   if (memoryBlock) messages.push({ role: "system", content: memoryBlock });
+  if (diversityBlock) {
+    messages.push({ role: "system", content: diversityBlock });
+  }
   if (skillsBlock) messages.push({ role: "system", content: skillsBlock });
   if (protocol) {
     messages.push({ role: "system", content: buildProtocolBlock(protocol) });

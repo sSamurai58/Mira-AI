@@ -92,8 +92,16 @@ export function SettingsIntegrationsSection() {
             )
             .join("\n") || "Пока нет сохранённых контактов",
         );
-        if (installed?.length) {
-          setBrowsers(installed.filter((b) => b.installed));
+        if (Array.isArray(installed) && installed.length) {
+          setBrowsers(
+            installed.filter(
+              (b): b is InstalledBrowser =>
+                Boolean(b) &&
+                typeof b === "object" &&
+                typeof (b as InstalledBrowser).id === "string" &&
+                Boolean((b as InstalledBrowser).installed),
+            ),
+          );
         }
       } catch {
         if (!cancelled) setContactsText("Не удалось загрузить контакты");
@@ -106,27 +114,51 @@ export function SettingsIntegrationsSection() {
   }, []);
 
   function setField(key: string, value: string) {
-    setDraft((prev) => ({ ...prev, [key]: value }));
+    setDraft((prev) => ({ ...prev, [key]: String(value ?? "") }));
   }
 
   async function handleSave(group: string, keys: string[]) {
     setSavingKey(group);
-    const patch: Record<string, string> = {};
-    for (const key of keys) {
-      const value = draft[key] ?? "";
-      if (
-        (key.endsWith("_TOKEN") || key.endsWith("_API_KEY")) &&
-        (!value.trim() || value.trim().startsWith("••••"))
-      ) {
-        continue;
+    try {
+      const patch: Record<string, string> = {};
+      for (const key of keys) {
+        const value = draft[key] ?? "";
+        if (
+          (key.endsWith("_TOKEN") || key.endsWith("_API_KEY")) &&
+          (!value.trim() || value.trim().startsWith("••••"))
+        ) {
+          continue;
+        }
+        patch[key] = value;
       }
-      patch[key] = value;
+      const res = await saveSettingsEnv(patch);
+      const values =
+        res.snap?.values && typeof res.snap.values === "object"
+          ? res.snap.values
+          : {};
+      const secretsSet =
+        res.snap?.secretsSet && typeof res.snap.secretsSet === "object"
+          ? res.snap.secretsSet
+          : {};
+      setSnap({
+        values,
+        secretsSet,
+        source: res.snap?.source ?? (window.mira ? "electron" : "browser"),
+        envFile: res.snap?.envFile,
+      });
+      setDraft((prev) => ({ ...prev, ...values }));
+      setNotes((prev) => ({
+        ...prev,
+        [group]: res.detail || (res.ok ? "Сохранено" : "Ошибка сохранения"),
+      }));
+    } catch (err) {
+      setNotes((prev) => ({
+        ...prev,
+        [group]: err instanceof Error ? err.message : String(err),
+      }));
+    } finally {
+      setSavingKey(null);
     }
-    const res = await saveSettingsEnv(patch);
-    setSnap(res.snap);
-    setDraft((prev) => ({ ...prev, ...res.snap.values }));
-    setNotes((prev) => ({ ...prev, [group]: res.detail }));
-    setSavingKey(null);
   }
 
   if (!snap) {
@@ -233,7 +265,8 @@ export function SettingsIntegrationsSection() {
           <ol>
             <li>SCREEN_ENABLED — разрешить capture в `data/screenshots/`.</li>
             <li>
-              SCREEN_CONTROL_ENABLED — клик/ввод только после ConfirmModal.
+              SCREEN_CONTROL_ENABLED — клик/ввод только после ConfirmModal
+              (по умолчанию выкл.). Нужны координаты, например «кликни 640, 360».
             </li>
             <li>OS_PRIORITY — порядок платформ, например linux,windows,macos.</li>
           </ol>
@@ -383,11 +416,22 @@ export function SettingsIntegrationsSection() {
             aria-label="Предпочтительный браузер"
             value={
               browsers.some((b) => b.id === draft.BROWSER_PREFERRED)
-                ? draft.BROWSER_PREFERRED
+                ? draft.BROWSER_PREFERRED!
                 : "system"
             }
             onChange={(v) => setField("BROWSER_PREFERRED", v)}
-            options={browsers.map((b) => ({
+            options={(browsers.some((b) => b.id === "system")
+              ? browsers
+              : [
+                  {
+                    id: "system",
+                    name: "Системный по умолчанию",
+                    path: null,
+                    installed: true,
+                  },
+                  ...browsers,
+                ]
+            ).map((b) => ({
               value: b.id,
               label: b.path ? `${b.name} · ${b.path}` : b.name,
             }))}

@@ -7,6 +7,7 @@ import { ensureMiraLibraryLayout, miraLibraryDir } from "../paths";
 import {
   addLearnedUnit,
   deleteLearnedUnitsForItem,
+  deleteLibraryItem as deleteLibraryItemRow,
   getLearnPlan,
   getLibraryItem,
   insertLibraryItem,
@@ -18,6 +19,10 @@ import {
   type LearnedUnitRow,
   type LibraryItemRow,
 } from "../store";
+import {
+  extractPdfBuffer,
+  isReadablePdfText,
+} from "./pdfExtract";
 
 export type LibraryAnalysis = {
   theses: string[];
@@ -41,33 +46,24 @@ export function detectMediaType(filePath: string): string {
   return "unknown";
 }
 
-/** Best-effort PDF text: pull printable strings and (Tj)/(TJ) payloads. */
-function extractPdfText(buf: Buffer): string {
-  const latin = buf.toString("latin1");
-  const chunks: string[] = [];
-  const tjRe = /\((?:\\.|[^\\)]){1,500}\)(?:\s*Tj|\s*TJ)/g;
-  let m: RegExpExecArray | null;
-  while ((m = tjRe.exec(latin)) && chunks.length < 4000) {
-    const inner = m[0]
-      .replace(/\)\s*T[jJ]$/, "")
-      .replace(/^\(/, "")
-      .replace(/\\([nrtbf()\\])/g, (_, c: string) => {
-        if (c === "n") return "\n";
-        if (c === "r") return "\r";
-        if (c === "t") return "\t";
-        return c;
-      });
-    if (inner.trim()) chunks.push(inner);
-  }
-  if (chunks.length >= 3) return chunks.join(" ").replace(/\s+/g, " ").trim();
-  // Fallback: long printable runs
-  const runs = latin.match(/[\x20-\x7E\u00A0-\u00FF]{6,}/g) ?? [];
-  return runs
-    .filter((r) => !/^%PDF|endobj|stream|xref|trailer/i.test(r))
-    .slice(0, 800)
-    .join(" ")
-    .replace(/\s+/g, " ")
-    .trim();
+/**
+ * Heuristic: does this look like human language (not raw PDF/binary noise)?
+ * Exported for smoke tests.
+ */
+export function isReadableHumanText(text: string): boolean {
+  // Reuse PDF gate (handles short title-page extracts too).
+  if (isReadablePdfText(text)) return true;
+  const s = text.replace(/\s+/g, " ").trim();
+  if (s.length < 24) return false;
+  if (/^\[(pdf|epub|audio|video)\b/i.test(s)) return false;
+  const words = s.match(/[A-Za-zА-Яа-яЁё]{3,}/g) ?? [];
+  const wordChars = words.join("").length;
+  const letters = (s.match(/[A-Za-zА-Яа-яЁё]/g) ?? []).length;
+  if (letters / s.length < 0.4) return false;
+  if (wordChars / s.length < 0.32) return false;
+  const noise =
+    (s.match(/[^\s\wа-яА-ЯёЁ.,;:!?«»"'()\-–—%/+\-*=\[\]{}]/g) ?? []).length;
+  return noise / s.length <= 0.18;
 }
 
 function sidecarTranscript(filePath: string): string | null {
@@ -83,10 +79,10 @@ function sidecarTranscript(filePath: string): string | null {
   return null;
 }
 
-export function extractContent(
+export async function extractContent(
   filePath: string,
   mediaType: string,
-): { text: string; note: string } {
+): Promise<{ text: string; note: string }> {
   if (!fs.existsSync(filePath)) {
     throw new Error(`Файл не найден: ${filePath}`);
   }
@@ -97,16 +93,29 @@ export function extractContent(
   if (mediaType === "pdf") {
     try {
       const raw = fs.readFileSync(filePath);
-      const extracted = extractPdfText(raw);
-      if (extracted.length > 40) {
+      const extracted = await extractPdfBuffer(raw);
+      if (extracted.text && isReadableHumanText(extracted.text)) {
         return {
-          text: extracted.slice(0, 50_000),
-          note: `pdf: извлечено ~${extracted.length} символов (best-effort stream parser)`,
+          text: extracted.text.slice(0, 50_000),
+          note: `pdf: ${extracted.note}`,
+        };
+      }
+      const side = sidecarTranscript(filePath);
+      if (side && isReadableHumanText(side)) {
+        return {
+          text: side.slice(0, 50_000),
+          note: "pdf: sidecar transcript (.md/.txt рядом)",
+        };
+      }
+      if (extracted.text && extracted.text.length > 40) {
+        return {
+          text: extracted.text.slice(0, 50_000),
+          note: `pdf: ${extracted.note} (низкая читаемость)`,
         };
       }
       return {
-        text: `[pdf] Файл ${path.basename(filePath)} (${raw.length} байт). Текстовый слой почти пуст — добавьте .md выжимку рядом.`,
-        note: "pdf: little text layer",
+        text: `[pdf] Файл «${path.basename(filePath)}» (${raw.length} байт) без читаемого текста. Попробованы pdf.js и OCR встроенных JPEG. Положите рядом .md/.txt или вставьте текст вручную, затем «Разобрать» и «Предложить skill».`,
+        note: extracted.note || "pdf: unreadable",
       };
     } catch {
       return { text: `[pdf] Не удалось извлечь`, note: "extract failed" };
@@ -154,18 +163,33 @@ export function extractContent(
 
 
 export function analyzeText(text: string, title: string): LibraryAnalysis {
+  if (!isReadableHumanText(text)) {
+    return {
+      theses: [
+        `Не удалось разобрать «${title}»: нет читаемого текста. Добавьте .md/.txt или вставьте текст вручную — тезисы/фразы ниже не являются skill.`,
+      ],
+      phrases: [],
+      styleNotes: [],
+      logicMoves: [],
+      terms: [],
+    };
+  }
+
   const lines = text
     .split(/\r?\n/)
     .map((l) => l.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((l) => isReadableHumanText(l) || l.length < 80);
   const headings = lines
     .filter((l) => /^#{1,3}\s+/.test(l) || /^[A-ZА-ЯЁ][^.]{8,60}$/.test(l))
     .slice(0, 12)
-    .map((l) => l.replace(/^#+\s*/, ""));
+    .map((l) => l.replace(/^#+\s*/, ""))
+    .filter((l) => isReadableHumanText(l) || /[A-Za-zА-Яа-яЁё]{4,}/.test(l));
   const sentences = text
     .split(/(?<=[.!?…])\s+/)
     .map((s) => s.trim())
-    .filter((s) => s.length > 40 && s.length < 240);
+    .filter((s) => s.length > 40 && s.length < 240)
+    .filter((s) => isReadableHumanText(s));
   const theses = (headings.length ? headings : sentences.slice(0, 8)).slice(
     0,
     8,
@@ -184,9 +208,7 @@ export function analyzeText(text: string, title: string): LibraryAnalysis {
     theses: theses.length
       ? theses
       : [`Материал «${title}»: основные идеи требуют ручного уточнения`],
-    phrases: phraseCandidates.length
-      ? phraseCandidates
-      : [`Ключевая формулировка из «${title}»`],
+    phrases: phraseCandidates,
     styleNotes: [
       text.length > 2000 ? "Развёрнутый didactic тон" : "Краткий конспектный тон",
       /мы |давайте |давай /i.test(text)
@@ -237,10 +259,10 @@ function assertAllowedImportPath(absPath: string): void {
   }
 }
 
-export function importLibraryFile(opts: {
+export async function importLibraryFile(opts: {
   filePath: string;
   title?: string;
-}): LibraryItemRow {
+}): Promise<LibraryItemRow> {
   const abs = path.resolve(opts.filePath);
   assertAllowedImportPath(abs);
   if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
@@ -251,7 +273,7 @@ export function importLibraryFile(opts: {
   const destDir = libraryRoot();
   const dest = path.join(destDir, `${Date.now()}-${base}`);
   fs.copyFileSync(abs, dest);
-  const extracted = extractContent(dest, mediaType);
+  const extracted = await extractContent(dest, mediaType);
   return insertLibraryItem({
     title: opts.title?.trim() || base.replace(/\.[^.]+$/, ""),
     kind: mediaType === "text" ? "document" : mediaType,
@@ -284,11 +306,13 @@ export function importLibraryText(opts: {
 const MAX_LIBRARY_BYTES = 20_000_000;
 
 /** Import raw bytes from renderer file picker / chat attach. */
-export function importLibraryBytes(opts: {
+export async function importLibraryBytes(opts: {
   bytes: Uint8Array | Buffer;
   fileName: string;
   title?: string;
-}): LibraryItemRow {
+  /** Optional pre-extracted text from renderer (pdf.js / OCR). */
+  extractedText?: string;
+}): Promise<LibraryItemRow> {
   const buf = Buffer.from(opts.bytes);
   if (buf.byteLength < 1) throw new Error("Пустой файл");
   if (buf.byteLength > MAX_LIBRARY_BYTES) {
@@ -302,7 +326,11 @@ export function importLibraryBytes(opts: {
   const dest = path.join(destDir, `${Date.now()}-${safe}`);
   fs.writeFileSync(dest, buf);
   const mediaType = detectMediaType(dest);
-  const extracted = extractContent(dest, mediaType);
+  const pre = opts.extractedText?.trim() ?? "";
+  const extracted =
+    pre && isReadableHumanText(pre)
+      ? { text: pre.slice(0, 50_000), note: "client extract" }
+      : await extractContent(dest, mediaType);
   return insertLibraryItem({
     title: opts.title?.trim() || safe.replace(/\.[^.]+$/, ""),
     kind: mediaType === "text" ? "document" : mediaType,
@@ -361,74 +389,99 @@ function slugify(s: string): string {
   return slug || "material";
 }
 
-export function processLibraryItem(id: string): {
+export async function processLibraryItem(id: string): Promise<{
   item: LibraryItemRow;
   analysis: LibraryAnalysis;
   plan: string[];
   units: LearnedUnitRow[];
-} {
+}> {
   const item = getLibraryItem(id);
   if (!item) throw new Error(`Материал не найден: ${id}`);
 
   updateLibraryItem(id, { status: "processing" });
 
   let text = item.extracted_text ?? "";
-  if (!text && item.source_path) {
-    const extracted = extractContent(item.source_path, item.media_type);
+  // Re-extract PDFs so older mojibake imports get a second chance with pdf.js/OCR.
+  const shouldReextract =
+    Boolean(item.source_path) &&
+    (item.media_type === "pdf" || !text || !isReadableHumanText(text));
+  if (shouldReextract && item.source_path) {
+    const extracted = await extractContent(item.source_path, item.media_type);
     text = extracted.text;
     updateLibraryItem(id, { extractedText: text });
   }
 
   const analysis = analyzeText(text, item.title);
-  const plan = buildLearnPlan(item.title, analysis);
+  const readable = isReadableHumanText(text);
+  const plan = readable
+    ? buildLearnPlan(item.title, analysis)
+    : [
+        `Добавить читаемый текст к «${item.title}» (.md/.txt рядом или вставка)`,
+        "Нажать «Разобрать» ещё раз",
+        "Затем «Предложить skill» — skill появится в Мастерская → Skills",
+      ];
   upsertLearnPlan(id, plan);
 
   // 14.8 incremental: replace learned units for this item, bump version
   deleteLearnedUnitsForItem(id);
   const units: LearnedUnitRow[] = [];
-  for (const thesis of analysis.theses) {
+
+  if (!readable) {
     units.push(
       addLearnedUnit({
         libraryItemId: id,
-        kind: "thesis",
-        title: `Тезис · ${item.title}`,
-        content: thesis,
+        kind: "note",
+        title: `Нужен текст · ${item.title}`,
+        content:
+          "PDF/файл не дал читаемого текста. Выдержки ниже — не skills. Добавьте .md/.txt или вставьте текст, снова «Разобрать», потом «Предложить skill».",
         sourceRef: item.title,
       }),
     );
-  }
-  for (const phrase of analysis.phrases.slice(0, 6)) {
-    units.push(
-      addLearnedUnit({
-        libraryItemId: id,
-        kind: "phrase",
-        title: `Фраза · ${item.title}`,
-        content: phrase,
-        sourceRef: item.title,
-      }),
-    );
-  }
-  for (const style of analysis.styleNotes) {
-    units.push(
-      addLearnedUnit({
-        libraryItemId: id,
-        kind: "style",
-        title: `Стиль · ${item.title}`,
-        content: style,
-        sourceRef: item.title,
-      }),
-    );
-  }
-  for (const logic of analysis.logicMoves) {
-    units.push(
-      addLearnedUnit({
-        libraryItemId: id,
-        kind: "logic",
-        title: `Логика · ${item.title}`,
-        content: logic,
-        sourceRef: item.title,
-      }),
-    );
+  } else {
+    for (const thesis of analysis.theses) {
+      units.push(
+        addLearnedUnit({
+          libraryItemId: id,
+          kind: "thesis",
+          title: `Тезис · ${item.title}`,
+          content: thesis,
+          sourceRef: item.title,
+        }),
+      );
+    }
+    for (const phrase of analysis.phrases.slice(0, 6)) {
+      units.push(
+        addLearnedUnit({
+          libraryItemId: id,
+          kind: "phrase",
+          title: `Фраза · ${item.title}`,
+          content: phrase,
+          sourceRef: item.title,
+        }),
+      );
+    }
+    for (const style of analysis.styleNotes) {
+      units.push(
+        addLearnedUnit({
+          libraryItemId: id,
+          kind: "style",
+          title: `Стиль · ${item.title}`,
+          content: style,
+          sourceRef: item.title,
+        }),
+      );
+    }
+    for (const logic of analysis.logicMoves) {
+      units.push(
+        addLearnedUnit({
+          libraryItemId: id,
+          kind: "logic",
+          title: `Логика · ${item.title}`,
+          content: logic,
+          sourceRef: item.title,
+        }),
+      );
+    }
   }
 
   const updated = updateLibraryItem(id, {
@@ -497,6 +550,14 @@ export async function proposeSkillFromItem(id: string): Promise<{
   if (!item) return { ok: false, detail: "Материал не найден", skillId: null };
   if (item.status !== "ready") {
     return { ok: false, detail: "Сначала выполните разбор материала", skillId: null };
+  }
+  if (!isReadableHumanText(item.extracted_text ?? "")) {
+    return {
+      ok: false,
+      detail:
+        "Нет читаемого текста для skill. Тезисы/фразы из битого PDF — не skills. Добавьте .md/.txt или вставьте текст, снова «Разобрать».",
+      skillId: null,
+    };
   }
   const analysis = item.analysis_json
     ? (JSON.parse(item.analysis_json) as LibraryAnalysis)
@@ -617,6 +678,52 @@ export function getLibrarySnapshot(): {
   return {
     items: listLibraryItems(50),
     learned: listLearnedUnits({ limit: 30 }),
+  };
+}
+
+/**
+ * Delete a library material: DB row, learned units, plan, and source file
+ * if it lives under the Mira library root (imported uploads).
+ * Does not delete catalog skills that were already created from it.
+ */
+export function deleteLibraryMaterial(id: string): {
+  ok: boolean;
+  detail: string;
+  deletedId: string | null;
+} {
+  const item = getLibraryItem(id);
+  if (!item) {
+    return { ok: false, detail: "Материал не найден", deletedId: null };
+  }
+
+  const removed = deleteLibraryItemRow(id);
+  if (!removed) {
+    return { ok: false, detail: "Не удалось удалить", deletedId: null };
+  }
+
+  let fileNote = "";
+  const src = removed.source_path;
+  if (src) {
+    try {
+      const resolved = path.resolve(src);
+      const root = path.resolve(libraryRoot());
+      if (
+        (resolved === root || resolved.startsWith(root + path.sep)) &&
+        fs.existsSync(resolved) &&
+        fs.statSync(resolved).isFile()
+      ) {
+        fs.unlinkSync(resolved);
+        fileNote = " · файл удалён";
+      }
+    } catch {
+      fileNote = " · файл на диске не удалён";
+    }
+  }
+
+  return {
+    ok: true,
+    detail: `Удалено «${removed.title}»${fileNote}`,
+    deletedId: removed.id,
   };
 }
 

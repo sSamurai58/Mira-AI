@@ -190,6 +190,7 @@
 | F11 | Backup / export / import / «забыть» | `partial` | mira-backup-v1; secrets opt-in; forget + confirm |
 | F12 | Режим подтверждений | `partial` | always/smart/dangerous-list + Settings |
 | F13 | Логи и Doctor | `partial` | findings+fix; app_logs + jsonl; UI Настройки→Данные |
+| F-MCP | MCP-подключения сайтов/программ | `partial` | Каталог+плитки в Настройки→MCP (0.1.4); runtime/OAuth — later. План: `docs/MCP.md` |
 
 ### Платформа
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { AutoGrowTextarea } from "./AutoGrowTextarea";
 import { StubBadge } from "./StubBadge";
 
 type Note = {
@@ -67,12 +68,12 @@ export function NotesFilesPanel() {
         </label>
         <label className="stack">
           <span className="muted">Markdown / текст</span>
-          <textarea
+          <AutoGrowTextarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
-            rows={8}
             placeholder="# Заметка&#10;&#10;Текст…"
-            style={{ fontFamily: "ui-monospace, monospace", minHeight: 140 }}
+            minHeight={140}
+            style={{ fontFamily: "ui-monospace, monospace" }}
           />
         </label>
         <div className="row">

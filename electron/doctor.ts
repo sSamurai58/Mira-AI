@@ -67,8 +67,23 @@ export function runDoctor(): DoctorReport {
       fix: llm.ok
         ? undefined
         : "Проверьте ключи / LLM_PROVIDER=openai|claude|gemini|grok|offline|mock в .env (Настройки → API и модели).",
+    }),
+  );
 
-
+  const hasEleven = Boolean(process.env.ELEVENLABS_API_KEY?.trim());
+  findings.push(
+    finding({
+      id: "api-elevenlabs",
+      area: "api",
+      ok: true,
+      severity: hasEleven ? "info" : "warn",
+      title: "ElevenLabs TTS",
+      detail: hasEleven
+        ? `ключ есть · voice=${process.env.ELEVENLABS_VOICE_ID?.trim() || "YjESejviApN7SHrbfnA2"} · model=${process.env.ELEVENLABS_MODEL_ID?.trim() || "eleven_multilingual_v2"}`
+        : "ELEVENLABS_API_KEY не задан — облачный TTS недоступен (Web Speech / Neural pack ok)",
+      fix: hasEleven
+        ? undefined
+        : "Настройки → API / Голос → ElevenLabs: вставьте API-ключ с elevenlabs.io (не Voice ID).",
     }),
   );
 
@@ -131,7 +146,7 @@ export function runDoctor(): DoctorReport {
       detail: `capture=${screen.enabled} control=${screen.controlEnabled} os=${screen.osPriority}`,
       fix: screen.enabled
         ? undefined
-        : "SCREEN_ENABLED=true. Если capture пустой — проверьте права экрана ОС / xdotool для control.",
+        : "SCREEN_ENABLED=true. Если capture пустой — проверьте права экрана ОС. Control: xdotool (Linux) или Win32 (Windows), только после Confirm.",
     }),
   );
   findings.push(
