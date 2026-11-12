@@ -144,7 +144,7 @@ export async function fetchWeatherSnapshot(
     signal,
     headers: {
       Accept: "application/json",
-      "User-Agent": "MiraAssistant/0.0.4 (+local)",
+      "User-Agent": "MiraAssistant/0.0.5 (+local)",
     },
   });
   if (!res.ok) {
@@ -293,7 +293,7 @@ export async function webFetch(
   const res = await fetch(parsed.toString(), {
     signal,
     redirect: "error",
-    headers: { "User-Agent": "MiraAssistant/0.0.4 (+local)" },
+    headers: { "User-Agent": "MiraAssistant/0.0.5 (+local)" },
   });
   const contentType = res.headers.get("content-type") || "";
   let text = await res.text();
