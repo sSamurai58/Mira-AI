@@ -433,6 +433,36 @@ contextBridge.exposeInMainWorld("mira", {
   deleteProfile: (id: string) => call("mira:delete-profile", id),
   getHudPolicy: () => call("mira:get-hud-policy"),
   toggleHud: () => call("mira:toggle-hud"),
+  windowMinimize: () => call("mira:window-minimize"),
+  windowMaximizeToggle: (): Promise<{ ok: boolean; maximized?: boolean }> =>
+    call("mira:window-maximize-toggle"),
+  windowClose: () => call("mira:window-close"),
+  windowGetState: (): Promise<{
+    maximized: boolean;
+    fullscreen: boolean;
+    focused: boolean;
+  }> => call("mira:window-get-state"),
+  windowSetChrome: (payload: {
+    backgroundColor?: string;
+  }): Promise<{ ok: boolean }> => call("mira:window-set-chrome", payload),
+  onWindowState: (
+    handler: (state: {
+      maximized: boolean;
+      fullscreen: boolean;
+      focused: boolean;
+    }) => void,
+  ) => {
+    const listener = (
+      _event: IpcRendererEvent,
+      state: {
+        maximized: boolean;
+        fullscreen: boolean;
+        focused: boolean;
+      },
+    ) => handler(state);
+    ipcRenderer.on("mira:window-state", listener);
+    return () => ipcRenderer.removeListener("mira:window-state", listener);
+  },
   respondConfirm: (
     id: string,
     accepted: boolean,

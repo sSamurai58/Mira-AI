@@ -11,6 +11,7 @@ import { AppConfirmProvider } from "./components/AppConfirm";
 import { ConfirmModal } from "./components/ConfirmModal";
 import { ErrorBanner } from "./components/ErrorBanner";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { TitleBar } from "./components/TitleBar";
 import { ChatPage } from "./pages/ChatPage";
 import { HudPage } from "./pages/HudPage";
 import { MemoryPage } from "./pages/MemoryPage";
@@ -351,6 +352,9 @@ export function App() {
       <div className="atmosphere-mid" aria-hidden />
       <div className="atmosphere-grid" aria-hidden />
 
+      <TitleBar />
+
+      <div className="app-shell-body">
       <ErrorBoundary fallbackTitle="Навигация Mira сбойнула">
         <aside className="nav">
           <div className="brand-row">
@@ -448,6 +452,7 @@ export function App() {
           </div>
         </div>
       </ErrorBoundary>
+      </div>
 
       <ErrorBoundary fallbackTitle="Диалог подтверждения сбойнул">
         <ConfirmModal

@@ -1,4 +1,10 @@
-import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  type IpcMainInvokeEvent,
+} from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import { getPublicConfig, loadConfig, validateLlmConfig } from "./config";
@@ -196,6 +202,15 @@ function createWindow(): BrowserWindow {
     height: 800,
     minWidth: 960,
     minHeight: 640,
+    // Frameless: themed in-app titlebar (see TitleBar + mira:window-*).
+    // Avoids OS accent-colored chrome (e.g. solid purple Windows title bar).
+    frame: false,
+    ...(process.platform === "darwin"
+      ? {
+          titleBarStyle: "hiddenInset" as const,
+          trafficLightPosition: { x: 14, y: 12 },
+        }
+      : {}),
     backgroundColor: "#000814",
     title: "Mira",
     show: false,
@@ -220,6 +235,21 @@ function createWindow(): BrowserWindow {
       win.focus();
     }
   }, 2500);
+
+  const emitChromeState = () => {
+    if (win.isDestroyed()) return;
+    win.webContents.send("mira:window-state", {
+      maximized: win.isMaximized(),
+      fullscreen: win.isFullScreen(),
+      focused: win.isFocused(),
+    });
+  };
+  win.on("maximize", emitChromeState);
+  win.on("unmaximize", emitChromeState);
+  win.on("enter-full-screen", emitChromeState);
+  win.on("leave-full-screen", emitChromeState);
+  win.on("focus", emitChromeState);
+  win.on("blur", emitChromeState);
 
   win.webContents.on("did-fail-load", (_e, code, desc, url, isMainFrame) => {
     if (!isMainFrame || code === -3 /* aborted */) return;
@@ -921,6 +951,48 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
   on("mira:delete-profile", (_e, id: string) => deleteProfile(id));
   on("mira:get-hud-policy", () => ({ ...getHudPolicy(), open: isHudOpen() }));
   on("mira:toggle-hud", async () => toggleHud({ isDev }));
+
+  const windowFromEvent = (e: IpcMainInvokeEvent) =>
+    BrowserWindow.fromWebContents(e.sender);
+
+  on("mira:window-minimize", (e) => {
+    windowFromEvent(e)?.minimize();
+    return { ok: true };
+  });
+  on("mira:window-maximize-toggle", (e) => {
+    const win = windowFromEvent(e);
+    if (!win) return { ok: false, maximized: false };
+    if (win.isMaximized()) win.unmaximize();
+    else win.maximize();
+    return { ok: true, maximized: win.isMaximized() };
+  });
+  on("mira:window-close", (e) => {
+    windowFromEvent(e)?.close();
+    return { ok: true };
+  });
+  on("mira:window-get-state", (e) => {
+    const win = windowFromEvent(e);
+    if (!win) {
+      return { maximized: false, fullscreen: false, focused: false };
+    }
+    return {
+      maximized: win.isMaximized(),
+      fullscreen: win.isFullScreen(),
+      focused: win.isFocused(),
+    };
+  });
+  on(
+    "mira:window-set-chrome",
+    (e, payload?: { backgroundColor?: string }) => {
+      const win = windowFromEvent(e);
+      if (!win) return { ok: false };
+      const bg = payload?.backgroundColor?.trim();
+      if (bg && /^#[0-9A-Fa-f]{6}$/.test(bg)) {
+        win.setBackgroundColor(bg);
+      }
+      return { ok: true };
+    },
+  );
 
 
   on("mira:get-backup-status", () => getBackupStatus());

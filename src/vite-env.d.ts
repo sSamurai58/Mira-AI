@@ -990,6 +990,24 @@ interface MiraBridge {
     open: boolean;
   }>;
   toggleHud: () => Promise<{ open: boolean }>;
+  windowMinimize: () => Promise<{ ok: boolean }>;
+  windowMaximizeToggle: () => Promise<{ ok: boolean; maximized?: boolean }>;
+  windowClose: () => Promise<{ ok: boolean }>;
+  windowGetState: () => Promise<{
+    maximized: boolean;
+    fullscreen: boolean;
+    focused: boolean;
+  }>;
+  windowSetChrome: (payload: {
+    backgroundColor?: string;
+  }) => Promise<{ ok: boolean }>;
+  onWindowState: (
+    handler: (state: {
+      maximized: boolean;
+      fullscreen: boolean;
+      focused: boolean;
+    }) => void,
+  ) => () => void;
 }
 
 
