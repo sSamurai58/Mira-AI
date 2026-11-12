@@ -675,6 +675,11 @@ interface MiraBridge {
     projectId: string,
     text: string,
   ) => Promise<MiraVoicePhrase>;
+  deleteVoicePhrase: (phraseId: string) => Promise<{
+    ok: boolean;
+    detail: string;
+    deletedId: string | null;
+  }>;
   trainVoiceModel: (projectId: string) => Promise<{
     project: MiraVoiceProject;
     analysis: unknown[];

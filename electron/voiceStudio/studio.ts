@@ -148,26 +148,140 @@ function inWordRange(
   return n >= minWords && n <= maxWords;
 }
 
-/** Stretch short seed text toward minWords without inventing unrelated topics. */
+const EXPAND_FILLERS_RU = [
+  "Это помогает лучше передать интонацию и ритм речи при обучении голоса.",
+  "Повторите спокойно, чётко и без спешки, сохраняя естественные паузы.",
+  "Длинный фрагмент даёт модели больше материала для устойчивого тембра.",
+  "Скажите фразу так, будто объясняете задачу другу, без спешки и без напряжения.",
+  "Смените темп: сначала медленнее, затем чуть быстрее, но сохраняйте ясность.",
+  "Произнесите числа, имена и короткие команды в одном естественном потоке.",
+  "Обратите внимание на мягкие согласные и ровный выдох в конце предложения.",
+  "Пусть голос звучит уверенно, но без театральности и лишнего давления.",
+  "Добавьте короткую паузу перед важной деталью, затем продолжите спокойно.",
+  "Опишите привычный сценарий: открыть приложение, проверить статус, ответить.",
+  "Тренируйте дикцию на шипящих и свистящих, не ускоряя остальные слова.",
+  "Сделайте акцент на вопросительной интонации, затем на утвердительной.",
+  "Произнесите техническую фразу про API, JSON и локальное хранилище данных.",
+  "Говорите так, будто ведёте живой диалог, а не читаете список слов.",
+  "Повторите ключевые слова с разной эмоциональной окраской: спокойно и тепло.",
+  "Следите, чтобы окончание фразы не проваливалось и не становилось шёпотом.",
+  "Вставьте бытовые детали: погода, время, адрес, короткое подтверждение.",
+  "Пусть ритм речи остаётся ровным даже на длинном непрерывном фрагменте.",
+  "Сформулируйте просьбу, уточнение и благодарность в одном связном абзаце.",
+  "Проверьте, что каждое новое предложение добавляет смысл, а не копирует прошлое.",
+  "Опишите действие на экране: нажать, сохранить, закрыть вкладку, продолжить.",
+  "Говорите имена и адреса чётко, разделяя части короткими естественными паузами.",
+  "Сделайте переход от нейтрального тона к лёгкой радости без резкого скачка.",
+  "Произнесите длинный ответ так, будто помогаете пользователю шаг за шагом.",
+  "Добавьте вариации: команда, вопрос, уточнение и короткое «готово» в финале.",
+  "Сохраняйте естественные паузы на знаках, не дробя слова искусственными сбоями.",
+  "Пусть тембр остаётся узнаваемым, даже когда меняются тема и длина фразы.",
+  "Скажите о проверке статуса, поиске в памяти и отправке короткого сообщения.",
+  "Тренируйте мягкий старт фразы и уверенное, но спокойное завершение мысли.",
+  "Соберите абзац из разных бытовых и рабочих реплик, без дословных повторов.",
+];
+
+const EXPAND_FILLERS_EN = [
+  "This longer line helps capture tone and pacing for voice training.",
+  "Speak clearly and steadily, keeping natural pauses between clauses.",
+  "A longer passage gives the model more material for a stable timbre.",
+  "Say it as if you are explaining a task to a friend, without rush or strain.",
+  "Change the pace: slower first, then a little faster, while staying clear.",
+  "Include numbers, names, and short commands in one natural flow.",
+  "Watch soft consonants and keep a steady breath at the end of each sentence.",
+  "Keep the voice confident, but avoid theatrical pressure or harsh edges.",
+  "Add a short pause before an important detail, then continue calmly.",
+  "Describe a familiar scene: open the app, check status, then reply.",
+  "Practice diction on sibilants without speeding through the rest.",
+  "Shift from a questioning tone into a firm, affirmative finish.",
+  "Speak a technical line about API, JSON, and local data storage.",
+  "Sound like a live conversation, not like a list of memorized words.",
+  "Repeat key words with a calm tone and then with a warmer color.",
+  "Do not let the phrase trail off into a whisper at the end.",
+  "Mix everyday details: weather, time, address, and a short confirmation.",
+  "Keep rhythm even across a long continuous training passage.",
+  "Combine a request, a clarification, and a thank-you in one paragraph.",
+  "Make every new sentence add meaning instead of copying the previous one.",
+  "Describe on-screen actions: click, save, close the tab, continue.",
+  "Say names and addresses clearly, with short natural pauses between parts.",
+  "Move from a neutral tone into light warmth without a sharp jump.",
+  "Deliver a long reply as if guiding the user one step at a time.",
+  "Vary the material: a command, a question, a clarification, and done.",
+  "Keep natural pauses on punctuation without chopping words artificially.",
+  "Keep the timbre recognizable even when topic and length change.",
+  "Mention checking status, searching memory, and sending a short message.",
+  "Train a soft phrase start and a calm, confident ending.",
+  "Build a paragraph from mixed daily and work lines without verbatim repeats.",
+];
+
+const PASSAGE_STARTERS_RU = [
+  "Учебный текст для устойчивого тембра.",
+  "Длинный тренировочный фрагмент речи.",
+  "Связный абзац для обучения голоса.",
+  "Развернутый ответ помощника для дикции.",
+  "Практика естественных пауз и ритма.",
+  "Корпусная фраза с бытовыми деталями.",
+  "Диалоговый текст с командами и уточнениями.",
+  "Речь для проверки интонации и ясности.",
+];
+
+const PASSAGE_STARTERS_EN = [
+  "Training passage for a stable timbre.",
+  "A long spoken fragment for voice learning.",
+  "Connected paragraph for diction practice.",
+  "Extended assistant reply for intonation work.",
+  "Practice for natural pauses and rhythm.",
+  "Corpus line with everyday details.",
+  "Dialog text with commands and clarifications.",
+  "Speech drill for clarity and pacing.",
+];
+
+function hashSeed(text: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function shuffleWithSeed<T>(items: T[], seedText: string): T[] {
+  const arr = [...items];
+  const rng = mulberry32(hashSeed(seedText) || 1);
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    const tmp = arr[i]!;
+    arr[i] = arr[j]!;
+    arr[j] = tmp;
+  }
+  return arr;
+}
+
+/** Stretch short seed text toward minWords with seeded filler variety. */
 function expandTowardMinWords(
   text: string,
   minWords: number,
   charBudget = MAX_PHRASE_CHARS,
+  variationKey = "",
 ): string {
   let out = text.trim().replace(/\s+/g, " ");
   if (countWords(out) >= minWords) return out;
-  const fillersRu = [
-    "Это помогает лучше передать интонацию и ритм речи при обучении голоса.",
-    "Повторите спокойно, чётко и без спешки, сохраняя естественные паузы.",
-    "Длинный фрагмент даёт модели больше материала для устойчивого тембра.",
-  ];
-  const fillersEn = [
-    "This longer line helps capture tone and pacing for voice training.",
-    "Speak clearly and steadily, keeping natural pauses between clauses.",
-    "A longer passage gives the model more material for a stable timbre.",
-  ];
   const looksRu = /[А-Яа-яЁё]/.test(out);
-  const fillers = looksRu ? fillersRu : fillersEn;
+  const fillers = shuffleWithSeed(
+    looksRu ? EXPAND_FILLERS_RU : EXPAND_FILLERS_EN,
+    `${variationKey}|${out}|expand`,
+  );
   let i = 0;
   let guard = 0;
   while (countWords(out) < minWords && guard < 800) {
@@ -191,12 +305,13 @@ function fitPhraseToWordRange(
   text: string,
   minWords: number,
   maxWords: number,
+  variationKey = "",
 ): string | null {
   const budget = phraseCharBudget(maxWords);
   let out = text.trim().replace(/\s+/g, " ");
   if (!out) return null;
   out = trimToMaxWords(out, maxWords);
-  out = expandTowardMinWords(out, minWords, budget);
+  out = expandTowardMinWords(out, minWords, budget, variationKey || out);
   out = trimToMaxWords(out, maxWords);
   if (out.length > budget) {
     out = out.slice(0, budget).replace(/\s+\S*$/, "").trim();
@@ -204,8 +319,17 @@ function fitPhraseToWordRange(
   }
   if (!inWordRange(out, minWords, maxWords)) {
     // Last resort: build a filler passage that hits the requested word range.
-    const seed = /[А-Яа-яЁё]/.test(text) ? "Обучение голоса." : "Voice training.";
-    out = expandTowardMinWords(seed, minWords, budget);
+    const looksRu = /[А-Яа-яЁё]/.test(text);
+    const starters = looksRu ? PASSAGE_STARTERS_RU : PASSAGE_STARTERS_EN;
+    const starter =
+      starters[hashSeed(`${variationKey}|${text}`) % starters.length] ??
+      (looksRu ? "Обучение голоса." : "Voice training.");
+    out = expandTowardMinWords(
+      starter,
+      minWords,
+      budget,
+      `${variationKey}|fallback|${text}`,
+    );
     out = trimToMaxWords(out, maxWords);
   }
   if (!inWordRange(out, minWords, maxWords)) return null;
@@ -611,13 +735,20 @@ export function generatePhrases(
   const ordered: string[] = [];
   const fromChatKeys = new Set<string>();
   const fromUncoveredKeys = new Set<string>();
+  let variationSeq = 0;
   const pushFresh = (
     list: string[],
     mark: "chat" | "uncovered" | null = null,
   ) => {
     for (const raw of list) {
       if (ordered.length >= want) return;
-      const fitted = fitPhraseToWordRange(raw, minWords, maxWords);
+      variationSeq += 1;
+      const fitted = fitPhraseToWordRange(
+        raw,
+        minWords,
+        maxWords,
+        `${projectId}|${mark ?? "bank"}|${variationSeq}|${raw.slice(0, 48)}`,
+      );
       if (!fitted) continue;
       const key = fitted.toLowerCase();
       if (existing.has(key)) continue;
@@ -632,12 +763,18 @@ export function generatePhrases(
   pushFresh(common);
   pushFresh(variety);
   // If still short of want (small banks + tight range), re-expand unique seeds
-  // with slight filler rotation so long corpora can still grow.
+  // with seeded filler rotation so long corpora stay distinct.
   if (ordered.length < want) {
     const extras = [...usedRanked, ...frequentUncovered, ...common, ...variety];
     for (const raw of extras) {
       if (ordered.length >= want) break;
-      const fitted = fitPhraseToWordRange(`${raw} ${raw}`, minWords, maxWords);
+      variationSeq += 1;
+      const fitted = fitPhraseToWordRange(
+        `${raw} ${raw}`,
+        minWords,
+        maxWords,
+        `${projectId}|extra|${variationSeq}|${raw.slice(0, 48)}`,
+      );
       if (!fitted) continue;
       const key = fitted.toLowerCase();
       if (existing.has(key)) continue;
@@ -646,13 +783,20 @@ export function generatePhrases(
     }
   }
   // Always be able to fill the requested count for long word ranges.
+  const langEn = project.lang.toLowerCase().startsWith("en");
+  const starters = langEn ? PASSAGE_STARTERS_EN : PASSAGE_STARTERS_RU;
   let synth = 0;
-  while (ordered.length < want && synth < want + 8) {
+  while (ordered.length < want && synth < want + 12) {
     synth += 1;
-    const seed = project.lang.toLowerCase().startsWith("en")
-      ? `Training passage ${synth}.`
-      : `Учебный текст ${synth}.`;
-    const fitted = fitPhraseToWordRange(seed, minWords, maxWords);
+    variationSeq += 1;
+    const starter = starters[(synth - 1) % starters.length]!;
+    const seed = `${starter} ${langEn ? `Variant ${synth}.` : `Вариант ${synth}.`}`;
+    const fitted = fitPhraseToWordRange(
+      seed,
+      minWords,
+      maxWords,
+      `${projectId}|synth|${variationSeq}|${synth}|${Date.now()}`,
+    );
     if (!fitted) break;
     const key = fitted.toLowerCase();
     if (existing.has(key)) continue;
@@ -1481,6 +1625,59 @@ export function addCustomPhrase(
     recommendation: "Запишите или загрузите аудио для новой фразы.",
   });
   return row;
+}
+
+/** Delete an untrained phrase (no accepted linked clip) and its orphan clips. */
+export function deleteVoicePhrase(phraseId: string): {
+  ok: boolean;
+  detail: string;
+  deletedId: string | null;
+} {
+  const store = openStore();
+  const phrase = store
+    .prepare(
+      `SELECT id, project_id, text, recorded
+       FROM voice_phrases WHERE id = ?`,
+    )
+    .get(phraseId) as
+    | { id: string; project_id: string; text: string; recorded: number }
+    | undefined;
+  if (!phrase) {
+    return { ok: false, detail: "Фраза не найдена", deletedId: null };
+  }
+  const accepted = store
+    .prepare(
+      `SELECT COUNT(*) AS c FROM voice_clips
+       WHERE phrase_id = ? AND accepted = 1`,
+    )
+    .get(phraseId) as { c: number };
+  if (accepted.c > 0 || phrase.recorded) {
+    return {
+      ok: false,
+      detail: "Обученную / записанную фразу удалить нельзя — только необученные",
+      deletedId: null,
+    };
+  }
+  const clips = store
+    .prepare(
+      `SELECT id, file_path FROM voice_clips WHERE phrase_id = ?`,
+    )
+    .all(phraseId) as Array<{ id: string; file_path: string }>;
+  for (const clip of clips) {
+    try {
+      if (clip.file_path && fs.existsSync(clip.file_path)) {
+        fs.unlinkSync(clip.file_path);
+      }
+    } catch {
+      // best-effort file cleanup
+    }
+  }
+  store.prepare(`DELETE FROM voice_clips WHERE phrase_id = ?`).run(phraseId);
+  store.prepare(`DELETE FROM voice_phrases WHERE id = ?`).run(phraseId);
+  touchProject(phrase.project_id, {
+    recommendation: `Удалена необученная фраза: ${phrase.text.slice(0, 64)}${phrase.text.length > 64 ? "…" : ""}`,
+  });
+  return { ok: true, detail: "Фраза удалена", deletedId: phraseId };
 }
 
 export function getStudioSnapshot(projectId?: string) {

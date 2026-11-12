@@ -84,6 +84,7 @@ import {
   addCustomPhrase,
   createVoiceProject,
   deleteCustomVoice,
+  deleteVoicePhrase,
   deleteVoiceProject,
   generatePhrases,
   getCustomVoiceCorpus,
@@ -758,6 +759,10 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
   on(
     "mira:add-voice-phrase",
     (_e, projectId: string, text: string) => addCustomPhrase(projectId, text),
+  );
+  on(
+    "mira:delete-voice-phrase",
+    (_e, phraseId: string) => deleteVoicePhrase(phraseId),
   );
   on("mira:train-voice-model", (_e, projectId: string) =>
     trainVoiceModel(projectId, (ev) => {

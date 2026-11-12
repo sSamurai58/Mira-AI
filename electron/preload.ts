@@ -304,6 +304,8 @@ contextBridge.exposeInMainWorld("mira", {
   deleteCustomVoice: (id: string) => call("mira:delete-custom-voice", id),
   addVoicePhrase: (projectId: string, text: string) =>
     call("mira:add-voice-phrase", projectId, text),
+  deleteVoicePhrase: (phraseId: string) =>
+    call("mira:delete-voice-phrase", phraseId),
   trainVoiceModel: (projectId: string) =>
     call("mira:train-voice-model", projectId),
   onVoiceTrainProgress: (

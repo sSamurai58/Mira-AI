@@ -312,18 +312,94 @@ function localPhraseCharBudget(maxWords: number): number {
   return Math.min(LOCAL_MAX_PHRASE_CHARS, Math.max(1200, maxWords * 14 + 160));
 }
 
+const LOCAL_EXPAND_FILLERS = [
+  "Это помогает лучше передать интонацию и ритм речи при обучении голоса.",
+  "Повторите спокойно, чётко и без спешки, сохраняя естественные паузы.",
+  "Длинный фрагмент даёт модели больше материала для устойчивого тембра.",
+  "Скажите фразу так, будто объясняете задачу другу, без спешки и без напряжения.",
+  "Смените темп: сначала медленнее, затем чуть быстрее, но сохраняйте ясность.",
+  "Произнесите числа, имена и короткие команды в одном естественном потоке.",
+  "Обратите внимание на мягкие согласные и ровный выдох в конце предложения.",
+  "Пусть голос звучит уверенно, но без театральности и лишнего давления.",
+  "Добавьте короткую паузу перед важной деталью, затем продолжите спокойно.",
+  "Опишите привычный сценарий: открыть приложение, проверить статус, ответить.",
+  "Тренируйте дикцию на шипящих и свистящих, не ускоряя остальные слова.",
+  "Сделайте акцент на вопросительной интонации, затем на утвердительной.",
+  "Произнесите техническую фразу про API, JSON и локальное хранилище данных.",
+  "Говорите так, будто ведёте живой диалог, а не читаете список слов.",
+  "Повторите ключевые слова с разной эмоциональной окраской: спокойно и тепло.",
+  "Следите, чтобы окончание фразы не проваливалось и не становилось шёпотом.",
+  "Вставьте бытовые детали: погода, время, адрес, короткое подтверждение.",
+  "Пусть ритм речи остаётся ровным даже на длинном непрерывном фрагменте.",
+  "Сформулируйте просьбу, уточнение и благодарность в одном связном абзаце.",
+  "Проверьте, что каждое новое предложение добавляет смысл, а не копирует прошлое.",
+  "Опишите действие на экране: нажать, сохранить, закрыть вкладку, продолжить.",
+  "Говорите имена и адреса чётко, разделяя части короткими естественными паузами.",
+  "Сделайте переход от нейтрального тона к лёгкой радости без резкого скачка.",
+  "Произнесите длинный ответ так, будто помогаете пользователю шаг за шагом.",
+  "Добавьте вариации: команда, вопрос, уточнение и короткое «готово» в финале.",
+  "Сохраняйте естественные паузы на знаках, не дробя слова искусственными сбоями.",
+  "Пусть тембр остаётся узнаваемым, даже когда меняются тема и длина фразы.",
+  "Скажите о проверке статуса, поиске в памяти и отправке короткого сообщения.",
+  "Тренируйте мягкий старт фразы и уверенное, но спокойное завершение мысли.",
+  "Соберите абзац из разных бытовых и рабочих реплик, без дословных повторов.",
+];
+
+const LOCAL_PASSAGE_STARTERS = [
+  "Учебный текст для устойчивого тембра.",
+  "Длинный тренировочный фрагмент речи.",
+  "Связный абзац для обучения голоса.",
+  "Развернутый ответ помощника для дикции.",
+  "Практика естественных пауз и ритма.",
+  "Корпусная фраза с бытовыми деталями.",
+  "Диалоговый текст с командами и уточнениями.",
+  "Речь для проверки интонации и ясности.",
+];
+
+function localHashSeed(text: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function localMulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function localShuffleWithSeed<T>(items: T[], seedText: string): T[] {
+  const arr = [...items];
+  const rng = localMulberry32(localHashSeed(seedText) || 1);
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    const tmp = arr[i]!;
+    arr[i] = arr[j]!;
+    arr[j] = tmp;
+  }
+  return arr;
+}
+
 function localExpandTowardMinWords(
   text: string,
   minWords: number,
   charBudget = LOCAL_MAX_PHRASE_CHARS,
+  variationKey = "",
 ): string {
   let out = text.trim().replace(/\s+/g, " ");
   if (localCountWords(out) >= minWords) return out;
-  const fillers = [
-    "Это помогает лучше передать интонацию и ритм речи при обучении голоса.",
-    "Повторите спокойно, чётко и без спешки, сохраняя естественные паузы.",
-    "Длинный фрагмент даёт модели больше материала для устойчивого тембра.",
-  ];
+  const fillers = localShuffleWithSeed(
+    LOCAL_EXPAND_FILLERS,
+    `${variationKey}|${out}|expand`,
+  );
   let i = 0;
   let guard = 0;
   while (localCountWords(out) < minWords && guard < 800) {
@@ -340,13 +416,19 @@ function localFitPhraseToWordRange(
   text: string,
   minWords: number,
   maxWords: number,
+  variationKey = "",
 ): string | null {
   const budget = localPhraseCharBudget(maxWords);
   let out = text.trim().replace(/\s+/g, " ");
   if (!out) return null;
   let words = out.split(/\s+/).filter(Boolean);
   if (words.length > maxWords) out = words.slice(0, maxWords).join(" ");
-  out = localExpandTowardMinWords(out, minWords, budget);
+  out = localExpandTowardMinWords(
+    out,
+    minWords,
+    budget,
+    variationKey || out,
+  );
   words = out.split(/\s+/).filter(Boolean);
   if (words.length > maxWords) out = words.slice(0, maxWords).join(" ");
   if (out.length > budget) {
@@ -356,7 +438,16 @@ function localFitPhraseToWordRange(
   }
   let n = localCountWords(out);
   if (n < minWords || n > maxWords) {
-    out = localExpandTowardMinWords("Обучение голоса.", minWords, budget);
+    const starter =
+      LOCAL_PASSAGE_STARTERS[
+        localHashSeed(`${variationKey}|${text}`) % LOCAL_PASSAGE_STARTERS.length
+      ] ?? "Обучение голоса.";
+    out = localExpandTowardMinWords(
+      starter,
+      minWords,
+      budget,
+      `${variationKey}|fallback|${text}`,
+    );
     words = out.split(/\s+/).filter(Boolean);
     if (words.length > maxWords) out = words.slice(0, maxWords).join(" ");
     n = localCountWords(out);
@@ -431,10 +522,17 @@ export function localGeneratePhrases(
   });
 
   const ordered: string[] = [];
-  const pushFresh = (list: string[]) => {
+  let variationSeq = 0;
+  const pushFresh = (list: string[], mark = "bank") => {
     for (const raw of list) {
       if (ordered.length >= want) return;
-      const fitted = localFitPhraseToWordRange(raw, minWords, maxWords);
+      variationSeq += 1;
+      const fitted = localFitPhraseToWordRange(
+        raw,
+        minWords,
+        maxWords,
+        `${projectId}|${mark}|${variationSeq}|${raw.slice(0, 48)}`,
+      );
       if (!fitted) continue;
       const key = fitted.toLowerCase();
       if (existing.has(key)) continue;
@@ -443,17 +541,19 @@ export function localGeneratePhrases(
     }
   };
   // Most-used speech first; then frequent uncovered words (system TTS until trained).
-  pushFresh(usedRanked);
-  pushFresh(uncoveredSeeds);
-  pushFresh(ASSISTANT_COMMON);
-  pushFresh(PHRASE_BANK);
+  pushFresh(usedRanked, "chat");
+  pushFresh(uncoveredSeeds, "uncovered");
+  pushFresh(ASSISTANT_COMMON, "common");
+  pushFresh(PHRASE_BANK, "bank");
   if (ordered.length < want) {
     for (const raw of [...usedRanked, ...ASSISTANT_COMMON, ...PHRASE_BANK]) {
       if (ordered.length >= want) break;
+      variationSeq += 1;
       const fitted = localFitPhraseToWordRange(
         `${raw} ${raw}`,
         minWords,
         maxWords,
+        `${projectId}|extra|${variationSeq}|${raw.slice(0, 48)}`,
       );
       if (!fitted) continue;
       const key = fitted.toLowerCase();
@@ -463,12 +563,16 @@ export function localGeneratePhrases(
     }
   }
   let synth = 0;
-  while (ordered.length < want && synth < want + 8) {
+  while (ordered.length < want && synth < want + 12) {
     synth += 1;
+    variationSeq += 1;
+    const starter =
+      LOCAL_PASSAGE_STARTERS[(synth - 1) % LOCAL_PASSAGE_STARTERS.length]!;
     const fitted = localFitPhraseToWordRange(
-      `Учебный текст ${synth}.`,
+      `${starter} Вариант ${synth}.`,
       minWords,
       maxWords,
+      `${projectId}|synth|${variationSeq}|${synth}|${Date.now()}`,
     );
     if (!fitted) break;
     const key = fitted.toLowerCase();
@@ -531,6 +635,40 @@ export function localAddPhrase(
   }
   write(store);
   return row;
+}
+
+export function localDeletePhrase(phraseId: string): {
+  ok: boolean;
+  detail: string;
+  deletedId: string | null;
+} {
+  const store = read();
+  const phrase = store.phrases.find((p) => p.id === phraseId);
+  if (!phrase) {
+    return { ok: false, detail: "Фраза не найдена", deletedId: null };
+  }
+  const hasAccepted = store.clips.some(
+    (c) => c.phrase_id === phraseId && c.accepted,
+  );
+  if (hasAccepted || phrase.recorded) {
+    return {
+      ok: false,
+      detail: "Обученную / записанную фразу удалить нельзя — только необученные",
+      deletedId: null,
+    };
+  }
+  store.clips = store.clips.filter((c) => c.phrase_id !== phraseId);
+  store.phrases = store.phrases.filter((p) => p.id !== phraseId);
+  const pIdx = store.projects.findIndex((p) => p.id === phrase.project_id);
+  if (pIdx >= 0) {
+    store.projects[pIdx] = {
+      ...store.projects[pIdx],
+      recommendation: `Удалена необученная фраза: ${phrase.text.slice(0, 64)}${phrase.text.length > 64 ? "…" : ""}`,
+      updated_at: now(),
+    };
+  }
+  write(store);
+  return { ok: true, detail: "Фраза удалена", deletedId: phraseId };
 }
 
 const MIN_TRAIN_CLIPS = 3;

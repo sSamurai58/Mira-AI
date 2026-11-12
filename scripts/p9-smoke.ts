@@ -10,6 +10,7 @@ import {
 } from "../electron/store";
 import {
   createVoiceProject,
+  deleteVoicePhrase,
   generatePhrases,
   getCustomVoiceCorpus,
   getStudioSnapshot,
@@ -72,6 +73,46 @@ async function main() {
     const n = p.text.trim().split(/\s+/).filter(Boolean).length;
     assert.ok(n >= 80 && n <= 120, `word range 80–120, got ${n}`);
   }
+  assert.notEqual(
+    longBatch[0]!.text,
+    longBatch[1]!.text,
+    "consecutive long texts must differ",
+  );
+
+  const veryLong = generatePhrases(project.id, {
+    count: 2,
+    minWords: 350,
+    maxWords: 400,
+  });
+  assert.equal(veryLong.length, 2, "400-word generate must return 2");
+  assert.notEqual(
+    veryLong[0]!.text,
+    veryLong[1]!.text,
+    "two 400-word texts must not be identical",
+  );
+  const overlapRatio = (() => {
+    const a = new Set(veryLong[0]!.text.split(/\s+/).slice(0, 80));
+    const b = veryLong[1]!.text.split(/\s+/).slice(0, 80);
+    const hit = b.filter((w) => a.has(w)).length;
+    return hit / Math.max(1, b.length);
+  })();
+  assert.ok(
+    overlapRatio < 0.92,
+    `long texts should diversify fillers; overlap=${overlapRatio.toFixed(2)}`,
+  );
+
+  const doomed = generatePhrases(project.id, {
+    count: 1,
+    minWords: 4,
+    maxWords: 12,
+  });
+  assert.equal(doomed.length, 1);
+  const del = deleteVoicePhrase(doomed[0]!.id);
+  assert.equal(del.ok, true, "untrained phrase should delete");
+  assert.equal(
+    listPhrases(project.id).some((p) => p.id === doomed[0]!.id),
+    false,
+  );
 
   const batch2 = generatePhrases(project.id, 5);
   assert.ok(batch2.length >= 1);

@@ -4,6 +4,7 @@ import { clearActiveVoiceId, setActiveVoiceId } from "../voice/catalog";
 import {
   localAddPhrase,
   localCreateProject,
+  localDeletePhrase,
   localDeleteProject,
   localGeneratePhrases,
   localImportClipBytes,
@@ -297,6 +298,33 @@ export function VoiceStudioPanel(props: {
       setCustomPhrase("");
       setPhraseId(row.id);
       setNote(`Фраза добавлена: ${row.text.slice(0, 60)}`);
+      await refresh(project.id);
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function removePendingPhrase(target: MiraVoicePhrase) {
+    if (!project) return;
+    if (isPhraseLearned(target)) {
+      setNote("Обученные фразы удалять нельзя");
+      return;
+    }
+    const preview = phraseTextPreview(target.text, 48);
+    if (!window.confirm(`Удалить необученный текст «${preview}»?`)) return;
+    setBusy("delete-phrase");
+    try {
+      const res = electron
+        ? await window.mira!.deleteVoicePhrase(target.id)
+        : localDeletePhrase(target.id);
+      if (!res.ok) {
+        setNote(res.detail);
+        return;
+      }
+      if (phraseId === target.id) setPhraseId("");
+      setNote(res.detail);
       await refresh(project.id);
     } catch (err) {
       setNote(err instanceof Error ? err.message : String(err));
@@ -1021,6 +1049,15 @@ export function VoiceStudioPanel(props: {
                           onClick={() => beginReloadPhrase(p.id)}
                         >
                           {activeReload ? "Выбрана" : "Записать / перезагрузить"}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-danger"
+                          disabled={Boolean(busy)}
+                          onClick={() => void removePendingPhrase(p)}
+                          title="Удалить необученный текст"
+                        >
+                          Удалить
                         </button>
                       </div>
                     </div>
