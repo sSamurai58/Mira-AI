@@ -115,7 +115,16 @@ export function VoiceStudioPanel(props: {
       setEditLang(snap.project.lang);
     }
     if (snap.project && !phraseId) {
-      const next = snap.phrases.find((p) => !p.recorded);
+      const trained =
+        Boolean(snap.project.custom_voice_id) ||
+        snap.project.status === "ready" ||
+        snap.project.status === "ready_partial";
+      const next = snap.phrases.find((p) => {
+        if (!trained) return !p.recorded;
+        const linked = snap.clips.filter((c) => c.phrase_id === p.id);
+        const accepted = linked.some((c) => c.accepted);
+        return !accepted && !p.recorded;
+      });
       if (next) setPhraseId(next.id);
     }
     if (!electron) {
@@ -520,6 +529,15 @@ export function VoiceStudioPanel(props: {
     ? phrases.filter((p) => !isPhraseLearned(p))
     : phrases;
 
+  // Drop selection if the chosen phrase left the pending dropdown after train.
+  useEffect(() => {
+    if (!phraseId) return;
+    if (pendingPhrases.some((p) => p.id === phraseId)) return;
+    setPhraseId(pendingPhrases[0]?.id ?? "");
+    // pendingPhrases is derived from phrases/clips/isTrained
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phraseId, isTrained, phrases, clips]);
+
   return (
     <div className="panel stack">
       <div className="row">
@@ -867,7 +885,8 @@ export function VoiceStudioPanel(props: {
                 value={phraseId}
                 options={[
                   { value: "", label: "— без привязки —" },
-                  ...phrases.map((p) => ({
+                  // After train: only untrained phrases — learned ones live in «Обученные».
+                  ...pendingPhrases.map((p) => ({
                     value: p.id,
                     label: phraseSelectLabel(phrases, p),
                   })),
