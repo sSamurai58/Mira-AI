@@ -837,23 +837,30 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   pointer-events: none;
   position: absolute;
   /* Soft atmospheric bloom; oversized so rim never reads as a hard circle */
-  inset: -12%;
+  inset: -14%;
   border-radius: 50%;
   z-index: 0;
   background:
+    /* Warm nucleus haze (amber) */
     radial-gradient(
       circle at 50% 48%,
-      color-mix(in srgb, var(--warning) 28%, transparent),
-      transparent 42%
+      color-mix(in srgb, var(--warning) 34%, transparent),
+      transparent 38%
+    ),
+    /* Cyan mid-shell atmospheric tint */
+    radial-gradient(
+      circle at 50% 46%,
+      transparent 28%,
+      color-mix(in srgb, var(--accent) 22%, transparent) 48%,
+      transparent 68%
     ),
     radial-gradient(
       circle at 50% 45%,
-      color-mix(in srgb, var(--accent) 26%, transparent),
-      color-mix(in srgb, var(--accent) 8%, transparent) 52%,
+      color-mix(in srgb, var(--accent) 14%, transparent),
       transparent 78%
     );
-  filter: blur(28px);
-  opacity: 0.72;
+  filter: blur(30px);
+  opacity: 0.78;
   animation: pulse-core 3.2s ease-in-out infinite;
 }
 
