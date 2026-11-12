@@ -13,7 +13,7 @@
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
 | Дорожная карта | Must + future F* закрыты (partial→done stubs where noted) |
 
-**Сейчас:** F10 профили, multi-LLM, vision screen, HUD, CI/pack — в коде.
+**Сейчас:** **0.1.4 released** (MCP catalog UI + Voice Studio fixes). Next: MCP runtime/OAuth when commanded.
 
 
 ## Решения
@@ -23,7 +23,7 @@
 | Дата | Решение | Почему |
 |------|---------|--------|
 | 2026-11-12 | MCP каталог в Настройки; этапы UI = кат. 1,2,3,5,6,7,8,9,10 (Dev + Design/Blender) | Продуктивность через стандартный разъём; плитки как темы; план в `docs/MCP.md` |
-| 2026-11-12 | Релиз 0.1.4 — только по явной команде | Не публиковать пакет до «релиз 0.1.4» |
+| 2026-11-12 | **Релиз 0.1.4 опубликован** (`v0.1.4`, Latest) | MCP catalog + Voice Studio slice/reload + content-fit modals; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.4 |
 | 2026-11-11 | Один процесс приложения | Проще модель данных и отладка |
 | 2026-11-11 | SQLite как единственное хранилище | Локальный продукт, файловая БД |
 | 2026-11-11 | Тёмный UI по умолчанию | Продуктовое направление DESIGN |
