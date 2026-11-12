@@ -111,22 +111,40 @@ export function SettingsIntegrationsSection() {
 
   async function handleSave(group: string, keys: string[]) {
     setSavingKey(group);
-    const patch: Record<string, string> = {};
-    for (const key of keys) {
-      const value = draft[key] ?? "";
-      if (
-        (key.endsWith("_TOKEN") || key.endsWith("_API_KEY")) &&
-        (!value.trim() || value.trim().startsWith("••••"))
-      ) {
-        continue;
+    try {
+      const patch: Record<string, string> = {};
+      for (const key of keys) {
+        const value = draft[key] ?? "";
+        if (
+          (key.endsWith("_TOKEN") || key.endsWith("_API_KEY")) &&
+          (!value.trim() || value.trim().startsWith("••••"))
+        ) {
+          continue;
+        }
+        patch[key] = value;
       }
-      patch[key] = value;
+      const res = await saveSettingsEnv(patch);
+      const values = res.snap?.values ?? {};
+      const secretsSet = res.snap?.secretsSet ?? {};
+      setSnap({
+        values,
+        secretsSet,
+        source: res.snap?.source ?? (window.mira ? "electron" : "browser"),
+        envFile: res.snap?.envFile,
+      });
+      setDraft((prev) => ({ ...prev, ...values }));
+      setNotes((prev) => ({
+        ...prev,
+        [group]: res.detail || (res.ok ? "Сохранено" : "Ошибка сохранения"),
+      }));
+    } catch (err) {
+      setNotes((prev) => ({
+        ...prev,
+        [group]: err instanceof Error ? err.message : String(err),
+      }));
+    } finally {
+      setSavingKey(null);
     }
-    const res = await saveSettingsEnv(patch);
-    setSnap(res.snap);
-    setDraft((prev) => ({ ...prev, ...res.snap.values }));
-    setNotes((prev) => ({ ...prev, [group]: res.detail }));
-    setSavingKey(null);
   }
 
   if (!snap) {

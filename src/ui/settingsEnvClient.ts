@@ -192,6 +192,14 @@ export async function loadSettingsEnv(): Promise<SettingsEnvSnapshot> {
   };
 }
 
+function normalizeSecretsSet(
+  raw: Record<string, boolean> | null | undefined,
+  values: Record<string, string>,
+): Record<string, boolean> {
+  if (raw && typeof raw === "object") return raw;
+  return secretsFrom(values);
+}
+
 export async function saveSettingsEnv(
   patch: Record<string, string>,
   opts?: { clearSecrets?: boolean },
@@ -200,12 +208,13 @@ export async function saveSettingsEnv(
     if (window.mira?.setSettingsEnv) {
       try {
         const res = await window.mira.setSettingsEnv(patch);
+        const values = { ...DEFAULTS, ...(res?.values ?? {}) };
         return {
-          ok: res.ok,
-          detail: res.detail,
+          ok: Boolean(res?.ok),
+          detail: res?.detail ?? (res?.ok ? "Сохранено" : "Ошибка сохранения"),
           snap: {
-            values: { ...DEFAULTS, ...res.values },
-            secretsSet: res.secretsSet,
+            values,
+            secretsSet: normalizeSecretsSet(res?.secretsSet, values),
             source: "electron" as const,
           },
         };

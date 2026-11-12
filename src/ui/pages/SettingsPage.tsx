@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 import { StubBadge } from "../components/StubBadge";
 import { SettingsApiSection } from "../components/SettingsApiSection";
 import { ToggleRow } from "../components/SettingsFormBits";
@@ -314,7 +315,11 @@ export function SettingsPage({
           </>
         ) : null}
         {section === "api" ? <SettingsApiSection /> : null}
-        {section === "integrations" ? <SettingsIntegrationsSection /> : null}
+        {section === "integrations" ? (
+          <ErrorBoundary fallbackTitle="Интеграции сбойнули">
+            <SettingsIntegrationsSection />
+          </ErrorBoundary>
+        ) : null}
         {section === "terminal" ? <TerminalSettingsSection /> : null}
         {section === "data" ? (
           <DataPrivacySection

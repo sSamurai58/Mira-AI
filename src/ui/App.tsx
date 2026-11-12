@@ -445,44 +445,48 @@ export function App() {
         </div>
       </ErrorBoundary>
 
-      <ConfirmModal
-        open={Boolean(pendingConfirm)}
-        title={pendingConfirm?.title ?? "Подтверждение"}
-        body={pendingConfirm?.body ?? ""}
-        confirmLabel={pendingConfirm?.confirmLabel ?? "Подтвердить"}
-        skillPropose={pendingConfirm?.skillPropose ?? null}
-        onCancel={() => {
-          if (pendingConfirm) {
-            logConfirmResolved(pendingConfirm.id, false, pendingConfirm.title);
-            if (window.mira) {
-              void window.mira.respondConfirm(pendingConfirm.id, false);
+      <ErrorBoundary fallbackTitle="Диалог подтверждения сбойнул">
+        <ConfirmModal
+          open={Boolean(pendingConfirm)}
+          title={pendingConfirm?.title ?? "Подтверждение"}
+          body={pendingConfirm?.body ?? ""}
+          confirmLabel={pendingConfirm?.confirmLabel ?? "Подтвердить"}
+          skillPropose={pendingConfirm?.skillPropose ?? null}
+          onCancel={() => {
+            if (pendingConfirm) {
+              logConfirmResolved(pendingConfirm.id, false, pendingConfirm.title);
+              if (window.mira) {
+                void window.mira.respondConfirm(pendingConfirm.id, false);
+              }
             }
-          }
-          setPendingConfirm(null);
-        }}
-        onConfirm={(fields) => {
-          if (pendingConfirm) {
-            logConfirmResolved(pendingConfirm.id, true, pendingConfirm.title);
-            if (window.mira) {
-              void window.mira.respondConfirm(
-                pendingConfirm.id,
-                true,
-                fields,
-              );
+            setPendingConfirm(null);
+          }}
+          onConfirm={(fields) => {
+            if (pendingConfirm) {
+              logConfirmResolved(pendingConfirm.id, true, pendingConfirm.title);
+              if (window.mira) {
+                void window.mira.respondConfirm(
+                  pendingConfirm.id,
+                  true,
+                  fields,
+                );
+              }
             }
-          }
-          setPendingConfirm(null);
-        }}
-      />
+            setPendingConfirm(null);
+          }}
+        />
+      </ErrorBoundary>
 
-      <ConfirmModal
-        open={doctorOpen}
-        title="Doctor"
-        body={doctorBody}
-        confirmLabel="Закрыть"
-        onCancel={() => setDoctorOpen(false)}
-        onConfirm={() => setDoctorOpen(false)}
-      />
+      <ErrorBoundary fallbackTitle="Doctor сбойнул">
+        <ConfirmModal
+          open={doctorOpen}
+          title="Doctor"
+          body={doctorBody}
+          confirmLabel="Закрыть"
+          onCancel={() => setDoctorOpen(false)}
+          onConfirm={() => setDoctorOpen(false)}
+        />
+      </ErrorBoundary>
     </div>
   );
 }

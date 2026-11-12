@@ -106,16 +106,22 @@ strong {
   max-height: 100%;
   padding: var(--pad-screen);
   box-sizing: border-box;
-  isolation: isolate;
   overflow: hidden;
-  /* Avoid contain:paint — with GPU it can composite absolute atmosphere over nav/workspace (blank UI). */
+  /* Opaque shell bg — never rely on atmosphere alone if GPU layers reorder. */
+  background: var(--bg);
+  /*
+   * Do not create a root stacking cage here and do not park atmosphere on a
+   * negative z plane: on GPU (esp. Windows) that can composite the atmosphere
+   * over nav/workspace after Settings toggle/save repaints (blank UI). Keep
+   * atmosphere at z-index 0 and chrome at 1. Also avoid contain:paint.
+   */
 }
 
 .atmosphere {
   pointer-events: none;
   position: absolute;
   inset: 0;
-  z-index: -1;
+  z-index: 0;
   overflow: hidden;
   /* Flat theme fill only — no ambient glows; pattern lives on .atmosphere-grid */
   background: var(--bg);
@@ -131,7 +137,7 @@ strong {
 .atmosphere-mid {
   pointer-events: none;
   position: absolute;
-  z-index: -1;
+  z-index: 0;
   inset: 0;
   overflow: hidden;
 }
@@ -141,7 +147,7 @@ strong {
   pointer-events: none;
   position: absolute;
   inset: 0;
-  z-index: -1;
+  z-index: 0;
   overflow: hidden;
   opacity: 0.048;
   background-color: transparent;
@@ -280,6 +286,8 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   position: relative;
   z-index: 1;
   min-height: 0;
+  /* Own stacking context so atmosphere (z=0) cannot paint over chrome. */
+  isolation: isolate;
 }
 
 .nav {
@@ -2339,6 +2347,7 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
 }
 
 .modal-backdrop {
+  /* Always above shell chrome / atmosphere — never under a blank layer. */
   position: fixed;
   inset: 0;
   z-index: 40;
