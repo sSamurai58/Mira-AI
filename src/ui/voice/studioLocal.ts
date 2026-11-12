@@ -38,6 +38,22 @@ function now() {
   return new Date().toISOString();
 }
 
+/** Stable corpus order: created_at, then original insertion index for ties. */
+function phrasesForProject(
+  store: LocalStore,
+  projectId: string,
+): MiraVoicePhrase[] {
+  return store.phrases
+    .map((p, i) => ({ p, i }))
+    .filter(({ p }) => p.project_id === projectId)
+    .sort((a, b) => {
+      const t = a.p.created_at.localeCompare(b.p.created_at);
+      if (t !== 0) return t;
+      return a.i - b.i;
+    })
+    .map(({ p }) => p);
+}
+
 export function localStudioSnapshot(projectId?: string) {
   const store = read();
   const project = projectId
@@ -46,9 +62,7 @@ export function localStudioSnapshot(projectId?: string) {
   return {
     projects: store.projects,
     project,
-    phrases: project
-      ? store.phrases.filter((p) => p.project_id === project.id)
-      : [],
+    phrases: project ? phrasesForProject(store, project.id) : [],
     clips: project
       ? store.clips.filter((c) => c.project_id === project.id)
       : [],
@@ -201,12 +215,14 @@ export function localGeneratePhrases(
   );
   const fresh = PHRASE_BANK.filter((t) => !existing.has(t.toLowerCase()));
   const pick = fresh.slice(0, Math.max(1, Math.min(count, fresh.length)));
-  const rows: MiraVoicePhrase[] = pick.map((text) => ({
+  const baseMs = Date.now();
+  // Stagger created_at so display numbers 1…N stay stable after collapse/refresh.
+  const rows: MiraVoicePhrase[] = pick.map((text, i) => ({
     id: crypto.randomUUID(),
     project_id: projectId,
     text,
     recorded: 0,
-    created_at: now(),
+    created_at: new Date(baseMs + i).toISOString(),
   }));
   store.phrases.push(...rows);
   const pIdx = store.projects.findIndex((p) => p.id === projectId);

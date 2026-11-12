@@ -28,6 +28,17 @@ function statusLabel(status: string) {
   return STATUS_LABEL[status] ?? status;
 }
 
+/** 1-based index in the full phrase array — never renumber a visible subset. */
+function phraseDisplayNo(all: MiraVoicePhrase[], phraseId: string): number {
+  const i = all.findIndex((p) => p.id === phraseId);
+  return i >= 0 ? i + 1 : 0;
+}
+
+function phraseSelectLabel(all: MiraVoicePhrase[], p: MiraVoicePhrase): string {
+  const n = phraseDisplayNo(all, p.id);
+  return `${n}. ${p.recorded ? "✓ " : ""}${p.text.slice(0, 68)}`;
+}
+
 export function VoiceStudioPanel(props: {
   onCatalogChanged?: () => void;
   focusProjectId?: string | null;
@@ -594,9 +605,9 @@ export function VoiceStudioPanel(props: {
                 </span>
               </div>
               <p className="muted" style={{ margin: 0 }}>
-                Список фраз свёрнут после обучения. Откройте панель, чтобы
-                прослушать аудио, перезагрузить отдельные фразы или переобучить
-                модель целиком.
+                Список фраз свёрнут после обучения. Нумерация 1…N сохраняется —
+                откройте просмотр, чтобы прослушать аудио, перезагрузить
+                отдельные фразы или переобучить модель целиком.
               </p>
               <div className="row" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
                 <button
@@ -604,7 +615,7 @@ export function VoiceStudioPanel(props: {
                   className="btn btn-primary"
                   onClick={() => setPhrasesOpen(true)}
                 >
-                  Открыть фразы
+                  Просмотр фраз
                 </button>
                 <button
                   type="button"
@@ -647,9 +658,9 @@ export function VoiceStudioPanel(props: {
                   value={phraseId}
                   options={[
                     { value: "", label: "— без привязки —" },
-                    ...phrases.map((p, i) => ({
+                    ...phrases.map((p) => ({
                       value: p.id,
-                      label: `${i + 1}. ${p.recorded ? "✓ " : ""}${p.text.slice(0, 68)}`,
+                      label: phraseSelectLabel(phrases, p),
                     })),
                   ]}
                   onChange={setPhraseId}
@@ -697,9 +708,10 @@ export function VoiceStudioPanel(props: {
                     Нажмите «Сгенерировать фразы» или добавьте свою
                   </span>
                 ) : (
-                  phrases.map((p, i) => (
+                  phrases.map((p) => (
                     <div key={p.id} className="muted mono">
-                      {i + 1}. {p.recorded ? "✓" : "○"} {p.text}
+                      {phraseDisplayNo(phrases, p.id)}.{" "}
+                      {p.recorded ? "✓" : "○"} {p.text}
                     </div>
                   ))
                 )}
@@ -761,8 +773,8 @@ export function VoiceStudioPanel(props: {
                   Фразы · {project.name}
                 </h2>
                 <p className="muted" style={{ margin: "0.35rem 0 0" }}>
-                  {phrases.length} фраз · {corpusReadyLabel} · клипы{" "}
-                  {acceptedClips}
+                  {phrases.length} фраз · номера 1…{phrases.length || "N"} ·{" "}
+                  {corpusReadyLabel} · клипы {acceptedClips}
                 </p>
               </div>
               <button
@@ -787,9 +799,10 @@ export function VoiceStudioPanel(props: {
               {phrases.length === 0 ? (
                 <span className="muted">Фраз пока нет</span>
               ) : (
-                phrases.map((p, i) => {
+                phrases.map((p) => {
                   const clip = bestClipForPhrase(p.id);
                   const activeReload = phraseId === p.id;
+                  const n = phraseDisplayNo(phrases, p.id);
                   return (
                     <div
                       key={p.id}
@@ -797,7 +810,7 @@ export function VoiceStudioPanel(props: {
                     >
                       <div className="voice-phrase-row-main muted mono">
                         <span>
-                          {i + 1}. {p.recorded ? "✓" : "○"} {p.text}
+                          {n}. {p.recorded ? "✓" : "○"} {p.text}
                         </span>
                         <span className="voice-phrase-row-meta">
                           {clip
@@ -840,9 +853,9 @@ export function VoiceStudioPanel(props: {
                   value={phraseId}
                   options={[
                     { value: "", label: "— без привязки —" },
-                    ...phrases.map((p, i) => ({
+                    ...phrases.map((p) => ({
                       value: p.id,
-                      label: `${i + 1}. ${p.recorded ? "✓ " : ""}${p.text.slice(0, 68)}`,
+                      label: phraseSelectLabel(phrases, p),
                     })),
                   ]}
                   onChange={setPhraseId}
