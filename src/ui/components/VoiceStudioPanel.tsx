@@ -16,7 +16,7 @@ const STATUS_LABEL: Record<string, string> = {
   created: "Создан",
   phrases: "Фразы собраны",
   collecting: "Сбор корпуса",
-  processing: "QA клипов",
+  processing: "QA аудио",
   ready_to_train: "Готов к обучению",
   training: "Обучение…",
   needs_data: "Нужно больше аудио",
@@ -34,9 +34,27 @@ function phraseDisplayNo(all: MiraVoicePhrase[], phraseId: string): number {
   return i >= 0 ? i + 1 : 0;
 }
 
+function phraseTextPreview(text: string, max = 42): string {
+  const t = text.trim();
+  if (t.length <= max) return t;
+  return `${t.slice(0, Math.max(1, max - 1))}…`;
+}
+
 function phraseSelectLabel(all: MiraVoicePhrase[], p: MiraVoicePhrase): string {
   const n = phraseDisplayNo(all, p.id);
   return `${n}. ${p.recorded ? "✓ " : ""}${p.text.slice(0, 68)}`;
+}
+
+/** Row label for uploaded/recorded audio: same 1…N as the phrase list + short text. */
+function clipPhraseLinkLabel(
+  all: MiraVoicePhrase[],
+  phraseId: string | null,
+): string {
+  if (!phraseId) return "без фразы";
+  const p = all.find((x) => x.id === phraseId);
+  if (!p) return "фраза ?";
+  const n = phraseDisplayNo(all, phraseId);
+  return `${n}. ${phraseTextPreview(p.text)}`;
 }
 
 export function VoiceStudioPanel(props: {
@@ -144,7 +162,7 @@ export function VoiceStudioPanel(props: {
 
   async function removeProject() {
     if (!project) return;
-    if (!window.confirm(`Удалить проект «${project.name}» и связанные клипы?`)) {
+    if (!window.confirm(`Удалить проект «${project.name}» и связанное аудио?`)) {
       return;
     }
     setBusy("delete");
@@ -190,7 +208,7 @@ export function VoiceStudioPanel(props: {
         ? await window.mira!.trainVoiceModel(project.id)
         : localTrainVoiceModel(project.id);
       setNote(
-        `${res.report.ok ? "OK" : "FAIL"} · ${res.report.detail} · клипы ${res.report.acceptedClips}, покрытие ${res.report.coveragePct}%`,
+        `${res.report.ok ? "OK" : "FAIL"} · ${res.report.detail} · аудио ${res.report.acceptedClips}, покрытие ${res.report.coveragePct}%`,
       );
       if (res.voice) {
         setActiveVoiceId(res.voice.id);
@@ -263,7 +281,7 @@ export function VoiceStudioPanel(props: {
           });
       setNote(
         res.processed.project.recommendation ??
-          `Клип загружен · ${statusLabel(res.processed.project.status)}`,
+          `Аудио загружено · ${statusLabel(res.processed.project.status)}`,
       );
       await refresh(project.id);
     } catch (err) {
@@ -374,12 +392,12 @@ export function VoiceStudioPanel(props: {
   async function playPhraseAudio(phraseId: string) {
     const clip = bestClipForPhrase(phraseId);
     if (!clip) {
-      setNote("Нет аудио для этой фразы — загрузите или запишите клип");
+      setNote("Нет аудио для этой фразы — загрузите или запишите");
       return;
     }
     if (!electron || clip.file_path.startsWith("browser://")) {
       setNote(
-        "Плеер клипов доступен в Electron (файлы в data/voice-studio). В browser-demo байты не хранятся.",
+        "Плеер аудио доступен в Electron (файлы в data/voice-studio). В browser-demo байты не хранятся.",
       );
       return;
     }
@@ -442,17 +460,19 @@ export function VoiceStudioPanel(props: {
       <p className="muted" style={{ margin: 0 }}>
         Здесь вы обучаете локальную голосовую модель Mira: собираете корпус
         «фраза ↔ аудио», прогоняете QA и запускаете обучение. После обучения
-        голос появляется в каталоге (превью из клипов; синтез новых фраз — через
+        голос появляется в каталоге (превью из записей; синтез новых фраз — через
         профиль + Web Speech до neural-trainer).
       </p>
       <ol className="muted" style={{ margin: 0, paddingLeft: "1.2rem" }}>
         <li>Создайте проект голоса (имя + язык).</li>
         <li>Сгенерируйте или добавьте фразы — они нумеруются 1…N.</li>
         <li>
-          Запишите mic / загрузите аудио, привязав клип к номеру фразы (удобно
-          называть файлы 1.wav, 2.wav…).
+          Запишите mic / загрузите аудио, привязав запись к номеру фразы
+          (удобно называть файлы 1.wav, 2.wav…).
         </li>
-        <li>Когда набрано ≥3 принятых клипа — нажмите «Обучить модель».</li>
+        <li>
+          Когда набрано ≥3 принятых записей — нажмите «Обучить модель».
+        </li>
         <li>Голос попадает в каталог; можно донабрать корпус и переобучить.</li>
       </ol>
 
@@ -522,7 +542,7 @@ export function VoiceStudioPanel(props: {
               {project.recommendation ? ` · ${project.recommendation}` : ""}
             </div>
             <div className="muted mono">
-              Корпус: фраз {phrases.length} · принятых клипов {acceptedClips} ·
+              Корпус: фраз {phrases.length} · принятых аудио {acceptedClips} ·
               привязано {linkedAccepted} · покрытие {coveragePct}%
               {project.custom_voice_id
                 ? ` · catalog ${project.custom_voice_id}`
@@ -544,8 +564,8 @@ export function VoiceStudioPanel(props: {
                 onClick={() => void trainModel()}
                 title={
                   canTrain
-                    ? "QA клипов → сборка корпуса → публикация в каталог"
-                    : "Нужно ≥1 фраза и ≥3 принятых клипа, привязанных к фразам"
+                    ? "QA аудио → сборка корпуса → публикация в каталог"
+                    : "Нужно ≥1 фраза и ≥3 принятых записей, привязанных к фразам"
                 }
               >
                 {busy === "train"
@@ -601,7 +621,7 @@ export function VoiceStudioPanel(props: {
                   {phrases.length} фраз · {corpusReadyLabel}
                 </strong>
                 <span className="muted mono" style={{ fontSize: "0.85rem" }}>
-                  клипы {acceptedClips} · покрытие {coveragePct}%
+                  аудио {acceptedClips} · покрытие {coveragePct}%
                 </span>
               </div>
               <p className="muted" style={{ margin: 0 }}>
@@ -625,7 +645,7 @@ export function VoiceStudioPanel(props: {
                   title={
                     canTrain
                       ? "Полное переобучение по текущему корпусу"
-                      : "Нужно ≥1 фраза и ≥3 принятых клипа"
+                      : "Нужно ≥1 фраза и ≥3 принятых записей"
                   }
                 >
                   {busy === "train" ? "Обучение…" : "Переобучить"}
@@ -652,9 +672,9 @@ export function VoiceStudioPanel(props: {
               </div>
 
               <label className="stack" style={{ gap: "0.25rem" }}>
-                <span className="muted">Фраза для привязки клипа</span>
+                <span className="muted">Фраза для привязки аудио</span>
                 <ThemeSelect
-                  aria-label="Фраза для привязки клипа"
+                  aria-label="Фраза для привязки аудио"
                   value={phraseId}
                   options={[
                     { value: "", label: "— без привязки —" },
@@ -718,7 +738,7 @@ export function VoiceStudioPanel(props: {
               </div>
 
               <div className="stack" style={{ gap: "0.35rem" }}>
-                <strong>Клипы ({clips.length})</strong>
+                <strong>Аудио фраз ({clips.length})</strong>
                 {clips.length === 0 ? (
                   <span className="muted">Пока нет загрузок / записей</span>
                 ) : (
@@ -738,9 +758,10 @@ export function VoiceStudioPanel(props: {
                     } catch {
                       qa = "qa?";
                     }
+                    const phraseLink = clipPhraseLinkLabel(phrases, c.phrase_id);
                     return (
                       <div key={c.id} className="muted mono">
-                        {c.accepted ? "✓" : "×"} {qa}
+                        {c.accepted ? "✓" : "×"} {phraseLink} · {qa}
                       </div>
                     );
                   })
@@ -774,7 +795,7 @@ export function VoiceStudioPanel(props: {
                 </h2>
                 <p className="muted" style={{ margin: "0.35rem 0 0" }}>
                   {phrases.length} фраз · номера 1…{phrases.length || "N"} ·{" "}
-                  {corpusReadyLabel} · клипы {acceptedClips}
+                  {corpusReadyLabel} · аудио {acceptedClips}
                 </p>
               </div>
               <button
@@ -847,7 +868,7 @@ export function VoiceStudioPanel(props: {
             <div className="panel stack voice-phrases-reload" style={{ gap: "0.5rem" }}>
               <strong>Перезагрузка / дозапись</strong>
               <label className="stack" style={{ gap: "0.25rem" }}>
-                <span className="muted">Фраза для привязки клипа</span>
+                <span className="muted">Фраза для привязки аудио</span>
                 <ThemeSelect
                   aria-label="Фраза для перезагрузки"
                   value={phraseId}
