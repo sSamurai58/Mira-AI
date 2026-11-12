@@ -699,6 +699,18 @@ interface MiraBridge {
       lexiconSize?: number;
       audioLexiconSize?: number;
       provisionalLexiconSize?: number;
+      epochs?: number;
+      trainSteps?: number;
+      initialLoss?: number;
+      finalLoss?: number;
+      melTargets?: number;
+      curriculum?: Array<{
+        concept: string;
+        neural: string;
+        mira: string;
+        status: string;
+      }>;
+      griffinLimPreview?: string | null;
     };
     pack?: unknown;
   }>;
@@ -709,6 +721,10 @@ interface MiraBridge {
       pct: number;
       label: string;
       detail?: string;
+      epoch?: number;
+      epochs?: number;
+      loss?: number;
+      melL1?: number;
     }) => void,
   ) => () => void;
   generateVoicePhrases: (

@@ -31,6 +31,8 @@ export type VoicePackUnit = {
    * Runtime falls back to system TTS until the user records the word.
    */
   provisional?: boolean;
+  /** Unit-selection prior from mel refinement. */
+  score?: number;
 };
 
 export type VoicePackLexiconEntry = {
@@ -42,6 +44,8 @@ export type VoicePackLexiconEntry = {
   sourcePhraseId: string;
   /** See VoicePackUnit.provisional */
   provisional?: boolean;
+  /** Unit-selection prior from mel refinement (higher = preferred). */
+  score?: number;
 };
 
 export type VoiceModelPack = {
@@ -73,6 +77,16 @@ export type VoiceModelPack = {
     clipPath: string;
     unitId: string;
   }>;
+  /** Mel refinement metrics (filled after iterative train epochs). */
+  trainMetrics?: {
+    epochs: number;
+    steps: number;
+    finalLoss: number;
+    initialLoss: number;
+    gain: number;
+    durationBias: number;
+    melTargets: number;
+  };
 };
 
 export type TrainProgressEvent = {
@@ -82,6 +96,7 @@ export type TrainProgressEvent = {
     | "features"
     | "segment"
     | "lexicon"
+    | "epochs"
     | "pack"
     | "publish"
     | "done"
@@ -89,6 +104,10 @@ export type TrainProgressEvent = {
   pct: number;
   label: string;
   detail?: string;
+  epoch?: number;
+  epochs?: number;
+  loss?: number;
+  melL1?: number;
 };
 
 export function normalizeLexKey(raw: string): string {

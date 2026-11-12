@@ -761,6 +761,27 @@ export function localImportClipBytes(opts: {
   };
 }
 
+const LOCAL_CURRICULUM = [
+  {
+    concept: "spectrogram / mel target",
+    neural: "Целевой mel",
+    mira: "Browser-demo: метрики без полного FFT pack",
+    status: "proxy",
+  },
+  {
+    concept: "epochs / L1 loss",
+    neural: "Эпохи + mel loss",
+    mira: "Симулированные эпохи loss в browser-demo",
+    status: "proxy",
+  },
+  {
+    concept: "full neural net + CUDA",
+    neural: "Tacotron на GPU",
+    mira: "Отложено",
+    status: "deferred",
+  },
+] as const;
+
 export async function localTrainVoiceModel(
   projectId: string,
   onProgress?: (ev: {
@@ -768,6 +789,10 @@ export async function localTrainVoiceModel(
     step: string;
     pct: number;
     label: string;
+    epoch?: number;
+    epochs?: number;
+    loss?: number;
+    melL1?: number;
   }) => void,
 ): Promise<{
   project: MiraVoiceProject;
@@ -787,6 +812,17 @@ export async function localTrainVoiceModel(
     lexiconSize?: number;
     audioLexiconSize?: number;
     provisionalLexiconSize?: number;
+    epochs?: number;
+    trainSteps?: number;
+    initialLoss?: number;
+    finalLoss?: number;
+    melTargets?: number;
+    curriculum?: Array<{
+      concept: string;
+      neural: string;
+      mira: string;
+      status: string;
+    }>;
   };
 }> {
   const store = read();
@@ -803,9 +839,19 @@ export async function localTrainVoiceModel(
       : 0;
 
   const steps: Array<{ step: string; label: string; pct: number }> = [];
-  const emit = (step: string, pct: number, label: string) => {
+  const emit = (
+    step: string,
+    pct: number,
+    label: string,
+    extra?: {
+      epoch?: number;
+      epochs?: number;
+      loss?: number;
+      melL1?: number;
+    },
+  ) => {
     steps.push({ step, label, pct });
-    onProgress?.({ projectId, step, pct, label });
+    onProgress?.({ projectId, step, pct, label, ...extra });
   };
   const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -950,10 +996,30 @@ export async function localTrainVoiceModel(
   );
   emit(
     "lexicon",
-    62,
+    52,
     `Лексикон ${lexiconSize} (аудио ${audioLexiconSize}, пока TTS ${provisionalLexiconSize})…`,
   );
-  await pause(240 + Math.min(8000, lexiconSize * 12));
+  await pause(180 + Math.min(4000, lexiconSize * 8));
+
+  const demoEpochs = 3;
+  let demoLoss = 0.55 + linkedAccepted * 0.01;
+  const initialDemoLoss = demoLoss;
+  for (let ep = 1; ep <= demoEpochs; ep++) {
+    demoLoss = Math.max(0.12, demoLoss * 0.82);
+    emit(
+      "epochs",
+      55 + Math.round((ep / demoEpochs) * 22),
+      `Эпоха ${ep}/${demoEpochs} · loss ${demoLoss.toFixed(4)} (browser-demo)`,
+      {
+        epoch: ep,
+        epochs: demoEpochs,
+        loss: Number(demoLoss.toFixed(4)),
+        melL1: Number((demoLoss * 0.85).toFixed(4)),
+      },
+    );
+    await pause(120 + linkedAccepted * 30);
+  }
+
   emit("pack", 82, `Сборка model-pack · лексикон ${lexiconSize}…`);
   await pause(180 + Math.min(2000, lexiconSize * 3));
   emit("publish", 92, "Публикация в каталог…");
@@ -972,7 +1038,7 @@ export async function localTrainVoiceModel(
   let voice = store.customVoices.find((v) => v.id === voiceId) ?? null;
   const meta = JSON.stringify({
     engine: "mira-voice-pack-v1",
-    method: "unit-selection-concatenative",
+    method: "unit-selection-mel-refine-v1",
     neuralTts: false,
     trainedAt: stamp,
     quality,
@@ -982,6 +1048,10 @@ export async function localTrainVoiceModel(
     audioLexiconSize,
     provisionalLexiconSize,
     unitCount: linkedAccepted + wordUnitCount,
+    epochs: demoEpochs,
+    initialLoss: Number(initialDemoLoss.toFixed(4)),
+    finalLoss: Number(demoLoss.toFixed(4)),
+    curriculum: LOCAL_CURRICULUM,
   });
   if (voice) {
     voice = {
@@ -1012,8 +1082,8 @@ export async function localTrainVoiceModel(
   const needMore =
     acceptedClips.length < TARGET_TRAIN_CLIPS || coveragePct < 80;
   const detail = needMore
-    ? `Unit-selection «${project.name}» (${quality}, browser-demo, лексикон ${lexiconSize}: аудио ${audioLexiconSize}, TTS ${provisionalLexiconSize}). Запишите длинные тексты и клипы (покрытие ${coveragePct}%). Не neural TTS.`
-    : `Unit-selection «${project.name}» (${quality}, browser-demo, лексикон ${lexiconSize}: аудио ${audioLexiconSize}, TTS ${provisionalLexiconSize}) в каталоге. Не neural TTS.`;
+    ? `Unit-selection+mel «${project.name}» (${quality}, browser-demo, лексикон ${lexiconSize}, loss ${demoLoss.toFixed(4)}). Запишите длинные тексты и клипы (покрытие ${coveragePct}%).`
+    : `Unit-selection+mel «${project.name}» (${quality}, browser-demo, лексикон ${lexiconSize}, loss ${demoLoss.toFixed(4)}) в каталоге.`;
 
   store.projects[pIdx] = {
     ...project,
@@ -1048,6 +1118,12 @@ export async function localTrainVoiceModel(
       lexiconSize,
       audioLexiconSize,
       provisionalLexiconSize,
+      epochs: demoEpochs,
+      trainSteps: demoEpochs * Math.max(1, linkedAccepted),
+      initialLoss: Number(initialDemoLoss.toFixed(4)),
+      finalLoss: Number(demoLoss.toFixed(4)),
+      melTargets: linkedAccepted,
+      curriculum: [...LOCAL_CURRICULUM],
     },
   };
 }

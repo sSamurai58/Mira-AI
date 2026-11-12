@@ -315,6 +315,10 @@ contextBridge.exposeInMainWorld("mira", {
       pct: number;
       label: string;
       detail?: string;
+      epoch?: number;
+      epochs?: number;
+      loss?: number;
+      melL1?: number;
     }) => void,
   ) => {
     const listener = (
@@ -325,6 +329,10 @@ contextBridge.exposeInMainWorld("mira", {
         pct: number;
         label: string;
         detail?: string;
+        epoch?: number;
+        epochs?: number;
+        loss?: number;
+        melL1?: number;
       },
     ) => handler(payload);
     ipcRenderer.on("mira:voice-train-progress", listener);

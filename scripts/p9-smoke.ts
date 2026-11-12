@@ -23,7 +23,15 @@ import {
 import {
   estimateWordBoundariesByEnergy,
   extractClipAudioFeatures,
+  noiseLikeness,
+  textAudioMismatch,
 } from "../electron/voiceStudio/audioFeatures";
+import {
+  extractMelFromWav,
+  melL1,
+  melToSummary,
+} from "../electron/voiceStudio/melSpectrogram";
+import { NEURAL_TTS_CURRICULUM } from "../electron/voiceStudio/melTrainer";
 
 loadConfig(true);
 process.env.LLM_PROVIDER = "mock";
@@ -144,6 +152,22 @@ async function main() {
   assert.equal(bounds.length, 4);
   assert.ok(bounds[0]!.endMs > bounds[0]!.startMs);
 
+  // Mel spectrogram pipeline (FFT → filterbank).
+  const mel = extractMelFromWav(sample);
+  assert.ok(mel, "mel from sample wav");
+  assert.ok(mel!.frameCount >= 1, "mel frames");
+  assert.equal(mel!.nMels, 40);
+  const melSum = melToSummary(mel!);
+  assert.ok(melSum.preview.length >= 1);
+  assert.ok(melL1(mel!, mel!) < 1e-6, "identical mel L1 ~ 0");
+  assert.ok(NEURAL_TTS_CURRICULUM.length >= 10, "curriculum rows");
+  assert.ok(
+    textAudioMismatch("один два три четыре пять шесть семь восемь девять десять", 200)
+      .length > 0,
+    "short clip vs long text should warn",
+  );
+  assert.ok(Array.isArray(noiseLikeness(sampleFeat)));
+
   // Near-silent WAV must fail hard QA (not accepted into train corpus).
   const silentPath = path.resolve(
     process.cwd(),
@@ -225,8 +249,12 @@ async function main() {
   );
   assert.equal(trainBlocked.voice, null);
 
+  const lossLog: number[] = [];
   const trained = await trainVoiceModel(project.id, (ev) => {
     progressLog.push(`${ev.step}:${ev.pct}`);
+    if (ev.step === "epochs" && typeof ev.loss === "number") {
+      lossLog.push(ev.loss);
+    }
   });
   assert.ok(trained.report.ok, trained.report.detail);
   assert.ok(trained.voice, "custom voice not built");
@@ -246,6 +274,27 @@ async function main() {
     progressLog.some((s) => s.startsWith("segment:")),
     "train progress callback should receive segment/align step",
   );
+  assert.ok(
+    progressLog.some((s) => s.startsWith("epochs:")),
+    "train progress should include mel epoch/loss step",
+  );
+  assert.ok(
+    (trained.report.epochs ?? 0) >= 2,
+    "report should include epochs",
+  );
+  assert.ok(
+    typeof trained.report.finalLoss === "number",
+    "report should include finalLoss",
+  );
+  assert.ok(
+    (trained.report.melTargets ?? 0) >= 1,
+    "mel targets extracted from wav clips",
+  );
+  assert.ok(
+    (trained.report.curriculum?.length ?? 0) >= 10,
+    "curriculum mapping in report",
+  );
+  assert.ok(lossLog.length >= 1, "epoch progress should emit loss numbers");
   const trainMeta = JSON.parse(trained.voice!.meta_json ?? "{}") as {
     engine?: string;
     method?: string;
@@ -253,9 +302,11 @@ async function main() {
     packDir?: string;
     wordUnitCount?: number;
     unitCount?: number;
+    epochs?: number;
+    finalLoss?: number;
   };
   assert.equal(trainMeta.engine, "mira-voice-pack-v1");
-  assert.equal(trainMeta.method, "unit-selection-concatenative");
+  assert.equal(trainMeta.method, "unit-selection-mel-refine-v1");
   assert.equal(trainMeta.neuralTts, false);
   assert.ok(trainMeta.packDir, "model pack dir missing");
   assert.ok(
@@ -265,6 +316,14 @@ async function main() {
   assert.ok(
     fs.existsSync(path.join(trainMeta.packDir!, "model-pack.json")),
     "model-pack.json should exist after train",
+  );
+  assert.ok(
+    fs.existsSync(path.join(trainMeta.packDir!, "train-metrics.json")),
+    "train-metrics.json should exist after mel epochs",
+  );
+  assert.ok(
+    fs.existsSync(path.join(trainMeta.packDir!, "mel-features")),
+    "mel-features dir should exist",
   );
   assert.ok(
     (trained.report.wordUnitCount ?? 0) > 0,

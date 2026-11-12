@@ -14,8 +14,15 @@ import {
 } from "./modelPack";
 import {
   extractClipAudioFeatures,
+  noiseLikeness,
   textAudioMismatch,
 } from "./audioFeatures";
+import {
+  DEFAULT_TRAIN_EPOCHS,
+  NEURAL_TTS_CURRICULUM,
+  runMelRefinement,
+  type MelTrainResult,
+} from "./melTrainer";
 
 export type VoiceProjectRow = {
   id: string;
@@ -905,6 +912,13 @@ function analyzeClipFile(filePath: string, phraseText: string | null) {
     // but the pack quality drops and UI shows the warning.
     warnings.push(issue);
   }
+  for (const issue of noiseLikeness(features)) {
+    if (issue === "noisy_or_non_speech" && features.speechScore < 0.2) {
+      hardIssues.push(issue);
+    } else {
+      warnings.push(issue);
+    }
+  }
 
   const textMatch =
     phraseText && phraseText.length > 0
@@ -1014,6 +1028,13 @@ export type VoiceTrainReport = {
   lexiconSize?: number;
   audioLexiconSize?: number;
   provisionalLexiconSize?: number;
+  epochs?: number;
+  trainSteps?: number;
+  initialLoss?: number;
+  finalLoss?: number;
+  melTargets?: number;
+  curriculum?: typeof NEURAL_TTS_CURRICULUM;
+  griffinLimPreview?: string | null;
 };
 
 export type VoiceTrainProgressHandler = (ev: TrainProgressEvent) => void;
@@ -1055,12 +1076,13 @@ export async function trainVoiceModel(
     pct: number,
     label: string,
     detail?: string,
+    extra?: Partial<TrainProgressEvent>,
   ) => {
     steps.push({ step, label, pct });
     if (step !== "done" && step !== "error") {
       touchProject(projectId, { status: "training", recommendation: label });
     }
-    onProgress?.({ projectId, step, pct, label, detail });
+    onProgress?.({ projectId, step, pct, label, detail, ...extra });
   };
 
   emit(
@@ -1170,11 +1192,11 @@ export async function trainVoiceModel(
 
   emit(
     "features",
-    20,
-    `Признаки аудио: RMS / тишина / mel-полосы (${pcmLinked}/${linkedClips.length} PCM WAV)…`,
+    18,
+    `Mel spectrogram + RMS / тишина (${pcmLinked}/${linkedClips.length} PCM WAV)…`,
   );
   await sleep(
-    Math.max(120, trainStepBudgetMs(linkedClips.length, pcmLinked * 4) / 3),
+    Math.max(80, trainStepBudgetMs(linkedClips.length, pcmLinked * 4) / 4),
   );
 
   const warnHeavy =
@@ -1199,13 +1221,13 @@ export async function trainVoiceModel(
 
   emit(
     "segment",
-    28,
-    `Выравнивание единиц (energy / equal-time): ${linkedClips.length} клипов, ${allPhraseTexts.length} текстов, ~${corpusWordHint} слов…`,
+    24,
+    `Выравнивание единиц (energy / equal-time ≈ attention): ${linkedClips.length} клипов, ${allPhraseTexts.length} текстов, ~${corpusWordHint} слов…`,
   );
   await sleep(
     Math.max(
-      180,
-      trainStepBudgetMs(linkedClips.length, Math.min(120, corpusWordHint)) / 2,
+      100,
+      trainStepBudgetMs(linkedClips.length, Math.min(120, corpusWordHint)) / 3,
     ),
   );
 
@@ -1223,26 +1245,50 @@ export async function trainVoiceModel(
     clips: linkedClips,
     allPhrases: allPhraseTexts,
     onProgress: (pct, label) => {
-      emit("segment", 28 + Math.round((pct / 100) * 38), label);
+      emit("segment", 24 + Math.round((pct / 100) * 28), label);
     },
   });
 
   emit(
     "lexicon",
-    72,
+    54,
     `Лексикон: ${pack.lexiconSize} слов · аудио ${pack.audioLexiconSize} · пока TTS ${pack.provisionalLexiconSize} · wav ${pack.wordUnitCount}`,
   );
   await sleep(
-    trainStepBudgetMs(
-      linkedClips.length,
-      Math.max(pack.lexiconSize, corpusWordHint),
+    Math.max(
+      80,
+      trainStepBudgetMs(
+        linkedClips.length,
+        Math.max(pack.lexiconSize, corpusWordHint),
+      ) / 3,
     ),
   );
 
   emit(
+    "epochs",
+    56,
+    `Mel-целевые признаки + эпохи refinement (${DEFAULT_TRAIN_EPOCHS} эпох)…`,
+  );
+
+  let melTrain: MelTrainResult | null = null;
+  melTrain = runMelRefinement(pack, packDir, linkedClips, {
+    epochs: DEFAULT_TRAIN_EPOCHS,
+    onProgress: (ev) => {
+      const pct =
+        56 + Math.round((ev.epoch / Math.max(1, ev.epochs)) * 24);
+      emit("epochs", Math.min(82, pct), ev.label, undefined, {
+        epoch: ev.epoch,
+        epochs: ev.epochs,
+        loss: ev.loss,
+        melL1: ev.melL1,
+      });
+    },
+  });
+
+  emit(
     "pack",
     84,
-    `Пакет модели сохранён (${pack.units.length} units, лексикон ${pack.lexiconSize})`,
+    `Пакет + mel-метрики сохранены (${pack.units.length} units, loss ${melTrain.finalLoss.toFixed(4)}, эпох ${melTrain.epochs})`,
     packDir,
   );
   await sleep(
@@ -1263,7 +1309,7 @@ export async function trainVoiceModel(
   const stamp = pack.trainedAt;
   const meta = {
     engine: VOICE_PACK_ENGINE,
-    method: "unit-selection-concatenative",
+    method: "unit-selection-mel-refine-v1",
     neuralTts: false,
     legacyEngine: "mira-local-corpus-v1",
     trainedAt: stamp,
@@ -1280,13 +1326,21 @@ export async function trainVoiceModel(
     lexiconSize: pack.lexiconSize,
     audioLexiconSize: pack.audioLexiconSize,
     provisionalLexiconSize: pack.provisionalLexiconSize,
-    synthesis: `${VOICE_PACK_ENGINE}: unit-selection (concatenative) — склейка слов/фрагментов из клипов; не neural mel-decoder. Непокрытые токены — Web Speech.`,
-    curriculum: [
+    epochs: melTrain?.epochs ?? 0,
+    trainSteps: melTrain?.steps ?? 0,
+    initialLoss: melTrain?.initialLoss ?? null,
+    finalLoss: melTrain?.finalLoss ?? null,
+    melTargets: melTrain?.melTargets ?? 0,
+    griffinLimPreview: melTrain?.griffinLimPreview ?? null,
+    synthesis: `${VOICE_PACK_ENGINE}: unit-selection + mel-refine — склейка единиц с mel L1 эпохами; не neural mel-decoder/Adam. Непокрытые токены — Web Speech.`,
+    curriculum: NEURAL_TTS_CURRICULUM,
+    pipeline: [
       "1. Пары текст↔аудио + QA (шум/тишина/клиппинг/mismatch)",
-      "2. Признаки: RMS, тишина, mel-полосы (JS, без GPU)",
-      "3. Выравнивание единиц (energy / equal-time)",
+      "2. Mel spectrogram (FFT→filterbank) + RMS признаки",
+      "3. Выравнивание единиц (energy / equal-time ≈ attention proxy)",
       "4. Лексикон (аудио + provisional TTS)",
-      "5. model-pack + публикация в каталог",
+      "5. Эпохи mel L1 refinement + priors/gain/duration",
+      "6. model-pack + публикация в каталог",
     ],
   };
   const existing = store
@@ -1337,11 +1391,14 @@ export async function trainVoiceModel(
   const needMore =
     qa.acceptedCount < TARGET_TRAIN_CLIPS || coveragePct < 80 || warnHeavy;
   const lexiconSummary = `лексикон ${pack.lexiconSize} (аудио ${pack.audioLexiconSize}, пока TTS ${pack.provisionalLexiconSize})`;
+  const lossNote = melTrain
+    ? `, эпох ${melTrain.epochs}, loss ${melTrain.finalLoss.toFixed(4)}`
+    : "";
   const detail = needMore
-    ? `Unit-selection «${project.name}» собран (${quality}, ${lexiconSummary}, wav ${pack.wordUnitCount}` +
+    ? `Unit-selection+mel «${project.name}» (${quality}, ${lexiconSummary}, wav ${pack.wordUnitCount}${lossNote}` +
       (warnCount ? `, QA-warn ${warnCount}` : "") +
-      `). Запишите чистые длинные тексты и ещё ${Math.max(0, TARGET_TRAIN_CLIPS - qa.acceptedCount)} клипов (покрытие ${coveragePct}%). Это не neural TTS.`
-    : `Unit-selection «${project.name}» собран (${quality}, ${lexiconSummary}, wav ${pack.wordUnitCount}). Голос в каталоге; донабирайте и переобучайте. Не neural mel-decoder.`;
+      `). Запишите чистые длинные тексты и ещё ${Math.max(0, TARGET_TRAIN_CLIPS - qa.acceptedCount)} клипов (покрытие ${coveragePct}%). Не GPU neural TTS.`
+    : `Unit-selection+mel «${project.name}» (${quality}, ${lexiconSummary}, wav ${pack.wordUnitCount}${lossNote}). Голос в каталоге; донабирайте и переобучайте.`;
 
   const updated = touchProject(projectId, {
     status: needMore ? "ready_partial" : "ready",
@@ -1379,6 +1436,13 @@ export async function trainVoiceModel(
       lexiconSize: pack.lexiconSize,
       audioLexiconSize: pack.audioLexiconSize,
       provisionalLexiconSize: pack.provisionalLexiconSize,
+      epochs: melTrain?.epochs,
+      trainSteps: melTrain?.steps,
+      initialLoss: melTrain?.initialLoss,
+      finalLoss: melTrain?.finalLoss,
+      melTargets: melTrain?.melTargets,
+      curriculum: NEURAL_TTS_CURRICULUM,
+      griffinLimPreview: melTrain?.griffinLimPreview ?? null,
     },
   };
 }

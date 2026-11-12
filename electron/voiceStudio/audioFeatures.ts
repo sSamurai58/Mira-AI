@@ -294,6 +294,7 @@ export function estimateWordBoundariesByEnergy(
 /**
  * Heuristic text↔audio mismatch: expected speaking rate ~2–4 syllables/word,
  * ~2.5 words/sec conversational. Flag extreme outliers.
+ * Also char-length vs duration (neural TTS data table: wrong text length).
  */
 export function textAudioMismatch(
   phraseText: string | null,
@@ -306,13 +307,46 @@ export function textAudioMismatch(
     .split(/\s+/)
     .filter(Boolean).length;
   if (words < 1) return issues;
+  const chars = phraseText.trim().length;
   const sec = durationMs / 1000;
   const wordsPerSec = words / Math.max(0.05, sec);
+  const charsPerSec = chars / Math.max(0.05, sec);
   // Extremely rushed / truncated recording vs long text.
   if (words >= 8 && wordsPerSec > 8) issues.push("text_too_long_for_clip");
+  // Char density way above conversational RU/EN speech (~12–18 chars/s).
+  if (chars >= 40 && charsPerSec > 28) issues.push("text_length_mismatch");
   // Very long silence-like stretch for a short phrase.
   if (words <= 4 && sec > 12) issues.push("clip_too_long_for_text");
   // Near-empty vs any text.
   if (words >= 2 && sec < 0.25) issues.push("clip_too_short_for_text");
+  // Too slow for long text (possible wrong/empty take linked to long phrase).
+  if (words >= 12 && wordsPerSec < 0.6) issues.push("clip_too_slow_for_text");
+  return issues;
+}
+
+/**
+ * Broadband noise / hiss heuristic from band balance + floor energy.
+ * High high-band share with low mid speech → likely noise floor.
+ */
+export function noiseLikeness(features: ClipAudioFeatures): string[] {
+  const issues: string[] = [];
+  if (features.format !== "pcm-wav") return issues;
+  const [low, mid, high] = features.bandEnergies;
+  // Hiss / fan: elevated high band, weak mid formants.
+  if (high > 0.48 && mid < 0.28 && features.rms > 0.008) {
+    issues.push("likely_broadband_noise");
+  }
+  // Rumbling noise: low-band dominant with high silence ratio.
+  if (low > 0.55 && mid < 0.25 && features.silenceRatio > 0.45) {
+    issues.push("likely_low_frequency_noise");
+  }
+  // Constant noise floor: decent RMS but poor speech score.
+  if (
+    features.rms >= 0.015 &&
+    features.speechScore < 0.28 &&
+    features.silenceRatio < 0.35
+  ) {
+    issues.push("noisy_or_non_speech");
+  }
   return issues;
 }

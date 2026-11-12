@@ -97,13 +97,33 @@ export function VoiceStudioPanel(props: {
     step: string;
     pct: number;
     label: string;
+    epoch?: number;
+    epochs?: number;
+    loss?: number;
+    melL1?: number;
+  } | null>(null);
+  const [lastCurriculum, setLastCurriculum] = useState<
+    Array<{
+      concept: string;
+      neural: string;
+      mira: string;
+      status: string;
+    }>
+  >([]);
+  const [lastTrainMetrics, setLastTrainMetrics] = useState<{
+    epochs?: number;
+    trainSteps?: number;
+    initialLoss?: number;
+    finalLoss?: number;
+    melTargets?: number;
   } | null>(null);
 
   const TRAIN_STEP_RU: Record<string, string> = {
     validate: "пары QA",
-    features: "признаки",
+    features: "mel / признаки",
     segment: "выравнивание",
     lexicon: "лексикон",
+    epochs: "эпохи / loss",
     pack: "pack",
     publish: "каталог",
     done: "готово",
@@ -255,7 +275,7 @@ export function VoiceStudioPanel(props: {
     setTrainProgress({
       step: "validate",
       pct: 2,
-      label: "Старт сборки unit-selection pack…",
+      label: "Старт сборки unit-selection + mel-эпохи…",
     });
     const unsub = electron
       ? window.mira?.onVoiceTrainProgress?.((ev) => {
@@ -264,6 +284,10 @@ export function VoiceStudioPanel(props: {
             step: ev.step,
             pct: ev.pct,
             label: ev.label,
+            epoch: ev.epoch,
+            epochs: ev.epochs,
+            loss: ev.loss,
+            melL1: ev.melL1,
           });
         })
       : undefined;
@@ -275,6 +299,12 @@ export function VoiceStudioPanel(props: {
               step: ev.step,
               pct: ev.pct,
               label: ev.label,
+              epoch: "epoch" in ev ? (ev as { epoch?: number }).epoch : undefined,
+              epochs:
+                "epochs" in ev ? (ev as { epochs?: number }).epochs : undefined,
+              loss: "loss" in ev ? (ev as { loss?: number }).loss : undefined,
+              melL1:
+                "melL1" in ev ? (ev as { melL1?: number }).melL1 : undefined,
             });
           });
       const words =
@@ -290,8 +320,23 @@ export function VoiceStudioPanel(props: {
           : res.report.wordUnitCount != null
             ? ` · слов ${res.report.wordUnitCount}`
             : "";
+      const lossBit =
+        res.report.finalLoss != null
+          ? ` · loss ${res.report.finalLoss.toFixed(4)}` +
+            (res.report.epochs != null ? ` / ${res.report.epochs} эпох` : "")
+          : "";
+      if (res.report.curriculum?.length) {
+        setLastCurriculum(res.report.curriculum);
+      }
+      setLastTrainMetrics({
+        epochs: res.report.epochs,
+        trainSteps: res.report.trainSteps,
+        initialLoss: res.report.initialLoss,
+        finalLoss: res.report.finalLoss,
+        melTargets: res.report.melTargets,
+      });
       setNote(
-        `${res.report.ok ? "OK" : "FAIL"} · ${res.report.detail} · аудио ${res.report.acceptedClips}, покрытие ${res.report.coveragePct}%${words}`,
+        `${res.report.ok ? "OK" : "FAIL"} · ${res.report.detail} · аудио ${res.report.acceptedClips}, покрытие ${res.report.coveragePct}%${words}${lossBit}`,
       );
       if (res.voice) {
         setActiveVoiceId(res.voice.id);
@@ -594,30 +639,32 @@ export function VoiceStudioPanel(props: {
       </div>
       <p className="muted" style={{ margin: 0 }}>
         Mira собирает{" "}
-        <strong>unit-selection / concatenative</strong> голос: режет ваши
-        записи на слова и склеивает ответы. Это{" "}
-        <strong>не neural TTS</strong> (нет encoder→mel→vocoder, эпох и
-        Adam/loss). Непокрытые слова — системный TTS, пока не запишете.
+        <strong>unit-selection + mel-refine</strong> голос: mel-спектрограмм
+        (FFT→filterbank), эпохи с mel L1 loss, priors единиц. Это{" "}
+        <strong>не GPU neural TTS</strong> (нет миллионов Adam-весов /
+        HiFi-GAN). Непокрытые слова — системный TTS, пока не запишете.
       </p>
       <details className="muted" style={{ margin: 0 }}>
         <summary style={{ cursor: "pointer" }}>
-          Чем отличается от «настоящего» обучения TTS
+          Учебный план: neural TTS → шаги Mira
         </summary>
         <ul style={{ margin: "0.4rem 0 0", paddingLeft: "1.2rem" }}>
           <li>
-            Neural TTS учит сеть предсказывать mel-кадры по тексту (teacher
-            forcing, L1/L2, stop-token, эпохи). У Mira этого стека нет.
+            Mel target / loss / эпохи — есть (JS FFT→mel, mel L1, несколько
+            эпох refinement).
           </li>
           <li>
-            Здесь: пары текст↔аудио → QA (тишина/громкость/клиппинг) →
-            mel-полосы/RMS → выравнивание слов по энергии → лексикон → pack.
+            Encoder / attention / decoder / stop / teacher forcing —
+            прокси: токены, energy-align, склейка mel-срезов, штрафы
+            длительности.
           </li>
           <li>
-            Качество = чистые длинные записи под тексты. Короткие/шумные
-            клипы получат предупреждение; provisional-слова говорят системным
-            TTS до записи.
+            Backprop+Adam, neural vocoder, RLHF — отложены (нет CUDA-стека
+            в Electron).
           </li>
-          <li>ASR и LLM — отдельные модули; студия только голос (TTS pack).</li>
+          <li>
+            QA: тишина, клиппинг, шум, text↔audio mismatch. ASR/LLM отдельно.
+          </li>
         </ul>
       </details>
       <ol className="muted" style={{ margin: 0, paddingLeft: "1.2rem" }}>
@@ -627,12 +674,12 @@ export function VoiceStudioPanel(props: {
           нумерация 1…N. Длинные разнообразные тексты расширяют лексикон.
         </li>
         <li>
-          Запишите чистую речь (лучше PCM wav) и привяжите к номеру фразы.
-          Шум, тишина и клиппинг отсекаются QA.
+          Запишите чистую речь (PCM wav) и привяжите к номеру фразы. Шум,
+          тишина, клиппинг и mismatch отсекаются QA.
         </li>
         <li>
-          ≥3 принятых пар — «Собрать голос»: пары → признаки → выравнивание →
-          лексикон → pack → каталог.
+          ≥3 принятых пар — «Собрать голос»: QA → mel → выравнивание →
+          лексикон → эпохи/loss → pack → каталог.
         </li>
         <li>
           В каталоге: склейка из аудио-единиц; слова без записи — системный
@@ -728,13 +775,16 @@ export function VoiceStudioPanel(props: {
                 onClick={() => void trainModel()}
                 title={
                   canTrain
-                    ? "Unit-selection: пары QA → признаки → выравнивание → лексикон → pack → каталог (не neural TTS)"
+                    ? "QA → mel → выравнивание → лексикон → эпохи/loss → pack → каталог"
                     : "Нужно ≥1 фраза и ≥3 принятых записей, привязанных к фразам"
                 }
               >
                 {busy === "train"
                   ? trainProgress
-                    ? `Сборка ${trainProgress.pct}%`
+                    ? trainProgress.step === "epochs" &&
+                      trainProgress.loss != null
+                      ? `Эпоха ${trainProgress.epoch ?? "…"} · loss ${trainProgress.loss.toFixed(4)}`
+                      : `Сборка ${trainProgress.pct}%`
                     : "Сборка…"
                   : project.custom_voice_id
                     ? "Пересобрать голос"
@@ -748,6 +798,18 @@ export function VoiceStudioPanel(props: {
                 >
                   <strong>{trainProgress.pct}%</strong>
                   {` · ${TRAIN_STEP_RU[trainProgress.step] ?? trainProgress.step} · ${trainProgress.label}`}
+                  {trainProgress.loss != null ? (
+                    <div className="mono" style={{ marginTop: "0.2rem" }}>
+                      loss={trainProgress.loss.toFixed(4)}
+                      {trainProgress.melL1 != null
+                        ? ` · mel L1=${trainProgress.melL1.toFixed(4)}`
+                        : ""}
+                      {trainProgress.epoch != null &&
+                      trainProgress.epochs != null
+                        ? ` · эпоха ${trainProgress.epoch}/${trainProgress.epochs}`
+                        : ""}
+                    </div>
+                  ) : null}
                   <div
                     style={{
                       marginTop: "0.35rem",
@@ -768,6 +830,61 @@ export function VoiceStudioPanel(props: {
                     />
                   </div>
                 </div>
+              ) : null}
+              {lastTrainMetrics?.finalLoss != null ? (
+                <div
+                  className="muted mono"
+                  style={{ flex: "1 1 100%", fontSize: "0.85rem" }}
+                >
+                  Последнее обучение: эпох {lastTrainMetrics.epochs ?? "—"} ·
+                  шагов {lastTrainMetrics.trainSteps ?? "—"} · loss{" "}
+                  {lastTrainMetrics.initialLoss?.toFixed(4) ?? "—"} →{" "}
+                  {lastTrainMetrics.finalLoss.toFixed(4)}
+                  {lastTrainMetrics.melTargets != null
+                    ? ` · mel-целей ${lastTrainMetrics.melTargets}`
+                    : ""}
+                </div>
+              ) : null}
+              {lastCurriculum.length > 0 ? (
+                <details
+                  className="muted"
+                  style={{ flex: "1 1 100%", margin: 0 }}
+                >
+                  <summary style={{ cursor: "pointer" }}>
+                    Отчёт curriculum ({lastCurriculum.length} концептов)
+                  </summary>
+                  <table
+                    style={{
+                      width: "100%",
+                      borderCollapse: "collapse",
+                      fontSize: "0.8rem",
+                      marginTop: "0.35rem",
+                    }}
+                  >
+                    <thead>
+                      <tr>
+                        <th align="left">Концепт</th>
+                        <th align="left">В Mira</th>
+                        <th align="left">Статус</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lastCurriculum.map((row) => (
+                        <tr key={row.concept}>
+                          <td>{row.concept}</td>
+                          <td>{row.mira}</td>
+                          <td>
+                            {row.status === "mapped"
+                              ? "есть"
+                              : row.status === "proxy"
+                                ? "прокси"
+                                : "отложено"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </details>
               ) : null}
               <button
                 type="button"
