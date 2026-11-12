@@ -687,11 +687,27 @@ interface MiraBridge {
       linkedAccepted: number;
       coveragePct: number;
       detail: string;
+      steps?: Array<{ step: string; label: string; pct: number }>;
+      packPath?: string | null;
+      wordUnitCount?: number;
+      fragmentUnitCount?: number;
     };
+    pack?: unknown;
   }>;
+  onVoiceTrainProgress?: (
+    handler: (payload: {
+      projectId: string;
+      step: string;
+      pct: number;
+      label: string;
+      detail?: string;
+    }) => void,
+  ) => () => void;
   generateVoicePhrases: (
     projectId: string,
-    count?: number,
+    countOrOpts?:
+      | number
+      | { count?: number; minWords?: number; maxWords?: number },
   ) => Promise<MiraVoicePhrase[]>;
   importVoiceClip: (payload: {
     projectId: string;

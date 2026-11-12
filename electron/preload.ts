@@ -306,8 +306,35 @@ contextBridge.exposeInMainWorld("mira", {
     call("mira:add-voice-phrase", projectId, text),
   trainVoiceModel: (projectId: string) =>
     call("mira:train-voice-model", projectId),
-  generateVoicePhrases: (projectId: string, count?: number) =>
-    call("mira:generate-voice-phrases", projectId, count),
+  onVoiceTrainProgress: (
+    handler: (payload: {
+      projectId: string;
+      step: string;
+      pct: number;
+      label: string;
+      detail?: string;
+    }) => void,
+  ) => {
+    const listener = (
+      _event: IpcRendererEvent,
+      payload: {
+        projectId: string;
+        step: string;
+        pct: number;
+        label: string;
+        detail?: string;
+      },
+    ) => handler(payload);
+    ipcRenderer.on("mira:voice-train-progress", listener);
+    return () =>
+      ipcRenderer.removeListener("mira:voice-train-progress", listener);
+  },
+  generateVoicePhrases: (
+    projectId: string,
+    countOrOpts?:
+      | number
+      | { count?: number; minWords?: number; maxWords?: number },
+  ) => call("mira:generate-voice-phrases", projectId, countOrOpts),
   importVoiceClip: (payload: {
     projectId: string;
     sourcePath: string;

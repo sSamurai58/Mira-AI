@@ -7,6 +7,8 @@ import {
   buildVoiceModelPack,
   readVoiceModelPack,
   type LinkedTrainClip,
+  type TrainProgressEvent,
+  type VoiceModelPack,
 } from "./modelPack";
 
 export type VoiceProjectRow = {
@@ -112,7 +114,86 @@ const PHRASE_BANK_EN = [
 ];
 
 const MIN_PHRASE_CHARS = 4;
-const MAX_PHRASE_CHARS = 220;
+/** Allow long training passages (word-range generate can stretch seeds). */
+const MAX_PHRASE_CHARS = 1600;
+
+function countWords(text: string): number {
+  return text
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+}
+
+function clampWordRange(
+  minWords?: number,
+  maxWords?: number,
+): { minWords: number; maxWords: number } {
+  const minW = Math.max(1, Math.min(Number(minWords) || 1, 400));
+  const maxW = Math.max(minW, Math.min(Number(maxWords) || 80, 500));
+  return { minWords: minW, maxWords: maxW };
+}
+
+function inWordRange(
+  text: string,
+  minWords: number,
+  maxWords: number,
+): boolean {
+  const n = countWords(text);
+  return n >= minWords && n <= maxWords;
+}
+
+/** Stretch short seed text toward minWords without inventing unrelated topics. */
+function expandTowardMinWords(text: string, minWords: number): string {
+  let out = text.trim().replace(/\s+/g, " ");
+  if (countWords(out) >= minWords) return out.slice(0, MAX_PHRASE_CHARS);
+  const fillersRu = [
+    "Это помогает лучше передать интонацию и ритм речи при обучении голоса.",
+    "Повторите спокойно, чётко и без спешки, сохраняя естественные паузы.",
+    "Длинный фрагмент даёт модели больше материала для устойчивого тембра.",
+  ];
+  const fillersEn = [
+    "This longer line helps capture tone and pacing for voice training.",
+    "Speak clearly and steadily, keeping natural pauses between clauses.",
+    "A longer passage gives the model more material for a stable timbre.",
+  ];
+  const looksRu = /[А-Яа-яЁё]/.test(out);
+  const fillers = looksRu ? fillersRu : fillersEn;
+  let i = 0;
+  while (countWords(out) < minWords && out.length < MAX_PHRASE_CHARS - 40) {
+    const add = fillers[i % fillers.length]!;
+    out = `${out} ${add}`.trim();
+    i += 1;
+  }
+  return out.slice(0, MAX_PHRASE_CHARS);
+}
+
+function trimToMaxWords(text: string, maxWords: number): string {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return text.trim();
+  return words.slice(0, maxWords).join(" ");
+}
+
+function fitPhraseToWordRange(
+  text: string,
+  minWords: number,
+  maxWords: number,
+): string | null {
+  let out = text.trim().replace(/\s+/g, " ");
+  if (!out) return null;
+  out = trimToMaxWords(out, maxWords);
+  out = expandTowardMinWords(out, minWords);
+  out = trimToMaxWords(out, maxWords).slice(0, MAX_PHRASE_CHARS);
+  if (!inWordRange(out, minWords, maxWords)) return null;
+  return out;
+}
+
+export type GeneratePhrasesOptions = {
+  count?: number;
+  minWords?: number;
+  maxWords?: number;
+};
+
+const MAX_GENERATE_COUNT = 40;
 
 /** Strip markdown/code noise the same way chat TTS does (lightweight). */
 function stripForPhraseSeed(raw: string): string {
@@ -334,11 +415,14 @@ export function listPhrases(projectId: string): VoicePhraseRow[] {
 
 export function generatePhrases(
   projectId: string,
-  count = 5,
+  countOrOpts: number | GeneratePhrasesOptions = 5,
 ): VoicePhraseRow[] {
   const project = getVoiceProject(projectId);
   if (!project) throw new Error("Проект не найден");
-  const want = Math.max(1, Math.min(count, 20));
+  const opts: GeneratePhrasesOptions =
+    typeof countOrOpts === "number" ? { count: countOrOpts } : countOrOpts;
+  const want = Math.max(1, Math.min(opts.count ?? 5, MAX_GENERATE_COUNT));
+  const { minWords, maxWords } = clampWordRange(opts.minWords, opts.maxWords);
   const existing = new Set(
     listPhrases(projectId).map((p) => p.text.toLowerCase()),
   );
@@ -346,29 +430,47 @@ export function generatePhrases(
 
   // Priority: (1) phrases Mira already speaks in chat, (2) common short
   // replies that prevent mid-utterance Web Speech fallback, (3) variety bank.
+  // Fit each seed into the requested word range for longer training texts.
   const used = collectAssistantUsedPhrases({
     limitUtterances: 100,
-    limitPhrases: 50,
+    limitPhrases: 80,
   });
   const ordered: string[] = [];
-  const pushFresh = (list: string[]) => {
-    for (const t of list) {
+  const fromChatKeys = new Set<string>();
+  const pushFresh = (list: string[], markFromChat = false) => {
+    for (const raw of list) {
       if (ordered.length >= want) return;
-      const key = t.toLowerCase();
+      const fitted = fitPhraseToWordRange(raw, minWords, maxWords);
+      if (!fitted) continue;
+      const key = fitted.toLowerCase();
       if (existing.has(key)) continue;
       if (ordered.some((x) => x.toLowerCase() === key)) continue;
-      ordered.push(t);
+      ordered.push(fitted);
+      if (markFromChat) fromChatKeys.add(key);
     }
   };
-  pushFresh(used);
+  pushFresh(used, true);
   pushFresh(common);
   pushFresh(variety);
+  // If still short of want (small banks + tight range), re-expand unique seeds
+  // with slight filler rotation so long corpora can still grow.
+  if (ordered.length < want) {
+    const extras = [...used, ...common, ...variety];
+    for (const raw of extras) {
+      if (ordered.length >= want) break;
+      const fitted = fitPhraseToWordRange(`${raw} ${raw}`, minWords, maxWords);
+      if (!fitted) continue;
+      const key = fitted.toLowerCase();
+      if (existing.has(key)) continue;
+      if (ordered.some((x) => x.toLowerCase() === key)) continue;
+      ordered.push(fitted);
+    }
+  }
   const pick = ordered.slice(0, want);
 
   if (!pick.length) {
     touchProject(projectId, {
-      recommendation:
-        "Новых фраз нет: чат и банк уже покрыты. Добавьте свою фразу ниже.",
+      recommendation: `Новых текстов на ${minWords}–${maxWords} слов нет: чат и банк уже покрыты. Добавьте свою фразу ниже.`,
     });
     return [];
   }
@@ -381,7 +483,6 @@ export function generatePhrases(
   const baseMs = Date.now();
   const rows: VoicePhraseRow[] = [];
   let fromChat = 0;
-  const usedKeys = new Set(used.map((t) => t.toLowerCase()));
   for (let i = 0; i < pick.length; i++) {
     const text = pick[i]!;
     // Stagger created_at so 1…N order stays stable across refreshes/collapse.
@@ -395,7 +496,7 @@ export function generatePhrases(
     try {
       insert.run(row.id, row.project_id, row.text, row.created_at);
       rows.push(row);
-      if (usedKeys.has(text.toLowerCase())) fromChat += 1;
+      if (fromChatKeys.has(text.toLowerCase())) fromChat += 1;
     } catch {
       // unique dedup race
     }
@@ -403,7 +504,7 @@ export function generatePhrases(
   touchProject(projectId, {
     status: "phrases",
     recommendation: rows.length
-      ? `Добавлено ${rows.length} фраз` +
+      ? `Добавлено ${rows.length} текстов (${minWords}–${maxWords} слов)` +
         (fromChat
           ? ` · из диалогов ассистента: ${fromChat}`
           : " · частые ответы Mira / банк") +
@@ -500,22 +601,56 @@ export type VoiceTrainReport = {
   linkedAccepted: number;
   coveragePct: number;
   detail: string;
+  steps?: Array<{ step: string; label: string; pct: number }>;
+  packPath?: string | null;
+  wordUnitCount?: number;
+  fragmentUnitCount?: number;
 };
 
-/** Train / rebuild local voice model from phrase↔audio corpus. */
-export function trainVoiceModel(projectId: string): {
+export type VoiceTrainProgressHandler = (ev: TrainProgressEvent) => void;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Per-step pause scales with corpus so training is visibly non-instant. */
+function trainStepBudgetMs(linkedAccepted: number, wordsHint = 8): number {
+  return Math.min(2200, 160 + linkedAccepted * 85 + wordsHint * 3);
+}
+
+/**
+ * Train / rebuild local voice model from phrase↔audio corpus.
+ * Pipeline: validate → segment → lexicon → pack → publish (with progress).
+ */
+export async function trainVoiceModel(
+  projectId: string,
+  onProgress?: VoiceTrainProgressHandler,
+): Promise<{
   project: VoiceProjectRow;
   analysis: ReturnType<typeof analyzeClipFile>[];
   voice: CustomVoiceRow | null;
   report: VoiceTrainReport;
-} {
+  pack: VoiceModelPack | null;
+}> {
   const cur = getVoiceProject(projectId);
   if (!cur) throw new Error("Проект не найден");
 
-  touchProject(projectId, {
-    status: "training",
-    recommendation: "Обучение: QA клипов → сборка корпуса → регистрация модели…",
-  });
+  const steps: Array<{ step: string; label: string; pct: number }> = [];
+  const emit = (
+    step: TrainProgressEvent["step"],
+    pct: number,
+    label: string,
+    detail?: string,
+  ) => {
+    steps.push({ step, label, pct });
+    if (step !== "done" && step !== "error") {
+      touchProject(projectId, { status: "training", recommendation: label });
+    }
+    onProgress?.({ projectId, step, pct, label, detail });
+  };
+
+  emit("validate", 4, "Обучение: проверка клипов и привязок…");
+  await sleep(trainStepBudgetMs(1, 0));
 
   const qa = qaProjectClips(projectId);
   const coveragePct =
@@ -523,98 +658,80 @@ export function trainVoiceModel(projectId: string): {
       ? Math.round((qa.linkedAccepted / qa.phraseCount) * 100)
       : 0;
 
+  const fail = (
+    status: string,
+    detail: string,
+    stage: string,
+  ): Awaited<ReturnType<typeof trainVoiceModel>> => {
+    emit("error", 100, detail);
+    const project = touchProject(projectId, {
+      status,
+      recommendation: detail,
+    });
+    return {
+      project,
+      analysis: qa.analyses,
+      voice: null,
+      pack: null,
+      report: {
+        ok: false,
+        stage,
+        phraseCount: qa.phraseCount,
+        acceptedClips: qa.acceptedCount,
+        linkedAccepted: qa.linkedAccepted,
+        coveragePct: qa.phraseCount > 0 ? coveragePct : 0,
+        detail,
+        steps,
+        packPath: null,
+      },
+    };
+  };
+
   if (qa.phraseCount < 1) {
-    const project = touchProject(projectId, {
-      status: "needs_data",
-      recommendation:
-        "Обучение невозможно: нет фраз. Сгенерируйте или добавьте фразы 1…N, затем привяжите аудио.",
-    });
-    return {
-      project,
-      analysis: qa.analyses,
-      voice: null,
-      report: {
-        ok: false,
-        stage: "needs_data",
-        phraseCount: 0,
-        acceptedClips: qa.acceptedCount,
-        linkedAccepted: qa.linkedAccepted,
-        coveragePct: 0,
-        detail: project.recommendation ?? "Нет фраз",
-      },
-    };
+    return fail(
+      "needs_data",
+      "Обучение невозможно: нет фраз. Сгенерируйте или добавьте фразы 1…N, затем привяжите аудио.",
+      "needs_data",
+    );
   }
-
   if (qa.acceptedCount === 0) {
-    const project = touchProject(projectId, {
-      status: "needs_data",
-      recommendation:
-        "Обучение невозможно: нет принятых клипов. Запишите или загрузите wav/webm к пронумерованным фразам.",
-    });
-    return {
-      project,
-      analysis: qa.analyses,
-      voice: null,
-      report: {
-        ok: false,
-        stage: "needs_data",
-        phraseCount: qa.phraseCount,
-        acceptedClips: 0,
-        linkedAccepted: 0,
-        coveragePct: 0,
-        detail: project.recommendation ?? "Нет данных",
-      },
-    };
+    return fail(
+      "needs_data",
+      "Обучение невозможно: нет принятых клипов. Запишите или загрузите wav/webm к пронумерованным фразам.",
+      "needs_data",
+    );
   }
-
   if (qa.linkedAccepted < MIN_TRAIN_CLIPS) {
-    const project = touchProject(projectId, {
-      status: "ready_to_train",
-      recommendation: `Для обучения нужно минимум ${MIN_TRAIN_CLIPS} принятых клипов, привязанных к фразам (сейчас linked=${qa.linkedAccepted}, accepted=${qa.acceptedCount}).`,
-    });
-    return {
-      project,
-      analysis: qa.analyses,
-      voice: null,
-      report: {
-        ok: false,
-        stage: "ready_to_train",
-        phraseCount: qa.phraseCount,
-        acceptedClips: qa.acceptedCount,
-        linkedAccepted: qa.linkedAccepted,
-        coveragePct,
-        detail: project.recommendation ?? "Мало привязанных клипов",
-      },
-    };
+    return fail(
+      "ready_to_train",
+      `Для обучения нужно минимум ${MIN_TRAIN_CLIPS} принятых клипов, привязанных к фразам (сейчас linked=${qa.linkedAccepted}, accepted=${qa.acceptedCount}).`,
+      "ready_to_train",
+    );
   }
 
-  // Real local model pack: segment linked clips into phrase/word/fragment units
-  // + lexicon for compositional TTS (uncovered tokens → Web Speech fallback).
+  emit(
+    "validate",
+    16,
+    `QA ок: ${qa.linkedAccepted} привязанных клипов, покрытие ${coveragePct}%`,
+  );
+  await sleep(trainStepBudgetMs(qa.linkedAccepted, 2));
+
   const project = getVoiceProject(projectId)!;
   const store = openStore();
   const voiceId =
     project.custom_voice_id ?? `mira-studio-${projectId.slice(0, 8)}`;
   const refreshed = listClips(projectId);
-  const preview =
-    refreshed.find((c) => c.accepted === 1)?.file_path ??
-    refreshed[0]?.file_path ??
-    null;
-  const stamp = new Date().toISOString();
-  const quality =
-    qa.acceptedCount >= TARGET_TRAIN_CLIPS && coveragePct >= 80
-      ? "high"
-      : qa.acceptedCount >= TARGET_TRAIN_CLIPS
-        ? "medium"
-        : "draft";
-
   const phraseById = new Map(
     listPhrases(projectId).map((p) => [p.id, p] as const),
   );
   const linkedClips: LinkedTrainClip[] = [];
+  const seenPhrase = new Set<string>();
   for (const clip of refreshed) {
     if (clip.accepted !== 1 || !clip.phrase_id) continue;
+    if (seenPhrase.has(clip.phrase_id)) continue;
     const phrase = phraseById.get(clip.phrase_id);
     if (!phrase) continue;
+    seenPhrase.add(clip.phrase_id);
     linkedClips.push({
       clipId: clip.id,
       phraseId: phrase.id,
@@ -623,10 +740,19 @@ export function trainVoiceModel(projectId: string): {
     });
   }
 
-  touchProject(projectId, {
-    status: "training",
-    recommendation: `Сегментация корпуса: ${linkedClips.length} клипов → слова/фрагменты…`,
-  });
+  const quality =
+    qa.acceptedCount >= TARGET_TRAIN_CLIPS && coveragePct >= 80
+      ? "high"
+      : qa.acceptedCount >= TARGET_TRAIN_CLIPS
+        ? "medium"
+        : "draft";
+
+  emit(
+    "segment",
+    26,
+    `Сегментация единиц речи (${linkedClips.length} клипов)…`,
+  );
+  await sleep(Math.max(100, trainStepBudgetMs(linkedClips.length, 4) / 2));
 
   const packDir = studioRoot(projectId, "model-pack");
   const pack = buildVoiceModelPack({
@@ -641,13 +767,38 @@ export function trainVoiceModel(projectId: string): {
     coveragePct,
     clips: linkedClips,
     onProgress: (pct, label) => {
-      touchProject(projectId, {
-        status: "training",
-        recommendation: `Обучение ${pct}% · ${label}`,
-      });
+      emit("segment", 26 + Math.round((pct / 100) * 40), label);
     },
   });
 
+  emit(
+    "lexicon",
+    72,
+    `Лексикон: ${Object.keys(pack.lexicon).length} слов · ${pack.wordUnitCount} wav-единиц`,
+  );
+  await sleep(
+    trainStepBudgetMs(linkedClips.length, Object.keys(pack.lexicon).length),
+  );
+
+  emit(
+    "pack",
+    84,
+    `Пакет модели сохранён (${pack.units.length} units)`,
+    packDir,
+  );
+  await sleep(
+    trainStepBudgetMs(Math.max(1, Math.floor(linkedClips.length / 2)), 1),
+  );
+
+  emit("publish", 92, "Публикация голоса в каталог…");
+  await sleep(120);
+
+  const preview =
+    pack.phrases[0]?.clipPath ??
+    refreshed.find((c) => c.accepted === 1)?.file_path ??
+    refreshed[0]?.file_path ??
+    null;
+  const stamp = pack.trainedAt;
   const meta = {
     engine: VOICE_PACK_ENGINE,
     legacyEngine: "mira-local-corpus-v1",
@@ -661,13 +812,13 @@ export function trainVoiceModel(projectId: string): {
     wordUnitCount: pack.wordUnitCount,
     fragmentUnitCount: pack.fragmentUnitCount,
     unitCount: pack.units.length,
-    synthesis:
-      `${VOICE_PACK_ENGINE}: unit-selection TTS — склейка слов/фрагментов из обученных клипов; непокрытые токены — запасной Web Speech.`,
+    lexiconSize: Object.keys(pack.lexicon).length,
+    synthesis: `${VOICE_PACK_ENGINE}: unit-selection TTS — склейка слов/фрагментов из обученных клипов; непокрытые токены — запасной Web Speech.`,
     curriculum: [
-      "1. Фразы (речь ассистента / банк / свои)",
-      "2. Аудио 1…N к фразам",
-      "3. QA клипов",
-      "4. Сборка model-pack (фразы + lexicon)",
+      "1. Валидация клипов",
+      "2. Сегментация единиц (фраза/слово)",
+      "3. Лексикон + аудио-индекс",
+      "4. Сохранение model-pack",
       "5. Публикация в каталог",
     ],
   };
@@ -712,6 +863,7 @@ export function trainVoiceModel(projectId: string): {
     style: "calm-assistant",
     voiceId,
     trainedQuality: quality,
+    engine: VOICE_PACK_ENGINE,
     promptHint: `Отвечай в характере голоса «${project.name}»: спокойно, коротко, по делу.`,
   });
 
@@ -734,10 +886,13 @@ export function trainVoiceModel(projectId: string): {
     )
     .get(voiceId) as CustomVoiceRow;
 
+  emit("done", 100, detail);
+
   return {
     project: updated,
     analysis: qa.analyses,
     voice,
+    pack,
     report: {
       ok: true,
       stage: updated.status,
@@ -746,9 +901,14 @@ export function trainVoiceModel(projectId: string): {
       linkedAccepted: qa.linkedAccepted,
       coveragePct,
       detail,
+      steps,
+      packPath: packDir,
+      wordUnitCount: pack.wordUnitCount,
+      fragmentUnitCount: pack.fragmentUnitCount,
     },
   };
 }
+
 
 /** After clip import: QA only; training is an explicit step. */
 function prepareCorpusAfterImport(projectId: string): {
