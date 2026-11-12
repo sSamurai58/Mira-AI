@@ -98,6 +98,17 @@ export function VoiceStudioPanel(props: {
     pct: number;
     label: string;
   } | null>(null);
+
+  const TRAIN_STEP_RU: Record<string, string> = {
+    validate: "пары QA",
+    features: "признаки",
+    segment: "выравнивание",
+    lexicon: "лексикон",
+    pack: "pack",
+    publish: "каталог",
+    done: "готово",
+    error: "ошибка",
+  };
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -244,7 +255,7 @@ export function VoiceStudioPanel(props: {
     setTrainProgress({
       step: "validate",
       pct: 2,
-      label: "Старт обучения модели…",
+      label: "Старт сборки unit-selection pack…",
     });
     const unsub = electron
       ? window.mira?.onVoiceTrainProgress?.((ev) => {
@@ -579,30 +590,53 @@ export function VoiceStudioPanel(props: {
     <div className="panel stack">
       <div className="row">
         <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Студия голоса</h2>
-        <span className="muted mono">P9 #15 · обучение модели</span>
+        <span className="muted mono">P9 #15 · unit-selection</span>
       </div>
       <p className="muted" style={{ margin: 0 }}>
-        Фразы обучают слова и интонацию (не готовый playback реплик). После
-        обучения Mira собирает новые ответы склейкой фрагментов из клипов; слова
-        вне корпуса — запасной системный TTS.
+        Mira собирает{" "}
+        <strong>unit-selection / concatenative</strong> голос: режет ваши
+        записи на слова и склеивает ответы. Это{" "}
+        <strong>не neural TTS</strong> (нет encoder→mel→vocoder, эпох и
+        Adam/loss). Непокрытые слова — системный TTS, пока не запишете.
       </p>
+      <details className="muted" style={{ margin: 0 }}>
+        <summary style={{ cursor: "pointer" }}>
+          Чем отличается от «настоящего» обучения TTS
+        </summary>
+        <ul style={{ margin: "0.4rem 0 0", paddingLeft: "1.2rem" }}>
+          <li>
+            Neural TTS учит сеть предсказывать mel-кадры по тексту (teacher
+            forcing, L1/L2, stop-token, эпохи). У Mira этого стека нет.
+          </li>
+          <li>
+            Здесь: пары текст↔аудио → QA (тишина/громкость/клиппинг) →
+            mel-полосы/RMS → выравнивание слов по энергии → лексикон → pack.
+          </li>
+          <li>
+            Качество = чистые длинные записи под тексты. Короткие/шумные
+            клипы получат предупреждение; provisional-слова говорят системным
+            TTS до записи.
+          </li>
+          <li>ASR и LLM — отдельные модули; студия только голос (TTS pack).</li>
+        </ul>
+      </details>
       <ol className="muted" style={{ margin: 0, paddingLeft: "1.2rem" }}>
         <li>Создайте проект голоса (имя + язык).</li>
         <li>
-          Сгенерируйте или добавьте фразы — приоритет у самых частых слов и
-          ответов Mira; они нумеруются 1…N.
+          Сгенерируйте или добавьте фразы — приоритет у частых ответов Mira;
+          нумерация 1…N. Длинные разнообразные тексты расширяют лексикон.
         </li>
         <li>
-          Запишите mic / загрузите аудио, привязав запись к номеру фразы
-          (удобно называть файлы 1.wav, 2.wav…).
+          Запишите чистую речь (лучше PCM wav) и привяжите к номеру фразы.
+          Шум, тишина и клиппинг отсекаются QA.
         </li>
         <li>
-          Когда набрано ≥3 принятых записей — запустите обучение модели
-          (валидация → сегментация → лексикон → пакет → каталог).
+          ≥3 принятых пар — «Собрать голос»: пары → признаки → выравнивание →
+          лексикон → pack → каталог.
         </li>
         <li>
-          После обучения голос в каталоге; непокрытые слова пока говорит
-          системный TTS — донабирайте корпус и переобучайте.
+          В каталоге: склейка из аудио-единиц; слова без записи — системный
+          TTS. Донабирайте и пересобирайте.
         </li>
       </ol>
 
@@ -694,17 +728,17 @@ export function VoiceStudioPanel(props: {
                 onClick={() => void trainModel()}
                 title={
                   canTrain
-                    ? "Валидация → сегментация → лексикон → model-pack → каталог"
+                    ? "Unit-selection: пары QA → признаки → выравнивание → лексикон → pack → каталог (не neural TTS)"
                     : "Нужно ≥1 фраза и ≥3 принятых записей, привязанных к фразам"
                 }
               >
                 {busy === "train"
                   ? trainProgress
-                    ? `Обучение ${trainProgress.pct}%`
-                    : "Обучение…"
+                    ? `Сборка ${trainProgress.pct}%`
+                    : "Сборка…"
                   : project.custom_voice_id
-                    ? "Переобучить модель"
-                    : "Обучить модель"}
+                    ? "Пересобрать голос"
+                    : "Собрать голос"}
               </button>
               {busy === "train" && trainProgress ? (
                 <div
@@ -713,7 +747,7 @@ export function VoiceStudioPanel(props: {
                   aria-live="polite"
                 >
                   <strong>{trainProgress.pct}%</strong>
-                  {` · ${trainProgress.step} · ${trainProgress.label}`}
+                  {` · ${TRAIN_STEP_RU[trainProgress.step] ?? trainProgress.step} · ${trainProgress.label}`}
                   <div
                     style={{
                       marginTop: "0.35rem",
@@ -1222,7 +1256,7 @@ export function VoiceStudioPanel(props: {
                 disabled={Boolean(busy) || !canTrain}
                 onClick={() => void trainModel()}
               >
-                {busy === "train" ? "Обучение…" : "Полное переобучение"}
+                {busy === "train" ? "Сборка…" : "Полная пересборка"}
               </button>
             </div>
           </div>

@@ -20,6 +20,10 @@ import {
   listPhrases,
   trainVoiceModel,
 } from "../electron/voiceStudio/studio";
+import {
+  estimateWordBoundariesByEnergy,
+  extractClipAudioFeatures,
+} from "../electron/voiceStudio/audioFeatures";
 
 loadConfig(true);
 process.env.LLM_PROVIDER = "mock";
@@ -127,6 +131,67 @@ async function main() {
     "voice-studio",
     "sample-phrase.wav",
   );
+
+  // PCM features + energy alignment (unit-selection, not neural).
+  const sampleFeat = extractClipAudioFeatures(
+    sample,
+    fs.statSync(sample).size,
+  );
+  assert.equal(sampleFeat.format, "pcm-wav");
+  assert.ok(sampleFeat.durationMs > 200, "sample duration");
+  assert.ok(sampleFeat.speechScore > 0.1, "sample should look like speech");
+  const bounds = estimateWordBoundariesByEnergy(sample, 4);
+  assert.equal(bounds.length, 4);
+  assert.ok(bounds[0]!.endMs > bounds[0]!.startMs);
+
+  // Near-silent WAV must fail hard QA (not accepted into train corpus).
+  const silentPath = path.resolve(
+    process.cwd(),
+    "seed",
+    "voice-studio",
+    "_smoke-silent.wav",
+  );
+  {
+    const sr = 16000;
+    const samples = sr; // 1s
+    const dataSize = samples * 2;
+    const header = Buffer.alloc(44);
+    header.write("RIFF", 0);
+    header.writeUInt32LE(36 + dataSize, 4);
+    header.write("WAVE", 8);
+    header.write("fmt ", 12);
+    header.writeUInt32LE(16, 16);
+    header.writeUInt16LE(1, 20);
+    header.writeUInt16LE(1, 22);
+    header.writeUInt32LE(sr, 24);
+    header.writeUInt32LE(sr * 2, 28);
+    header.writeUInt16LE(2, 32);
+    header.writeUInt16LE(16, 34);
+    header.write("data", 36);
+    header.writeUInt32LE(dataSize, 40);
+    fs.writeFileSync(silentPath, Buffer.concat([header, Buffer.alloc(dataSize)]));
+  }
+  const silentProject = createVoiceProject({
+    name: "Silent QA",
+    lang: "ru-RU",
+  });
+  const silentPhrase = addCustomPhrase(silentProject.id, "Проверка тишины.");
+  const silentImport = importClip({
+    projectId: silentProject.id,
+    sourcePath: silentPath,
+    phraseId: silentPhrase.id,
+  });
+  assert.equal(
+    silentImport.processed.project.status,
+    "needs_data",
+    "silent clip must fail QA",
+  );
+  try {
+    fs.unlinkSync(silentPath);
+  } catch {
+    /* ignore */
+  }
+
   const phrases = listPhrases(project.id);
   for (let i = 0; i < 3; i++) {
     const imported = importClip({
@@ -174,16 +239,24 @@ async function main() {
     "train should emit multi-step progress",
   );
   assert.ok(
+    progressLog.some((s) => s.startsWith("features:")),
+    "train progress should include audio features step",
+  );
+  assert.ok(
     progressLog.some((s) => s.startsWith("segment:")),
-    "train progress callback should receive segment step",
+    "train progress callback should receive segment/align step",
   );
   const trainMeta = JSON.parse(trained.voice!.meta_json ?? "{}") as {
     engine?: string;
+    method?: string;
+    neuralTts?: boolean;
     packDir?: string;
     wordUnitCount?: number;
     unitCount?: number;
   };
   assert.equal(trainMeta.engine, "mira-voice-pack-v1");
+  assert.equal(trainMeta.method, "unit-selection-concatenative");
+  assert.equal(trainMeta.neuralTts, false);
   assert.ok(trainMeta.packDir, "model pack dir missing");
   assert.ok(
     (trainMeta.wordUnitCount ?? 0) + (trainMeta.unitCount ?? 0) > 0,

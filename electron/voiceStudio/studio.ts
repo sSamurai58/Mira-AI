@@ -12,6 +12,10 @@ import {
   type TrainProgressEvent,
   type VoiceModelPack,
 } from "./modelPack";
+import {
+  extractClipAudioFeatures,
+  textAudioMismatch,
+} from "./audioFeatures";
 
 export type VoiceProjectRow = {
   id: string;
@@ -872,28 +876,84 @@ function analyzeClipFile(filePath: string, phraseText: string | null) {
   const stat = fs.statSync(filePath);
   const size = stat.size;
   const ext = path.extname(filePath).toLowerCase();
-  const issues: string[] = [];
+  const hardIssues: string[] = [];
+  const warnings: string[] = [];
   if (![".wav", ".flac", ".webm", ".mp3", ".ogg", ".m4a"].includes(ext)) {
-    issues.push("unexpected_format");
+    hardIssues.push("unexpected_format");
   }
-  if (size < 800) issues.push("too_short_or_empty");
-  if (size > 15_000_000) issues.push("too_large");
-  // Heuristic "duration proxy" without decoding: assume ~16kB/s for compressed speech
-  const approxSec = size / 16000;
-  if (approxSec < 0.3) issues.push("likely_silence_or_too_short");
-  if (approxSec > 45) issues.push("too_long");
+  if (size < 800) hardIssues.push("too_short_or_empty");
+  if (size > 15_000_000) hardIssues.push("too_large");
+
+  const features = extractClipAudioFeatures(filePath, size);
+  const approxSec = features.durationMs / 1000;
+  if (approxSec < 0.25) hardIssues.push("likely_silence_or_too_short");
+  if (approxSec > 90) hardIssues.push("too_long");
+
+  if (features.format === "pcm-wav") {
+    if (features.silenceRatio > 0.92) hardIssues.push("mostly_silence");
+    else if (features.silenceRatio > 0.75) warnings.push("high_silence_ratio");
+    if (features.rms < 0.004) hardIssues.push("too_quiet");
+    else if (features.rms < 0.012) warnings.push("low_loudness");
+    if (features.clipRatio > 0.05) hardIssues.push("heavy_clipping");
+    else if (features.clipRatio > 0.015) warnings.push("possible_clipping");
+    if (features.speechScore < 0.18) hardIssues.push("low_speech_likeness");
+    else if (features.speechScore < 0.32) warnings.push("weak_speech_signal");
+  }
+
+  for (const issue of textAudioMismatch(phraseText, features.durationMs)) {
+    // Mismatch is a warning — short seed WAVs still train in smoke/demo,
+    // but the pack quality drops and UI shows the warning.
+    warnings.push(issue);
+  }
+
   const textMatch =
     phraseText && phraseText.length > 0
-      ? { expectedChars: phraseText.length, note: "text_provided" }
-      : { expectedChars: 0, note: "no_phrase_link" };
-  const accepted = issues.length === 0;
+      ? {
+          expectedChars: phraseText.length,
+          wordCount: tokenizeSpeechWords(phraseText).length,
+          note: "text_provided",
+        }
+      : { expectedChars: 0, wordCount: 0, note: "no_phrase_link" };
+
+  const issues = [...hardIssues, ...warnings];
+  const accepted = hardIssues.length === 0;
   return {
     size,
     approxSec: Number(approxSec.toFixed(2)),
+    durationMs: Math.round(features.durationMs),
     issues,
+    hardIssues,
+    warnings,
     textMatch,
-    loudness: accepted ? "ok_stub" : "unknown",
-    clipping: "not_detected_stub",
+    features: {
+      format: features.format,
+      rms: Number(features.rms.toFixed(4)),
+      peak: Number(features.peak.toFixed(4)),
+      silenceRatio: Number(features.silenceRatio.toFixed(3)),
+      clipRatio: Number(features.clipRatio.toFixed(4)),
+      bandEnergies: features.bandEnergies.map((b) =>
+        Number(b.toFixed(3)),
+      ) as [number, number, number],
+      speechScore: Number(features.speechScore.toFixed(3)),
+      sampleRate: features.sampleRate,
+    },
+    loudness:
+      features.format === "pcm-wav"
+        ? features.rms >= 0.02
+          ? "ok"
+          : features.rms >= 0.012
+            ? "low"
+            : "too_quiet"
+        : "unknown_compressed",
+    clipping:
+      features.format === "pcm-wav"
+        ? features.clipRatio > 0.05
+          ? "heavy"
+          : features.clipRatio > 0.015
+            ? "possible"
+            : "ok"
+        : "not_analyzed",
+    method: "unit-selection-qa-v1",
     accepted,
   };
 }
@@ -972,8 +1032,9 @@ function trainStepBudgetMs(linkedAccepted: number, wordsHint = 8): number {
 }
 
 /**
- * Train / rebuild local voice model from phrase↔audio corpus.
- * Pipeline: validate → segment → lexicon → pack → publish (with progress).
+ * Train / rebuild local unit-selection voice pack from phrase↔audio pairs.
+ * NOT neural TTS (no mel encoder/decoder, epochs, or vocoder).
+ * Pipeline: pairs QA → features → energy alignment → lexicon → pack → publish.
  */
 export async function trainVoiceModel(
   projectId: string,
@@ -1002,7 +1063,11 @@ export async function trainVoiceModel(
     onProgress?.({ projectId, step, pct, label, detail });
   };
 
-  emit("validate", 4, "Обучение: проверка клипов и привязок…");
+  emit(
+    "validate",
+    4,
+    "Пары текст↔аудио: проверка клипов и привязок (unit-selection)…",
+  );
   await sleep(trainStepBudgetMs(1, 0));
 
   const qa = qaProjectClips(projectId);
@@ -1010,6 +1075,10 @@ export async function trainVoiceModel(
     qa.phraseCount > 0
       ? Math.round((qa.linkedAccepted / qa.phraseCount) * 100)
       : 0;
+  const warnCount = qa.analyses.reduce(
+    (n, a) => n + ((a.warnings as string[] | undefined)?.length ?? 0),
+    0,
+  );
 
   const fail = (
     status: string,
@@ -1064,8 +1133,9 @@ export async function trainVoiceModel(
 
   emit(
     "validate",
-    16,
-    `QA ок: ${qa.linkedAccepted} привязанных клипов, покрытие ${coveragePct}%`,
+    14,
+    `QA пар: ${qa.linkedAccepted} привязанных клипов, покрытие ${coveragePct}%` +
+      (warnCount ? ` · предупреждений ${warnCount}` : ""),
   );
   await sleep(trainStepBudgetMs(qa.linkedAccepted, 2));
 
@@ -1093,8 +1163,26 @@ export async function trainVoiceModel(
     });
   }
 
+  const pcmLinked = linkedClips.filter((c) => {
+    const ext = path.extname(c.filePath).toLowerCase();
+    return ext === ".wav";
+  }).length;
+
+  emit(
+    "features",
+    20,
+    `Признаки аудио: RMS / тишина / mel-полосы (${pcmLinked}/${linkedClips.length} PCM WAV)…`,
+  );
+  await sleep(
+    Math.max(120, trainStepBudgetMs(linkedClips.length, pcmLinked * 4) / 3),
+  );
+
+  const warnHeavy =
+    warnCount >= Math.max(2, Math.floor(qa.linkedAccepted * 0.6));
   const quality =
-    qa.acceptedCount >= TARGET_TRAIN_CLIPS && coveragePct >= 80
+    !warnHeavy &&
+    qa.acceptedCount >= TARGET_TRAIN_CLIPS &&
+    coveragePct >= 80
       ? "high"
       : qa.acceptedCount >= TARGET_TRAIN_CLIPS
         ? "medium"
@@ -1111,8 +1199,8 @@ export async function trainVoiceModel(
 
   emit(
     "segment",
-    26,
-    `Сегментация единиц речи (${linkedClips.length} клипов, ${allPhraseTexts.length} текстов, ~${corpusWordHint} слов)…`,
+    28,
+    `Выравнивание единиц (energy / equal-time): ${linkedClips.length} клипов, ${allPhraseTexts.length} текстов, ~${corpusWordHint} слов…`,
   );
   await sleep(
     Math.max(
@@ -1135,7 +1223,7 @@ export async function trainVoiceModel(
     clips: linkedClips,
     allPhrases: allPhraseTexts,
     onProgress: (pct, label) => {
-      emit("segment", 26 + Math.round((pct / 100) * 40), label);
+      emit("segment", 28 + Math.round((pct / 100) * 38), label);
     },
   });
 
@@ -1175,6 +1263,8 @@ export async function trainVoiceModel(
   const stamp = pack.trainedAt;
   const meta = {
     engine: VOICE_PACK_ENGINE,
+    method: "unit-selection-concatenative",
+    neuralTts: false,
     legacyEngine: "mira-local-corpus-v1",
     trainedAt: stamp,
     quality,
@@ -1182,6 +1272,7 @@ export async function trainVoiceModel(
     linkedAccepted: qa.linkedAccepted,
     phraseCount: qa.phraseCount,
     coveragePct,
+    qaWarnings: warnCount,
     packDir,
     wordUnitCount: pack.wordUnitCount,
     fragmentUnitCount: pack.fragmentUnitCount,
@@ -1189,13 +1280,13 @@ export async function trainVoiceModel(
     lexiconSize: pack.lexiconSize,
     audioLexiconSize: pack.audioLexiconSize,
     provisionalLexiconSize: pack.provisionalLexiconSize,
-    synthesis: `${VOICE_PACK_ENGINE}: unit-selection TTS — склейка слов/фрагментов из обученных клипов; непокрытые токены — запасной Web Speech.`,
+    synthesis: `${VOICE_PACK_ENGINE}: unit-selection (concatenative) — склейка слов/фрагментов из клипов; не neural mel-decoder. Непокрытые токены — Web Speech.`,
     curriculum: [
-      "1. Валидация клипов",
-      "2. Сегментация единиц (фраза/слово)",
-      "3. Лексикон + аудио-индекс",
-      "4. Сохранение model-pack",
-      "5. Публикация в каталог",
+      "1. Пары текст↔аудио + QA (шум/тишина/клиппинг/mismatch)",
+      "2. Признаки: RMS, тишина, mel-полосы (JS, без GPU)",
+      "3. Выравнивание единиц (energy / equal-time)",
+      "4. Лексикон (аудио + provisional TTS)",
+      "5. model-pack + публикация в каталог",
     ],
   };
   const existing = store
@@ -1243,11 +1334,14 @@ export async function trainVoiceModel(
     promptHint: `Отвечай в характере голоса «${project.name}»: спокойно, коротко, по делу.`,
   });
 
-  const needMore = qa.acceptedCount < TARGET_TRAIN_CLIPS || coveragePct < 80;
+  const needMore =
+    qa.acceptedCount < TARGET_TRAIN_CLIPS || coveragePct < 80 || warnHeavy;
   const lexiconSummary = `лексикон ${pack.lexiconSize} (аудио ${pack.audioLexiconSize}, пока TTS ${pack.provisionalLexiconSize})`;
   const detail = needMore
-    ? `Модель «${project.name}» обучена (${quality}, ${lexiconSummary}, wav ${pack.wordUnitCount}). Для качества: запишите длинные тексты и ещё ${Math.max(0, TARGET_TRAIN_CLIPS - qa.acceptedCount)} клипов (покрытие ${coveragePct}%).`
-    : `Модель «${project.name}» обучена (${quality}, ${lexiconSummary}, wav ${pack.wordUnitCount}). Голос в каталоге; донабирайте и переобучайте.`;
+    ? `Unit-selection «${project.name}» собран (${quality}, ${lexiconSummary}, wav ${pack.wordUnitCount}` +
+      (warnCount ? `, QA-warn ${warnCount}` : "") +
+      `). Запишите чистые длинные тексты и ещё ${Math.max(0, TARGET_TRAIN_CLIPS - qa.acceptedCount)} клипов (покрытие ${coveragePct}%). Это не neural TTS.`
+    : `Unit-selection «${project.name}» собран (${quality}, ${lexiconSummary}, wav ${pack.wordUnitCount}). Голос в каталоге; донабирайте и переобучайте. Не neural mel-decoder.`;
 
   const updated = touchProject(projectId, {
     status: needMore ? "ready_partial" : "ready",
@@ -1298,10 +1392,10 @@ function prepareCorpusAfterImport(projectId: string): {
 } {
   const qa = qaProjectClips(projectId);
   if (qa.acceptedCount === 0) {
+    const issues = qa.analyses[0]?.issues?.slice(0, 4).join(", ") ?? "qa_fail";
     const project = touchProject(projectId, {
       status: "needs_data",
-      recommendation:
-        "Клип не прошёл QA. Запишите длиннее/чище (wav/webm) и привяжите к номеру фразы.",
+      recommendation: `Клип не прошёл QA (${issues}). Нужна чистая речь без сильной тишины/клиппинга; привяжите wav/webm к номеру фразы.`,
     });
     return { project, analysis: qa.analyses, voice: null };
   }
@@ -1309,13 +1403,19 @@ function prepareCorpusAfterImport(projectId: string): {
     qa.phraseCount > 0
       ? Math.round((qa.linkedAccepted / qa.phraseCount) * 100)
       : 0;
+  const warnCount = qa.analyses.reduce(
+    (n, a) => n + ((a.warnings as string[] | undefined)?.length ?? 0),
+    0,
+  );
   const ready =
     qa.phraseCount >= 1 && qa.linkedAccepted >= MIN_TRAIN_CLIPS;
   const project = touchProject(projectId, {
     status: ready ? "ready_to_train" : "collecting",
     recommendation: ready
-      ? `Корпус готов к обучению: ${qa.linkedAccepted} клипов привязано к фразам, покрытие ${coveragePct}%. Нажмите «Обучить модель».`
-      : `Нужно ≥${MIN_TRAIN_CLIPS} принятых клипов с привязкой к фразам (сейчас linked=${qa.linkedAccepted}). Нумерация 1…N.`,
+      ? `Корпус готов к unit-selection: ${qa.linkedAccepted} клипов ↔ фразы, покрытие ${coveragePct}%` +
+        (warnCount ? ` · предупреждений QA: ${warnCount}` : "") +
+        `. Нажмите «Собрать голос» (не neural TTS).`
+      : `Нужно ≥${MIN_TRAIN_CLIPS} принятых клипов с привязкой к фразам (сейчас linked=${qa.linkedAccepted}). Чистая речь + длинные тексты.`,
   });
   return { project, analysis: qa.analyses, voice: null };
 }

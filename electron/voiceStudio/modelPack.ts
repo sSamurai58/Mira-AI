@@ -1,13 +1,15 @@
 /**
  * Local voice model pack (mira-voice-pack-v1).
  *
+ * Unit-selection / concatenative TTS (NOT neural mel encoder→decoder).
  * Training builds phrase units + word/fragment slices + a lexicon index so
  * runtime TTS can stitch novel replies from trained units instead of only
- * replaying exact phrases.
+ * replaying exact phrases. Uncovered words fall back to system TTS.
  */
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { estimateWordBoundariesByEnergy } from "./audioFeatures";
 
 export const VOICE_PACK_ENGINE = "mira-voice-pack-v1";
 
@@ -77,6 +79,7 @@ export type TrainProgressEvent = {
   projectId: string;
   step:
     | "validate"
+    | "features"
     | "segment"
     | "lexicon"
     | "pack"
@@ -343,19 +346,26 @@ export function buildVoiceModelPack(opts: {
     if (words.length === 0) {
       opts.onProgress?.(
         Math.round(((idx + 1) / workTotal) * 70),
-        `Сегментация ${idx + 1}/${clipTotal}`,
+        `Выравнивание ${idx + 1}/${clipTotal}`,
       );
       return;
     }
 
-    // Equal-time forced alignment proxy (no neural aligner in-app yet).
-    const padMs = Math.min(40, durationMs * 0.04);
-    const usable = Math.max(80, durationMs - padMs * 2);
-    const slot = usable / words.length;
+    // Energy-weighted alignment when PCM WAV is available; else equal-time.
+    // (Not neural attention alignment — desktop unit-selection proxy.)
+    const bounds = estimateWordBoundariesByEnergy(
+      clip.filePath,
+      words.length,
+      durationMs,
+    );
 
     words.forEach((word, wIdx) => {
-      const startMs = padMs + slot * wIdx;
-      const endMs = padMs + slot * (wIdx + 1);
+      const bound = bounds[wIdx] ?? {
+        startMs: (durationMs * wIdx) / words.length,
+        endMs: (durationMs * (wIdx + 1)) / words.length,
+      };
+      const startMs = bound.startMs;
+      const endMs = bound.endMs;
       const key = normalizeLexKey(word);
       if (!key) return;
 
@@ -415,7 +425,7 @@ export function buildVoiceModelPack(opts: {
 
     opts.onProgress?.(
       Math.round(((idx + 1) / workTotal) * 70),
-      `Сегментация клипа ${idx + 1}/${clipTotal} · ${words.length} слов`,
+      `Выравнивание клипа ${idx + 1}/${clipTotal} · ${words.length} слов (unit-selection)`,
     );
   });
 

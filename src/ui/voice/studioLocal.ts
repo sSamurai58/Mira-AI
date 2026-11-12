@@ -809,11 +809,15 @@ export async function localTrainVoiceModel(
   };
   const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-  emit("validate", 5, "Обучение (browser-demo): проверка клипов…");
+  emit(
+    "validate",
+    5,
+    "Пары текст↔аудио (browser-demo): проверка клипов…",
+  );
   store.projects[pIdx] = {
     ...project,
     status: "training",
-    recommendation: "Обучение модели…",
+    recommendation: "Сборка unit-selection pack…",
     updated_at: now(),
   };
   write(store);
@@ -931,20 +935,26 @@ export async function localTrainVoiceModel(
   const wordUnitCount = audioLexiconSize;
 
   emit(
+    "features",
+    22,
+    `Признаки (demo): RMS/тишина · ${linkedAccepted} клипов…`,
+  );
+  await pause(120 + linkedAccepted * 25);
+  emit(
     "segment",
-    30,
-    `Сегментация ${linkedAccepted} клипов · ${phrases.length} текстов · ~${lexiconSize} слов…`,
+    38,
+    `Выравнивание ${linkedAccepted} клипов · ${phrases.length} текстов · ~${lexiconSize} слов…`,
   );
   await pause(
     280 + linkedAccepted * 70 + Math.min(6000, lexiconSize * 10),
   );
   emit(
     "lexicon",
-    60,
+    62,
     `Лексикон ${lexiconSize} (аудио ${audioLexiconSize}, пока TTS ${provisionalLexiconSize})…`,
   );
   await pause(240 + Math.min(8000, lexiconSize * 12));
-  emit("pack", 80, `Сборка model-pack · лексикон ${lexiconSize}…`);
+  emit("pack", 82, `Сборка model-pack · лексикон ${lexiconSize}…`);
   await pause(180 + Math.min(2000, lexiconSize * 3));
   emit("publish", 92, "Публикация в каталог…");
   await pause(140);
@@ -962,6 +972,8 @@ export async function localTrainVoiceModel(
   let voice = store.customVoices.find((v) => v.id === voiceId) ?? null;
   const meta = JSON.stringify({
     engine: "mira-voice-pack-v1",
+    method: "unit-selection-concatenative",
+    neuralTts: false,
     trainedAt: stamp,
     quality,
     browserDemo: true,
@@ -1000,8 +1012,8 @@ export async function localTrainVoiceModel(
   const needMore =
     acceptedClips.length < TARGET_TRAIN_CLIPS || coveragePct < 80;
   const detail = needMore
-    ? `Модель «${project.name}» обучена (${quality}, browser-demo, лексикон ${lexiconSize}: аудио ${audioLexiconSize}, TTS ${provisionalLexiconSize}). Запишите длинные тексты и добавьте клипы (покрытие ${coveragePct}%).`
-    : `Модель «${project.name}» обучена (${quality}, browser-demo, лексикон ${lexiconSize}: аудио ${audioLexiconSize}, TTS ${provisionalLexiconSize}) и в каталоге.`;
+    ? `Unit-selection «${project.name}» (${quality}, browser-demo, лексикон ${lexiconSize}: аудио ${audioLexiconSize}, TTS ${provisionalLexiconSize}). Запишите длинные тексты и клипы (покрытие ${coveragePct}%). Не neural TTS.`
+    : `Unit-selection «${project.name}» (${quality}, browser-demo, лексикон ${lexiconSize}: аудио ${audioLexiconSize}, TTS ${provisionalLexiconSize}) в каталоге. Не neural TTS.`;
 
   store.projects[pIdx] = {
     ...project,
