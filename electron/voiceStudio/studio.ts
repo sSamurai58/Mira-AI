@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { openStore } from "../store";
+import { getOwnerId } from "../owner";
 
 export type VoiceProjectRow = {
   id: string;
@@ -43,18 +44,48 @@ export type CustomVoiceRow = {
   updated_at: string;
 };
 
-const PHRASE_BANK_RU = [
+/** Short replies Mira often speaks — train these first so TTS stays studio voice. */
+const ASSISTANT_COMMON_RU = [
   "Привет, я Mira — твой голосовой помощник.",
+  "Слушаю.",
+  "Да, сделаю это сейчас.",
+  "Хорошо.",
+  "Готово.",
+  "Секунду.",
+  "Принято.",
+  "Спасибо, сообщение отправлено.",
+  "Не совсем поняла, уточни пожалуйста.",
+  "Я на связи.",
+  "До связи.",
+  "Проверяю.",
+  "Нашла.",
+  "Открываю.",
+  "Записываю.",
+  "Готово, можно продолжать.",
+];
+
+const ASSISTANT_COMMON_EN = [
+  "Hello, I am Mira — your voice assistant.",
+  "Listening.",
+  "Yes, I will do that now.",
+  "Okay.",
+  "Done.",
+  "One moment.",
+  "Got it.",
+  "Thanks, message sent.",
+  "I am here if you need me.",
+];
+
+/** Variety / diction bank — fills remaining slots after real assistant lines. */
+const PHRASE_BANK_RU = [
   "Сегодня хороший день, чтобы закончить важную задачу.",
   "Повтори за мной: мягко верни внимание к дыханию.",
   "Номер телефона: плюс семь девятьсот двенадцать.",
   "Открой терминал и выполни проверку статуса.",
   "Я могу искать в памяти прошлые разговоры.",
   "Добавь встречу на пятницу в пятнадцать ноль ноль.",
-  "Спасибо, сообщение отправлено.",
   "Проверь погоду в Москве на завтра.",
   "Фраза для дикции: шесть шипящих шагов по шоссе.",
-  "Короткий ответ: да, сделаю это сейчас.",
   "Длинная фраза нужна, чтобы проверить естественные паузы и темп речи помощника.",
   "Произнеси спокойно: один, два, три, четыре, пять.",
   "Эмоция радости: отличная новость, получилось!",
@@ -67,12 +98,102 @@ const PHRASE_BANK_RU = [
 ];
 
 const PHRASE_BANK_EN = [
-  "Hello, I am Mira — your voice assistant.",
   "Please repeat after me: bring your attention back gently.",
   "Technical line: JSON, API, SQLite, Electron.",
-  "Short confirmation: yes, I will do that now.",
   "Longer line to test pacing, pauses, and natural intonation in speech.",
+  "Check the weather in London for tomorrow.",
+  "Open the terminal and run a status check.",
 ];
+
+const MIN_PHRASE_CHARS = 4;
+const MAX_PHRASE_CHARS = 220;
+
+/** Strip markdown/code noise the same way chat TTS does (lightweight). */
+function stripForPhraseSeed(raw: string): string {
+  return raw
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`[^`\n]+`/g, " ")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/_([^_]+)_/g, "$1")
+    .replace(/^\s*[-*•]\s+/gm, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isUsefulSpeechPhrase(p: string): boolean {
+  if (p.length < MIN_PHRASE_CHARS || p.length > MAX_PHRASE_CHARS) return false;
+  // Skip pure URLs / code-ish lines.
+  if (/^https?:\/\//i.test(p)) return false;
+  if (/[{}<>;=]/.test(p) && /[{}]/.test(p)) return false;
+  // Skip mock / env / tooling chatter — not what Mira says in real speech.
+  if (/mock-модели|LLM_PROVIDER|API-ключ|\.env\b/i.test(p)) return false;
+  if (/skills?\s+в\s+контексте|skills\s+on-demand/i.test(p)) return false;
+  if (/интернет-инструменты/i.test(p)) return false;
+  return true;
+}
+
+function splitPhraseCandidates(text: string): string[] {
+  const cleaned = stripForPhraseSeed(text);
+  if (!cleaned) return [];
+  return cleaned
+    .split(/(?<=[.!?…])\s+|\n+/)
+    .map((p) => p.trim().replace(/^["«»„]+|["«»„]+$/g, "").trim())
+    .filter(isUsefulSpeechPhrase);
+}
+
+/** Recent assistant chat lines → phrase candidates (frequency + recency). */
+export function collectAssistantUsedPhrases(opts?: {
+  limitUtterances?: number;
+  limitPhrases?: number;
+}): string[] {
+  const limitU = opts?.limitUtterances ?? 80;
+  const limitP = opts?.limitPhrases ?? 40;
+  try {
+    const store = openStore();
+    const owner = getOwnerId();
+    const rows = store
+      .prepare(
+        `SELECT u.content AS content
+         FROM utterances u
+         JOIN sessions s ON s.id = u.session_id
+         WHERE s.owner_id = ? AND u.role = 'assistant'
+         ORDER BY u.created_at DESC
+         LIMIT ?`,
+      )
+      .all(owner, limitU) as Array<{ content: string }>;
+
+    const freq = new Map<string, { text: string; score: number }>();
+    rows.forEach((row, idx) => {
+      const recency = Math.max(1, limitU - idx);
+      for (const part of splitPhraseCandidates(row.content)) {
+        const key = part.toLowerCase();
+        const prev = freq.get(key);
+        const bump = recency + (part.length <= 80 ? 8 : 0);
+        if (prev) prev.score += bump;
+        else freq.set(key, { text: part, score: bump });
+      }
+    });
+
+    return [...freq.values()]
+      .sort((a, b) => b.score - a.score || a.text.length - b.text.length)
+      .slice(0, limitP)
+      .map((x) => x.text);
+  } catch {
+    return [];
+  }
+}
+
+function phrasePoolForLang(lang: string): {
+  common: string[];
+  variety: string[];
+} {
+  if (lang.toLowerCase().startsWith("en")) {
+    return { common: ASSISTANT_COMMON_EN, variety: PHRASE_BANK_EN };
+  }
+  return { common: ASSISTANT_COMMON_RU, variety: PHRASE_BANK_RU };
+}
 
 function studioRoot(...parts: string[]): string {
   const { dataRoot } = require("../appPaths") as typeof import("../appPaths");
@@ -211,19 +332,41 @@ export function generatePhrases(
 ): VoicePhraseRow[] {
   const project = getVoiceProject(projectId);
   if (!project) throw new Error("Проект не найден");
-  const existing = listPhrases(projectId).map((p) => p.text.toLowerCase());
-  const bank = project.lang.toLowerCase().startsWith("en")
-    ? PHRASE_BANK_EN
-    : PHRASE_BANK_RU;
-  const fresh = bank.filter((t) => !existing.includes(t.toLowerCase()));
-  if (!fresh.length) {
+  const want = Math.max(1, Math.min(count, 20));
+  const existing = new Set(
+    listPhrases(projectId).map((p) => p.text.toLowerCase()),
+  );
+  const { common, variety } = phrasePoolForLang(project.lang);
+
+  // Priority: (1) phrases Mira already speaks in chat, (2) common short
+  // replies that prevent mid-utterance Web Speech fallback, (3) variety bank.
+  const used = collectAssistantUsedPhrases({
+    limitUtterances: 100,
+    limitPhrases: 50,
+  });
+  const ordered: string[] = [];
+  const pushFresh = (list: string[]) => {
+    for (const t of list) {
+      if (ordered.length >= want) return;
+      const key = t.toLowerCase();
+      if (existing.has(key)) continue;
+      if (ordered.some((x) => x.toLowerCase() === key)) continue;
+      ordered.push(t);
+    }
+  };
+  pushFresh(used);
+  pushFresh(common);
+  pushFresh(variety);
+  const pick = ordered.slice(0, want);
+
+  if (!pick.length) {
     touchProject(projectId, {
       recommendation:
-        "Банк фраз исчерпан для демо. Добавьте свои записи или расширьте банк.",
+        "Новых фраз нет: чат и банк уже покрыты. Добавьте свою фразу ниже.",
     });
     return [];
   }
-  const pick = fresh.slice(0, Math.max(1, Math.min(count, fresh.length)));
+
   const store = openStore();
   const insert = store.prepare(
     `INSERT INTO voice_phrases (id, project_id, text, recorded, created_at)
@@ -231,6 +374,8 @@ export function generatePhrases(
   );
   const baseMs = Date.now();
   const rows: VoicePhraseRow[] = [];
+  let fromChat = 0;
+  const usedKeys = new Set(used.map((t) => t.toLowerCase()));
   for (let i = 0; i < pick.length; i++) {
     const text = pick[i]!;
     // Stagger created_at so 1…N order stays stable across refreshes/collapse.
@@ -244,17 +389,23 @@ export function generatePhrases(
     try {
       insert.run(row.id, row.project_id, row.text, row.created_at);
       rows.push(row);
+      if (usedKeys.has(text.toLowerCase())) fromChat += 1;
     } catch {
       // unique dedup race
     }
   }
   touchProject(projectId, {
     status: "phrases",
-    recommendation: `Запишите/загрузите аудио для ${rows.length} новых фраз.`,
+    recommendation: rows.length
+      ? `Добавлено ${rows.length} фраз` +
+        (fromChat
+          ? ` · из диалогов ассистента: ${fromChat}`
+          : " · частые ответы Mira / банк") +
+        ". Запишите аудио — иначе TTS уйдёт в системный голос."
+      : "Новых фраз нет. Добавьте свою.",
   });
   return rows;
 }
-
 export function listClips(projectId: string): VoiceClipRow[] {
   return openStore()
     .prepare(

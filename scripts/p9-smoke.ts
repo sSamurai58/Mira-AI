@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { loadConfig } from "../electron/config";
-import { closeStore, openStore } from "../electron/store";
+import {
+  addUtterance,
+  closeStore,
+  createSession,
+  openStore,
+} from "../electron/store";
 import {
   createVoiceProject,
   generatePhrases,
@@ -19,6 +24,11 @@ loadConfig(true);
 openStore();
 
 async function main() {
+  // Seed chat so generation prefers real assistant lines first.
+  const session = createSession("voice-phrase-seed");
+  addUtterance(session.id, "assistant", "Слушаю вас внимательно.");
+  addUtterance(session.id, "assistant", "Готово, задача выполнена.");
+
   const project = createVoiceProject({ name: "Smoke Voice", lang: "ru-RU" });
   assert.equal(project.status, "created");
 
@@ -26,6 +36,10 @@ async function main() {
   assert.equal(batch1.length, 5);
   const texts1 = new Set(batch1.map((p) => p.text));
   assert.equal(texts1.size, 5);
+  assert.ok(
+    batch1.some((p) => /слушаю|готово/i.test(p.text)),
+    "generation should prioritize assistant-used phrases",
+  );
 
   const batch2 = generatePhrases(project.id, 5);
   assert.ok(batch2.length >= 1);

@@ -191,10 +191,22 @@ export function VoiceStudioPanel(props: {
         : localGeneratePhrases(project.id, 5);
       setNote(
         rows.length
-          ? `+${rows.length} фраз для записи (нумеруйте аудио 1…N)`
+          ? `+${rows.length} фраз (сначала речь ассистента / частые ответы). Запишите аудио 1…N`
           : "Новых фраз нет — добавьте свою ниже",
       );
       await refresh(project.id);
+      // After train, corpus is collapsed — open list so generation isn't "silent".
+      const trained =
+        Boolean(project.custom_voice_id) ||
+        project.status === "ready" ||
+        project.status === "ready_partial";
+      if (rows.length && trained) setPhrasesOpen(true);
+    } catch (err) {
+      setNote(
+        err instanceof Error
+          ? `Генерация фраз: ${err.message}`
+          : "Генерация фраз не удалась",
+      );
     } finally {
       setBusy(null);
     }
@@ -591,19 +603,18 @@ export function VoiceStudioPanel(props: {
               className="btn"
               disabled={Boolean(busy)}
               onClick={() => void morePhrases()}
+              title="Сначала фразы из речи ассистента и частые ответы Mira"
             >
-              Сгенерировать фразы
+              {busy === "phrases" ? "Генерация…" : "Сгенерировать фразы"}
             </button>
-            {!collapseCorpus ? (
-              <button
-                type="button"
-                className={`btn ${recording ? "btn-primary" : ""}`}
-                disabled={Boolean(busy) && !recording}
-                onClick={() => void toggleRecord()}
-              >
-                {recording ? "Стоп запись" : "Запись mic"}
-              </button>
-            ) : null}
+            <button
+              type="button"
+              className={`btn ${recording ? "btn-primary" : ""}`}
+              disabled={Boolean(busy) && !recording}
+              onClick={() => void toggleRecord()}
+            >
+              {recording ? "Стоп запись" : "Запись mic"}
+            </button>
             <button
               type="button"
               className="btn"
@@ -612,6 +623,90 @@ export function VoiceStudioPanel(props: {
             >
               Превью модели
             </button>
+          </div>
+
+          <div
+            className="panel stack"
+            style={{ gap: "0.5rem" }}
+            data-testid="voice-own-phrase"
+          >
+            <strong>Своя фраза</strong>
+            <p className="muted" style={{ margin: 0 }}>
+              Добавьте текст вручную, затем запишите mic или загрузите аудио к
+              номеру фразы — так студийный голос покроет реальные ответы Mira.
+            </p>
+            <div className="row" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
+              <input
+                value={customPhrase}
+                onChange={(e) => setCustomPhrase(e.target.value)}
+                placeholder="Своя фраза для записи…"
+                style={{ flex: 1, minWidth: "14rem" }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && customPhrase.trim()) {
+                    e.preventDefault();
+                    void addPhrase();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={Boolean(busy) || !customPhrase.trim()}
+                onClick={() => void addPhrase()}
+              >
+                Добавить фразу
+              </button>
+            </div>
+
+            <label className="stack" style={{ gap: "0.25rem" }}>
+              <span className="muted">Фраза для привязки аудио</span>
+              <ThemeSelect
+                aria-label="Фраза для привязки аудио"
+                value={phraseId}
+                options={[
+                  { value: "", label: "— без привязки —" },
+                  ...phrases.map((p) => ({
+                    value: p.id,
+                    label: phraseSelectLabel(phrases, p),
+                  })),
+                ]}
+                onChange={setPhraseId}
+              />
+            </label>
+
+            <div className="row" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
+              {electron ? (
+                <>
+                  <input
+                    value={filePath}
+                    onChange={(e) => setFilePath(e.target.value)}
+                    placeholder="seed/voice-studio/….wav"
+                    style={{ flex: 1, minWidth: "14rem" }}
+                  />
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={Boolean(busy)}
+                    onClick={() => void importPath()}
+                  >
+                    Загрузить путь
+                  </button>
+                </>
+              ) : null}
+              <label className="btn" style={{ cursor: "pointer" }}>
+                Загрузить аудио…
+                <input
+                  type="file"
+                  accept="audio/*,.wav,.flac,.webm,.mp3,.ogg,.m4a"
+                  hidden
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void uploadBytes(f);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+            </div>
           </div>
 
           {collapseCorpus ? (
@@ -627,7 +722,8 @@ export function VoiceStudioPanel(props: {
               <p className="muted" style={{ margin: 0 }}>
                 Список фраз свёрнут после обучения. Нумерация 1…N сохраняется —
                 откройте просмотр, чтобы прослушать аудио, перезагрузить
-                отдельные фразы или переобучить модель целиком.
+                отдельные фразы или переобучить модель целиком. Свою фразу можно
+                добавить выше в любой момент.
               </p>
               <div className="row" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
                 <button
@@ -654,78 +750,11 @@ export function VoiceStudioPanel(props: {
             </div>
           ) : (
             <>
-              <div className="row" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
-                <input
-                  value={customPhrase}
-                  onChange={(e) => setCustomPhrase(e.target.value)}
-                  placeholder="Своя фраза для записи…"
-                  style={{ flex: 1, minWidth: "14rem" }}
-                />
-                <button
-                  type="button"
-                  className="btn"
-                  disabled={Boolean(busy) || !customPhrase.trim()}
-                  onClick={() => void addPhrase()}
-                >
-                  Добавить фразу
-                </button>
-              </div>
-
-              <label className="stack" style={{ gap: "0.25rem" }}>
-                <span className="muted">Фраза для привязки аудио</span>
-                <ThemeSelect
-                  aria-label="Фраза для привязки аудио"
-                  value={phraseId}
-                  options={[
-                    { value: "", label: "— без привязки —" },
-                    ...phrases.map((p) => ({
-                      value: p.id,
-                      label: phraseSelectLabel(phrases, p),
-                    })),
-                  ]}
-                  onChange={setPhraseId}
-                />
-              </label>
-
-              <div className="row" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
-                {electron ? (
-                  <>
-                    <input
-                      value={filePath}
-                      onChange={(e) => setFilePath(e.target.value)}
-                      placeholder="seed/voice-studio/….wav"
-                      style={{ flex: 1, minWidth: "14rem" }}
-                    />
-                    <button
-                      type="button"
-                      className="btn"
-                      disabled={Boolean(busy)}
-                      onClick={() => void importPath()}
-                    >
-                      Загрузить путь
-                    </button>
-                  </>
-                ) : null}
-                <label className="btn" style={{ cursor: "pointer" }}>
-                  Загрузить аудио…
-                  <input
-                    type="file"
-                    accept="audio/*,.wav,.flac,.webm,.mp3,.ogg,.m4a"
-                    hidden
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) void uploadBytes(f);
-                      e.target.value = "";
-                    }}
-                  />
-                </label>
-              </div>
-
               <div className="stack" style={{ gap: "0.35rem" }}>
                 <strong>Фразы ({phrases.length})</strong>
                 {phrases.length === 0 ? (
                   <span className="muted">
-                    Нажмите «Сгенерировать фразы» или добавьте свою
+                    Нажмите «Сгенерировать фразы» или добавьте свою выше
                   </span>
                 ) : (
                   phrases.map((p) => (

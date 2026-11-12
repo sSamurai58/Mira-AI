@@ -190,16 +190,51 @@ export function localDeleteCustomVoice(id: string): {
   return { ok: true, detail: `Удалён ${id}`, clearedVoiceId: id };
 }
 
-const PHRASE_BANK = [
+/** Common Mira replies first — keep studio voice during real speech. */
+const ASSISTANT_COMMON = [
   "Привет, я Mira — твой голосовой помощник.",
+  "Слушаю.",
+  "Да, сделаю это сейчас.",
+  "Хорошо.",
+  "Готово.",
+  "Секунду.",
+  "Принято.",
+  "Спасибо, сообщение отправлено.",
+  "Не совсем поняла, уточни пожалуйста.",
+  "Я на связи.",
+  "До связи.",
+  "Проверяю.",
+  "Нашла.",
+  "Открываю.",
+  "Записываю.",
+  "Готово, можно продолжать.",
+];
+
+const PHRASE_BANK = [
   "Сегодня хороший день, чтобы закончить важную задачу.",
   "Повтори за мной: мягко верни внимание к дыханию.",
-  "Спасибо, сообщение отправлено.",
-  "Короткий ответ: да, сделаю это сейчас.",
   "Техническая фраза: JSON, API, SQLite, Electron.",
   "Вопрос: что у меня сейчас на экране?",
   "Финал сессии: до связи, я на связи, когда понадоблюсь.",
+  "Проверь погоду в Москве на завтра.",
+  "Длинная фраза нужна, чтобы проверить естественные паузы и темп речи помощника.",
 ];
+
+function localAssistantUsedPhrases(): string[] {
+  // Browser-demo has no SQLite utterances; optional mirror if host exported them.
+  try {
+    const raw = localStorage.getItem("mira.assistantPhraseSeed");
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((x): x is string => typeof x === "string")
+      .map((s) => s.trim())
+      .filter((s) => s.length >= 4 && s.length <= 220);
+  } catch {
+    return [];
+  }
+}
 
 export function localGeneratePhrases(
   projectId: string,
@@ -208,16 +243,29 @@ export function localGeneratePhrases(
   const store = read();
   const project = store.projects.find((p) => p.id === projectId);
   if (!project) throw new Error("Проект не найден");
+  const want = Math.max(1, Math.min(count, 20));
   const existing = new Set(
     store.phrases
       .filter((p) => p.project_id === projectId)
       .map((p) => p.text.toLowerCase()),
   );
-  const fresh = PHRASE_BANK.filter((t) => !existing.has(t.toLowerCase()));
-  const pick = fresh.slice(0, Math.max(1, Math.min(count, fresh.length)));
+  const ordered: string[] = [];
+  const pushFresh = (list: string[]) => {
+    for (const t of list) {
+      if (ordered.length >= want) return;
+      const key = t.toLowerCase();
+      if (existing.has(key)) continue;
+      if (ordered.some((x) => x.toLowerCase() === key)) continue;
+      ordered.push(t);
+    }
+  };
+  pushFresh(localAssistantUsedPhrases());
+  pushFresh(ASSISTANT_COMMON);
+  pushFresh(PHRASE_BANK);
+
   const baseMs = Date.now();
   // Stagger created_at so display numbers 1…N stay stable after collapse/refresh.
-  const rows: MiraVoicePhrase[] = pick.map((text, i) => ({
+  const rows: MiraVoicePhrase[] = ordered.slice(0, want).map((text, i) => ({
     id: crypto.randomUUID(),
     project_id: projectId,
     text,
@@ -231,15 +279,14 @@ export function localGeneratePhrases(
       ...store.projects[pIdx],
       status: "phrases",
       recommendation: rows.length
-        ? `Запишите/загрузите аудио для ${rows.length} новых фраз.`
-        : "Банк фраз исчерпан. Добавьте свою фразу.",
+        ? `Добавлено ${rows.length} фраз (сначала частые ответы Mira). Запишите аудио.`
+        : "Новых фраз нет. Добавьте свою фразу.",
       updated_at: now(),
     };
   }
   write(store);
   return rows;
 }
-
 export function localAddPhrase(
   projectId: string,
   text: string,
