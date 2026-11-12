@@ -25,10 +25,14 @@ loadConfig(true);
 openStore();
 
 async function main() {
-  // Seed chat so generation prefers real assistant lines first.
+  // Seed chat so generation prefers the most frequent assistant lines first.
   const session = createSession("voice-phrase-seed");
   addUtterance(session.id, "assistant", "Слушаю вас внимательно.");
   addUtterance(session.id, "assistant", "Готово, задача выполнена.");
+  // Repeat a rarer line so frequency outranks a single recent one.
+  for (let i = 0; i < 5; i++) {
+    addUtterance(session.id, "assistant", "Проверяю статус задачи.");
+  }
 
   const project = createVoiceProject({ name: "Smoke Voice", lang: "ru-RU" });
   assert.equal(project.status, "created");
@@ -38,8 +42,12 @@ async function main() {
   const texts1 = new Set(batch1.map((p) => p.text));
   assert.equal(texts1.size, 5);
   assert.ok(
-    batch1.some((p) => /слушаю|готово/i.test(p.text)),
+    batch1.some((p) => /проверяю|слушаю|готово/i.test(p.text)),
     "generation should prioritize assistant-used phrases",
+  );
+  assert.ok(
+    batch1.some((p) => /проверяю/i.test(p.text)),
+    "most frequent assistant phrase should appear in generation",
   );
 
   const batch2 = generatePhrases(project.id, 5);

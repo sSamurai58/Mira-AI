@@ -220,48 +220,228 @@ const PHRASE_BANK = [
   "Длинная фраза нужна, чтобы проверить естественные паузы и темп речи помощника.",
 ];
 
-function localAssistantUsedPhrases(): string[] {
-  // Browser-demo has no SQLite utterances; optional mirror if host exported them.
+function localNormalizeWord(raw: string): string {
+  return raw
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "")
+    .trim();
+}
+
+function localTokenizeWords(text: string): string[] {
+  return text
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .map((t) => t.replace(/^[«»„"'(（\[]+|[»„"'.,!?;:…)）\]]+$/g, ""))
+    .filter((t) => t.length > 0);
+}
+
+/** Browser-demo seeds: frequency-ranked assistant phrases (+ optional word bags). */
+function localAssistantSpeechStats(): {
+  phrases: string[];
+  words: Array<{ word: string; key: string; count: number }>;
+} {
   try {
     const raw = localStorage.getItem("mira.assistantPhraseSeed");
-    if (!raw) return [];
+    if (!raw) return { phrases: [], words: [] };
     const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter((x): x is string => typeof x === "string")
-      .map((s) => s.trim())
-      .filter((s) => s.length >= 4 && s.length <= 220);
+    if (!Array.isArray(parsed)) return { phrases: [], words: [] };
+    const phraseFreq = new Map<string, { text: string; count: number }>();
+    const wordFreq = new Map<string, { word: string; count: number }>();
+    for (const item of parsed) {
+      const text =
+        typeof item === "string"
+          ? item.trim()
+          : item &&
+              typeof item === "object" &&
+              typeof (item as { text?: unknown }).text === "string"
+            ? String((item as { text: string }).text).trim()
+            : "";
+      if (text.length < 4 || text.length > 1600) continue;
+      const key = text.toLowerCase();
+      const prev = phraseFreq.get(key);
+      if (prev) prev.count += 1;
+      else phraseFreq.set(key, { text, count: 1 });
+      for (const rawWord of localTokenizeWords(text)) {
+        const wKey = localNormalizeWord(rawWord);
+        if (!wKey || wKey.length < 2) continue;
+        const wPrev = wordFreq.get(wKey);
+        if (wPrev) wPrev.count += 1;
+        else wordFreq.set(wKey, { word: rawWord, count: 1 });
+      }
+    }
+    const phrases = [...phraseFreq.values()]
+      .sort((a, b) => b.count - a.count || a.text.length - b.text.length)
+      .map((p) => p.text);
+    const words = [...wordFreq.entries()]
+      .map(([key, w]) => ({ word: w.word, key, count: w.count }))
+      .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
+    return { phrases, words };
   } catch {
-    return [];
+    return { phrases: [], words: [] };
   }
+}
+
+
+type LocalGeneratePhrasesOptions = {
+  count?: number;
+  minWords?: number;
+  maxWords?: number;
+};
+
+const LOCAL_MAX_GENERATE = 40;
+const LOCAL_MAX_PHRASE_CHARS = 1600;
+
+function localCountWords(text: string): number {
+  return text
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+}
+
+function localClampWordRange(
+  minWords?: number,
+  maxWords?: number,
+): { minWords: number; maxWords: number } {
+  const minW = Math.max(1, Math.min(Number(minWords) || 1, 400));
+  const maxW = Math.max(minW, Math.min(Number(maxWords) || 80, 500));
+  return { minWords: minW, maxWords: maxW };
+}
+
+function localExpandTowardMinWords(text: string, minWords: number): string {
+  let out = text.trim().replace(/\s+/g, " ");
+  if (localCountWords(out) >= minWords) return out.slice(0, LOCAL_MAX_PHRASE_CHARS);
+  const fillers = [
+    "Это помогает лучше передать интонацию и ритм речи при обучении голоса.",
+    "Повторите спокойно, чётко и без спешки, сохраняя естественные паузы.",
+    "Длинный фрагмент даёт модели больше материала для устойчивого тембра.",
+  ];
+  let i = 0;
+  while (
+    localCountWords(out) < minWords &&
+    out.length < LOCAL_MAX_PHRASE_CHARS - 40
+  ) {
+    out = `${out} ${fillers[i % fillers.length]}`.trim();
+    i += 1;
+  }
+  return out.slice(0, LOCAL_MAX_PHRASE_CHARS);
+}
+
+function localFitPhraseToWordRange(
+  text: string,
+  minWords: number,
+  maxWords: number,
+): string | null {
+  let out = text.trim().replace(/\s+/g, " ");
+  if (!out) return null;
+  const words = out.split(/\s+/).filter(Boolean);
+  if (words.length > maxWords) out = words.slice(0, maxWords).join(" ");
+  out = localExpandTowardMinWords(out, minWords);
+  const trimmed = out.split(/\s+/).filter(Boolean);
+  if (trimmed.length > maxWords) out = trimmed.slice(0, maxWords).join(" ");
+  out = out.slice(0, LOCAL_MAX_PHRASE_CHARS);
+  const n = localCountWords(out);
+  if (n < minWords || n > maxWords) return null;
+  return out;
 }
 
 export function localGeneratePhrases(
   projectId: string,
-  count = 5,
+  countOrOpts: number | LocalGeneratePhrasesOptions = 5,
 ): MiraVoicePhrase[] {
   const store = read();
   const project = store.projects.find((p) => p.id === projectId);
   if (!project) throw new Error("Проект не найден");
-  const want = Math.max(1, Math.min(count, 20));
+  const opts: LocalGeneratePhrasesOptions =
+    typeof countOrOpts === "number" ? { count: countOrOpts } : countOrOpts;
+  const want = Math.max(1, Math.min(opts.count ?? 5, LOCAL_MAX_GENERATE));
+  const { minWords, maxWords } = localClampWordRange(
+    opts.minWords,
+    opts.maxWords,
+  );
   const existing = new Set(
     store.phrases
       .filter((p) => p.project_id === projectId)
       .map((p) => p.text.toLowerCase()),
   );
+  const covered = new Set<string>();
+  for (const p of store.phrases.filter((x) => x.project_id === projectId)) {
+    for (const raw of localTokenizeWords(p.text)) {
+      const key = localNormalizeWord(raw);
+      if (key) covered.add(key);
+    }
+  }
+  const stats = localAssistantSpeechStats();
+  const uncoveredWords = stats.words.filter((w) => !covered.has(w.key));
+  const uncoveredSeeds: string[] = [];
+  {
+    let bucket: string[] = [];
+    for (const w of uncoveredWords) {
+      bucket.push(w.word);
+      if (bucket.length >= Math.min(12, Math.max(4, minWords))) {
+        const fitted = localFitPhraseToWordRange(
+          `Произнесите чётко: ${bucket.join(" ")}.`,
+          minWords,
+          maxWords,
+        );
+        if (fitted) uncoveredSeeds.push(fitted);
+        bucket = [];
+        if (uncoveredSeeds.length >= 24) break;
+      }
+    }
+    if (bucket.length && uncoveredSeeds.length < 24) {
+      const fitted = localFitPhraseToWordRange(
+        `Произнесите чётко: ${bucket.join(" ")}.`,
+        minWords,
+        maxWords,
+      );
+      if (fitted) uncoveredSeeds.push(fitted);
+    }
+  }
+  const uncoveredRank = new Map(
+    uncoveredWords.map((w, i) => [w.key, w.count * 1000 - i] as const),
+  );
+  const usedRanked = [...stats.phrases].sort((a, b) => {
+    const score = (text: string) =>
+      localTokenizeWords(text).reduce((sum, raw) => {
+        const key = localNormalizeWord(raw);
+        return sum + (uncoveredRank.get(key) ?? 0);
+      }, 0);
+    return score(b) - score(a);
+  });
+
   const ordered: string[] = [];
   const pushFresh = (list: string[]) => {
-    for (const t of list) {
+    for (const raw of list) {
       if (ordered.length >= want) return;
-      const key = t.toLowerCase();
+      const fitted = localFitPhraseToWordRange(raw, minWords, maxWords);
+      if (!fitted) continue;
+      const key = fitted.toLowerCase();
       if (existing.has(key)) continue;
       if (ordered.some((x) => x.toLowerCase() === key)) continue;
-      ordered.push(t);
+      ordered.push(fitted);
     }
   };
-  pushFresh(localAssistantUsedPhrases());
+  // Most-used speech first; then frequent uncovered words (system TTS until trained).
+  pushFresh(usedRanked);
+  pushFresh(uncoveredSeeds);
   pushFresh(ASSISTANT_COMMON);
   pushFresh(PHRASE_BANK);
+  if (ordered.length < want) {
+    for (const raw of [...usedRanked, ...ASSISTANT_COMMON, ...PHRASE_BANK]) {
+      if (ordered.length >= want) break;
+      const fitted = localFitPhraseToWordRange(
+        `${raw} ${raw}`,
+        minWords,
+        maxWords,
+      );
+      if (!fitted) continue;
+      const key = fitted.toLowerCase();
+      if (existing.has(key)) continue;
+      if (ordered.some((x) => x.toLowerCase() === key)) continue;
+      ordered.push(fitted);
+    }
+  }
 
   const baseMs = Date.now();
   // Stagger created_at so display numbers 1…N stay stable after collapse/refresh.
@@ -279,14 +459,15 @@ export function localGeneratePhrases(
       ...store.projects[pIdx],
       status: "phrases",
       recommendation: rows.length
-        ? `Добавлено ${rows.length} фраз (сначала частые ответы Mira). Запишите аудио.`
-        : "Новых фраз нет. Добавьте свою фразу.",
+        ? `Добавлено ${rows.length} текстов (${minWords}–${maxWords} слов; приоритет частым словам). Непокрытые — системный TTS до записи.`
+        : `Новых текстов на ${minWords}–${maxWords} слов нет. Добавьте свою фразу.`,
       updated_at: now(),
     };
   }
   write(store);
   return rows;
 }
+
 export function localAddPhrase(
   projectId: string,
   text: string,
