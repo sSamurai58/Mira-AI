@@ -7,6 +7,7 @@ import {
   buildVoiceModelPack,
   ensureSlicableWav,
   normalizeLexKey,
+  prunePhraseFromVoicePack,
   readVoiceModelPack,
   tokenizeSpeechWords,
   type LinkedTrainClip,
@@ -1891,6 +1892,105 @@ export function deleteVoicePhrase(phraseId: string): {
     recommendation: `Удалена необученная фраза: ${phrase.text.slice(0, 64)}${phrase.text.length > 64 ? "…" : ""}`,
   });
   return { ok: true, detail: "Фраза удалена", deletedId: phraseId };
+}
+
+const MIN_LINKED_FOR_READY = 3;
+
+/**
+ * «Перезагрузить» for a learned phrase: delete its audio clips, keep the
+ * phrase text in the permanent corpus (`voice_phrases`) so it returns to the
+ * pending / «Необученные» upload queue, and prune orphaned model-pack units.
+ */
+export function resetVoicePhraseAudio(phraseId: string): {
+  ok: boolean;
+  detail: string;
+  phraseId: string | null;
+  projectId: string | null;
+  deletedClips: number;
+  needsRebuild: boolean;
+} {
+  const store = openStore();
+  const phrase = store
+    .prepare(
+      `SELECT id, project_id, text, recorded
+       FROM voice_phrases WHERE id = ?`,
+    )
+    .get(phraseId) as
+    | { id: string; project_id: string; text: string; recorded: number }
+    | undefined;
+  if (!phrase) {
+    return {
+      ok: false,
+      detail: "Фраза не найдена",
+      phraseId: null,
+      projectId: null,
+      deletedClips: 0,
+      needsRebuild: false,
+    };
+  }
+
+  const clips = store
+    .prepare(
+      `SELECT id, file_path FROM voice_clips WHERE phrase_id = ?`,
+    )
+    .all(phraseId) as Array<{ id: string; file_path: string }>;
+
+  for (const clip of clips) {
+    try {
+      if (clip.file_path && fs.existsSync(clip.file_path)) {
+        fs.unlinkSync(clip.file_path);
+      }
+    } catch {
+      // best-effort file cleanup
+    }
+  }
+  store.prepare(`DELETE FROM voice_clips WHERE phrase_id = ?`).run(phraseId);
+  store
+    .prepare(`UPDATE voice_phrases SET recorded = 0 WHERE id = ?`)
+    .run(phraseId);
+
+  const packDir = studioRoot(phrase.project_id, "model-pack");
+  const pruned = prunePhraseFromVoicePack(packDir, phraseId);
+  const project = getVoiceProject(phrase.project_id);
+  const hadModel = Boolean(project?.custom_voice_id) || pruned.removedUnits > 0;
+
+  const linkedLeft = store
+    .prepare(
+      `SELECT COUNT(*) AS c FROM voice_clips
+       WHERE project_id = ? AND accepted = 1 AND phrase_id IS NOT NULL`,
+    )
+    .get(phrase.project_id) as { c: number };
+
+  const preview =
+    phrase.text.length > 48
+      ? `${phrase.text.slice(0, 47)}…`
+      : phrase.text;
+  const needsRebuild = hadModel;
+  const status =
+    linkedLeft.c >= MIN_LINKED_FOR_READY
+      ? hadModel
+        ? "ready_partial"
+        : "ready_to_train"
+      : linkedLeft.c > 0
+        ? "collecting"
+        : "phrases";
+  const detail = needsRebuild
+    ? `Аудио сброшено · «${preview}» снова в текстах для загрузки. Запишите новое аудио, затем «Полная пересборка».`
+    : `Аудио сброшено · «${preview}» снова в текстах для загрузки.`;
+
+  touchProject(phrase.project_id, {
+    status,
+    recommendation: detail,
+  });
+
+  return {
+    ok: true,
+    detail,
+    phraseId: phrase.id,
+    projectId: phrase.project_id,
+    deletedClips: clips.length,
+    needsRebuild,
+  };
 }
 
 export function getStudioSnapshot(projectId?: string) {

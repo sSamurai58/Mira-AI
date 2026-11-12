@@ -671,6 +671,98 @@ export function localDeletePhrase(phraseId: string): {
   return { ok: true, detail: "Фраза удалена", deletedId: phraseId };
 }
 
+/** Clear clip audio; keep phrase text in corpus for re-upload (browser-demo). */
+export function localResetVoicePhraseAudio(phraseId: string): {
+  ok: boolean;
+  detail: string;
+  phraseId: string | null;
+  projectId: string | null;
+  deletedClips: number;
+  needsRebuild: boolean;
+} {
+  const store = read();
+  const phrase = store.phrases.find((p) => p.id === phraseId);
+  if (!phrase) {
+    return {
+      ok: false,
+      detail: "Фраза не найдена",
+      phraseId: null,
+      projectId: null,
+      deletedClips: 0,
+      needsRebuild: false,
+    };
+  }
+  const before = store.clips.length;
+  store.clips = store.clips.filter((c) => c.phrase_id !== phraseId);
+  const deletedClips = before - store.clips.length;
+  phrase.recorded = 0;
+
+  const pIdx = store.projects.findIndex((p) => p.id === phrase.project_id);
+  const project = pIdx >= 0 ? store.projects[pIdx] : null;
+  const linkedLeft = store.clips.filter(
+    (c) =>
+      c.project_id === phrase.project_id && c.accepted && c.phrase_id,
+  ).length;
+  const hadModel = Boolean(project?.custom_voice_id);
+  const preview =
+    phrase.text.length > 48
+      ? `${phrase.text.slice(0, 47)}…`
+      : phrase.text;
+  const needsRebuild = hadModel;
+  const detail = needsRebuild
+    ? `Аудио сброшено · «${preview}» снова в текстах для загрузки. Запишите новое аудио, затем «Полная пересборка».`
+    : `Аудио сброшено · «${preview}» снова в текстах для загрузки.`;
+  if (project) {
+    store.projects[pIdx] = {
+      ...project,
+      status:
+        linkedLeft >= 3
+          ? hadModel
+            ? "ready_partial"
+            : "ready_to_train"
+          : linkedLeft > 0
+            ? "collecting"
+            : "phrases",
+      recommendation: detail,
+      updated_at: now(),
+    };
+  }
+  // Drop demo voice units for this phrase so catalog TTS stays consistent.
+  if (project?.custom_voice_id) {
+    const vIdx = store.customVoices.findIndex(
+      (v) => v.id === project.custom_voice_id,
+    );
+    if (vIdx >= 0) {
+      const voice = store.customVoices[vIdx];
+      let meta: { units?: Array<{ phraseId?: string }> } = {};
+      try {
+        meta = voice.meta_json
+          ? (JSON.parse(voice.meta_json) as typeof meta)
+          : {};
+      } catch {
+        meta = {};
+      }
+      if (Array.isArray(meta.units)) {
+        meta.units = meta.units.filter((u) => u.phraseId !== phraseId);
+        store.customVoices[vIdx] = {
+          ...voice,
+          meta_json: JSON.stringify(meta),
+          updated_at: now(),
+        };
+      }
+    }
+  }
+  write(store);
+  return {
+    ok: true,
+    detail,
+    phraseId: phrase.id,
+    projectId: phrase.project_id,
+    deletedClips,
+    needsRebuild,
+  };
+}
+
 const MIN_TRAIN_CLIPS = 3;
 const TARGET_TRAIN_CLIPS = 5;
 

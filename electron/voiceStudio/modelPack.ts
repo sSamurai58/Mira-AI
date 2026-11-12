@@ -772,3 +772,78 @@ export function readVoiceModelPack(packDir: string): VoiceModelPack | null {
     return null;
   }
 }
+
+function rewriteLexiconStats(pack: VoiceModelPack): void {
+  const keys = Object.keys(pack.lexicon ?? {});
+  pack.lexiconSize = keys.length;
+  let audio = 0;
+  let provisional = 0;
+  for (const key of keys) {
+    const entries = pack.lexicon[key] ?? [];
+    if (entries.some((e) => !e.provisional && e.file)) audio += 1;
+    else provisional += 1;
+  }
+  pack.audioLexiconSize = audio;
+  pack.provisionalLexiconSize = provisional;
+}
+
+/**
+ * Drop phrase/word/fragment units for one source phrase so TTS does not keep
+ * orphaned audio after the user clears that phrase's clips. Writes pack JSON.
+ */
+export function prunePhraseFromVoicePack(
+  packDir: string,
+  phraseId: string,
+): { removedUnits: number; pack: VoiceModelPack | null } {
+  const pack = readVoiceModelPack(packDir);
+  if (!pack) return { removedUnits: 0, pack: null };
+
+  const keepUnits: VoicePackUnit[] = [];
+  const removedFiles = new Set<string>();
+  let removedUnits = 0;
+  for (const unit of pack.units) {
+    if (unit.sourcePhraseId !== phraseId) {
+      keepUnits.push(unit);
+      continue;
+    }
+    removedUnits += 1;
+    if (unit.file && unit.file.startsWith(packDir)) {
+      removedFiles.add(unit.file);
+    }
+  }
+  if (removedUnits === 0) return { removedUnits: 0, pack };
+
+  pack.units = keepUnits;
+  pack.phrases = (pack.phrases ?? []).filter((p) => p.id !== phraseId);
+
+  const nextLexicon: Record<string, VoicePackLexiconEntry[]> = {};
+  for (const [key, entries] of Object.entries(pack.lexicon ?? {})) {
+    const kept = entries.filter((e) => e.sourcePhraseId !== phraseId);
+    if (kept.length) nextLexicon[key] = kept;
+  }
+  pack.lexicon = nextLexicon;
+  rewriteLexiconStats(pack);
+
+  pack.wordUnitCount = keepUnits.filter((u) => u.kind === "word").length;
+  pack.fragmentUnitCount = keepUnits.filter((u) => u.kind === "fragment").length;
+  pack.linkedAccepted = pack.phrases.length;
+  // phraseCount stays as corpus size from last train; full rebuild refreshes it.
+
+  for (const file of removedFiles) {
+    // Keep files still referenced by remaining units (shared paths).
+    const stillUsed = keepUnits.some((u) => u.file === file);
+    if (stillUsed) continue;
+    try {
+      if (fs.existsSync(file)) fs.unlinkSync(file);
+    } catch {
+      // best-effort
+    }
+  }
+
+  fs.writeFileSync(
+    path.join(packDir, "model-pack.json"),
+    JSON.stringify(pack, null, 2),
+    "utf8",
+  );
+  return { removedUnits, pack };
+}

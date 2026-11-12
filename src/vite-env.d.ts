@@ -683,6 +683,14 @@ interface MiraBridge {
     detail: string;
     deletedId: string | null;
   }>;
+  resetVoicePhraseAudio: (phraseId: string) => Promise<{
+    ok: boolean;
+    detail: string;
+    phraseId: string | null;
+    projectId: string | null;
+    deletedClips: number;
+    needsRebuild: boolean;
+  }>;
   trainVoiceModel: (projectId: string) => Promise<{
     project: MiraVoiceProject;
     analysis: unknown[];

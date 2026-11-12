@@ -8,6 +8,7 @@ import {
   localDeleteProject,
   localGeneratePhrases,
   localImportClipBytes,
+  localResetVoicePhraseAudio,
   localStudioSnapshot,
   localTrainVoiceModel,
   localUpdateProject,
@@ -584,6 +585,41 @@ export function VoiceStudioPanel(props: {
   function beginReloadPhrase(nextPhraseId: string) {
     setPhraseId(nextPhraseId);
     setNote("Перезагрузка фразы: запишите mic или загрузите аудио");
+  }
+
+  /**
+   * Learned-phrase «Перезагрузить»: delete clip audio, keep text in
+   * `voice_phrases` (pending / Необученные queue), leave «Обученные».
+   */
+  async function resetLearnedPhrase(target: MiraVoicePhrase) {
+    if (!project) return;
+    const preview = phraseTextPreview(target.text, 48);
+    if (
+      !window.confirm(
+        `Сбросить аудио для «${preview}»?\nТекст вернётся в необученные для новой загрузки; из «Обученные» фраза пропадёт.`,
+      )
+    ) {
+      return;
+    }
+    stopPhraseAudio();
+    setBusy("reset-phrase");
+    try {
+      const res = electron
+        ? await window.mira!.resetVoicePhraseAudio(target.id)
+        : localResetVoicePhraseAudio(target.id);
+      if (!res.ok) {
+        setNote(res.detail);
+        return;
+      }
+      setPhraseId(target.id);
+      setNote(res.detail);
+      await refresh(project.id);
+      props.onCatalogChanged?.();
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+    }
   }
 
   function closeTrainedPanel() {
@@ -1288,6 +1324,11 @@ export function VoiceStudioPanel(props: {
                   {learnedPhrases.length} в модели · номера из корпуса 1…
                   {phrases.length || "N"} · {corpusReadyLabel}
                 </p>
+                <p className="muted" style={{ margin: "0.35rem 0 0" }}>
+                  «Перезагрузить» удаляет аудио, возвращает текст в необученные
+                  для новой загрузки и убирает фразу отсюда. После новой записи
+                  нажмите «Полная пересборка».
+                </p>
               </div>
               <button
                 type="button"
@@ -1313,13 +1354,9 @@ export function VoiceStudioPanel(props: {
               ) : (
                 learnedPhrases.map((p) => {
                   const clip = bestClipForPhrase(p.id);
-                  const activeReload = phraseId === p.id;
                   const n = phraseDisplayNo(phrases, p.id);
                   return (
-                    <div
-                      key={p.id}
-                      className={`voice-phrase-row${activeReload ? " is-active" : ""}`}
-                    >
+                    <div key={p.id} className="voice-phrase-row">
                       <div className="voice-phrase-row-main muted mono">
                         <span>
                           {n}. {p.recorded ? "✓" : "○"} {p.text}
@@ -1346,11 +1383,12 @@ export function VoiceStudioPanel(props: {
                         </button>
                         <button
                           type="button"
-                          className={`btn${activeReload ? " btn-primary" : ""}`}
-                          disabled={Boolean(busy) && !recording}
-                          onClick={() => beginReloadPhrase(p.id)}
+                          className="btn"
+                          disabled={Boolean(busy)}
+                          title="Удалить аудио и вернуть текст в необученные"
+                          onClick={() => void resetLearnedPhrase(p)}
                         >
-                          {activeReload ? "Выбрана" : "Перезагрузить"}
+                          Перезагрузить
                         </button>
                       </div>
                     </div>

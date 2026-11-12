@@ -93,6 +93,7 @@ import {
   importClipBytes,
   listCustomVoices,
   listVoiceProjects,
+  resetVoicePhraseAudio,
   trainVoiceModel,
   updateCustomVoice,
   updateVoiceProject,
@@ -763,6 +764,10 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
   on(
     "mira:delete-voice-phrase",
     (_e, phraseId: string) => deleteVoicePhrase(phraseId),
+  );
+  on(
+    "mira:reset-voice-phrase-audio",
+    (_e, phraseId: string) => resetVoicePhraseAudio(phraseId),
   );
   on("mira:train-voice-model", (_e, projectId: string) =>
     trainVoiceModel(projectId, (ev) => {

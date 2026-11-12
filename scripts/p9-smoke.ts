@@ -16,8 +16,10 @@ import {
   getCustomVoiceCorpus,
   getStudioSnapshot,
   importClip,
+  listClips,
   listCustomVoices,
   listPhrases,
+  resetVoicePhraseAudio,
   trainVoiceModel,
 } from "../electron/voiceStudio/studio";
 import {
@@ -532,9 +534,41 @@ async function main() {
     "trained voice corpus should expose accepted phrase clips",
   );
 
+  // «Перезагрузить»: drop audio, keep phrase text in corpus, prune pack units.
+  const reloadTarget = phrases[0]!;
+  const clipsBeforeReload = listClips(project.id).filter(
+    (c) => c.phrase_id === reloadTarget.id,
+  ).length;
+  assert.ok(clipsBeforeReload >= 1, "reload target should have linked clips");
+  const unitsBeforeReload = corpus.units.filter(
+    (u) => u.phraseId === reloadTarget.id,
+  ).length;
+  assert.ok(unitsBeforeReload >= 1, "pack/corpus should expose reload target");
+  const reset = resetVoicePhraseAudio(reloadTarget.id);
+  assert.equal(reset.ok, true, reset.detail);
+  assert.equal(reset.phraseId, reloadTarget.id);
+  assert.ok(reset.deletedClips >= 1);
+  assert.equal(reset.needsRebuild, true);
+  const afterReload = listPhrases(project.id).find(
+    (p) => p.id === reloadTarget.id,
+  );
+  assert.ok(afterReload, "phrase text must stay in permanent corpus");
+  assert.equal(afterReload!.recorded, 0, "phrase should be unrecorded");
+  assert.equal(
+    listClips(project.id).some((c) => c.phrase_id === reloadTarget.id),
+    false,
+    "clips for reloaded phrase must be gone",
+  );
+  const corpusAfterReload = getCustomVoiceCorpus(trained.voice!.id);
+  assert.equal(
+    corpusAfterReload.units.some((u) => u.phraseId === reloadTarget.id),
+    false,
+    "model pack / corpus must not keep orphaned units for reloaded phrase",
+  );
+
   const snap = getStudioSnapshot(project.id);
   assert.ok(snap.phrases.length >= 6);
-  assert.ok(snap.clips.length >= 3);
+  assert.ok(snap.clips.length >= 2);
   assert.ok(snap.project?.recommendation);
 
   // path allowlist
