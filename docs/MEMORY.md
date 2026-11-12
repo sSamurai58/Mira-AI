@@ -13,7 +13,7 @@
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
 | Дорожная карта | Must + future F* закрыты (partial→done stubs where noted) |
 
-**Сейчас:** **0.1.4 released** (MCP catalog UI + Voice Studio fixes). Next: MCP runtime/OAuth when commanded.
+**Сейчас:** **0.1.5 WIP** (ветка `cursor/release-0-1-5-6838`). База = tip 0.1.4. **Не публиковать** GitHub Release/`v0.1.5`, пока явно не скажут «релиз 0.1.5».
 
 
 ## Решения
