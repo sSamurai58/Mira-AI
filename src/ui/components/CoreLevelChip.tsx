@@ -45,7 +45,9 @@ export function CoreLevelChip({ level, progressPct }: CoreLevelChipProps) {
       </div>
       <div className="core-level-copy">
         <strong>Уровень ядра</strong>
-        <span>1…∞ · растёт с Мирой</span>
+        <span>
+          →{level + 1} · {Math.round(clamped)}% · диалоги и обучение
+        </span>
       </div>
     </div>
   );

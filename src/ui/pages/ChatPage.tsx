@@ -21,6 +21,7 @@ import { CoreOrb } from "../components/CoreOrb";
 import { HomeRail } from "../components/HomeRail";
 import { HudCorners } from "../components/HudCorners";
 import { ThemeSelect } from "../components/ThemeSelect";
+import { notifyCoreProgress } from "../coreLevel";
 import {
   localImportLibraryBytes,
   localImportLibraryText,
@@ -53,6 +54,8 @@ type ChatPageProps = {
   onVoiceState: (state: VoiceState) => void;
   autoSpeak: boolean;
   coreLevel?: number;
+  /** 0…100 toward next core level (home orb caption). */
+  coreProgressPct?: number;
 };
 
 type Bubble = {
@@ -74,6 +77,7 @@ export function ChatPage({
   onVoiceState,
   autoSpeak,
   coreLevel = 1,
+  coreProgressPct = 0,
 }: ChatPageProps) {
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const [input, setInput] = useState("");
@@ -205,6 +209,7 @@ export function ChatPage({
         /* skip bad file */
       }
     }
+    if (titles.length) notifyCoreProgress();
     return titles.length
       ? `Добавлено в обучение (demo): ${titles.join(", ")}. Workshop → Обучение → Разобрать.`
       : null;
@@ -595,7 +600,7 @@ export function ChatPage({
         setBusy(false);
         requestIdRef.current = null;
         speakAssistant(event.utterance.content);
-        window.dispatchEvent(new Event("mira:core-progress"));
+        notifyCoreProgress();
       }
 
       if (event.type === "error") {
@@ -881,7 +886,9 @@ export function ChatPage({
                   </div>
                 </div>
                 <p className="core-level-caption muted">
-                  Уровень ядра {coreLevel} · без потолка · растёт с Мирой
+                  Уровень ядра {coreLevel} ·{" "}
+                  {Math.round(Math.min(100, Math.max(0, coreProgressPct)))}% до{" "}
+                  {coreLevel + 1} · растёт с диалогами и обучением
                 </p>
               </div>
 

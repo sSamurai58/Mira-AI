@@ -9,6 +9,7 @@ import {
   setLocalProtocolEnabled,
   setLocalSkillEnabled,
 } from "../catalogLocal";
+import { notifyCoreProgress } from "../coreLevel";
 import { useAppConfirm } from "../components/AppConfirm";
 import { AutoGrowTextarea } from "../components/AutoGrowTextarea";
 import {
@@ -283,6 +284,7 @@ export function WorkshopPage() {
     }
     await refreshCatalogs();
     setNote(`Сохранён skill ${payload.id}`);
+    notifyCoreProgress();
     emitActionLog({
       title: "Skill сохранён",
       reason: `${payload.id} · ${payload.name}`,
@@ -309,6 +311,7 @@ export function WorkshopPage() {
     }
     await refreshCatalogs();
     setNote(`Сохранён протокол ${payload.id}`);
+    notifyCoreProgress();
   }
 
   function editSkill(item: CatalogItem) {
@@ -615,7 +618,10 @@ export function WorkshopPage() {
         <div className="stack">
           <VoiceStudioPanel
             focusProjectId={focusVoiceProjectId}
-            onCatalogChanged={() => void refreshVoices()}
+            onCatalogChanged={() => {
+              void refreshVoices();
+              notifyCoreProgress();
+            }}
           />
           <div className="panel stack">
             <div className="row">

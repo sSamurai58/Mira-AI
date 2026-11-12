@@ -1,5 +1,6 @@
 import { emitActionLog } from "../actionLog";
 import { useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
+import { notifyCoreProgress } from "../coreLevel";
 import {
   localDeleteLibraryItem,
   localGetLearnPlan,
@@ -94,6 +95,7 @@ export function LibraryPanel() {
       });
       await refresh();
       await selectItem(item.id);
+      notifyCoreProgress();
     } finally {
       setBusy(null);
     }
@@ -153,6 +155,7 @@ export function LibraryPanel() {
       }
       setNote(`Добавлено в обучение: ${names.join(", ")}`);
       await refresh();
+      if (names.length) notifyCoreProgress();
     } catch (err) {
       setNote(err instanceof Error ? err.message : String(err));
     } finally {
@@ -177,6 +180,7 @@ export function LibraryPanel() {
       }
       await refresh();
       await selectItem(activeId);
+      notifyCoreProgress();
     } catch (err) {
       setNote(err instanceof Error ? err.message : String(err));
     } finally {
@@ -185,7 +189,11 @@ export function LibraryPanel() {
   }
 
   async function proposeSkill() {
-    if (!window.mira || !activeId) {
+    if (!activeId) {
+      setNote("Предложить skill доступно в Electron.");
+      return;
+    }
+    if (!window.mira) {
       setNote("Предложить skill доступно в Electron.");
       return;
     }
@@ -194,6 +202,7 @@ export function LibraryPanel() {
       const res = await window.mira.proposeLibrarySkill(activeId);
       setNote(`${res.ok ? "OK" : "FAIL"} — ${res.detail}`);
       await refresh();
+      if (res.ok) notifyCoreProgress();
     } finally {
       setBusy(null);
     }

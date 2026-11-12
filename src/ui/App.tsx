@@ -24,7 +24,7 @@ import {
 } from "./backgrounds";
 import { CoreLevelChip } from "./components/CoreLevelChip";
 import {
-  computeCoreXp,
+  CORE_PROGRESS_EVENT,
   coreLevelRingPct,
   loadCoreLevel,
   syncCoreLevelFromProgress,
@@ -234,8 +234,7 @@ export function App() {
       customVoices: health.customVoices,
       browserVisits: health.browserVisits,
     };
-    const xp = computeCoreXp(signals);
-    const nextLevel = syncCoreLevelFromProgress(signals);
+    const { level: nextLevel, xp } = syncCoreLevelFromProgress(signals);
     setCoreXp(xp);
     setCoreLevel((prev) => (prev === nextLevel ? prev : nextLevel));
   }, []);
@@ -284,11 +283,11 @@ export function App() {
     const onProgress = () => {
       void refreshCoreLevel();
     };
-    window.addEventListener("mira:core-progress", onProgress);
+    window.addEventListener(CORE_PROGRESS_EVENT, onProgress);
     window.addEventListener("focus", onProgress);
-    const id = window.setInterval(onProgress, 20_000);
+    const id = window.setInterval(onProgress, 12_000);
     return () => {
-      window.removeEventListener("mira:core-progress", onProgress);
+      window.removeEventListener(CORE_PROGRESS_EVENT, onProgress);
       window.removeEventListener("focus", onProgress);
       window.clearInterval(id);
     };
@@ -428,6 +427,7 @@ export function App() {
                 onVoiceState={setVoiceState}
                 autoSpeak={autoSpeak}
                 coreLevel={coreLevel}
+                coreProgressPct={levelPct}
               />
             ) : null}
             {nav === "memory" ? (
