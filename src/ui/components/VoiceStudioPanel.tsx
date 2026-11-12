@@ -759,7 +759,9 @@ export function VoiceStudioPanel(props: {
       </div>
 
       {projects.length > 0 ? (
-        <label className="stack" style={{ gap: "0.25rem" }}>
+        // div, not label: ThemeSelect buttons break when wrapped in <label>
+        // (browser re-clicks the trigger → menu re-opens after select / won't close).
+        <div className="stack" style={{ gap: "0.25rem" }}>
           <span className="muted">Проект модели</span>
           <ThemeSelect
             aria-label="Проект голоса"
@@ -774,7 +776,7 @@ export function VoiceStudioPanel(props: {
               void refresh(id);
             }}
           />
-        </label>
+        </div>
       ) : null}
 
       {project ? (
@@ -1114,7 +1116,7 @@ export function VoiceStudioPanel(props: {
               </button>
             </div>
 
-            <label className="stack" style={{ gap: "0.25rem" }}>
+            <div className="stack" style={{ gap: "0.25rem" }}>
               <span className="muted">Фраза для привязки аудио</span>
               <ThemeSelect
                 aria-label="Фраза для привязки аудио"
@@ -1129,7 +1131,7 @@ export function VoiceStudioPanel(props: {
                 ]}
                 onChange={setPhraseId}
               />
-            </label>
+            </div>
 
             <div className="row" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
               {electron ? (
