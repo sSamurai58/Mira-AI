@@ -79,6 +79,11 @@ export function VoiceStudioPanel(props: {
   const [recording, setRecording] = useState(false);
   const [phrasesOpen, setPhrasesOpen] = useState(false);
   const [playingPhraseId, setPlayingPhraseId] = useState<string | null>(null);
+  const [trainProgress, setTrainProgress] = useState<{
+    step: string;
+    pct: number;
+    label: string;
+  } | null>(null);
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -215,12 +220,37 @@ export function VoiceStudioPanel(props: {
   async function trainModel() {
     if (!project) return;
     setBusy("train");
+    setTrainProgress({
+      step: "validate",
+      pct: 2,
+      label: "Старт обучения модели…",
+    });
+    const unsub = electron
+      ? window.mira?.onVoiceTrainProgress?.((ev) => {
+          if (ev.projectId !== project.id) return;
+          setTrainProgress({
+            step: ev.step,
+            pct: ev.pct,
+            label: ev.label,
+          });
+        })
+      : undefined;
     try {
       const res = electron
         ? await window.mira!.trainVoiceModel(project.id)
-        : localTrainVoiceModel(project.id);
+        : await localTrainVoiceModel(project.id, (ev) => {
+            setTrainProgress({
+              step: ev.step,
+              pct: ev.pct,
+              label: ev.label,
+            });
+          });
+      const words =
+        res.report.wordUnitCount != null
+          ? ` · слов ${res.report.wordUnitCount}`
+          : "";
       setNote(
-        `${res.report.ok ? "OK" : "FAIL"} · ${res.report.detail} · аудио ${res.report.acceptedClips}, покрытие ${res.report.coveragePct}%`,
+        `${res.report.ok ? "OK" : "FAIL"} · ${res.report.detail} · аудио ${res.report.acceptedClips}, покрытие ${res.report.coveragePct}%${words}`,
       );
       if (res.voice) {
         setActiveVoiceId(res.voice.id);
@@ -230,7 +260,9 @@ export function VoiceStudioPanel(props: {
     } catch (err) {
       setNote(err instanceof Error ? err.message : String(err));
     } finally {
+      unsub?.();
       setBusy(null);
+      setTrainProgress(null);
     }
   }
 
@@ -482,9 +514,12 @@ export function VoiceStudioPanel(props: {
           (удобно называть файлы 1.wav, 2.wav…).
         </li>
         <li>
-          Когда набрано ≥3 принятых записей — нажмите «Обучить модель».
+          Когда набрано ≥3 принятых записей — запустите обучение модели
+          (валидация → сегментация → лексикон → пакет → каталог).
         </li>
-        <li>Голос попадает в каталог; можно донабрать корпус и переобучить.</li>
+        <li>
+          После обучения голос в каталоге; донабирайте корпус и переобучайте.
+        </li>
       </ol>
 
       <div className="row" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
@@ -575,16 +610,47 @@ export function VoiceStudioPanel(props: {
                 onClick={() => void trainModel()}
                 title={
                   canTrain
-                    ? "QA аудио → сборка корпуса → публикация в каталог"
+                    ? "Валидация → сегментация → лексикон → model-pack → каталог"
                     : "Нужно ≥1 фраза и ≥3 принятых записей, привязанных к фразам"
                 }
               >
                 {busy === "train"
-                  ? "Обучение…"
+                  ? trainProgress
+                    ? `Обучение ${trainProgress.pct}%`
+                    : "Обучение…"
                   : project.custom_voice_id
                     ? "Переобучить модель"
                     : "Обучить модель"}
               </button>
+              {busy === "train" && trainProgress ? (
+                <div
+                  className="muted"
+                  style={{ flex: "1 1 100%", fontSize: "0.9rem" }}
+                  aria-live="polite"
+                >
+                  <strong>{trainProgress.pct}%</strong>
+                  {` · ${trainProgress.step} · ${trainProgress.label}`}
+                  <div
+                    style={{
+                      marginTop: "0.35rem",
+                      height: "0.35rem",
+                      background:
+                        "color-mix(in oklab, var(--fg) 12%, transparent)",
+                      borderRadius: "999px",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: `${Math.max(2, Math.min(100, trainProgress.pct))}%`,
+                        height: "100%",
+                        background: "var(--accent, #3d8bfd)",
+                        transition: "width 0.25s ease",
+                      }}
+                    />
+                  </div>
+                </div>
+              ) : null}
               <button
                 type="button"
                 className="btn btn-danger"

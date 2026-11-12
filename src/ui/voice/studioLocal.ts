@@ -408,7 +408,15 @@ export function localImportClipBytes(opts: {
   };
 }
 
-export function localTrainVoiceModel(projectId: string): {
+export async function localTrainVoiceModel(
+  projectId: string,
+  onProgress?: (ev: {
+    projectId: string;
+    step: string;
+    pct: number;
+    label: string;
+  }) => void,
+): Promise<{
   project: MiraVoiceProject;
   analysis: unknown[];
   voice: MiraCustomVoice | null;
@@ -420,8 +428,11 @@ export function localTrainVoiceModel(projectId: string): {
     linkedAccepted: number;
     coveragePct: number;
     detail: string;
+    steps?: Array<{ step: string; label: string; pct: number }>;
+    wordUnitCount?: number;
+    fragmentUnitCount?: number;
   };
-} {
+}> {
   const store = read();
   const pIdx = store.projects.findIndex((p) => p.id === projectId);
   if (pIdx < 0) throw new Error("Проект не найден");
@@ -435,6 +446,14 @@ export function localTrainVoiceModel(projectId: string): {
       ? Math.round((linkedAccepted / phrases.length) * 100)
       : 0;
 
+  const steps: Array<{ step: string; label: string; pct: number }> = [];
+  const emit = (step: string, pct: number, label: string) => {
+    steps.push({ step, label, pct });
+    onProgress?.({ projectId, step, pct, label });
+  };
+  const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  emit("validate", 5, "Обучение (browser-demo): проверка клипов…");
   store.projects[pIdx] = {
     ...project,
     status: "training",
@@ -442,10 +461,12 @@ export function localTrainVoiceModel(projectId: string): {
     updated_at: now(),
   };
   write(store);
+  await pause(180 + linkedAccepted * 40);
 
   if (phrases.length < 1) {
     const detail =
       "Обучение невозможно: нет фраз. Сгенерируйте или добавьте фразы 1…N.";
+    emit("error", 100, detail);
     store.projects[pIdx] = {
       ...store.projects[pIdx],
       status: "needs_data",
@@ -465,6 +486,7 @@ export function localTrainVoiceModel(projectId: string): {
         linkedAccepted,
         coveragePct: 0,
         detail,
+        steps,
       },
     };
   }
@@ -472,6 +494,7 @@ export function localTrainVoiceModel(projectId: string): {
   if (acceptedClips.length === 0) {
     const detail =
       "Обучение невозможно: нет принятых клипов. Запишите аудио к фразам 1…N.";
+    emit("error", 100, detail);
     store.projects[pIdx] = {
       ...store.projects[pIdx],
       status: "needs_data",
@@ -491,12 +514,14 @@ export function localTrainVoiceModel(projectId: string): {
         linkedAccepted: 0,
         coveragePct: 0,
         detail,
+        steps,
       },
     };
   }
 
   if (linkedAccepted < MIN_TRAIN_CLIPS) {
     const detail = `Для обучения нужно минимум ${MIN_TRAIN_CLIPS} клипов, привязанных к фразам (сейчас linked=${linkedAccepted}).`;
+    emit("error", 100, detail);
     store.projects[pIdx] = {
       ...store.projects[pIdx],
       status: "ready_to_train",
@@ -516,9 +541,26 @@ export function localTrainVoiceModel(projectId: string): {
         linkedAccepted,
         coveragePct,
         detail,
+        steps,
       },
     };
   }
+
+  emit("segment", 30, `Сегментация ${linkedAccepted} клипов (browser-demo)…`);
+  await pause(220 + linkedAccepted * 55);
+  let wordUnitCount = 0;
+  for (const clip of acceptedClips) {
+    if (!clip.phrase_id) continue;
+    const ph = phrases.find((p) => p.id === clip.phrase_id);
+    if (!ph) continue;
+    wordUnitCount += ph.text.split(/\s+/).filter(Boolean).length;
+  }
+  emit("lexicon", 60, `Лексикон ~${wordUnitCount} слов (browser-demo)…`);
+  await pause(200 + Math.min(800, wordUnitCount * 8));
+  emit("pack", 80, "Сборка model-pack (browser-demo)…");
+  await pause(160);
+  emit("publish", 92, "Публикация в каталог…");
+  await pause(120);
 
   const stamp = now();
   const voiceId =
@@ -531,18 +573,21 @@ export function localTrainVoiceModel(projectId: string): {
         : "draft";
   const preview = acceptedClips[0]?.file_path ?? null;
   let voice = store.customVoices.find((v) => v.id === voiceId) ?? null;
+  const meta = JSON.stringify({
+    engine: "mira-voice-pack-v1",
+    trainedAt: stamp,
+    quality,
+    browserDemo: true,
+    wordUnitCount,
+    unitCount: linkedAccepted + wordUnitCount,
+  });
   if (voice) {
     voice = {
       ...voice,
       name: project.name,
       lang: project.lang,
       preview_path: preview,
-      meta_json: JSON.stringify({
-        engine: "mira-voice-pack-v1",
-        trainedAt: stamp,
-        quality,
-        browserDemo: true,
-      }),
+      meta_json: meta,
       updated_at: stamp,
     };
     store.customVoices = store.customVoices.map((v) =>
@@ -555,12 +600,7 @@ export function localTrainVoiceModel(projectId: string): {
       name: project.name,
       lang: project.lang,
       preview_path: preview,
-      meta_json: JSON.stringify({
-        engine: "mira-voice-pack-v1",
-        trainedAt: stamp,
-        quality,
-        browserDemo: true,
-      }),
+      meta_json: meta,
       created_at: stamp,
       updated_at: stamp,
     };
@@ -570,8 +610,8 @@ export function localTrainVoiceModel(projectId: string): {
   const needMore =
     acceptedClips.length < TARGET_TRAIN_CLIPS || coveragePct < 80;
   const detail = needMore
-    ? `Модель «${project.name}» обучена (${quality}, browser-demo). Для качества добавьте ещё клипы (покрытие ${coveragePct}%).`
-    : `Модель «${project.name}» обучена (${quality}, browser-demo) и в каталоге.`;
+    ? `Модель «${project.name}» обучена (${quality}, browser-demo, ~${wordUnitCount} слов). Для качества добавьте ещё клипы (покрытие ${coveragePct}%).`
+    : `Модель «${project.name}» обучена (${quality}, browser-demo, ~${wordUnitCount} слов) и в каталоге.`;
 
   store.projects[pIdx] = {
     ...project,
@@ -581,11 +621,13 @@ export function localTrainVoiceModel(projectId: string): {
       style: "calm-assistant",
       voiceId,
       trainedQuality: quality,
+      engine: "mira-voice-pack-v1",
     }),
     recommendation: detail,
     updated_at: stamp,
   };
   write(store);
+  emit("done", 100, detail);
   return {
     project: store.projects[pIdx],
     analysis: [],
@@ -598,6 +640,9 @@ export function localTrainVoiceModel(projectId: string): {
       linkedAccepted,
       coveragePct,
       detail,
+      steps,
+      wordUnitCount,
+      fragmentUnitCount: 0,
     },
   };
 }

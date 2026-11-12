@@ -760,12 +760,19 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
     (_e, projectId: string, text: string) => addCustomPhrase(projectId, text),
   );
   on("mira:train-voice-model", (_e, projectId: string) =>
-    trainVoiceModel(projectId),
+    trainVoiceModel(projectId, (ev) => {
+      broadcast("mira:voice-train-progress", ev);
+    }),
   );
   on(
     "mira:generate-voice-phrases",
-    (_e, projectId: string, count?: number) =>
-      generatePhrases(projectId, count ?? 5),
+    (
+      _e,
+      projectId: string,
+      countOrOpts?:
+        | number
+        | { count?: number; minWords?: number; maxWords?: number },
+    ) => generatePhrases(projectId, countOrOpts ?? 5),
   );
   on(
     "mira:import-voice-clip",

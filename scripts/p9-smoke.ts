@@ -78,7 +78,8 @@ async function main() {
       phraseId: null,
     });
   }
-  const trainBlocked = trainVoiceModel(unlinkedProject.id);
+  const progressLog: string[] = [];
+  const trainBlocked = await trainVoiceModel(unlinkedProject.id);
   assert.equal(
     trainBlocked.report.ok,
     false,
@@ -86,13 +87,23 @@ async function main() {
   );
   assert.equal(trainBlocked.voice, null);
 
-  const trained = trainVoiceModel(project.id);
+  const trained = await trainVoiceModel(project.id, (ev) => {
+    progressLog.push(`${ev.step}:${ev.pct}`);
+  });
   assert.ok(trained.report.ok, trained.report.detail);
   assert.ok(trained.voice, "custom voice not built");
   assert.ok(trained.project.custom_voice_id, "project missing custom_voice_id");
   assert.ok(trained.project.llm_profile, "llm profile missing");
   assert.ok(["ready", "ready_partial"].includes(trained.project.status));
   assert.ok(trained.report.linkedAccepted >= 3);
+  assert.ok(
+    (trained.report.steps?.length ?? 0) >= 4,
+    "train should emit multi-step progress",
+  );
+  assert.ok(
+    progressLog.some((s) => s.startsWith("segment:")),
+    "train progress callback should receive segment step",
+  );
   const trainMeta = JSON.parse(trained.voice!.meta_json ?? "{}") as {
     engine?: string;
     packDir?: string;
@@ -109,6 +120,10 @@ async function main() {
     fs.existsSync(path.join(trainMeta.packDir!, "model-pack.json")),
     "model-pack.json should exist after train",
   );
+  assert.ok(
+    (trained.report.wordUnitCount ?? 0) > 0,
+    "report should include word unit count",
+  );
 
   // retrain after another clip keeps stable voice id
   importClip({
@@ -116,7 +131,7 @@ async function main() {
     sourcePath: sample,
     phraseId: phrases[3]?.id,
   });
-  const again = trainVoiceModel(project.id);
+  const again = await trainVoiceModel(project.id);
   assert.equal(
     again.voice?.id,
     trained.voice!.id,
