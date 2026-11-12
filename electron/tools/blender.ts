@@ -25,7 +25,8 @@ export type BlenderJobResult = {
 };
 
 function blenderRoot(...parts: string[]): string {
-  const dir = path.resolve(process.cwd(), "data", "blender", ...parts);
+  const { dataRoot } = require("../appPaths") as typeof import("../appPaths");
+  const dir = dataRoot("blender", ...parts);
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }

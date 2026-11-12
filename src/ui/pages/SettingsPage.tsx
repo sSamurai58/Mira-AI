@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 import { StubBadge } from "../components/StubBadge";
 import { SettingsApiSection } from "../components/SettingsApiSection";
+import { ToggleRow } from "../components/SettingsFormBits";
 import { SettingsIntegrationsSection } from "../components/SettingsIntegrationsSection";
 import { SettingsUpdatesSection } from "../components/SettingsUpdatesSection";
 import { ThemeSelect } from "../components/ThemeSelect";
+import { BG_PATTERNS, type BgPatternId } from "../backgrounds";
 import { THEMES, type ThemeId } from "../themes";
 import {
   getActiveVoiceId,
+  listCatalogVoices,
   setActiveVoiceId,
-  waitForVoices,
 } from "../voice/catalog";
 import { getVoiceEngineStatus } from "../voice/engineStatus";
 import {
@@ -43,6 +46,8 @@ type SectionId = (typeof SECTIONS)[number]["id"];
 type SettingsPageProps = {
   themeId: ThemeId;
   onThemeChange: (id: ThemeId) => void;
+  bgPatternId: BgPatternId;
+  onBgPatternChange: (id: BgPatternId) => void;
   healthText: string;
   onOpenDoctor?: () => void;
 };
@@ -50,6 +55,8 @@ type SettingsPageProps = {
 export function SettingsPage({
   themeId,
   onThemeChange,
+  bgPatternId,
+  onBgPatternChange,
   healthText,
   onOpenDoctor,
 }: SettingsPageProps) {
@@ -79,7 +86,7 @@ export function SettingsPage({
 
   useEffect(() => {
     let cancelled = false;
-    void waitForVoices().then((list) => {
+    void listCatalogVoices().then((list) => {
       if (cancelled) return;
       setVoices(list);
       setActiveVoiceIdState(getActiveVoiceId(list));
@@ -108,14 +115,16 @@ export function SettingsPage({
 
       <div className="panel stack">
         {section === "appearance" ? (
-          <>
-            <div className="row">
-              <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Темы</h2>
-              <StubBadge label="DESIGN" />
-            </div>
-            <p className="muted" style={{ margin: 0 }}>
-              Акцент зашит в тему. Default — Deep Sea Neon.
-            </p>
+          <div className="appearance-stack">
+            <header className="appearance-block-head">
+              <div className="row">
+                <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Темы</h2>
+                <StubBadge label="DESIGN" />
+              </div>
+              <p className="muted" style={{ margin: 0 }}>
+                Акцент зашит в тему. Default — Deep Sea Neon.
+              </p>
+            </header>
             <div className="theme-grid">
               {THEMES.map((theme) => (
                 <button
@@ -123,27 +132,64 @@ export function SettingsPage({
                   type="button"
                   className={`theme-card ${themeId === theme.id ? "active" : ""}`}
                   onClick={() => onThemeChange(theme.id)}
+                  aria-pressed={themeId === theme.id}
                 >
-                  <strong>{theme.name}</strong>
-                  <div className="swatches">
-                    <span
-                      className="swatch"
-                      style={{ background: theme.tokens.bg }}
-                    />
-                    <span
-                      className="swatch"
-                      style={{ background: theme.tokens.bgElevated }}
-                    />
-                    <span
-                      className="swatch"
-                      style={{ background: theme.tokens.accent }}
-                    />
-                  </div>
-                  <span className="mono muted">{theme.id}</span>
+                  <span
+                    className="theme-card-ribbon"
+                    aria-hidden
+                    style={{
+                      background: `linear-gradient(90deg, ${theme.tokens.bg} 0 34%, ${theme.tokens.bgElevated} 34% 68%, ${theme.tokens.accent} 68% 100%)`,
+                    }}
+                  />
+                  <span className="theme-card-body">
+                    <strong>{theme.name}</strong>
+                    <span className="mono muted">{theme.id}</span>
+                  </span>
+                  {themeId === theme.id ? (
+                    <span className="appearance-check" aria-hidden>
+                      ✓
+                    </span>
+                  ) : null}
                 </button>
               ))}
             </div>
-          </>
+
+            <header className="appearance-block-head">
+              <div className="row">
+                <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Фон · узор</h2>
+                <StubBadge label="STATIC" />
+              </div>
+              <p className="muted" style={{ margin: 0 }}>
+                Статичный паттерн без свечений. Чернила из цвета темы.
+              </p>
+            </header>
+            <div className="bg-pattern-grid">
+              {BG_PATTERNS.map((pat) => (
+                <button
+                  key={pat.id}
+                  type="button"
+                  className={`bg-pattern-card ${bgPatternId === pat.id ? "active" : ""}`}
+                  onClick={() => onBgPatternChange(pat.id)}
+                  aria-pressed={bgPatternId === pat.id}
+                >
+                  <span
+                    className="bg-pattern-preview"
+                    data-bg-preview={pat.id}
+                    aria-hidden
+                  />
+                  <span className="bg-pattern-meta">
+                    <strong>{pat.label}</strong>
+                    <span className="mono muted">{pat.id}</span>
+                  </span>
+                  {bgPatternId === pat.id ? (
+                    <span className="appearance-check" aria-hidden>
+                      ✓
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+          </div>
         ) : null}
 
         {section === "general" ? <GeneralSection /> : null}
@@ -174,43 +220,31 @@ export function SettingsPage({
             <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
               {listTtsEngines().find((e) => e.id === ttsEngine)?.detail}
             </p>
-            <label className="row">
-              <input
-                type="checkbox"
-                checked={autoSpeak}
-                onChange={(e) => {
-                  const on = e.target.checked;
-                  setAutoSpeak(on);
-                  localStorage.setItem("mira.autoSpeak", on ? "1" : "0");
-                }}
-              />
-              <span>Автоозвучка ответов</span>
-            </label>
-
-            <label className="row">
-              <input
-                type="checkbox"
-                checked={handsFree.enabled}
-                onChange={(e) =>
-                  setHandsFree(
-                    setHandsFreePrefs({ enabled: e.target.checked }),
-                  )
-                }
-              />
-              <span>Hands-free (wake-word без PTT)</span>
-            </label>
-            <label className="row">
-              <input
-                type="checkbox"
-                checked={handsFree.bargeIn}
-                onChange={(e) =>
-                  setHandsFree(
-                    setHandsFreePrefs({ bargeIn: e.target.checked }),
-                  )
-                }
-              />
-              <span>Barge-in: перебить озвучку → сразу слушать (Space)</span>
-            </label>
+            <ToggleRow
+              label="Автоозвучка ответов"
+              hint="Озвучивать ответы Миры автоматически"
+              checked={autoSpeak}
+              onChange={(on) => {
+                setAutoSpeak(on);
+                localStorage.setItem("mira.autoSpeak", on ? "1" : "0");
+              }}
+            />
+            <ToggleRow
+              label="Hands-free (wake-word без PTT)"
+              hint="Слушать wake-фразу в idle без удержания кнопки"
+              checked={handsFree.enabled}
+              onChange={(on) =>
+                setHandsFree(setHandsFreePrefs({ enabled: on }))
+              }
+            />
+            <ToggleRow
+              label="Barge-in"
+              hint="Перебить озвучку → сразу слушать (Space)"
+              checked={handsFree.bargeIn}
+              onChange={(on) =>
+                setHandsFree(setHandsFreePrefs({ bargeIn: on }))
+              }
+            />
             <label className="stack">
               <span className="muted">Wake-фраза</span>
               <input
@@ -268,6 +302,13 @@ export function SettingsPage({
                     speakText(
                       "Проверка голоса Mira. Звучу ли я достаточно естественно?",
                       activeVoiceId,
+                      {
+                        preferPreview: true,
+                        onStatus: (msg) => {
+                          // Surface studio vs system path for the listen check.
+                          console.info("[mira.tts]", msg);
+                        },
+                      },
                     )
                   }
                 >
@@ -281,7 +322,11 @@ export function SettingsPage({
           </>
         ) : null}
         {section === "api" ? <SettingsApiSection /> : null}
-        {section === "integrations" ? <SettingsIntegrationsSection /> : null}
+        {section === "integrations" ? (
+          <ErrorBoundary fallbackTitle="Интеграции сбойнули">
+            <SettingsIntegrationsSection />
+          </ErrorBoundary>
+        ) : null}
         {section === "terminal" ? <TerminalSettingsSection /> : null}
         {section === "data" ? (
           <DataPrivacySection

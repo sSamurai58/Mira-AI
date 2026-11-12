@@ -1,4 +1,6 @@
 const LS_KEY = "mira_env_settings";
+/** Browser-demo secrets live in sessionStorage (tab-scoped), not localStorage. */
+const SS_SECRETS_KEY = "mira_env_secrets";
 
 export const SETTINGS_SECRET_KEYS = new Set([
   "OPENAI_API_KEY",
@@ -7,6 +9,17 @@ export const SETTINGS_SECRET_KEYS = new Set([
   "XAI_API_KEY",
   "TELEGRAM_BOT_TOKEN",
 ]);
+
+let saveQueue: Promise<unknown> = Promise.resolve();
+
+function enqueueSave<T>(fn: () => Promise<T>): Promise<T> {
+  const next = saveQueue.then(fn, fn);
+  saveQueue = next.then(
+    () => undefined,
+    () => undefined,
+  );
+  return next;
+}
 
 const DEFAULTS: Record<string, string> = {
   LLM_PROVIDER: "mock",
@@ -68,14 +81,57 @@ function migrateLocalModels(values: Record<string, string>): Record<string, stri
   return next;
 }
 
+function readSessionSecrets(): Record<string, string> {
+  try {
+    const raw = sessionStorage.getItem(SS_SECRETS_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
+function writeSessionSecrets(secrets: Record<string, string>) {
+  sessionStorage.setItem(SS_SECRETS_KEY, JSON.stringify(secrets));
+}
+
+function splitPublicAndSecrets(values: Record<string, string>): {
+  publicValues: Record<string, string>;
+  secrets: Record<string, string>;
+} {
+  const publicValues: Record<string, string> = {};
+  const secrets: Record<string, string> = {};
+  for (const [key, value] of Object.entries(values)) {
+    if (SETTINGS_SECRET_KEYS.has(key)) secrets[key] = value;
+    else publicValues[key] = value;
+  }
+  return { publicValues, secrets };
+}
+
 function readLocal(): Record<string, string> {
   try {
     const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return { ...DEFAULTS };
-    const parsed = JSON.parse(raw) as Record<string, string>;
-    const merged = migrateLocalModels({ ...DEFAULTS, ...parsed });
-    // Persist remap so Settings field and chat stay in sync
-    if (merged.LLM_MODEL !== (parsed.LLM_MODEL || DEFAULTS.LLM_MODEL)) {
+    const parsed = raw
+      ? (JSON.parse(raw) as Record<string, string>)
+      : ({} as Record<string, string>);
+    // Migrate legacy secrets out of localStorage into sessionStorage once.
+    const legacySecrets: Record<string, string> = {};
+    const publicOnly: Record<string, string> = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (SETTINGS_SECRET_KEYS.has(key) && value) legacySecrets[key] = value;
+      else if (!SETTINGS_SECRET_KEYS.has(key)) publicOnly[key] = value;
+    }
+    const sessionSecrets = { ...legacySecrets, ...readSessionSecrets() };
+    if (Object.keys(legacySecrets).length) {
+      writeSessionSecrets(sessionSecrets);
+      localStorage.setItem(LS_KEY, JSON.stringify(publicOnly));
+    }
+    const merged = migrateLocalModels({
+      ...DEFAULTS,
+      ...publicOnly,
+      ...sessionSecrets,
+    });
+    if (merged.LLM_MODEL !== (publicOnly.LLM_MODEL || DEFAULTS.LLM_MODEL)) {
       writeLocal(merged);
     }
     return merged;
@@ -85,7 +141,9 @@ function readLocal(): Record<string, string> {
 }
 
 function writeLocal(values: Record<string, string>) {
-  localStorage.setItem(LS_KEY, JSON.stringify(values));
+  const { publicValues, secrets } = splitPublicAndSecrets(values);
+  localStorage.setItem(LS_KEY, JSON.stringify(publicValues));
+  writeSessionSecrets(secrets);
 }
 
 function maskSecret(value: string): string {
@@ -134,57 +192,68 @@ export async function loadSettingsEnv(): Promise<SettingsEnvSnapshot> {
   };
 }
 
+function normalizeSecretsSet(
+  raw: Record<string, boolean> | null | undefined,
+  values: Record<string, string>,
+): Record<string, boolean> {
+  if (raw && typeof raw === "object") return raw;
+  return secretsFrom(values);
+}
+
 export async function saveSettingsEnv(
   patch: Record<string, string>,
+  opts?: { clearSecrets?: boolean },
 ): Promise<{ ok: boolean; detail: string; snap: SettingsEnvSnapshot }> {
-  if (window.mira?.setSettingsEnv) {
-    try {
-      const res = await window.mira.setSettingsEnv(patch);
-      return {
-        ok: res.ok,
-        detail: res.detail,
-        snap: {
-          values: { ...DEFAULTS, ...res.values },
-          secretsSet: res.secretsSet,
-          source: "electron",
-        },
-      };
-    } catch (err) {
-      return {
-        ok: false,
-        detail: err instanceof Error ? err.message : String(err),
-        snap: await loadSettingsEnv(),
-      };
+  return enqueueSave(async () => {
+    if (window.mira?.setSettingsEnv) {
+      try {
+        const res = await window.mira.setSettingsEnv(patch);
+        const values = { ...DEFAULTS, ...(res?.values ?? {}) };
+        return {
+          ok: Boolean(res?.ok),
+          detail: res?.detail ?? (res?.ok ? "Сохранено" : "Ошибка сохранения"),
+          snap: {
+            values,
+            secretsSet: normalizeSecretsSet(res?.secretsSet, values),
+            source: "electron" as const,
+          },
+        };
+      } catch (err) {
+        return {
+          ok: false,
+          detail: err instanceof Error ? err.message : String(err),
+          snap: await loadSettingsEnv(),
+        };
+      }
     }
-  }
 
-  const current = readLocal();
-  for (const [key, value] of Object.entries(patch)) {
-    if (!(key in DEFAULTS) && !(key in current)) {
-      // still allow known defaults keys only
-    }
-    if (SETTINGS_SECRET_KEYS.has(key)) {
-      const trimmed = value.trim();
-      if (!trimmed) {
-        current[key] = "";
+    const current = readLocal();
+    for (const [key, value] of Object.entries(patch)) {
+      if (SETTINGS_SECRET_KEYS.has(key)) {
+        const trimmed = value.trim();
+        if (!trimmed) {
+          // Empty secret only clears when explicitly requested (Delete button).
+          if (opts?.clearSecrets) current[key] = "";
+          continue;
+        }
+        if (trimmed.startsWith("••••")) continue;
+        current[key] = trimmed;
         continue;
       }
-      if (trimmed.startsWith("••••")) continue;
-      current[key] = trimmed;
-      continue;
+      current[key] = value;
     }
-    current[key] = value;
-  }
-  writeLocal(current);
-  return {
-    ok: true,
-    detail: "Сохранено в браузере (demo). В Electron пишется в `.env`.",
-    snap: {
-      values: displayValues(current),
-      secretsSet: secretsFrom(current),
-      source: "browser",
-    },
-  };
+    writeLocal(current);
+    return {
+      ok: true,
+      detail:
+        "Сохранено в браузере (demo): публичные поля — localStorage, секреты — sessionStorage вкладки.",
+      snap: {
+        values: displayValues(current),
+        secretsSet: secretsFrom(current),
+        source: "browser" as const,
+      },
+    };
+  });
 }
 
 export function isTruthyEnv(value: string | undefined): boolean {

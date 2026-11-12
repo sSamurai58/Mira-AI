@@ -37,7 +37,7 @@ export function listTtsEngines(): TtsEngineInfo[] {
       label: "Neural pack (локальный)",
       ready: true,
       detail:
-        "Голоса из Voice Studio / data/voice-studio — превью клипами; синтез fallback → Web Speech",
+        "Студийные голоса: склейка слов/фрагментов из обученных клипов (unit selection); непокрытые токены — запасной Web Speech"
     },
     {
       id: "edge-stub",

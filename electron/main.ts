@@ -1,19 +1,23 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import fs from "node:fs";
 import path from "node:path";
 import { getPublicConfig, loadConfig, validateLlmConfig } from "./config";
 import { getSettingsEnv, setSettingsEnv } from "./settingsEnv";
 import { wireConfirmBridge } from "./confirmBridge";
 import { createLlmAdapter } from "./llm";
 import {
+  deleteCatalogItem,
   ensureSeededCatalog,
   loadMarkdownCatalog,
   setCatalogEnabled,
   writeCatalogItem,
 } from "./markdownCatalog";
 import {
+  deleteLibraryMaterial,
   getLearnPlan,
   getLibraryItem,
   getLibrarySnapshot,
+  importLibraryBytes,
   importLibraryFile,
   importLibraryText,
   listLearnedUnits,
@@ -23,6 +27,7 @@ import {
   searchLearnedUnits,
 } from "./library/learn";
 import { runMemorySearch, sendChatMessage } from "./orchestrator";
+import { sampleSystemLoad, warmSystemMetrics } from "./systemMetrics";
 import {
   clearTerminalHistory,
   createTerminalSession,
@@ -58,6 +63,7 @@ import {
   downloadUpdate,
   getUpdateStatus,
   initUpdater,
+  openReleasesPage,
   quitAndInstall,
 } from "./updater";
 import {
@@ -80,11 +86,13 @@ import {
   deleteCustomVoice,
   deleteVoiceProject,
   generatePhrases,
+  getCustomVoiceCorpus,
   getStudioSnapshot,
   importClip,
   importClipBytes,
   listCustomVoices,
   listVoiceProjects,
+  trainVoiceModel,
   updateCustomVoice,
   updateVoiceProject,
 } from "./voiceStudio/studio";
@@ -136,15 +144,51 @@ import {
   upsertProfile,
 } from "./profiles";
 import { getHudPolicy, isHudOpen, toggleHud } from "./hud";
-import fs from "node:fs";
-
 
 const isDev = process.env.MIRA_DEV === "1";
 const activeAborts = new Map<string, AbortController>();
 let calendarTick: NodeJS.Timeout | null = null;
 
+// Pin taskbar identity. GPU stays on — software rendering made the UI laggy.
+// Opt out only if needed: MIRA_DISABLE_GPU=1
+if (process.platform === "win32") {
+  app.setAppUserModelId("ai.mira.desktop");
+}
+if (process.env.MIRA_DISABLE_GPU === "1") {
+  app.disableHardwareAcceleration();
+}
+
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    const win = BrowserWindow.getAllWindows()[0];
+    if (!win) {
+      createWindow();
+      return;
+    }
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+  });
+}
+
+
+function appIconPath(): string | undefined {
+  const candidates = [
+    path.join(__dirname, "..", "build", "icon.png"),
+    path.join(process.cwd(), "build", "icon.png"),
+    path.join(process.resourcesPath ?? "", "icon.png"),
+  ];
+  for (const p of candidates) {
+    if (p && fs.existsSync(p)) return p;
+  }
+  return undefined;
+}
 
 function createWindow(): BrowserWindow {
+  const icon = appIconPath();
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -152,6 +196,9 @@ function createWindow(): BrowserWindow {
     minHeight: 640,
     backgroundColor: "#000814",
     title: "Mira",
+    show: false,
+    autoHideMenuBar: true,
+    ...(icon ? { icon } : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -160,10 +207,40 @@ function createWindow(): BrowserWindow {
     },
   });
 
+  win.once("ready-to-show", () => {
+    win.show();
+    win.focus();
+  });
+  // Fallback if ready-to-show never fires (some GPU drivers)
+  setTimeout(() => {
+    if (!win.isDestroyed() && !win.isVisible()) {
+      win.show();
+      win.focus();
+    }
+  }, 2500);
+
+  win.webContents.on("did-fail-load", (_e, code, desc, url, isMainFrame) => {
+    if (!isMainFrame || code === -3 /* aborted */) return;
+    console.error("[mira] renderer failed", code, desc, url);
+    void dialog.showMessageBox(win, {
+      type: "error",
+      title: "Mira — UI не загрузился",
+      message: "Не удалось открыть интерфейс",
+      detail: `${desc} (${code})\n${url}`,
+    });
+  });
+
   if (isDev) {
     void win.loadURL(process.env.MIRA_DEV_URL ?? "http://127.0.0.1:5173");
   } else {
-    void win.loadFile(path.join(__dirname, "..", "dist", "index.html"));
+    const indexHtml = path.join(__dirname, "..", "dist", "index.html");
+    void win.loadFile(indexHtml).catch((err) => {
+      console.error("[mira] loadFile failed", indexHtml, err);
+      void dialog.showErrorBox(
+        "Mira — UI не загрузился",
+        `${indexHtml}\n${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
   }
 
   return win;
@@ -175,14 +252,21 @@ function broadcast(channel: string, payload: unknown): void {
   }
 }
 
-app.whenReady().then(() => {
-  initIpcSecurity();
-  loadConfig(true);
-  wireConfirmBridge();
-  openStore();
-  ensureBootstrapSession();
-  ensureSeededCatalog("skills");
-  ensureSeededCatalog("protocols");
+if (gotSingleInstanceLock) app.whenReady().then(() => {
+  // Make window appear even if later init throws (common on Windows install).
+  let bootError: string | null = null;
+  try {
+    initIpcSecurity();
+    loadConfig(true);
+    wireConfirmBridge();
+    openStore();
+    ensureBootstrapSession();
+    ensureSeededCatalog("skills");
+    ensureSeededCatalog("protocols");
+  } catch (err) {
+    bootError = err instanceof Error ? err.message : String(err);
+    console.error("[mira] boot failed", err);
+  }
 
   setTerminalHandlers({
     onData: (sessionId, data) => {
@@ -193,7 +277,17 @@ app.whenReady().then(() => {
     },
   });
 
-  initUpdater(broadcast);
+  try {
+    initUpdater(broadcast);
+  } catch (err) {
+    console.error("[mira] updater init failed", err);
+  }
+
+  try {
+    warmSystemMetrics();
+  } catch (err) {
+    console.error("[mira] system metrics warm failed", err);
+  }
 
   const on = (
     channel: string,
@@ -202,6 +296,8 @@ app.whenReady().then(() => {
   ) => {
     ipcMain.handle(channel, authed(fn as any, opts));
   };
+
+  on("mira:get-system-load", () => sampleSystemLoad());
 
   on("mira:get-health", () => {
     const health = getStoreHealth();
@@ -277,6 +373,15 @@ app.whenReady().then(() => {
         text: string;
         requestId: string;
         forceProtocolId?: string | null;
+        attachments?: Array<{
+          name: string;
+          mimeType: string;
+          size: number;
+          kind: string;
+          text?: string;
+          dataBase64?: string;
+        }>;
+        addToLibrary?: boolean;
       },
     ) => {
       const requestId = payload.requestId || crypto.randomUUID();
@@ -288,6 +393,8 @@ app.whenReady().then(() => {
             sessionId: payload.sessionId,
             text: payload.text,
             forceProtocolId: payload.forceProtocolId,
+            attachments: payload.attachments,
+            addToLibrary: payload.addToLibrary,
           },
           (event) => {
             broadcast("mira:chat-event", { requestId, event });
@@ -355,6 +462,16 @@ app.whenReady().then(() => {
         body: string;
       },
     ) => writeCatalogItem("skills", item),
+  );
+  on(
+    "mira:delete-skill",
+    (_e, id: string) => deleteCatalogItem("skills", id),
+    { privileged: true },
+  );
+  on(
+    "mira:delete-protocol",
+    (_e, id: string) => deleteCatalogItem("protocols", id),
+    { privileged: true },
   );
 
   on("mira:get-web-policy", () => getWebPolicy());
@@ -560,7 +677,31 @@ app.whenReady().then(() => {
     (_e, payload: { title: string; text: string; fileName?: string }) =>
       importLibraryText(payload),
   );
+  on(
+    "mira:import-library-bytes",
+    (
+      _e,
+      payload: {
+        bytes: number[] | Uint8Array;
+        fileName: string;
+        title?: string;
+        extractedText?: string;
+      },
+    ) =>
+      importLibraryBytes({
+        bytes: Uint8Array.from(payload.bytes),
+        fileName: payload.fileName,
+        title: payload.title,
+        extractedText: payload.extractedText,
+      }),
+    { privileged: true },
+  );
   on("mira:process-library-item", (_e, id: string) => processLibraryItem(id));
+  on(
+    "mira:delete-library-item",
+    (_e, id: string) => deleteLibraryMaterial(id),
+    { privileged: true },
+  );
   on("mira:propose-library-skill", async (_e, id: string) =>
     proposeSkillFromItem(id),
   );
@@ -581,6 +722,9 @@ app.whenReady().then(() => {
   );
   on("mira:list-voice-projects", () => listVoiceProjects());
   on("mira:list-custom-voices", () => listCustomVoices());
+  on("mira:get-custom-voice-corpus", (_e, voiceId: string) =>
+    getCustomVoiceCorpus(voiceId),
+  );
   on(
     "mira:create-voice-project",
     (_e, payload?: { name?: string; lang?: string }) =>
@@ -597,7 +741,11 @@ app.whenReady().then(() => {
         lang: payload.lang,
       }),
   );
-  on("mira:delete-voice-project", (_e, id: string) => deleteVoiceProject(id));
+  on(
+    "mira:delete-voice-project",
+    (_e, id: string) => deleteVoiceProject(id),
+    { privileged: true },
+  );
   on(
     "mira:update-custom-voice",
     (_e, payload: { id: string; name?: string; lang?: string }) =>
@@ -611,10 +759,20 @@ app.whenReady().then(() => {
     "mira:add-voice-phrase",
     (_e, projectId: string, text: string) => addCustomPhrase(projectId, text),
   );
+  on("mira:train-voice-model", (_e, projectId: string) =>
+    trainVoiceModel(projectId, (ev) => {
+      broadcast("mira:voice-train-progress", ev);
+    }),
+  );
   on(
     "mira:generate-voice-phrases",
-    (_e, projectId: string, count?: number) =>
-      generatePhrases(projectId, count ?? 5),
+    (
+      _e,
+      projectId: string,
+      countOrOpts?:
+        | number
+        | { count?: number; minWords?: number; maxWords?: number },
+    ) => generatePhrases(projectId, countOrOpts ?? 5),
   );
   on(
     "mira:import-voice-clip",
@@ -650,6 +808,7 @@ app.whenReady().then(() => {
         fileName: payload.fileName,
         phraseId: payload.phraseId,
       }),
+    { privileged: true },
   );
   on("mira:get-blender-policy", () => getBlenderPolicy());
   on("mira:run-doctor", () => {
@@ -799,9 +958,10 @@ app.whenReady().then(() => {
   on(
     "mira:read-voice-preview",
     (_e, filePath: string) => {
+      const { dataRoot, seedRoot } = require("./appPaths") as typeof import("./appPaths");
       const abs = path.resolve(filePath);
-      const root = path.resolve(process.cwd(), "data", "voice-studio");
-      const seed = path.resolve(process.cwd(), "seed", "voice-studio");
+      const root = dataRoot("voice-studio");
+      const seed = seedRoot("voice-studio");
       if (
         !(abs === root || abs.startsWith(root + path.sep)) &&
         !(abs === seed || abs.startsWith(seed + path.sep))
@@ -837,8 +997,19 @@ app.whenReady().then(() => {
     () => quitAndInstall(),
     { privileged: true },
   );
+  on("mira:open-releases-page", async () => openReleasesPage());
 
   createWindow();
+
+  if (bootError) {
+    void dialog.showMessageBox({
+      type: "error",
+      title: "Mira — ошибка запуска",
+      message: "Часть модулей не поднялась",
+      detail:
+        `${bootError}\n\nОкно всё равно открыто. Данные пишутся в:\n${app.getPath("userData")}`,
+    });
+  }
 
   calendarTick = setInterval(() => {
     void tickCalendarNotifications().catch(() => undefined);

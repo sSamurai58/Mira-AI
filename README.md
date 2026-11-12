@@ -20,11 +20,27 @@ npm run dev:electron
 
 Smokes: `p1`…`p8`. Без API-ключа — mock LLM.
 
+## Windows (скачать с GitHub)
+
+Сборка кладётся в `release/` и публикуется через Actions / Releases:
+
+- архив: `Mira-<version>-windows-x64.zip` — распаковать → `Mira.exe`
+- установщик NSIS: `Mira-<version>-windows-x64.exe` (собирается на `windows-latest`)
+
+```bash
+npm run pack:win
+```
+
+Артефакты: Actions → workflow **Windows installer** → `mira-windows`.  
+Релизы по тегу `v*`: workflow **Release** (GitHub Releases).
+
 ## Структура
 
 - `electron/library/` — import/extract/analyze/plan/skill
 - `electron/terminal/` — PTY
 - `src/ui/` — AppShell, LibraryPanel, TerminalView
 - `docs/` — PRD, DESIGN, RULES, MEMORY, WIP
+- `branding/` — SVG-логотипы
+- `electron-builder.yml` — упаковка Windows/Linux/macOS
 
 Секреты только в `.env`.

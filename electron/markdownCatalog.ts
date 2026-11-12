@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { dataRoot, seedRoot } from "./appPaths";
 
 export type FrontMatter = Record<string, string | boolean | string[]>;
 
@@ -13,18 +14,16 @@ export type CatalogItem = {
   body: string;
   filePath: string;
   relativePath: string;
+  /** File mtime ISO — for sorting in Workshop UI */
+  updatedAt: string;
 };
 
-function appRoot(): string {
-  return path.resolve(__dirname, "..");
-}
-
 export function resolveDataDir(...parts: string[]): string {
-  return path.join(appRoot(), "data", ...parts);
+  return dataRoot(...parts);
 }
 
 export function resolveSeedDir(...parts: string[]): string {
-  return path.join(appRoot(), "seed", ...parts);
+  return seedRoot(...parts);
 }
 
 export function parseFrontMatter(raw: string): {
@@ -106,6 +105,12 @@ export function loadMarkdownCatalog(
     const id =
       String(meta.id ?? file.replace(/\.md$/i, "")).trim() ||
       file.replace(/\.md$/i, "");
+    let updatedAt = new Date(0).toISOString();
+    try {
+      updatedAt = fs.statSync(filePath).mtime.toISOString();
+    } catch {
+      /* ignore */
+    }
     items.push({
       id,
       name: String(meta.name ?? id),
@@ -116,6 +121,7 @@ export function loadMarkdownCatalog(
       body,
       filePath,
       relativePath: path.join("data", kind, file),
+      updatedAt,
     });
   }
   return items;
@@ -176,6 +182,35 @@ export function setCatalogEnabled(
     enabled,
     body: found.body,
   });
+}
+
+/** Delete a catalog markdown file by id. */
+export function deleteCatalogItem(
+  kind: "skills" | "protocols",
+  id: string,
+): { ok: boolean; detail: string; deletedId: string | null } {
+  const items = loadMarkdownCatalog(kind);
+  const found = items.find((i) => i.id === id);
+  if (!found) {
+    return { ok: false, detail: `${kind} «${id}» не найден`, deletedId: null };
+  }
+  try {
+    if (fs.existsSync(found.filePath)) {
+      fs.unlinkSync(found.filePath);
+    }
+    return {
+      ok: true,
+      detail: `Удалён ${kind === "skills" ? "skill" : "протокол"} «${found.name}» (${found.id})`,
+      deletedId: found.id,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      ok: false,
+      detail: `Не удалось удалить файл: ${message.slice(0, 120)}`,
+      deletedId: null,
+    };
+  }
 }
 
 export function matchByTriggers(

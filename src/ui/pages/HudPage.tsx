@@ -1,11 +1,31 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState } from "react";
 import { APP_NAME } from "../../config";
+import { HudCorners } from "../components/HudCorners";
+import { applyTheme, loadStoredThemeId } from "../themes";
 
-/** Compact always-on-top HUD surface (#/hud). */
+const VOICE_LABEL: Record<string, string> = {
+  idle: "ожидание",
+  listening: "слушаю",
+  thinking: "думаю",
+  speaking: "говорю",
+  error: "ошибка",
+};
+
+/** Compact always-on-top HUD surface (#/hud), themed like the main shell. */
 export function HudPage() {
   const [voice, setVoice] = useState("idle");
   const [profile, setProfile] = useState("—");
   const [timerHint, setTimerHint] = useState("нет таймеров");
+
+  useEffect(() => {
+    applyTheme(loadStoredThemeId());
+    document.documentElement.classList.add("mira-hud-root");
+    document.body.classList.add("mira-hud-root");
+    return () => {
+      document.documentElement.classList.remove("mira-hud-root");
+      document.body.classList.remove("mira-hud-root");
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,53 +71,68 @@ export function HudPage() {
   useEffect(() => {
     const onStorage = () => {
       setVoice(localStorage.getItem("mira.voiceState") || "idle");
+      applyTheme(loadStoredThemeId());
     };
     onStorage();
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  const shell: CSSProperties = {
-    minHeight: "100vh",
-    padding: "14px 16px",
-    background:
-      "linear-gradient(135deg, rgba(4,22,42,0.92), rgba(8,48,72,0.88))",
-    color: "#e8f4ff",
-    fontFamily: '"Segoe UI", "Trebuchet MS", sans-serif',
-    borderRadius: 16,
-    border: "1px solid rgba(120,200,255,0.25)",
-    boxSizing: "border-box",
-    display: "flex",
-    flexDirection: "column",
-    gap: 8,
-  };
+  function closeHud() {
+    void window.mira?.toggleHud?.();
+  }
+
+  const voiceLabel = VOICE_LABEL[voice] ?? voice;
 
   return (
-    <div style={shell}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "baseline",
-        }}
-      >
-        <strong style={{ letterSpacing: "0.04em", fontSize: "1.15rem" }}>
-          {APP_NAME}
-        </strong>
-        <span style={{ opacity: 0.75, fontSize: "0.8rem" }}>{voice}</span>
+    <div className="mira-hud" data-voice={voice}>
+      <HudCorners />
+      <header className="mira-hud-top">
+        <div className="mira-hud-brand">
+          <img
+            className="mira-hud-mark"
+            src="./brand/mira-mark.svg"
+            width={22}
+            height={24}
+            alt=""
+            aria-hidden
+          />
+          <span className="mira-hud-name">{APP_NAME}</span>
+        </div>
+        <div className="mira-hud-actions">
+          <span className="mira-hud-voice" title={voice}>
+            <span className="status-dot" aria-hidden />
+            {voiceLabel}
+          </span>
+          <button
+            type="button"
+            className="mira-hud-close"
+            aria-label="Закрыть HUD"
+            title="Закрыть"
+            onClick={closeHud}
+          >
+            <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden>
+              <path
+                d="M3.2 3.2l9.6 9.6M12.8 3.2L3.2 12.8"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+        </div>
+      </header>
+      <div className="mira-hud-meta">
+        <div className="mira-hud-row">
+          <span className="mira-hud-k">Профиль</span>
+          <span className="mira-hud-v">{profile}</span>
+        </div>
+        <div className="mira-hud-row">
+          <span className="mira-hud-k">Таймер</span>
+          <span className="mira-hud-v">{timerHint}</span>
+        </div>
       </div>
-      <div style={{ fontSize: "0.85rem", opacity: 0.9 }}>Профиль: {profile}</div>
-      <div style={{ fontSize: "0.8rem", opacity: 0.75 }}>⏱ {timerHint}</div>
-      <button
-        type="button"
-        className="btn"
-        style={{ marginTop: "auto", alignSelf: "flex-start" }}
-        onClick={() => {
-          void window.mira?.toggleHud?.();
-        }}
-      >
-        Скрыть HUD
-      </button>
     </div>
   );
 }

@@ -74,6 +74,15 @@ type MiraCatalogItem = {
   body: string;
   filePath: string;
   relativePath: string;
+  updatedAt?: string;
+};
+
+type MiraConfirmSkillPropose = {
+  defaultId: string;
+  defaultName: string;
+  summary: string;
+  existingIds: string[];
+  sourceTitle: string;
 };
 
 type MiraConfirmRequest = {
@@ -81,6 +90,7 @@ type MiraConfirmRequest = {
   title: string;
   body: string;
   confirmLabel?: string;
+  skillPropose?: MiraConfirmSkillPropose;
 };
 
 type MiraChatEvent =
@@ -97,6 +107,7 @@ type MiraChatEvent =
       blender?: string | null;
       addon?: string | null;
     }
+  | { type: "phase"; phase: "tools" | "llm"; detail: string }
   | { type: "assistant_start"; sessionId: string }
   | { type: "token"; text: string }
   | {
@@ -274,10 +285,24 @@ type MiraUpdateStatus = {
   canDownload: boolean;
   canInstall: boolean;
   packaged: boolean;
+  releasesUrl?: string;
+};
+
+type MiraSystemLoad = {
+  cpu: number;
+  ram: number;
+  ramUsedGb: number;
+  ramTotalGb: number;
+  gpu: number | null;
+  vramUsedGb: number | null;
+  vramTotalGb: number | null;
+  gpuSource: "nvidia-smi" | "windows-counter" | "drm" | "none";
+  ts: number;
 };
 
 interface MiraBridge {
   getHealth: () => Promise<MiraHealth>;
+  getSystemLoad: () => Promise<MiraSystemLoad>;
   getConfig: () => Promise<MiraPublicConfig>;
   getSettingsEnv: () => Promise<{
     values: Record<string, string>;
@@ -305,6 +330,15 @@ interface MiraBridge {
     text: string;
     requestId: string;
     forceProtocolId?: string | null;
+    attachments?: Array<{
+      name: string;
+      mimeType: string;
+      size: number;
+      kind: string;
+      text?: string;
+      dataBase64?: string;
+    }>;
+    addToLibrary?: boolean;
   }) => Promise<{
     ok: boolean;
     sessionId?: string;
@@ -340,6 +374,12 @@ interface MiraBridge {
     enabled: boolean;
     body: string;
   }) => Promise<MiraCatalogItem>;
+  deleteSkill: (
+    id: string,
+  ) => Promise<{ ok: boolean; detail: string; deletedId: string | null }>;
+  deleteProtocol: (
+    id: string,
+  ) => Promise<{ ok: boolean; detail: string; deletedId: string | null }>;
   getWebPolicy: () => Promise<{
     enabled: boolean;
     allowlist: string[];
@@ -523,8 +563,12 @@ interface MiraBridge {
   respondConfirm: (
     id: string,
     accepted: boolean,
+    fields?: { skillId?: string; skillName?: string },
   ) => Promise<{ ok: boolean }>;
   onConfirmRequest: (handler: (req: MiraConfirmRequest) => void) => () => void;
+  onConfirmDismiss: (
+    handler: (payload: { id: string }) => void,
+  ) => () => void;
   onChatEvent: (
     handler: (payload: { requestId: string; event: MiraChatEvent }) => void,
   ) => () => void;
@@ -538,6 +582,7 @@ interface MiraBridge {
   checkForUpdates: () => Promise<MiraUpdateStatus>;
   downloadUpdate: () => Promise<MiraUpdateStatus>;
   quitAndInstall: () => Promise<{ ok: boolean; detail: string }>;
+  openReleasesPage: () => Promise<{ ok: boolean; detail: string }>;
   onUpdateEvent: (handler: (status: MiraUpdateStatus) => void) => () => void;
   listLibraryItems: () => Promise<MiraLibraryItem[]>;
   getLibraryItem: (id: string) => Promise<MiraLibraryItem | null>;
@@ -554,12 +599,21 @@ interface MiraBridge {
     text: string;
     fileName?: string;
   }) => Promise<MiraLibraryItem>;
+  importLibraryBytes: (payload: {
+    bytes: number[] | Uint8Array;
+    fileName: string;
+    title?: string;
+    extractedText?: string;
+  }) => Promise<MiraLibraryItem>;
   processLibraryItem: (id: string) => Promise<{
     item: MiraLibraryItem;
     analysis: unknown;
     plan: string[];
     units: MiraLearnedUnit[];
   }>;
+  deleteLibraryItem: (
+    id: string,
+  ) => Promise<{ ok: boolean; detail: string; deletedId: string | null }>;
   proposeLibrarySkill: (
     id: string,
   ) => Promise<{ ok: boolean; detail: string; skillId: string | null }>;
@@ -583,6 +637,16 @@ interface MiraBridge {
   }>;
   listVoiceProjects: () => Promise<MiraVoiceProject[]>;
   listCustomVoices: () => Promise<MiraCustomVoice[]>;
+  getCustomVoiceCorpus: (voiceId: string) => Promise<{
+    voice: MiraCustomVoice;
+    units: Array<{
+      phraseId: string;
+      text: string;
+      filePath: string;
+      startFrac?: number;
+      endFrac?: number;
+    }>;
+  }>;
   createVoiceProject: (payload?: {
     name?: string;
     lang?: string;
@@ -592,24 +656,58 @@ interface MiraBridge {
     name?: string;
     lang?: string;
   }) => Promise<MiraVoiceProject>;
-  deleteVoiceProject: (
-    id: string,
-  ) => Promise<{ ok: boolean; detail: string }>;
+  deleteVoiceProject: (id: string) => Promise<{
+    ok: boolean;
+    detail: string;
+    clearedVoiceId: string | null;
+  }>;
   updateCustomVoice: (payload: {
     id: string;
     name?: string;
     lang?: string;
   }) => Promise<MiraCustomVoice>;
-  deleteCustomVoice: (
-    id: string,
-  ) => Promise<{ ok: boolean; detail: string }>;
+  deleteCustomVoice: (id: string) => Promise<{
+    ok: boolean;
+    detail: string;
+    clearedVoiceId: string | null;
+  }>;
   addVoicePhrase: (
     projectId: string,
     text: string,
   ) => Promise<MiraVoicePhrase>;
+  trainVoiceModel: (projectId: string) => Promise<{
+    project: MiraVoiceProject;
+    analysis: unknown[];
+    voice: MiraCustomVoice | null;
+    report: {
+      ok: boolean;
+      stage: string;
+      phraseCount: number;
+      acceptedClips: number;
+      linkedAccepted: number;
+      coveragePct: number;
+      detail: string;
+      steps?: Array<{ step: string; label: string; pct: number }>;
+      packPath?: string | null;
+      wordUnitCount?: number;
+      fragmentUnitCount?: number;
+    };
+    pack?: unknown;
+  }>;
+  onVoiceTrainProgress?: (
+    handler: (payload: {
+      projectId: string;
+      step: string;
+      pct: number;
+      label: string;
+      detail?: string;
+    }) => void,
+  ) => () => void;
   generateVoicePhrases: (
     projectId: string,
-    count?: number,
+    countOrOpts?:
+      | number
+      | { count?: number; minWords?: number; maxWords?: number },
   ) => Promise<MiraVoicePhrase[]>;
   importVoiceClip: (payload: {
     projectId: string;

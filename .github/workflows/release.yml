@@ -15,15 +15,10 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-          - os: windows-latest
-          - os: macos-latest
-    runs-on: ${{ matrix.os }}
+  # Windows first: electron-updater needs latest.yml + NSIS from windows-latest.
+  # Linux/mac can be re-enabled later; mixed matrix left incomplete releases.
+  release-windows:
+    runs-on: windows-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -36,8 +31,9 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Build + publish
+      - name: Build + publish Windows
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LLM_PROVIDER: mock
-        run: npm run release
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npm run release -- --win --x64

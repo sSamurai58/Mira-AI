@@ -20,9 +20,12 @@ import {
 import {
   extractLearnQuery,
   formatLearnedBlock,
+  importLibraryBytes,
+  importLibraryText,
   looksLikeLibraryLearnIntent,
   searchLearnedUnits,
 } from "./library/learn";
+import type { ChatImagePart } from "./llm/types";
 import {
   formatMessagingBlock,
   getMessagingPolicy,
@@ -52,8 +55,10 @@ import {
 } from "./tools/terminal";
 import {
   extractSearchQueryFromText,
+  fetchWeatherSnapshot,
   formatWebBlock,
   getWebPolicy,
+  looksLikeWeatherIntent,
   looksLikeWebIntent,
   webFetch,
   webSearch,
@@ -85,8 +90,14 @@ import { handleMailFromChat, looksLikeMailIntent } from "./future/mail";
 import { handleMediaFromChat, looksLikeMediaIntent } from "./future/media";
 import { handleNotesFromChat, looksLikeNotesIntent } from "./future/notes";
 
-const SYSTEM_PROMPT =
-  "Ты Mira — локальный голосовой ИИ-помощник. Отвечай по делу на языке пользователя. Если даны фрагменты памяти, выученное из библиотеки, интернет-данные, снимок экрана, история браузера, мессенджер, вывод терминала или результат Blender — опирайся на них. Skills подключаются только по необходимости.";
+const SYSTEM_PROMPT = [
+  "Ты Mira — локальный голосовой ИИ-помощник.",
+  "Отвечай на языке пользователя, выразительно и по делу.",
+  "Формат ответа: Markdown — **жирный**, *курсив*, __подчёркнутый__ где уместно; списки через «- »; обязательно несколько коротких абзацев (не одна длинная строка).",
+  "Если в контексте есть интернет/погода/память/инструменты — опирайся только на них и дождись их данных: не пиши заранее, что данных нет, пока блок инструментов пуст или помечен как ошибка.",
+  "Если блок погоды или поиска уже содержит цифры — используй их как актуальные и не предлагай «проверьте сайт» без нужды.",
+  "Skills подключаются только по необходимости.",
+].join(" ");
 
 export type ChatStreamEvent =
   | { type: "user"; utterance: UtteranceRow }
@@ -102,6 +113,7 @@ export type ChatStreamEvent =
       blender?: string | null;
       addon?: string | null;
     }
+  | { type: "phase"; phase: "tools" | "llm"; detail: string }
   | { type: "assistant_start"; sessionId: string }
   | { type: "token"; text: string }
   | {
@@ -214,19 +226,117 @@ function buildProtocolBlock(protocol: CatalogItem): string {
   return `[Active protocol: ${protocol.name} (${protocol.id})]\nВыполни этот протокол сейчас.\n\n${protocol.body}`;
 }
 
+export type ChatAttachmentInput = {
+  name: string;
+  mimeType: string;
+  size: number;
+  kind: string;
+  text?: string;
+  dataBase64?: string;
+};
+
+function buildUserContentWithAttachments(
+  text: string,
+  attachments: ChatAttachmentInput[],
+): { storedText: string; promptText: string; images: ChatImagePart[] } {
+  const trimmed = text.trim();
+  const images: ChatImagePart[] = [];
+  if (!attachments.length) {
+    return { storedText: trimmed, promptText: trimmed, images };
+  }
+  const lines: string[] = [];
+  if (trimmed) lines.push(trimmed);
+  else lines.push("Смотри прикреплённые файлы.");
+  lines.push("");
+  lines.push(`[Вложения: ${attachments.length}]`);
+  for (const a of attachments) {
+    lines.push(`--- файл: ${a.name} (${a.kind}, ${a.size} B) ---`);
+    if (a.kind === "image" && a.dataBase64) {
+      images.push({
+        mimeType: a.mimeType || "image/png",
+        dataBase64: a.dataBase64,
+      });
+      lines.push("(изображение передано модели через vision)");
+    } else if (a.text?.trim()) {
+      lines.push(a.text.trim().slice(0, 40_000));
+    } else {
+      lines.push(`(содержимое «${a.name}» не извлечено в текст)`);
+    }
+  }
+  const promptText = lines.join("\n");
+  const names = attachments.map((a) => a.name).join(", ");
+  const storedText = trimmed
+    ? `${trimmed}\n\n[вложения: ${names}]`
+    : `[вложения: ${names}]`;
+  return { storedText, promptText, images };
+}
+
+async function maybeImportAttachmentsToLibrary(
+  attachments: ChatAttachmentInput[],
+): Promise<string[]> {
+  const imported: string[] = [];
+  for (const a of attachments) {
+    try {
+      if (a.kind === "text" && a.text?.trim()) {
+        const item = importLibraryText({
+          title: a.name.replace(/\.[^.]+$/, "") || a.name,
+          text: a.text,
+          fileName: a.name,
+        });
+        imported.push(item.title);
+        continue;
+      }
+      if (a.dataBase64) {
+        const bytes = Buffer.from(a.dataBase64, "base64");
+        const item = await importLibraryBytes({
+          bytes,
+          fileName: a.name,
+          title: a.name.replace(/\.[^.]+$/, "") || a.name,
+          extractedText: a.text,
+        });
+        imported.push(item.title);
+      }
+    } catch (err) {
+      appendAppLog({
+        level: "warn",
+        category: "library",
+        message: err instanceof Error ? err.message : String(err),
+        meta: { file: a.name },
+      });
+    }
+  }
+  return imported;
+}
+
 export async function sendChatMessage(
   input: {
     sessionId?: string | null;
     text: string;
     forceProtocolId?: string | null;
+    attachments?: ChatAttachmentInput[];
+    addToLibrary?: boolean;
   },
   emit: (event: ChatStreamEvent) => void,
   signal?: AbortSignal,
 ): Promise<SessionRow> {
-  const text = input.text.trim();
-  if (!text) {
+  const attachments = input.attachments ?? [];
+  const rawText = input.text.trim();
+  if (!rawText && !attachments.length) {
     emit({ type: "error", message: "Пустое сообщение" });
     throw new Error("Пустое сообщение");
+  }
+
+  const { storedText, promptText, images } = buildUserContentWithAttachments(
+    rawText,
+    attachments,
+  );
+
+  let libraryNote: string | null = null;
+  if (input.addToLibrary && attachments.length) {
+    const titles = await maybeImportAttachmentsToLibrary(attachments);
+    if (titles.length) {
+      libraryNote = `Добавлено в материалы обучения: ${titles.join(", ")}. Workshop → Обучение → «Разобрать».`;
+    }
   }
 
   const cfg = loadConfig();
@@ -240,10 +350,10 @@ export async function sendChatMessage(
     (input.sessionId ? getSession(input.sessionId) : null) ?? null;
   const isNew = !session;
   if (!session) {
-    session = createSession(titleFromFirstMessage(text));
+    session = createSession(titleFromFirstMessage(storedText));
   }
 
-  const userUtterance = addUtterance(session.id, "user", text);
+  const userUtterance = addUtterance(session.id, "user", storedText);
   emit({ type: "user", utterance: userUtterance });
 
   if (
@@ -251,12 +361,13 @@ export async function sendChatMessage(
     session.title === "Первый диалог" ||
     session.title === "Новый диалог"
   ) {
-    touchSession(session.id, titleFromFirstMessage(text));
+    touchSession(session.id, titleFromFirstMessage(storedText));
     session = getSession(session.id) ?? session;
   }
 
-  const skills = selectSkillsForTurn(text);
+  const skills = selectSkillsForTurn(promptText);
   let protocol: CatalogItem | null = null;
+  const text = promptText;
   if (input.forceProtocolId) {
     protocol =
       loadMarkdownCatalog("protocols").find(
@@ -283,6 +394,11 @@ export async function sendChatMessage(
 
   // Must tools first, then F* addons, then generic web — avoid calendar
   // stealing «Напиши … в Telegram, что встреча…».
+  emit({
+    type: "phase",
+    phase: "tools",
+    detail: "Собираю данные…",
+  });
   try {
     if (looksLikeBlenderIntent(text) && getBlenderPolicy().enabled) {
       const job = await runDemoScene();
@@ -363,19 +479,23 @@ export async function sendChatMessage(
       getScreenPolicy().controlEnabled
     ) {
       const typed = parseTypeText(text);
-      if (typed && !parseClickCoords(text)) {
+      const coords = parseClickCoords(text);
+      if (typed && !coords) {
         const typedResult = await typeText(typed);
         desktopUsed = typedResult.ok
           ? `screen-type:${typedResult.mode}`
           : "screen-type-denied";
         desktopBlock = formatScreenBlock("type", typedResult);
-      } else {
-        const coords = parseClickCoords(text) ?? { x: 100, y: 100 };
+      } else if (coords) {
         const click = await clickAt(coords.x, coords.y);
         desktopUsed = click.ok
           ? `screen-click:${click.mode}`
           : "screen-click-denied";
         desktopBlock = formatScreenBlock("click", click);
+      } else {
+        desktopUsed = "screen-control-need-coords";
+        desktopBlock =
+          "[Экран: control]\nНужны явные координаты, например: «кликни 640, 360». Без координат клик не выполняется (защита от случайного клика по окну Mira).";
       }
     } else if (looksLikeBrowserOpenIntent(text) && getBrowserPolicy().enabled) {
       const url = extractOpenUrl(text);
@@ -394,7 +514,23 @@ export async function sendChatMessage(
     } else if (looksLikeWebIntent(text) && getWebPolicy().enabled) {
       const q = extractSearchQueryFromText(text);
       const urlMatch = text.match(/https?:\/\/\S+/i)?.[0];
-      if (urlMatch && !looksLikeBrowserOpenIntent(text)) {
+      if (looksLikeWeatherIntent(text) && !urlMatch) {
+        emit({
+          type: "phase",
+          phase: "tools",
+          detail: "Уточняю погоду…",
+        });
+        try {
+          webBlock = await fetchWeatherSnapshot(q || text, signal);
+          webUsed = "weather";
+        } catch (weatherErr) {
+          const hits = await webSearch(q || text, signal);
+          webUsed = "search";
+          webBlock = `${formatWebBlock("search", hits)}\n\n[Погода: прямой источник недоступен — ${
+            weatherErr instanceof Error ? weatherErr.message : String(weatherErr)
+          }. Если в поиске нет температуры, честно скажи об этом.]`;
+        }
+      } else if (urlMatch && !looksLikeBrowserOpenIntent(text)) {
         const policy = getWebPolicy();
         if (policy.requireConfirmForFetch) {
           const ok = await requestUserConfirm({
@@ -411,11 +547,21 @@ export async function sendChatMessage(
           }
         }
         if (webUsed !== "fetch-denied") {
+          emit({
+            type: "phase",
+            phase: "tools",
+            detail: "Загружаю страницу…",
+          });
           const fetched = await webFetch(urlMatch, signal);
           webUsed = "fetch";
           webBlock = formatWebBlock("fetch", fetched);
         }
       } else {
+        emit({
+          type: "phase",
+          phase: "tools",
+          detail: "Ищу в интернете…",
+        });
         const hits = await webSearch(q, signal);
         webUsed = "search";
         webBlock = formatWebBlock("search", hits);
@@ -501,9 +647,20 @@ export async function sendChatMessage(
 
   for (const u of history) {
     if (u.role === "system") continue;
+    const isLastUser =
+      u.id === userUtterance.id && u.role === "user" && images.length > 0;
     messages.push({
       role: u.role === "assistant" ? "assistant" : "user",
-      content: u.content,
+      // Use full prompt text (with attachment bodies) for the latest user turn.
+      content: isLastUser || u.id === userUtterance.id ? promptText : u.content,
+      images: isLastUser ? images : undefined,
+    });
+  }
+
+  if (libraryNote) {
+    messages.push({
+      role: "system",
+      content: `[Библиотека обучения] ${libraryNote}`,
     });
   }
 
@@ -518,6 +675,11 @@ export async function sendChatMessage(
   }
 
   const adapter = createLlmAdapter(cfg);
+  emit({
+    type: "phase",
+    phase: "llm",
+    detail: "Формирую полный ответ…",
+  });
   emit({ type: "assistant_start", sessionId: session.id });
 
   let full = "";

@@ -54,11 +54,20 @@ export type MiraCatalogItem = {
   relativePath: string;
 };
 
+export type MiraConfirmSkillPropose = {
+  defaultId: string;
+  defaultName: string;
+  summary: string;
+  existingIds: string[];
+  sourceTitle: string;
+};
+
 export type MiraConfirmRequest = {
   id: string;
   title: string;
   body: string;
   confirmLabel?: string;
+  skillPropose?: MiraConfirmSkillPropose;
 };
 
 export type MiraChatEvent =
@@ -75,6 +84,7 @@ export type MiraChatEvent =
       blender?: string | null;
       addon?: string | null;
     }
+  | { type: "phase"; phase: "tools" | "llm"; detail: string }
   | { type: "assistant_start"; sessionId: string }
   | { type: "token"; text: string }
   | {
@@ -111,6 +121,17 @@ const call = (channel: string, ...args: unknown[]) =>
 
 contextBridge.exposeInMainWorld("mira", {
   getHealth: () => call("mira:get-health"),
+  getSystemLoad: (): Promise<{
+    cpu: number;
+    ram: number;
+    ramUsedGb: number;
+    ramTotalGb: number;
+    gpu: number | null;
+    vramUsedGb: number | null;
+    vramTotalGb: number | null;
+    gpuSource: "nvidia-smi" | "windows-counter" | "drm" | "none";
+    ts: number;
+  }> => call("mira:get-system-load"),
   getConfig: (): Promise<MiraPublicConfig> => call("mira:get-config"),
   getSettingsEnv: (): Promise<{
     values: Record<string, string>;
@@ -141,6 +162,15 @@ contextBridge.exposeInMainWorld("mira", {
     text: string;
     requestId: string;
     forceProtocolId?: string | null;
+    attachments?: Array<{
+      name: string;
+      mimeType: string;
+      size: number;
+      kind: string;
+      text?: string;
+      dataBase64?: string;
+    }>;
+    addToLibrary?: boolean;
   }): Promise<{
     ok: boolean;
     sessionId?: string;
@@ -172,6 +202,8 @@ contextBridge.exposeInMainWorld("mira", {
     enabled: boolean;
     body: string;
   }) => call("mira:save-skill", item),
+  deleteSkill: (id: string) => call("mira:delete-skill", id),
+  deleteProtocol: (id: string) => call("mira:delete-protocol", id),
   getWebPolicy: () => call("mira:get-web-policy"),
   getScreenPolicy: () => call("mira:get-screen-policy"),
   getBrowserPolicy: () => call("mira:get-browser-policy"),
@@ -242,7 +274,14 @@ contextBridge.exposeInMainWorld("mira", {
     text: string;
     fileName?: string;
   }) => call("mira:import-library-text", payload),
+  importLibraryBytes: (payload: {
+    bytes: number[] | Uint8Array;
+    fileName: string;
+    title?: string;
+    extractedText?: string;
+  }) => call("mira:import-library-bytes", payload),
   processLibraryItem: (id: string) => call("mira:process-library-item", id),
+  deleteLibraryItem: (id: string) => call("mira:delete-library-item", id),
   proposeLibrarySkill: (id: string) => call("mira:propose-library-skill", id),
   listLearnedUnits: (libraryItemId?: string) =>
     call("mira:list-learned-units", libraryItemId),
@@ -253,6 +292,8 @@ contextBridge.exposeInMainWorld("mira", {
     call("mira:voice-studio-snapshot", projectId),
   listVoiceProjects: () => call("mira:list-voice-projects"),
   listCustomVoices: () => call("mira:list-custom-voices"),
+  getCustomVoiceCorpus: (voiceId: string) =>
+    call("mira:get-custom-voice-corpus", voiceId),
   createVoiceProject: (payload?: { name?: string; lang?: string }) =>
     call("mira:create-voice-project", payload),
   updateVoiceProject: (payload: { id: string; name?: string; lang?: string }) =>
@@ -263,8 +304,37 @@ contextBridge.exposeInMainWorld("mira", {
   deleteCustomVoice: (id: string) => call("mira:delete-custom-voice", id),
   addVoicePhrase: (projectId: string, text: string) =>
     call("mira:add-voice-phrase", projectId, text),
-  generateVoicePhrases: (projectId: string, count?: number) =>
-    call("mira:generate-voice-phrases", projectId, count),
+  trainVoiceModel: (projectId: string) =>
+    call("mira:train-voice-model", projectId),
+  onVoiceTrainProgress: (
+    handler: (payload: {
+      projectId: string;
+      step: string;
+      pct: number;
+      label: string;
+      detail?: string;
+    }) => void,
+  ) => {
+    const listener = (
+      _event: IpcRendererEvent,
+      payload: {
+        projectId: string;
+        step: string;
+        pct: number;
+        label: string;
+        detail?: string;
+      },
+    ) => handler(payload);
+    ipcRenderer.on("mira:voice-train-progress", listener);
+    return () =>
+      ipcRenderer.removeListener("mira:voice-train-progress", listener);
+  },
+  generateVoicePhrases: (
+    projectId: string,
+    countOrOpts?:
+      | number
+      | { count?: number; minWords?: number; maxWords?: number },
+  ) => call("mira:generate-voice-phrases", projectId, countOrOpts),
   importVoiceClip: (payload: {
     projectId: string;
     sourcePath: string;
@@ -351,18 +421,28 @@ contextBridge.exposeInMainWorld("mira", {
   deleteProfile: (id: string) => call("mira:delete-profile", id),
   getHudPolicy: () => call("mira:get-hud-policy"),
   toggleHud: () => call("mira:toggle-hud"),
-  respondConfirm: (id: string, accepted: boolean) =>
-    call("mira:confirm-response", id, accepted),
+  respondConfirm: (
+    id: string,
+    accepted: boolean,
+    fields?: { skillId?: string; skillName?: string },
+  ) => call("mira:confirm-response", id, accepted, fields),
   getUpdateStatus: () => call("mira:get-update-status"),
   checkForUpdates: () => call("mira:check-for-updates"),
   downloadUpdate: () => call("mira:download-update"),
   quitAndInstall: () => call("mira:quit-and-install"),
+  openReleasesPage: () => call("mira:open-releases-page"),
 
   onConfirmRequest: (handler: (req: MiraConfirmRequest) => void) => {
     const listener = (_event: IpcRendererEvent, req: MiraConfirmRequest) =>
       handler(req);
     ipcRenderer.on("mira:confirm-request", listener);
     return () => ipcRenderer.removeListener("mira:confirm-request", listener);
+  },
+  onConfirmDismiss: (handler: (payload: { id: string }) => void) => {
+    const listener = (_event: IpcRendererEvent, payload: { id: string }) =>
+      handler(payload);
+    ipcRenderer.on("mira:confirm-dismiss", listener);
+    return () => ipcRenderer.removeListener("mira:confirm-dismiss", listener);
   },
   onChatEvent: (
     handler: (payload: { requestId: string; event: MiraChatEvent }) => void,

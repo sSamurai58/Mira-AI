@@ -1,0 +1,50 @@
+name: Windows installer
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "electron/**"
+      - "src/**"
+      - "public/**"
+      - "seed/**"
+      - "build/**"
+      - "package.json"
+      - "package-lock.json"
+      - "electron-builder.yml"
+      - ".github/workflows/windows-installer.yml"
+    branches:
+      - main
+      - "cursor/**"
+
+permissions:
+  contents: read
+
+jobs:
+  pack-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Build Windows packages
+        env:
+          LLM_PROVIDER: mock
+          # Avoid electron-builder CI auto-publish (needs GH_TOKEN; artifacts upload below).
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npm run pack:win
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mira-windows
+          path: |
+            release/Mira-*-windows-x64.zip
+            release/Mira-*-windows-x64.exe
+            release/latest.yml
+          if-no-files-found: error
+          retention-days: 14

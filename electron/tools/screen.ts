@@ -15,18 +15,20 @@ export type ScreenCaptureResult = {
   note: string;
 };
 
+export type ScreenClickMode = "xdotool" | "win32" | "dry-run";
+
 export type ScreenClickResult = {
   ok: boolean;
   x: number;
   y: number;
-  mode: "xdotool" | "dry-run";
+  mode: ScreenClickMode;
   detail: string;
 };
 
 export type ScreenTypeResult = {
   ok: boolean;
   text: string;
-  mode: "xdotool" | "dry-run";
+  mode: ScreenClickMode;
   detail: string;
 };
 
@@ -35,7 +37,8 @@ function isElectronRuntime(): boolean {
 }
 
 function screenshotsDir(): string {
-  const dir = path.resolve(process.cwd(), "data", "screenshots");
+  const { dataRoot } = require("../appPaths") as typeof import("../appPaths");
+  const dir = dataRoot("screenshots");
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -48,16 +51,21 @@ function minimalPng(): Buffer {
   );
 }
 
+function envFlag(name: string, defaultValue: boolean): boolean {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") return defaultValue;
+  return raw.trim().toLowerCase() !== "false";
+}
+
 export function getScreenPolicy(): {
   enabled: boolean;
   controlEnabled: boolean;
   osPriority: string;
 } {
   return {
-    enabled: (process.env.SCREEN_ENABLED ?? "true").trim().toLowerCase() !== "false",
-    controlEnabled:
-      (process.env.SCREEN_CONTROL_ENABLED ?? "true").trim().toLowerCase() !==
-      "false",
+    // Capture on by default; control is fail-closed (matches Settings UI).
+    enabled: envFlag("SCREEN_ENABLED", true),
+    controlEnabled: envFlag("SCREEN_CONTROL_ENABLED", false),
     osPriority: (process.env.OS_PRIORITY ?? "linux,windows,macos").trim(),
   };
 }
@@ -86,6 +94,116 @@ export function parseTypeText(text: string): string | null {
   );
   if (!m?.[1]) return null;
   return m[1].trim();
+}
+
+/**
+ * Temporarily minimize Mira windows so a desktop click/type cannot hit Mira
+ * itself (which previously blanked the UI when the confirm modal / chrome
+ * received the synthetic click).
+ */
+async function withMiraWindowsAside<T>(fn: () => Promise<T>): Promise<T> {
+  if (!isElectronRuntime()) return fn();
+
+  const { BrowserWindow } = await import("electron");
+  const windows = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed());
+  const snapshot = windows.map((w) => ({
+    win: w,
+    wasMinimized: w.isMinimized(),
+    wasVisible: w.isVisible(),
+    wasFocused: w.isFocused(),
+  }));
+
+  for (const { win } of snapshot) {
+    try {
+      if (!win.isMinimized()) win.minimize();
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // Let the OS finish the minimize animation before sending input.
+  await new Promise((r) => setTimeout(r, 280));
+
+  try {
+    return await fn();
+  } finally {
+    for (const { win, wasMinimized, wasVisible, wasFocused } of snapshot) {
+      if (win.isDestroyed()) continue;
+      try {
+        if (!wasMinimized && wasVisible) {
+          win.restore();
+          if (wasFocused) win.focus();
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+}
+
+async function clickViaXdotool(x: number, y: number): Promise<void> {
+  await execFileAsync(
+    "xdotool",
+    ["mousemove", String(x), String(y), "click", "1"],
+    { timeout: 5000 },
+  );
+}
+
+async function typeViaXdotool(text: string): Promise<void> {
+  await execFileAsync("xdotool", ["type", "--", text], { timeout: 8000 });
+}
+
+/** Win32 mouse click via PowerShell + user32 (no extra native deps). */
+async function clickViaWin32(x: number, y: number): Promise<void> {
+  const xi = Math.round(x);
+  const yi = Math.round(y);
+  const script = [
+    "Add-Type -TypeDefinition @'",
+    "using System;",
+    "using System.Runtime.InteropServices;",
+    "public static class MiraMouse {",
+    "  [DllImport(\"user32.dll\")] public static extern bool SetCursorPos(int X, int Y);",
+    "  [DllImport(\"user32.dll\")] public static extern void mouse_event(uint f, uint x, uint y, uint d, UIntPtr e);",
+    "  public const uint LEFTDOWN = 0x0002;",
+    "  public const uint LEFTUP = 0x0004;",
+    "}",
+    "'@",
+    `[MiraMouse]::SetCursorPos(${xi}, ${yi}) | Out-Null`,
+    "Start-Sleep -Milliseconds 40",
+    "[MiraMouse]::mouse_event([MiraMouse]::LEFTDOWN, 0, 0, 0, [UIntPtr]::Zero)",
+    "[MiraMouse]::mouse_event([MiraMouse]::LEFTUP, 0, 0, 0, [UIntPtr]::Zero)",
+  ].join("\n");
+
+  await execFileAsync(
+    "powershell.exe",
+    ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+    { timeout: 8000, windowsHide: true },
+  );
+}
+
+/** Best-effort Win32 text entry via SendKeys (focused window after click). */
+async function typeViaWin32(text: string): Promise<void> {
+  const escaped = text
+    .replace(/\{/g, "{{}")
+    .replace(/\}/g, "{}}")
+    .replace(/\+/g, "{+}")
+    .replace(/\^/g, "{^}")
+    .replace(/%/g, "{%}")
+    .replace(/~/g, "{~}")
+    .replace(/\(/g, "{(}")
+    .replace(/\)/g, "{)}")
+    .replace(/'/g, "''");
+
+  const script = [
+    "Add-Type -AssemblyName System.Windows.Forms",
+    `[System.Windows.Forms.SendKeys]::SendWait('${escaped}')`,
+  ].join("; ");
+
+  await execFileAsync(
+    "powershell.exe",
+    ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+    { timeout: 10000, windowsHide: true },
+  );
 }
 
 export async function captureScreen(): Promise<ScreenCaptureResult> {
@@ -174,11 +292,28 @@ export async function clickAt(
     throw new Error("Контроль экрана выключен.");
   }
 
+  if (
+    !Number.isFinite(x) ||
+    !Number.isFinite(y) ||
+    x < 0 ||
+    y < 0 ||
+    x > 100_000 ||
+    y > 100_000
+  ) {
+    return {
+      ok: false,
+      x,
+      y,
+      mode: "dry-run",
+      detail: "Некорректные координаты клика",
+    };
+  }
+
   const ok = await requestUserConfirm({
     actionClass: "screen",
     risk: "high",
     title: "Подтверждение контроля экрана",
-    body: `Mira хочет выполнить клик по координатам (${x}, ${y}).\nРазрешить?`,
+    body: `Mira хочет выполнить клик по координатам (${Math.round(x)}, ${Math.round(y)}).\nОкно Mira будет свёрнуто на момент клика.\nРазрешить?`,
     confirmLabel: "Кликнуть",
   });
   if (!ok) {
@@ -192,18 +327,26 @@ export async function clickAt(
   }
 
   try {
-    await execFileAsync(
-      "xdotool",
-      ["mousemove", String(x), String(y), "click", "1"],
-      { timeout: 5000 },
-    );
-    return {
-      ok: true,
-      x,
-      y,
-      mode: "xdotool",
-      detail: "Клик выполнен через xdotool",
-    };
+    return await withMiraWindowsAside(async () => {
+      if (process.platform === "win32") {
+        await clickViaWin32(x, y);
+        return {
+          ok: true,
+          x,
+          y,
+          mode: "win32" as const,
+          detail: "Клик выполнен через Win32",
+        };
+      }
+      await clickViaXdotool(x, y);
+      return {
+        ok: true,
+        x,
+        y,
+        mode: "xdotool" as const,
+        detail: "Клик выполнен через xdotool",
+      };
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return {
@@ -211,7 +354,7 @@ export async function clickAt(
       x,
       y,
       mode: "dry-run",
-      detail: `xdotool недоступен (${message.slice(0, 120)}). Действие зафиксировано как dry-run после confirm.`,
+      detail: `Системный клик недоступен (${message.slice(0, 120)}). Действие зафиксировано как dry-run после confirm.`,
     };
   }
 }
@@ -226,7 +369,7 @@ export async function typeText(text: string): Promise<ScreenTypeResult> {
     actionClass: "screen",
     risk: "high",
     title: "Подтверждение ввода с клавиатуры",
-    body: `Mira хочет ввести текст:\n«${text.slice(0, 200)}»\nРазрешить?`,
+    body: `Mira хочет ввести текст:\n«${text.slice(0, 200)}»\nОкно Mira будет свёрнуто на момент ввода.\nРазрешить?`,
     confirmLabel: "Ввести",
   });
   if (!ok) {
@@ -239,20 +382,31 @@ export async function typeText(text: string): Promise<ScreenTypeResult> {
   }
 
   try {
-    await execFileAsync("xdotool", ["type", "--", text], { timeout: 8000 });
-    return {
-      ok: true,
-      text,
-      mode: "xdotool",
-      detail: "Текст введён через xdotool",
-    };
+    return await withMiraWindowsAside(async () => {
+      if (process.platform === "win32") {
+        await typeViaWin32(text);
+        return {
+          ok: true,
+          text,
+          mode: "win32" as const,
+          detail: "Текст введён через Win32 SendKeys",
+        };
+      }
+      await typeViaXdotool(text);
+      return {
+        ok: true,
+        text,
+        mode: "xdotool" as const,
+        detail: "Текст введён через xdotool",
+      };
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return {
       ok: true,
       text,
       mode: "dry-run",
-      detail: `xdotool недоступен (${message.slice(0, 120)}). Ввод зафиксирован как dry-run после confirm.`,
+      detail: `Системный ввод недоступен (${message.slice(0, 120)}). Ввод зафиксирован как dry-run после confirm.`,
     };
   }
 }

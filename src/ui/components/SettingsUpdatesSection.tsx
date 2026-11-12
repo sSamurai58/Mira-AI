@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { StubBadge } from "./StubBadge";
 import { IntegCard } from "./SettingsFormBits";
 
+const RELEASES_URL = "https://github.com/sSamurai58/Mira-AI/releases";
+
 const DEMO_STATUS: MiraUpdateStatus = {
   channel: "idle",
-  currentVersion: "0.0.1-demo",
+  currentVersion: "0.0.2-demo",
   availableVersion: null,
   progress: null,
   detail:
@@ -13,6 +15,7 @@ const DEMO_STATUS: MiraUpdateStatus = {
   canDownload: false,
   canInstall: false,
   packaged: false,
+  releasesUrl: RELEASES_URL,
 };
 
 export function SettingsUpdatesSection() {
@@ -96,6 +99,24 @@ export function SettingsUpdatesSection() {
     }
   }
 
+  async function openReleases() {
+    setBusy("releases");
+    setNote(null);
+    try {
+      if (window.mira?.openReleasesPage) {
+        const res = await window.mira.openReleasesPage();
+        setNote(res.detail);
+        return;
+      }
+      window.open(status.releasesUrl || RELEASES_URL, "_blank", "noopener");
+      setNote("Открыл страницу релизов");
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   const channelLabel: Record<string, string> = {
     idle: "ожидание",
     checking: "проверка…",
@@ -103,7 +124,7 @@ export function SettingsUpdatesSection() {
     "not-available": "актуально",
     downloading: "скачивание…",
     downloaded: "готово к установке",
-    error: "ошибка",
+    error: "нет связи / ошибка",
   };
 
   return (
@@ -113,8 +134,9 @@ export function SettingsUpdatesSection() {
         <StubBadge label="RELEASE" />
       </div>
       <p className="muted" style={{ margin: 0 }}>
-        Разработка — в GitHub. Релизы публикуются тегом `v*`; установленная Mira
-        качает билд с GitHub Releases по кнопке ниже.
+        Релизы с GitHub. После скачивания установка проходит тихо при
+        перезапуске (без мастера NSIS). Можно нажать «Обновить и перезапустить»
+        или просто закрыть Mira — обновление применится само.
       </p>
 
       <IntegCard
@@ -123,12 +145,15 @@ export function SettingsUpdatesSection() {
         purpose="Проверка, скачивание и установка новой версии без ручной переустановки."
         howto={
           <ol>
+            <li>«Проверить обновления» → «Скачать».</li>
             <li>
-              Bump версии в `package.json`, тег `vX.Y.Z`, push — CI собирает
-              установщики.
+              «Обновить и перезапустить» — тихая установка и запуск новой
+              версии.
             </li>
-            <li>В установленном приложении: «Проверить обновления».</li>
-            <li>Скачать → «Обновить и перезапустить».</li>
+            <li>
+              Или просто закройте Mira: обновление встанет при выходе, без
+              окон установщика.
+            </li>
           </ol>
         }
         footer={
@@ -156,6 +181,14 @@ export function SettingsUpdatesSection() {
               onClick={() => void install()}
             >
               {busy === "install" ? "Перезапуск…" : "Обновить и перезапустить"}
+            </button>
+            <button
+              type="button"
+              className="btn"
+              disabled={busy !== null}
+              onClick={() => void openReleases()}
+            >
+              {busy === "releases" ? "Открываю…" : "Открыть релизы"}
             </button>
             {note ? <span className="chip">{note}</span> : null}
           </div>

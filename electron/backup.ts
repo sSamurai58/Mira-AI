@@ -29,7 +29,8 @@ export type ForgetScope =
   | "all";
 
 function dataRoot(...parts: string[]): string {
-  return path.resolve(process.cwd(), "data", ...parts);
+  const { dataRoot: root } = require("./appPaths") as typeof import("./appPaths");
+  return root(...parts);
 }
 
 function backupsRoot(...parts: string[]): string {
@@ -175,7 +176,8 @@ export async function exportBackup(opts?: {
     parts.push("protocols");
 
     if (includeSecrets) {
-      const envPath = path.resolve(process.cwd(), ".env");
+      const { envFilePath } = require("./appPaths") as typeof import("./appPaths");
+      const envPath = envFilePath();
       if (fs.existsSync(envPath)) {
         copyFileSafe(envPath, path.join(packagePath, "secrets.env"));
         parts.push("secrets.env");

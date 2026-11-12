@@ -34,7 +34,11 @@ export type AppConfig = {
 let cached: AppConfig | null = null;
 
 function loadEnvFile(): void {
+  // Lazy import avoids circular init with appPaths/electron
+  const { envFilePath, writableRoot } = require("./appPaths") as typeof import("./appPaths");
   const candidates = [
+    envFilePath(),
+    path.resolve(writableRoot(), ".env"),
     path.resolve(process.cwd(), ".env"),
     path.resolve(appRoot(), ".env"),
   ];
@@ -114,11 +118,12 @@ export function loadConfig(force = false): AppConfig {
     return requestedModel;
   })();
 
+  const { writableRoot } = require("./appPaths") as typeof import("./appPaths");
   const databasePath = ensureMiraDatabaseLayout(
     process.env.DATABASE_PATH?.trim()
       ? path.isAbsolute(process.env.DATABASE_PATH.trim())
         ? process.env.DATABASE_PATH.trim()
-        : path.resolve(process.cwd(), process.env.DATABASE_PATH.trim())
+        : path.resolve(writableRoot(), process.env.DATABASE_PATH.trim())
       : defaultDatabasePath(),
   );
 

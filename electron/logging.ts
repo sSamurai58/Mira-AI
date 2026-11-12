@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { dataRoot } from "./appPaths";
 import { openStore } from "./store";
 
 export type LogLevel = "info" | "warn" | "error" | "debug";
@@ -14,7 +15,7 @@ export type AppLogRow = {
 };
 
 function logsDir(): string {
-  const dir = path.resolve(process.cwd(), "data", "logs");
+  const dir = dataRoot("logs");
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }

@@ -27,7 +27,10 @@ export function getWebPolicy(): WebPolicy {
   const enabled =
     (process.env.WEB_ENABLED ?? "true").trim().toLowerCase() !== "false";
   // Fetch allowlist defaults to duckduckgo + example; "*" remains possible but SSRF guard still applies.
-  const raw = (process.env.WEB_ALLOWLIST ?? "duckduckgo.com,api.duckduckgo.com").trim();
+  const raw = (
+    process.env.WEB_ALLOWLIST ??
+    "duckduckgo.com,api.duckduckgo.com,wttr.in,api.open-meteo.com,geocoding-api.open-meteo.com"
+  ).trim();
   const allowlist = raw
     .split(",")
     .map((s) => s.trim().toLowerCase())
@@ -109,6 +112,88 @@ export function looksLikeWebIntent(text: string): boolean {
       text,
     )
   );
+}
+
+export function looksLikeWeatherIntent(text: string): boolean {
+  return /(погод|температур|осадк|ветер|влажност|°|градус|weather|forecast)/i.test(
+    text,
+  );
+}
+
+/** Current weather via wttr.in (no API key). */
+export async function fetchWeatherSnapshot(
+  placeQuery: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  const place =
+    placeQuery
+      .replace(
+        /^(какая|какой|какое|что|покажи|скажи|проверь|узнай)\s+/i,
+        "",
+      )
+      .replace(
+        /\b(сейчас|в данный момент|на улице|погода|температура|weather|forecast|сейчас)\b/gi,
+        " ",
+      )
+      .replace(/\s+/g, " ")
+      .trim() || "Moscow";
+
+  const url = `https://wttr.in/${encodeURIComponent(place)}?format=j1&lang=ru`;
+  await assertSafeFetchUrl(url);
+  const res = await fetch(url, {
+    signal,
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "MiraAssistant/0.0.6 (+local)",
+    },
+  });
+  if (!res.ok) {
+    throw new Error(`wttr.in HTTP ${res.status}`);
+  }
+  const data = (await res.json()) as {
+    current_condition?: Array<{
+      temp_C?: string;
+      FeelsLikeC?: string;
+      weatherDesc?: Array<{ value?: string }>;
+      windspeedKmph?: string;
+      winddir16Point?: string;
+      humidity?: string;
+      pressure?: string;
+      lang_ru?: Array<{ value?: string }>;
+    }>;
+    nearest_area?: Array<{
+      areaName?: Array<{ value?: string }>;
+      country?: Array<{ value?: string }>;
+    }>;
+  };
+  const cur = data.current_condition?.[0];
+  if (!cur) {
+    return `[Погода] Нет данных wttr.in для «${place}».`;
+  }
+  const area =
+    data.nearest_area?.[0]?.areaName?.[0]?.value ||
+    place;
+  const country = data.nearest_area?.[0]?.country?.[0]?.value || "";
+  const desc =
+    cur.lang_ru?.[0]?.value ||
+    cur.weatherDesc?.[0]?.value ||
+    "—";
+  const windMs = cur.windspeedKmph
+    ? (Number(cur.windspeedKmph) / 3.6).toFixed(1)
+    : "—";
+  const pressureMm = cur.pressure
+    ? Math.round(Number(cur.pressure) * 0.750062).toString()
+    : "—";
+  return [
+    `[Погода: wttr.in · ${area}${country ? `, ${country}` : ""}]`,
+    `Сейчас: ${cur.temp_C ?? "—"}°C (ощущается ${cur.FeelsLikeC ?? "—"}°C)`,
+    `Условия: ${desc}`,
+    `Ветер: ${windMs} м/с${cur.winddir16Point ? ` (${cur.winddir16Point})` : ""}`,
+    `Влажность: ${cur.humidity ?? "—"}%`,
+    `Давление: ${pressureMm} мм рт. ст.`,
+    "",
+    "Используй эти цифры как актуальные. Не говори, что данных нет.",
+  ].join("\n");
 }
 
 export function extractSearchQueryFromText(text: string): string {
@@ -208,7 +293,7 @@ export async function webFetch(
   const res = await fetch(parsed.toString(), {
     signal,
     redirect: "error",
-    headers: { "User-Agent": "MiraAssistant/0.0.1 (+local)" },
+    headers: { "User-Agent": "MiraAssistant/0.0.6 (+local)" },
   });
   const contentType = res.headers.get("content-type") || "";
   let text = await res.text();

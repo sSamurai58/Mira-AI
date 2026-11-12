@@ -1,14 +1,36 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type DragEvent,
+  type FormEvent,
+} from "react";
+import { emitActionLog } from "../actionLog";
 import { getBrowserLlmLabel, streamBrowserChat } from "../browserLlm";
+import {
+  filesToPendingAttachments,
+  formatAttachmentsForPrompt,
+  isLearnableAttachment,
+  toAttachmentPayload,
+  type PendingChatAttachment,
+} from "../chat/attachments";
+import { ChatMarkdown } from "../chat/ChatMarkdown";
+import { textForSpeech } from "../chat/codeSpeech";
 import { CoreOrb } from "../components/CoreOrb";
 import { HomeRail } from "../components/HomeRail";
 import { HudCorners } from "../components/HudCorners";
 import { ThemeSelect } from "../components/ThemeSelect";
+import {
+  localImportLibraryBytes,
+  localImportLibraryText,
+} from "../library/libraryLocal";
 import { createAsrSession, isAsrAvailable } from "../voice/asr";
 import {
   getActiveVoiceId,
+  isCustomVoiceId,
+  listCatalogVoices,
   setActiveVoiceId,
-  waitForVoices,
 } from "../voice/catalog";
 import { getVoiceEngineStatus } from "../voice/engineStatus";
 import {
@@ -38,6 +60,9 @@ type Bubble = {
   role: "user" | "assistant";
   content: string;
   pending?: boolean;
+  /** Shown while waiting for tools / first tokens */
+  statusHint?: string;
+  attachments?: Array<{ name: string; kind: string }>;
 };
 
 export function ChatPage({
@@ -48,7 +73,7 @@ export function ChatPage({
   onError,
   onVoiceState,
   autoSpeak,
-  coreLevel = 4,
+  coreLevel = 1,
 }: ChatPageProps) {
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const [input, setInput] = useState("");
@@ -63,8 +88,13 @@ export function ChatPage({
   const [handsFree, setHandsFree] = useState<HandsFreePrefs>(() =>
     getHandsFreePrefs(),
   );
+  const [pendingFiles, setPendingFiles] = useState<PendingChatAttachment[]>([]);
+  const [addToLibrary, setAddToLibrary] = useState(false);
+  const [attachNote, setAttachNote] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
   const requestIdRef = useRef<string | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const asrRef = useRef<ReturnType<typeof createAsrSession> | null>(null);
   const wakeRef = useRef<ReturnType<typeof createAsrSession> | null>(null);
   const sessionIdRef = useRef(sessionId);
@@ -94,7 +124,7 @@ export function ChatPage({
   useEffect(() => {
     const sync = () => setHandsFree(getHandsFreePrefs());
     window.addEventListener("storage", sync);
-    const id = window.setInterval(sync, 800);
+    const id = window.setInterval(sync, 4000);
     return () => {
       window.removeEventListener("storage", sync);
       window.clearInterval(id);
@@ -104,7 +134,7 @@ export function ChatPage({
   useEffect(() => {
     let cancelled = false;
     async function bootVoices() {
-      const list = await waitForVoices();
+      const list = await listCatalogVoices();
       if (cancelled) return;
       setVoices(list);
       setActiveVoiceIdState(getActiveVoiceId(list));
@@ -125,9 +155,17 @@ export function ChatPage({
         onVoiceState("idle");
         return;
       }
-      speakText(text, activeVoiceId, {
+      const spoken = textForSpeech(text);
+      if (!spoken) {
+        onVoiceState("idle");
+        return;
+      }
+      speakText(spoken, activeVoiceId, {
         onStart: () => onVoiceState("speaking"),
         onEnd: () => onVoiceState("idle"),
+        onStatus: (msg) => {
+          setEngineNote(msg);
+        },
         onError: (msg) => {
           // Soft-fail TTS: keep chat usable in headless / empty-voice envs
           localStorage.setItem("mira.autoSpeak", "0");
@@ -141,16 +179,69 @@ export function ChatPage({
     [activeVoiceId, autoSpeak, onError, onVoiceState],
   );
 
+  async function importPendingToLocalLibrary(
+    files: PendingChatAttachment[],
+  ): Promise<string | null> {
+    const titles: string[] = [];
+    for (const f of files) {
+      if (!isLearnableAttachment(f) && !f.dataBase64) continue;
+      try {
+        if (f.kind === "text" && f.text?.trim()) {
+          const item = localImportLibraryText({
+            title: f.name.replace(/\.[^.]+$/, "") || f.name,
+            text: f.text,
+            fileName: f.name,
+          });
+          titles.push(item.title);
+        } else {
+          const item = localImportLibraryBytes({
+            title: f.name.replace(/\.[^.]+$/, "") || f.name,
+            fileName: f.name,
+            text: f.text,
+          });
+          titles.push(item.title);
+        }
+      } catch {
+        /* skip bad file */
+      }
+    }
+    return titles.length
+      ? `Добавлено в обучение (demo): ${titles.join(", ")}. Workshop → Обучение → Разобрать.`
+      : null;
+  }
+
   const sendBrowserDemo = useCallback(
-    async (trimmed: string) => {
+    async (
+      trimmed: string,
+      files: PendingChatAttachment[] = [],
+      toLibrary = false,
+    ) => {
       const requestId = crypto.randomUUID();
       requestIdRef.current = requestId;
       setBusy(true);
       setMemoryNote(null);
       onVoiceState("thinking");
+      const payloads = files.map(toAttachmentPayload);
+      const prompt = formatAttachmentsForPrompt(trimmed, payloads);
+      const display =
+        trimmed ||
+        (files.length
+          ? `📎 ${files.map((f) => f.name).join(", ")}`
+          : "");
+      emitActionLog({
+        title: "Сообщение отправлено",
+        reason: (display || trimmed || "вложения").slice(0, 120),
+        tag: "Чат",
+        tone: "accent",
+      });
       setBubbles((prev) => [
         ...prev,
-        { id: `local-user-${requestId}`, role: "user", content: trimmed },
+        {
+          id: `local-user-${requestId}`,
+          role: "user",
+          content: display,
+          attachments: files.map((f) => ({ name: f.name, kind: f.kind })),
+        },
         {
           id: `local-assistant-${requestId}`,
           role: "assistant",
@@ -159,13 +250,26 @@ export function ChatPage({
         },
       ]);
 
+      let libraryHint: string | null = null;
+      if (toLibrary && files.length) {
+        libraryHint = await importPendingToLocalLibrary(files);
+        if (libraryHint) {
+          emitActionLog({
+            title: "В библиотеку",
+            reason: libraryHint.slice(0, 120),
+            tag: "Обучение",
+            tone: "success",
+          });
+        }
+      }
+
       const history = bubbles
         .filter((b) => !b.pending && (b.role === "user" || b.role === "assistant"))
         .map((b) => ({ role: b.role, content: b.content }));
 
       try {
         const cfg = await streamBrowserChat({
-          userText: trimmed,
+          userText: libraryHint ? `${prompt}\n\n[${libraryHint}]` : prompt,
           history,
           handlers: {
             onToken: (chunk) => {
@@ -187,7 +291,17 @@ export function ChatPage({
                 ),
               );
               setModelLabel(label);
-              setContextNote(`browser · ${label}`);
+              setContextNote(
+                libraryHint
+                  ? `browser · ${label} · library`
+                  : `browser · ${label}`,
+              );
+              emitActionLog({
+                title: "Ответ готов",
+                reason: `browser · ${label}`,
+                tag: "Чат",
+                tone: "success",
+              });
               setBusy(false);
               speakAssistant(full);
             },
@@ -195,6 +309,12 @@ export function ChatPage({
               setBusy(false);
               onVoiceState("error");
               onError(err.message);
+              emitActionLog({
+                title: "Сбой диалога",
+                reason: err.message.slice(0, 120),
+                tag: "Ошибка",
+                tone: "danger",
+              });
               setBubbles((prev) => prev.filter((b) => !b.pending));
             },
           },
@@ -216,10 +336,14 @@ export function ChatPage({
         setModelLabel("browser-only");
         const reply = [
           "Browser-demo Mira (mock).",
-          `Вы сказали: «${trimmed.slice(0, 240)}».`,
+          `Вы сказали: «${trimmed.slice(0, 240) || "вложения"}».`,
+          files.length ? `Файлов: ${files.map((f) => f.name).join(", ")}.` : "",
+          libraryHint ?? "",
           "Ключ Grok/OpenAI ещё не сохранён в этой вкладке.",
           "Настройки → API и модели → провайдер grok + XAI_API_KEY → Сохранить, затем снова напишите сюда.",
-        ].join(" ");
+        ]
+          .filter(Boolean)
+          .join(" ");
 
         let built = "";
         for (const word of reply.split(/(\s+)/)) {
@@ -249,11 +373,15 @@ export function ChatPage({
   );
 
   const sendText = useCallback(
-    async (text: string) => {
+    async (
+      text: string,
+      files: PendingChatAttachment[] = [],
+      toLibrary = false,
+    ) => {
       const trimmed = text.trim();
-      if (!trimmed || busy) return;
+      if ((!trimmed && !files.length) || busy) return;
       if (!window.mira) {
-        await sendBrowserDemo(trimmed);
+        await sendBrowserDemo(trimmed, files, toLibrary);
         return;
       }
 
@@ -265,15 +393,26 @@ export function ChatPage({
 
       const requestId = crypto.randomUUID();
       requestIdRef.current = requestId;
+      const display =
+        trimmed ||
+        (files.length
+          ? `📎 ${files.map((f) => f.name).join(", ")}`
+          : "");
 
       setBubbles((prev) => [
         ...prev,
-        { id: `local-user-${requestId}`, role: "user", content: trimmed },
+        {
+          id: `local-user-${requestId}`,
+          role: "user",
+          content: display,
+          attachments: files.map((f) => ({ name: f.name, kind: f.kind })),
+        },
         {
           id: `local-assistant-${requestId}`,
           role: "assistant",
           content: "",
           pending: true,
+          statusHint: "Собираю данные…",
         },
       ]);
 
@@ -281,6 +420,8 @@ export function ChatPage({
         sessionId: sessionIdRef.current,
         text: trimmed,
         requestId,
+        attachments: files.map(toAttachmentPayload),
+        addToLibrary: toLibrary,
       });
 
       if (result.sessionId) onSessionChange(result.sessionId);
@@ -310,6 +451,8 @@ export function ChatPage({
       }
 
       if (sessionId) {
+        // Don't clobber an in-flight reply (causes duplicate / truncated bubbles).
+        if (busyRef.current || requestIdRef.current) return;
         const pack = await window.mira.getSession(sessionId);
         if (!cancelled && pack) {
           setBubbles(
@@ -339,6 +482,20 @@ export function ChatPage({
     if (!window.mira) return;
     return window.mira.onChatEvent(({ requestId, event }) => {
       if (requestIdRef.current && requestId !== requestIdRef.current) return;
+
+      if (event.type === "phase") {
+        setBubbles((prev) => {
+          const next = [...prev];
+          const last = next[next.length - 1];
+          if (last?.pending && last.role === "assistant" && !last.content) {
+            next[next.length - 1] = {
+              ...last,
+              statusHint: event.detail,
+            };
+          }
+          return next;
+        });
+      }
 
       if (event.type === "context") {
         const skillPart = event.skills.length
@@ -373,6 +530,7 @@ export function ChatPage({
             next[next.length - 1] = {
               ...last,
               content: last.content + event.text,
+              statusHint: undefined,
             };
           }
           return next;
@@ -382,13 +540,22 @@ export function ChatPage({
       if (event.type === "assistant_done") {
         setBubbles((prev) => {
           const next = [...prev];
-          const last = next[next.length - 1];
-          if (last?.pending) {
-            next[next.length - 1] = {
-              id: event.utterance.id,
-              role: "assistant",
-              content: event.utterance.content,
-            };
+          const pendingIdx = [...next]
+            .map((b, i) => ({ b, i }))
+            .reverse()
+            .find((x) => x.b.pending && x.b.role === "assistant")?.i;
+          const bubble = {
+            id: event.utterance.id,
+            role: "assistant" as const,
+            content: event.utterance.content,
+          };
+          if (pendingIdx != null) {
+            next[pendingIdx] = bubble;
+            return next;
+          }
+          // Fallback: avoid losing the final answer if the pending bubble was cleared.
+          if (!next.some((b) => b.id === event.utterance.id)) {
+            next.push(bubble);
           }
           return next;
         });
@@ -428,6 +595,7 @@ export function ChatPage({
         setBusy(false);
         requestIdRef.current = null;
         speakAssistant(event.utterance.content);
+        window.dispatchEvent(new Event("mira:core-progress"));
       }
 
       if (event.type === "error") {
@@ -450,12 +618,35 @@ export function ChatPage({
     onVoiceState("idle");
   }
 
+  async function addFilesFromList(list: FileList | File[] | null) {
+    if (!list || list.length === 0) return;
+    const { added, errors } = await filesToPendingAttachments(
+      list,
+      pendingFiles.length,
+    );
+    if (added.length) {
+      setPendingFiles((prev) => [...prev, ...added]);
+      if (added.some(isLearnableAttachment)) setAddToLibrary(true);
+    }
+    setAttachNote(errors[0] ?? null);
+  }
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     const text = input.trim();
-    if (!text) return;
+    if (!text && !pendingFiles.length) return;
+    const files = pendingFiles;
+    const toLibrary = addToLibrary;
     setInput("");
-    void sendText(text);
+    setPendingFiles([]);
+    setAttachNote(null);
+    void sendText(text, files, toLibrary);
+  }
+
+  function onComposerDrop(e: DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    void addFilesFromList(e.dataTransfer.files);
   }
 
   function stopWakeListen() {
@@ -679,13 +870,18 @@ export function ChatPage({
             <div className="core-card-grid">
               <div className="core-col">
                 <CoreOrb level={coreLevel} voiceState={voiceState} size={320} />
-                <div className="level-ticks" aria-hidden>
-                  {Array.from({ length: 5 }, (_, i) => (
-                    <span key={i} className={i < coreLevel ? "on" : ""} />
-                  ))}
+                <div
+                  className="core-level-controls"
+                  aria-live="polite"
+                  aria-label={`Уровень ядра ${coreLevel}`}
+                >
+                  <div className="core-level-value">
+                    <strong>{coreLevel}</strong>
+                    <span className="muted">уровень</span>
+                  </div>
                 </div>
                 <p className="core-level-caption muted">
-                  Уровень ядра {coreLevel}/5
+                  Уровень ядра {coreLevel} · без потолка · растёт с Мирой
                 </p>
               </div>
 
@@ -816,7 +1012,26 @@ export function ChatPage({
             ) : (
               bubbles.map((b) => (
                 <div key={b.id} className={`bubble ${b.role}`}>
-                  {b.content || (b.pending ? "…" : "")}
+                  {b.attachments?.length ? (
+                    <div className="bubble-attach-list">
+                      {b.attachments.map((a) => (
+                        <span key={a.name} className="attach-chip">
+                          {a.kind === "image" ? "🖼" : "📎"} {a.name}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                  {b.content ? (
+                    b.role === "assistant" ? (
+                      <ChatMarkdown text={b.content} />
+                    ) : (
+                      <div className="bubble-plain">{b.content}</div>
+                    )
+                  ) : b.pending ? (
+                    <span className="bubble-pending">
+                      {b.statusHint || "Думаю…"}
+                    </span>
+                  ) : null}
                 </div>
               ))
             )}
@@ -842,12 +1057,89 @@ export function ChatPage({
             ))}
           </div>
 
-          <form className="composer-row" onSubmit={handleSubmit}>
-            <div className="rainbow-field">
+          {pendingFiles.length > 0 ? (
+            <div className="attach-pending">
+              {pendingFiles.map((f) => (
+                <span key={f.id} className="attach-chip is-pending">
+                  {f.kind === "image" ? "🖼" : "📎"} {f.name}
+                  <button
+                    type="button"
+                    className="attach-chip-x"
+                    aria-label={`Убрать ${f.name}`}
+                    onClick={() =>
+                      setPendingFiles((prev) =>
+                        prev.filter((x) => x.id !== f.id),
+                      )
+                    }
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+              <label className="attach-learn-toggle">
+                <input
+                  type="checkbox"
+                  checked={addToLibrary}
+                  onChange={(e) => setAddToLibrary(e.target.checked)}
+                />
+                В материалы обучения
+              </label>
+            </div>
+          ) : null}
+          {attachNote ? (
+            <p className="mono tiny muted" style={{ margin: 0 }}>
+              {attachNote}
+            </p>
+          ) : null}
+
+          <form
+            className={`composer-row ${dragOver ? "is-drop" : ""}`}
+            onSubmit={handleSubmit}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={onComposerDrop}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              hidden
+              onChange={(e) => {
+                void addFilesFromList(e.target.files);
+                e.target.value = "";
+              }}
+            />
+            <div className="rainbow-field has-attach">
+              <button
+                type="button"
+                className="attach-btn"
+                disabled={busy}
+                title="Прикрепить файлы к сообщению"
+                aria-label="Прикрепить файлы к сообщению"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
+                  <path
+                    d="M16.5 6.5v8.25a4.5 4.5 0 1 1-9 0V7a3 3 0 0 1 6 0v7.25a1.5 1.5 0 1 1-3 0V8"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                <span className="attach-btn-label">Файл</span>
+              </button>
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Скажите или напишите…"
+                placeholder={
+                  pendingFiles.length
+                    ? "Напишите сообщение к файлам…"
+                    : "Сообщение или перетащите файлы сюда…"
+                }
                 disabled={busy}
                 aria-label="Сообщение для Mira"
               />
@@ -872,7 +1164,7 @@ export function ChatPage({
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={busy || !input.trim()}
+              disabled={busy || (!input.trim() && !pendingFiles.length)}
             >
               {busy ? "Думаю…" : "Отправить"}
             </button>
@@ -889,7 +1181,13 @@ export function ChatPage({
       {showHome ? (
         <HomeRail
           modelLabel={modelLabel}
-          voiceNote={activeVoiceId ? "voice on" : "voice n/a"}
+          voiceNote={
+            activeVoiceId
+              ? isCustomVoiceId(activeVoiceId)
+                ? "студия"
+                : "voice on"
+              : "voice n/a"
+          }
           voiceState={voiceState}
         />
       ) : null}
