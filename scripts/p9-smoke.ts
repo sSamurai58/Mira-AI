@@ -5,6 +5,7 @@ import { closeStore, openStore } from "../electron/store";
 import {
   createVoiceProject,
   generatePhrases,
+  getCustomVoiceCorpus,
   getStudioSnapshot,
   importClip,
   listCustomVoices,
@@ -93,6 +94,13 @@ async function main() {
 
   const catalog = listCustomVoices();
   assert.ok(catalog.some((v) => v.id === trained.voice!.id));
+
+  const corpus = getCustomVoiceCorpus(trained.voice!.id);
+  assert.equal(corpus.voice.id, trained.voice!.id);
+  assert.ok(
+    corpus.units.length >= 3,
+    "trained voice corpus should expose accepted phrase clips",
+  );
 
   const snap = getStudioSnapshot(project.id);
   assert.ok(snap.phrases.length >= 6);

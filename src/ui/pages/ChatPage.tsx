@@ -28,6 +28,7 @@ import {
 import { createAsrSession, isAsrAvailable } from "../voice/asr";
 import {
   getActiveVoiceId,
+  isCustomVoiceId,
   listCatalogVoices,
   setActiveVoiceId,
 } from "../voice/catalog";
@@ -162,6 +163,9 @@ export function ChatPage({
       speakText(spoken, activeVoiceId, {
         onStart: () => onVoiceState("speaking"),
         onEnd: () => onVoiceState("idle"),
+        onStatus: (msg) => {
+          setEngineNote(msg);
+        },
         onError: (msg) => {
           // Soft-fail TTS: keep chat usable in headless / empty-voice envs
           localStorage.setItem("mira.autoSpeak", "0");
@@ -1177,7 +1181,13 @@ export function ChatPage({
       {showHome ? (
         <HomeRail
           modelLabel={modelLabel}
-          voiceNote={activeVoiceId ? "voice on" : "voice n/a"}
+          voiceNote={
+            activeVoiceId
+              ? isCustomVoiceId(activeVoiceId)
+                ? "студия"
+                : "voice on"
+              : "voice n/a"
+          }
           voiceState={voiceState}
         />
       ) : null}

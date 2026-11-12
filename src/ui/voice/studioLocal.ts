@@ -559,6 +559,45 @@ export function listLocalCustomVoices(): MiraCustomVoice[] {
   return read().customVoices;
 }
 
+export function getLocalCustomVoiceCorpus(voiceId: string): {
+  voice: MiraCustomVoice;
+  units: Array<{ phraseId: string; text: string; filePath: string }>;
+} {
+  const store = read();
+  const voice = store.customVoices.find((v) => v.id === voiceId);
+  if (!voice) throw new Error("Голос не найден");
+  const phrases = new Map(
+    store.phrases
+      .filter((p) => p.project_id === voice.project_id)
+      .map((p) => [p.id, p]),
+  );
+  const clips = store.clips
+    .filter(
+      (c) =>
+        c.project_id === voice.project_id &&
+        c.accepted === 1 &&
+        Boolean(c.phrase_id),
+    )
+    .slice()
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const seen = new Set<string>();
+  const units: Array<{ phraseId: string; text: string; filePath: string }> =
+    [];
+  for (const clip of clips) {
+    const phraseId = clip.phrase_id!;
+    if (seen.has(phraseId)) continue;
+    const phrase = phrases.get(phraseId);
+    if (!phrase) continue;
+    seen.add(phraseId);
+    units.push({
+      phraseId,
+      text: phrase.text,
+      filePath: clip.file_path,
+    });
+  }
+  return { voice, units };
+}
+
 export function getHiddenSystemVoiceIds(): string[] {
   try {
     const raw = localStorage.getItem(HIDDEN_KEY);
