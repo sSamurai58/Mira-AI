@@ -1202,11 +1202,16 @@ export function VoiceStudioPanel(props: {
                 className="btn btn-primary"
                 disabled={Boolean(busy)}
                 onClick={() => void morePhrases()}
-                title="Сначала тексты из речи ассистента в заданном диапазоне слов"
+                title="Новые тексты расширяют словарь: меньше повторов частых слов, больше новых фраз, интонаций и предлогов"
               >
                 {busy === "phrases" ? "Генерация…" : "Сгенерировать фразы"}
               </button>
             </div>
+            <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
+              Генерация смотрит на уже записанный корпус и избегает сотен
+              повторов одних и тех же слов — добавляет новые слова, фразы,
+              интонации и недостающие предлоги/частицы.
+            </p>
             <div
               className="row"
               style={{ flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}

@@ -341,6 +341,7 @@ UX: **Создать → фразы → загрузить → Mira сама о�
 
 - [x] Bump `package.json` / `package-lock.json` → 0.1.6 (`__MIRA_VERSION__` / UI)
 - [x] Voice Studio «Обученные фразы» modal + CatalogEditModal → `createPortal(document.body)` (nav rail z-index)
+- [x] Voice Studio phrase generate: corpus word-frequency novelty — avoid recycling saturated words; cover missing prepositions/particles; diversify intonation seeds (`phraseNovelty.ts`)
 - [ ] **Не** tag / GitHub Release `v0.1.6`, пока явно не скажут «релиз 0.1.6»
 
 ## Шаблон новой темы

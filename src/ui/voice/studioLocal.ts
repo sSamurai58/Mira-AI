@@ -1,5 +1,13 @@
 /** Browser-demo store for Voice Studio when Electron IPC is unavailable. */
 
+import {
+  localAccumulatePhrase,
+  localBuildCorpusLexStats,
+  localCoverageSeeds,
+  localRankByNovelty,
+  localScorePhraseNovelty,
+} from "./phraseNoveltyLocal";
+
 const KEY = "mira.voiceStudio.v1";
 const HIDDEN_KEY = "mira.hiddenSystemVoices";
 
@@ -470,13 +478,12 @@ export function localGeneratePhrases(
     opts.minWords,
     opts.maxWords,
   );
-  const existing = new Set(
-    store.phrases
-      .filter((p) => p.project_id === projectId)
-      .map((p) => p.text.toLowerCase()),
-  );
+  const projectPhrases = store.phrases.filter((p) => p.project_id === projectId);
+  const existing = new Set(projectPhrases.map((p) => p.text.toLowerCase()));
+  let lexStats = localBuildCorpusLexStats(projectPhrases.map((p) => p.text));
+  const corpusMature = lexStats.phraseCount >= 5 || lexStats.totalTokens >= 40;
   const covered = new Set<string>();
-  for (const p of store.phrases.filter((x) => x.project_id === projectId)) {
+  for (const p of projectPhrases) {
     for (const raw of localTokenizeWords(p.text)) {
       const key = localNormalizeWord(raw);
       if (key) covered.add(key);
@@ -509,21 +516,17 @@ export function localGeneratePhrases(
       if (fitted) uncoveredSeeds.push(fitted);
     }
   }
-  const uncoveredRank = new Map(
-    uncoveredWords.map((w, i) => [w.key, w.count * 1000 - i] as const),
-  );
-  const usedRanked = [...stats.phrases].sort((a, b) => {
-    const score = (text: string) =>
-      localTokenizeWords(text).reduce((sum, raw) => {
-        const key = localNormalizeWord(raw);
-        return sum + (uncoveredRank.get(key) ?? 0);
-      }, 0);
-    return score(b) - score(a);
-  });
+  const usedRanked = corpusMature
+    ? localRankByNovelty(stats.phrases, lexStats)
+    : [...stats.phrases];
+  const coverageSeeds = localCoverageSeeds(lexStats);
+  const commonRanked = localRankByNovelty(ASSISTANT_COMMON, lexStats);
+  const bankRanked = localRankByNovelty(PHRASE_BANK, lexStats);
+  const uncoveredRanked = localRankByNovelty(uncoveredSeeds, lexStats);
 
   const ordered: string[] = [];
   let variationSeq = 0;
-  const pushFresh = (list: string[], mark = "bank") => {
+  const pushFresh = (list: string[], mark = "bank", allowRepetitive = false) => {
     for (const raw of list) {
       if (ordered.length >= want) return;
       variationSeq += 1;
@@ -537,20 +540,38 @@ export function localGeneratePhrases(
       const key = fitted.toLowerCase();
       if (existing.has(key)) continue;
       if (ordered.some((x) => x.toLowerCase() === key)) continue;
+      const nov = localScorePhraseNovelty(fitted, lexStats);
+      if (!allowRepetitive && nov.tooRepetitive) continue;
       ordered.push(fitted);
+      lexStats = localAccumulatePhrase(lexStats, fitted);
     }
   };
-  // Most-used speech first; then frequent uncovered words (system TTS until trained).
-  pushFresh(usedRanked, "chat");
-  pushFresh(uncoveredSeeds, "uncovered");
-  pushFresh(ASSISTANT_COMMON, "common");
-  pushFresh(PHRASE_BANK, "bank");
+  if (corpusMature) {
+    pushFresh(coverageSeeds, "coverage");
+    pushFresh(bankRanked, "bank");
+    pushFresh(uncoveredRanked, "uncovered");
+    pushFresh(usedRanked, "chat");
+    pushFresh(commonRanked, "common");
+  } else {
+    pushFresh(usedRanked, "chat", true);
+    pushFresh(coverageSeeds, "coverage");
+    pushFresh(uncoveredRanked, "uncovered");
+    pushFresh(commonRanked, "common", true);
+    pushFresh(bankRanked, "bank");
+  }
   if (ordered.length < want) {
-    for (const raw of [...usedRanked, ...ASSISTANT_COMMON, ...PHRASE_BANK]) {
+    for (const raw of [
+      ...coverageSeeds,
+      ...bankRanked,
+      ...usedRanked,
+      ...ASSISTANT_COMMON,
+      ...PHRASE_BANK,
+    ]) {
       if (ordered.length >= want) break;
       variationSeq += 1;
+      const seed = corpusMature ? raw : `${raw} ${raw}`;
       const fitted = localFitPhraseToWordRange(
-        `${raw} ${raw}`,
+        seed,
         minWords,
         maxWords,
         `${projectId}|extra|${variationSeq}|${raw.slice(0, 48)}`,
@@ -559,7 +580,10 @@ export function localGeneratePhrases(
       const key = fitted.toLowerCase();
       if (existing.has(key)) continue;
       if (ordered.some((x) => x.toLowerCase() === key)) continue;
+      const nov = localScorePhraseNovelty(fitted, lexStats);
+      if (corpusMature && nov.tooRepetitive) continue;
       ordered.push(fitted);
+      lexStats = localAccumulatePhrase(lexStats, fitted);
     }
   }
   let synth = 0;
@@ -579,6 +603,10 @@ export function localGeneratePhrases(
     if (existing.has(key)) continue;
     if (ordered.some((x) => x.toLowerCase() === key)) continue;
     ordered.push(fitted);
+    lexStats = localAccumulatePhrase(lexStats, fitted);
+  }
+  if (ordered.length < want) {
+    pushFresh([...coverageSeeds, ...ASSISTANT_COMMON, ...PHRASE_BANK], "fill", true);
   }
 
   const baseMs = Date.now();
@@ -597,7 +625,7 @@ export function localGeneratePhrases(
       ...store.projects[pIdx],
       status: "phrases",
       recommendation: rows.length
-        ? `Добавлено ${rows.length} текстов (${minWords}–${maxWords} слов; приоритет частым словам). Непокрытые — системный TTS до записи.`
+        ? `Добавлено ${rows.length} текстов (${minWords}–${maxWords} слов; новизна словаря + предлоги). Непокрытые — системный TTS до записи.`
         : `Новых текстов на ${minWords}–${maxWords} слов нет. Добавьте свою фразу.`,
       updated_at: now(),
     };

@@ -22,6 +22,7 @@
 
 | Дата | Решение | Почему |
 |------|---------|--------|
+| 2026-11-12 | Voice Studio: новые генерации фраз → новизна словаря (частоты корпуса, предлоги/частицы, soft-filter повторов) | Учиться = расширять покрытие, а не повторять одни и те же слова десятки/сотни раз |
 | 2026-11-12 | Workshop overlays (`Обученные фразы`, CatalogEdit) → `createPortal(document.body)` | Sticky `.workshop-layout > .settings-nav` z-index 2 sits above `.workshop-main` (z=0); in-tree `modal-backdrop` z=40 was trapped |
 | 2026-11-12 | **Релиз 0.1.5 опубликован** (`v0.1.5`, Latest) | Themed ConfirmModal/AppConfirm + frameless TitleBar; Integrations blank-UI (hide/show, shell, portal, hash); ThemeSelect phrase-bind close; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.5 |
 | 2026-11-12 | Локальные UI-confirm через `AppConfirm`/`ConfirmModal`, не `window.confirm` | Native OS chrome (фиолетовый title bar) выбивается из тёмной темы Mira |

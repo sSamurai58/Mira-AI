@@ -25,6 +25,16 @@ import {
   runMelRefinement,
   type MelTrainResult,
 } from "./melTrainer";
+import {
+  accumulatePhraseIntoStats,
+  buildCorpusLexStats,
+  buildMissingFunctionSeeds,
+  coverageSeedPool,
+  rankFillersForNovelty,
+  rankSeedsByNovelty,
+  scorePhraseNovelty,
+  type CorpusLexStats,
+} from "./phraseNovelty";
 
 export type VoiceProjectRow = {
   id: string;
@@ -287,23 +297,40 @@ function expandTowardMinWords(
   minWords: number,
   charBudget = MAX_PHRASE_CHARS,
   variationKey = "",
+  lexStats?: CorpusLexStats,
+  lang = "ru-RU",
 ): string {
   let out = text.trim().replace(/\s+/g, " ");
   if (countWords(out) >= minWords) return out;
   const looksRu = /[А-Яа-яЁё]/.test(out);
-  const fillers = shuffleWithSeed(
-    looksRu ? EXPAND_FILLERS_RU : EXPAND_FILLERS_EN,
-    `${variationKey}|${out}|expand`,
-  );
+  const baseFillers = looksRu ? EXPAND_FILLERS_RU : EXPAND_FILLERS_EN;
+  // Prefer fillers that add novel / missing function words when corpus exists.
+  const noveltyOrdered = lexStats
+    ? rankFillersForNovelty(baseFillers, lexStats, lang, new Map())
+    : baseFillers;
+  // Keep novelty-preferred fillers earlier; light shuffle only on the tail.
+  const preferred = lexStats
+    ? [
+        ...noveltyOrdered.slice(0, Math.ceil(noveltyOrdered.length / 2)),
+        ...shuffleWithSeed(
+          noveltyOrdered.slice(Math.ceil(noveltyOrdered.length / 2)),
+          `${variationKey}|tail`,
+        ),
+      ]
+    : shuffleWithSeed(noveltyOrdered, `${variationKey}|${out}|expand`);
   let i = 0;
   let guard = 0;
+  const usedFiller = new Set<string>();
   while (countWords(out) < minWords && guard < 800) {
-    const add = fillers[i % fillers.length]!;
+    const add = preferred[i % preferred.length]!;
+    i += 1;
+    guard += 1;
+    // Soft-skip exact filler reuse within one expansion when alternatives remain.
+    if (usedFiller.has(add) && usedFiller.size < preferred.length) continue;
+    usedFiller.add(add);
     const next = `${out} ${add}`.trim();
     if (next.length > charBudget) break;
     out = next;
-    i += 1;
-    guard += 1;
   }
   return out;
 }
@@ -319,12 +346,21 @@ function fitPhraseToWordRange(
   minWords: number,
   maxWords: number,
   variationKey = "",
+  lexStats?: CorpusLexStats,
+  lang = "ru-RU",
 ): string | null {
   const budget = phraseCharBudget(maxWords);
   let out = text.trim().replace(/\s+/g, " ");
   if (!out) return null;
   out = trimToMaxWords(out, maxWords);
-  out = expandTowardMinWords(out, minWords, budget, variationKey || out);
+  out = expandTowardMinWords(
+    out,
+    minWords,
+    budget,
+    variationKey || out,
+    lexStats,
+    lang,
+  );
   out = trimToMaxWords(out, maxWords);
   if (out.length > budget) {
     out = out.slice(0, budget).replace(/\s+\S*$/, "").trim();
@@ -342,6 +378,8 @@ function fitPhraseToWordRange(
       minWords,
       budget,
       `${variationKey}|fallback|${text}`,
+      lexStats,
+      lang,
     );
     out = trimToMaxWords(out, maxWords);
   }
@@ -702,56 +740,64 @@ export function generatePhrases(
     typeof countOrOpts === "number" ? { count: countOrOpts } : countOrOpts;
   const want = Math.max(1, Math.min(opts.count ?? 5, MAX_GENERATE_COUNT));
   const { minWords, maxWords } = clampWordRange(opts.minWords, opts.maxWords);
-  const existing = new Set(
-    listPhrases(projectId).map((p) => p.text.toLowerCase()),
-  );
+  const existingPhrases = listPhrases(projectId);
+  const existing = new Set(existingPhrases.map((p) => p.text.toLowerCase()));
   const { common, variety } = phrasePoolForLang(project.lang);
 
-  // Priority for maximum learning:
-  // (1) most-frequent assistant phrases,
-  // (2) packs of frequent uncovered words (still system TTS until trained),
-  // (3) common short replies, (4) variety bank.
-  const stats = collectAssistantSpeechStats({
+  // Corpus lexical stats: avoid recycling words already used heavily.
+  let lexStats = buildCorpusLexStats(
+    existingPhrases.map((p) => p.text),
+    project.lang,
+  );
+  const corpusMature = lexStats.phraseCount >= 5 || lexStats.totalTokens >= 40;
+
+  const speechStats = collectAssistantSpeechStats({
     limitUtterances: 120,
     limitPhrases: 100,
     limitWords: 100,
   });
   const covered = projectCoveredWordKeys(projectId);
   const frequentUncovered = buildFrequentUncoveredSeeds(
-    stats.words,
+    speechStats.words,
     covered,
     project.lang,
     minWords,
     maxWords,
   );
-  // Phrase frequency stays primary; uncovered high-freq words are a tie-break
-  // so we close lexicon gaps without demoting the most-used replies.
-  const uncoveredRank = new Map(
-    stats.words
-      .filter((w) => !covered.has(w.key))
-      .map((w, i) => [w.key, w.count * 10 - i] as const),
+
+  // Chat phrases: when corpus is still small, keep frequent speech for bootstrap;
+  // once mature, rank by novelty (penalize saturated content reuse).
+  const chatTexts = speechStats.phrases.map((p) => p.text);
+  const usedRanked = corpusMature
+    ? rankSeedsByNovelty(chatTexts, lexStats, project.lang)
+    : chatTexts;
+
+  const missingFnSeeds = buildMissingFunctionSeeds(
+    lexStats.missingFunctionKeys,
+    project.lang,
   );
-  const usedRanked = stats.phrases
-    .map((p) => {
-      const uncoveredBoost = tokenizeSpeechWords(p.text).reduce((sum, raw) => {
-        const key = normalizeLexKey(raw);
-        return sum + (uncoveredRank.get(key) ?? 0);
-      }, 0);
-      return {
-        text: p.text,
-        rank: p.score * 10_000 + uncoveredBoost,
-      };
-    })
-    .sort((a, b) => b.rank - a.rank)
-    .map((p) => p.text);
+  const coverageSeeds = rankSeedsByNovelty(
+    [...missingFnSeeds, ...coverageSeedPool(project.lang)],
+    lexStats,
+    project.lang,
+  );
+  const commonRanked = rankSeedsByNovelty(common, lexStats, project.lang);
+  const varietyRanked = rankSeedsByNovelty(variety, lexStats, project.lang);
+  const uncoveredRanked = rankSeedsByNovelty(
+    frequentUncovered,
+    lexStats,
+    project.lang,
+  );
 
   const ordered: string[] = [];
   const fromChatKeys = new Set<string>();
   const fromUncoveredKeys = new Set<string>();
+  const fromCoverageKeys = new Set<string>();
   let variationSeq = 0;
   const pushFresh = (
     list: string[],
-    mark: "chat" | "uncovered" | null = null,
+    mark: "chat" | "uncovered" | "coverage" | null = null,
+    allowRepetitive = false,
   ) => {
     for (const raw of list) {
       if (ordered.length >= want) return;
@@ -761,41 +807,72 @@ export function generatePhrases(
         minWords,
         maxWords,
         `${projectId}|${mark ?? "bank"}|${variationSeq}|${raw.slice(0, 48)}`,
+        lexStats,
+        project.lang,
       );
       if (!fitted) continue;
       const key = fitted.toLowerCase();
       if (existing.has(key)) continue;
       if (ordered.some((x) => x.toLowerCase() === key)) continue;
+      const nov = scorePhraseNovelty(fitted, lexStats, project.lang);
+      if (!allowRepetitive && nov.tooRepetitive) continue;
       ordered.push(fitted);
+      lexStats = accumulatePhraseIntoStats(lexStats, fitted, project.lang);
       if (mark === "chat") fromChatKeys.add(key);
       if (mark === "uncovered") fromUncoveredKeys.add(key);
+      if (mark === "coverage") fromCoverageKeys.add(key);
     }
   };
-  pushFresh(usedRanked, "chat");
-  pushFresh(frequentUncovered, "uncovered");
-  pushFresh(common);
-  pushFresh(variety);
-  // If still short of want (small banks + tight range), re-expand unique seeds
-  // with seeded filler rotation so long corpora stay distinct.
+
+  // Learning-first order once the corpus has material:
+  // coverage (prepositions/intonation) → novel variety → uncovered TTS gaps →
+  // chat (novelty-ranked) → common. Bootstrap (empty corpus) still seeds chat first.
+  if (corpusMature) {
+    pushFresh(coverageSeeds, "coverage");
+    pushFresh(varietyRanked);
+    pushFresh(uncoveredRanked, "uncovered");
+    pushFresh(usedRanked, "chat");
+    pushFresh(commonRanked);
+  } else {
+    pushFresh(usedRanked, "chat", true);
+    pushFresh(coverageSeeds, "coverage");
+    pushFresh(uncoveredRanked, "uncovered");
+    pushFresh(commonRanked, null, true);
+    pushFresh(varietyRanked);
+  }
+
+  // If still short, re-expand unique seeds (avoid verbatim `raw raw` when mature).
   if (ordered.length < want) {
-    const extras = [...usedRanked, ...frequentUncovered, ...common, ...variety];
+    const extras = [
+      ...coverageSeeds,
+      ...varietyRanked,
+      ...uncoveredRanked,
+      ...usedRanked,
+      ...commonRanked,
+    ];
     for (const raw of extras) {
       if (ordered.length >= want) break;
       variationSeq += 1;
+      const seed = corpusMature ? raw : `${raw} ${raw}`;
       const fitted = fitPhraseToWordRange(
-        `${raw} ${raw}`,
+        seed,
         minWords,
         maxWords,
         `${projectId}|extra|${variationSeq}|${raw.slice(0, 48)}`,
+        lexStats,
+        project.lang,
       );
       if (!fitted) continue;
       const key = fitted.toLowerCase();
       if (existing.has(key)) continue;
       if (ordered.some((x) => x.toLowerCase() === key)) continue;
+      const nov = scorePhraseNovelty(fitted, lexStats, project.lang);
+      if (corpusMature && nov.tooRepetitive) continue;
       ordered.push(fitted);
+      lexStats = accumulatePhraseIntoStats(lexStats, fitted, project.lang);
     }
   }
-  // Always be able to fill the requested count for long word ranges.
+
   const langEn = project.lang.toLowerCase().startsWith("en");
   const starters = langEn ? PASSAGE_STARTERS_EN : PASSAGE_STARTERS_RU;
   let synth = 0;
@@ -809,12 +886,25 @@ export function generatePhrases(
       minWords,
       maxWords,
       `${projectId}|synth|${variationSeq}|${synth}|${Date.now()}`,
+      lexStats,
+      project.lang,
     );
     if (!fitted) break;
     const key = fitted.toLowerCase();
     if (existing.has(key)) continue;
     if (ordered.some((x) => x.toLowerCase() === key)) continue;
+    const nov = scorePhraseNovelty(fitted, lexStats, project.lang);
+    if (corpusMature && nov.tooRepetitive) continue;
     ordered.push(fitted);
+    lexStats = accumulatePhraseIntoStats(lexStats, fitted, project.lang);
+  }
+  // Last resort: allow repetitive candidates so count never collapses to [].
+  if (ordered.length < want) {
+    pushFresh(
+      [...coverageSeeds, ...common, ...variety, ...usedRanked],
+      null,
+      true,
+    );
   }
   const pick = ordered.slice(0, want);
 
@@ -834,6 +924,7 @@ export function generatePhrases(
   const rows: VoicePhraseRow[] = [];
   let fromChat = 0;
   let fromUncovered = 0;
+  let fromCoverage = 0;
   for (let i = 0; i < pick.length; i++) {
     const text = pick[i]!;
     // Stagger created_at so 1…N order stays stable across refreshes/collapse.
@@ -849,25 +940,30 @@ export function generatePhrases(
       rows.push(row);
       if (fromChatKeys.has(text.toLowerCase())) fromChat += 1;
       if (fromUncoveredKeys.has(text.toLowerCase())) fromUncovered += 1;
+      if (fromCoverageKeys.has(text.toLowerCase())) fromCoverage += 1;
     } catch {
       // unique dedup race
     }
   }
-  const uncoveredWordCount = stats.words.filter(
+  const uncoveredWordCount = speechStats.words.filter(
     (w) => !covered.has(w.key),
   ).length;
+  const missingFnLeft = lexStats.missingFunctionKeys.length;
   touchProject(projectId, {
     status: "phrases",
     recommendation: rows.length
       ? `Добавлено ${rows.length} текстов (${minWords}–${maxWords} слов)` +
-        (fromChat ? ` · частые фразы диалога: ${fromChat}` : "") +
+        (fromCoverage ? ` · новизна/предлоги: ${fromCoverage}` : "") +
+        (fromChat ? ` · фразы диалога: ${fromChat}` : "") +
         (fromUncovered
-          ? ` · частые непокрытые слова: ${fromUncovered}`
+          ? ` · непокрытые слова: ${fromUncovered}`
           : uncoveredWordCount
             ? ` · непокрытых частых слов в речи: ${uncoveredWordCount}`
             : "") +
-        (!fromChat && !fromUncovered ? " · частые ответы Mira / банк" : "") +
-        ". Непокрытые слова пока говорит системный TTS — запишите и переобучите."
+        (missingFnLeft
+          ? ` · ещё не в корпусе служебных слов: ${missingFnLeft}`
+          : " · служебные слова корпуса закрыты") +
+        ". Новые генерации расширяют словарь и избегают частых повторов."
       : "Новых фраз нет. Добавьте свою.",
   });
   return rows;

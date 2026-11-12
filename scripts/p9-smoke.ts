@@ -23,6 +23,11 @@ import {
   trainVoiceModel,
 } from "../electron/voiceStudio/studio";
 import {
+  buildCorpusLexStats,
+  scorePhraseNovelty,
+} from "../electron/voiceStudio/phraseNovelty";
+import { normalizeLexKey, tokenizeSpeechWords } from "../electron/voiceStudio/modelPack";
+import {
   estimateWordBoundariesByEnergy,
   extractClipAudioFeatures,
   noiseLikeness,
@@ -63,13 +68,14 @@ async function main() {
   assert.equal(batch1.length, 5);
   const texts1 = new Set(batch1.map((p) => p.text));
   assert.equal(texts1.size, 5);
+  // Empty/small corpus still bootstraps from frequent assistant speech.
   assert.ok(
     batch1.some((p) => /проверяю|слушаю|готово/i.test(p.text)),
-    "generation should prioritize assistant-used phrases",
+    "empty corpus should still seed assistant-used phrases",
   );
   assert.ok(
     batch1.some((p) => /проверяю/i.test(p.text)),
-    "most frequent assistant phrase should appear in generation",
+    "most frequent assistant phrase should appear while corpus is small",
   );
 
   // UI always sends { count, minWords, maxWords } — must not return [].
@@ -140,6 +146,64 @@ async function main() {
   for (const p of batch2) {
     assert.equal(texts1.has(p.text), false, "dedup failed");
   }
+
+  // Novelty: after a mock corpus saturated with the same content words,
+  // new generations must not recycle those top words heavily — prefer
+  // new vocabulary / missing prepositions / intonation seeds.
+  const noveltyProject = createVoiceProject({
+    name: "Novelty Voice",
+    lang: "ru-RU",
+  });
+  const saturatedLine =
+    "проверка статуса задачи проверка статуса задачи проверка статуса задачи";
+  for (let i = 0; i < 10; i++) {
+    addCustomPhrase(noveltyProject.id, `${saturatedLine} вариант ${i + 1}.`);
+  }
+  const mockCorpus = listPhrases(noveltyProject.id).map((p) => p.text);
+  const mockStats = buildCorpusLexStats(mockCorpus, "ru-RU");
+  assert.ok(mockStats.saturated.has("проверка") || (mockStats.freq.get("проверка") ?? 0) >= 8);
+  assert.ok(mockStats.missingFunctionKeys.includes("через") || mockStats.missingFunctionKeys.length > 0);
+
+  const novelBatch = generatePhrases(noveltyProject.id, {
+    count: 6,
+    minWords: 4,
+    maxWords: 40,
+  });
+  assert.ok(novelBatch.length >= 3, "novelty generate should return phrases");
+  const satKeys = ["проверка", "статуса", "задачи"] as const;
+  let avoidedHeavy = 0;
+  let coverageHit = 0;
+  for (const p of novelBatch) {
+    const nov = scorePhraseNovelty(p.text, mockStats, "ru-RU");
+    assert.equal(
+      nov.tooRepetitive,
+      false,
+      `candidate too repetitive vs saturated corpus: ${p.text.slice(0, 100)}`,
+    );
+    const keys = tokenizeSpeechWords(p.text).map((w) => normalizeLexKey(w));
+    const satHits = keys.filter((k) =>
+      satKeys.includes(k as (typeof satKeys)[number]),
+    ).length;
+    const satRatio = satHits / Math.max(1, keys.length);
+    if (satRatio < 0.35) avoidedHeavy += 1;
+    if (
+      /через|вдоль|вокруг|предлог|вопрос|команда|перечислен|телефон|мягк/i.test(
+        p.text,
+      ) ||
+      nov.missingFunctionHits > 0 ||
+      nov.novelCount >= 2
+    ) {
+      coverageHit += 1;
+    }
+  }
+  assert.ok(
+    avoidedHeavy >= Math.ceil(novelBatch.length * 0.5),
+    `expected most new phrases to avoid saturated content words; avoided=${avoidedHeavy}/${novelBatch.length}`,
+  );
+  assert.ok(
+    coverageHit >= 1,
+    "expected at least one novelty/coverage-oriented phrase",
+  );
 
   const sample = path.resolve(
     process.cwd(),
