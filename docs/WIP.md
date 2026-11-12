@@ -324,7 +324,7 @@ UX: **Создать → фразы → загрузить → Mira сама о�
 
 ## 2026-11-12 — Релиз 0.1.5 ✅
 
-Ветка `cursor/release-0-1-5-6838` @ `f1b8424`. Пакет **0.1.5**. Latest GitHub Release.
+Ветка `cursor/release-0-1-5-6838` @ `f1b8424`. Пакет **0.1.5**.
 
 - [x] Bump `package.json` / `package-lock.json` → 0.1.5 (`__MIRA_VERSION__` / UI)
 - [x] In-app confirm modals (`AppConfirm` / `ConfirmModal`) вместо native `window.confirm`
@@ -334,15 +334,16 @@ UX: **Создать → фразы → загрузить → Mira сама о�
 - [x] Публикация GitHub Release **0.1.5** — https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.5 (tag `v0.1.5` @ `f1b8424`)
 - [ ] MCP runtime / OAuth (по-прежнему later; после явной команды)
 
-## 2026-11-12 — 0.1.6 WIP (no publish yet)
+## 2026-11-12 — Релиз 0.1.6 ✅
 
-Ветка `cursor/release-0-1-6-6838` от tip `cursor/release-0-1-5-6838` (`04dc220`).
-Версия пакета **0.1.6**. Накопление изменений здесь.
+Ветка `cursor/release-0-1-6-6838` @ `8baa1da`. Пакет **0.1.6**. Latest GitHub Release.
 
 - [x] Bump `package.json` / `package-lock.json` → 0.1.6 (`__MIRA_VERSION__` / UI)
 - [x] Voice Studio «Обученные фразы» modal + CatalogEditModal → `createPortal(document.body)` (nav rail z-index)
+- [x] Plain-language Voice Studio TTS curriculum / train report table
 - [x] Voice Studio phrase generate: corpus word-frequency novelty — avoid recycling saturated words; cover missing prepositions/particles; diversify intonation seeds (`phraseNovelty.ts`)
-- [ ] **Не** tag / GitHub Release `v0.1.6`, пока явно не скажут «релиз 0.1.6»
+- [x] Публикация GitHub Release **0.1.6** — https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.6 (tag `v0.1.6` @ `8baa1da`)
+- [ ] MCP runtime / OAuth (по-прежнему later; после явной команды)
 
 ## Шаблон новой темы
 
