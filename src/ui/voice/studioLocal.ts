@@ -784,6 +784,9 @@ export async function localTrainVoiceModel(
     steps?: Array<{ step: string; label: string; pct: number }>;
     wordUnitCount?: number;
     fragmentUnitCount?: number;
+    lexiconSize?: number;
+    audioLexiconSize?: number;
+    provisionalLexiconSize?: number;
   };
 }> {
   const store = read();
@@ -899,21 +902,52 @@ export async function localTrainVoiceModel(
     };
   }
 
-  emit("segment", 30, `Сегментация ${linkedAccepted} клипов (browser-demo)…`);
-  await pause(220 + linkedAccepted * 55);
-  let wordUnitCount = 0;
+  const allWords = new Set<string>();
+  const audioWords = new Set<string>();
+  for (const ph of phrases) {
+    for (const w of ph.text
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+      .split(/\s+/)
+      .filter(Boolean)) {
+      allWords.add(w);
+    }
+  }
   for (const clip of acceptedClips) {
     if (!clip.phrase_id) continue;
     const ph = phrases.find((p) => p.id === clip.phrase_id);
     if (!ph) continue;
-    wordUnitCount += ph.text.split(/\s+/).filter(Boolean).length;
+    for (const w of ph.text
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]+/gu, " ")
+      .split(/\s+/)
+      .filter(Boolean)) {
+      audioWords.add(w);
+    }
   }
-  emit("lexicon", 60, `Лексикон ~${wordUnitCount} слов (browser-demo)…`);
-  await pause(200 + Math.min(800, wordUnitCount * 8));
-  emit("pack", 80, "Сборка model-pack (browser-demo)…");
-  await pause(160);
+  const lexiconSize = allWords.size;
+  const audioLexiconSize = audioWords.size;
+  const provisionalLexiconSize = Math.max(0, lexiconSize - audioLexiconSize);
+  const wordUnitCount = audioLexiconSize;
+
+  emit(
+    "segment",
+    30,
+    `Сегментация ${linkedAccepted} клипов · ${phrases.length} текстов · ~${lexiconSize} слов…`,
+  );
+  await pause(
+    280 + linkedAccepted * 70 + Math.min(6000, lexiconSize * 10),
+  );
+  emit(
+    "lexicon",
+    60,
+    `Лексикон ${lexiconSize} (аудио ${audioLexiconSize}, пока TTS ${provisionalLexiconSize})…`,
+  );
+  await pause(240 + Math.min(8000, lexiconSize * 12));
+  emit("pack", 80, `Сборка model-pack · лексикон ${lexiconSize}…`);
+  await pause(180 + Math.min(2000, lexiconSize * 3));
   emit("publish", 92, "Публикация в каталог…");
-  await pause(120);
+  await pause(140);
 
   const stamp = now();
   const voiceId =
@@ -932,6 +966,9 @@ export async function localTrainVoiceModel(
     quality,
     browserDemo: true,
     wordUnitCount,
+    lexiconSize,
+    audioLexiconSize,
+    provisionalLexiconSize,
     unitCount: linkedAccepted + wordUnitCount,
   });
   if (voice) {
@@ -963,8 +1000,8 @@ export async function localTrainVoiceModel(
   const needMore =
     acceptedClips.length < TARGET_TRAIN_CLIPS || coveragePct < 80;
   const detail = needMore
-    ? `Модель «${project.name}» обучена (${quality}, browser-demo, ~${wordUnitCount} слов). Для качества добавьте ещё клипы (покрытие ${coveragePct}%).`
-    : `Модель «${project.name}» обучена (${quality}, browser-demo, ~${wordUnitCount} слов) и в каталоге.`;
+    ? `Модель «${project.name}» обучена (${quality}, browser-demo, лексикон ${lexiconSize}: аудио ${audioLexiconSize}, TTS ${provisionalLexiconSize}). Запишите длинные тексты и добавьте клипы (покрытие ${coveragePct}%).`
+    : `Модель «${project.name}» обучена (${quality}, browser-demo, лексикон ${lexiconSize}: аудио ${audioLexiconSize}, TTS ${provisionalLexiconSize}) и в каталоге.`;
 
   store.projects[pIdx] = {
     ...project,
@@ -996,6 +1033,9 @@ export async function localTrainVoiceModel(
       steps,
       wordUnitCount,
       fragmentUnitCount: 0,
+      lexiconSize,
+      audioLexiconSize,
+      provisionalLexiconSize,
     },
   };
 }

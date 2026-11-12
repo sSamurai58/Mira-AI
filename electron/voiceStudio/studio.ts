@@ -951,6 +951,9 @@ export type VoiceTrainReport = {
   packPath?: string | null;
   wordUnitCount?: number;
   fragmentUnitCount?: number;
+  lexiconSize?: number;
+  audioLexiconSize?: number;
+  provisionalLexiconSize?: number;
 };
 
 export type VoiceTrainProgressHandler = (ev: TrainProgressEvent) => void;
@@ -961,7 +964,11 @@ function sleep(ms: number): Promise<void> {
 
 /** Per-step pause scales with corpus so training is visibly non-instant. */
 function trainStepBudgetMs(linkedAccepted: number, wordsHint = 8): number {
-  return Math.min(2200, 160 + linkedAccepted * 85 + wordsHint * 3);
+  // Long generated passages (hundreds of words) must take real time — not ~2s.
+  return Math.min(
+    14_000,
+    320 + linkedAccepted * 140 + Math.max(0, wordsHint) * 16,
+  );
 }
 
 /**
@@ -1093,12 +1100,26 @@ export async function trainVoiceModel(
         ? "medium"
         : "draft";
 
+  const allPhraseTexts = listPhrases(projectId).map((p) => ({
+    phraseId: p.id,
+    text: p.text,
+  }));
+  const corpusWordHint = allPhraseTexts.reduce(
+    (sum, p) => sum + tokenizeSpeechWords(p.text).length,
+    0,
+  );
+
   emit(
     "segment",
     26,
-    `Сегментация единиц речи (${linkedClips.length} клипов)…`,
+    `Сегментация единиц речи (${linkedClips.length} клипов, ${allPhraseTexts.length} текстов, ~${corpusWordHint} слов)…`,
   );
-  await sleep(Math.max(100, trainStepBudgetMs(linkedClips.length, 4) / 2));
+  await sleep(
+    Math.max(
+      180,
+      trainStepBudgetMs(linkedClips.length, Math.min(120, corpusWordHint)) / 2,
+    ),
+  );
 
   const packDir = studioRoot(projectId, "model-pack");
   const pack = buildVoiceModelPack({
@@ -1112,6 +1133,7 @@ export async function trainVoiceModel(
     phraseCount: qa.phraseCount,
     coveragePct,
     clips: linkedClips,
+    allPhrases: allPhraseTexts,
     onProgress: (pct, label) => {
       emit("segment", 26 + Math.round((pct / 100) * 40), label);
     },
@@ -1120,20 +1142,26 @@ export async function trainVoiceModel(
   emit(
     "lexicon",
     72,
-    `Лексикон: ${Object.keys(pack.lexicon).length} слов · ${pack.wordUnitCount} wav-единиц`,
+    `Лексикон: ${pack.lexiconSize} слов · аудио ${pack.audioLexiconSize} · пока TTS ${pack.provisionalLexiconSize} · wav ${pack.wordUnitCount}`,
   );
   await sleep(
-    trainStepBudgetMs(linkedClips.length, Object.keys(pack.lexicon).length),
+    trainStepBudgetMs(
+      linkedClips.length,
+      Math.max(pack.lexiconSize, corpusWordHint),
+    ),
   );
 
   emit(
     "pack",
     84,
-    `Пакет модели сохранён (${pack.units.length} units)`,
+    `Пакет модели сохранён (${pack.units.length} units, лексикон ${pack.lexiconSize})`,
     packDir,
   );
   await sleep(
-    trainStepBudgetMs(Math.max(1, Math.floor(linkedClips.length / 2)), 1),
+    trainStepBudgetMs(
+      Math.max(1, Math.floor(linkedClips.length / 2)),
+      Math.min(80, pack.lexiconSize),
+    ),
   );
 
   emit("publish", 92, "Публикация голоса в каталог…");
@@ -1158,7 +1186,9 @@ export async function trainVoiceModel(
     wordUnitCount: pack.wordUnitCount,
     fragmentUnitCount: pack.fragmentUnitCount,
     unitCount: pack.units.length,
-    lexiconSize: Object.keys(pack.lexicon).length,
+    lexiconSize: pack.lexiconSize,
+    audioLexiconSize: pack.audioLexiconSize,
+    provisionalLexiconSize: pack.provisionalLexiconSize,
     synthesis: `${VOICE_PACK_ENGINE}: unit-selection TTS — склейка слов/фрагментов из обученных клипов; непокрытые токены — запасной Web Speech.`,
     curriculum: [
       "1. Валидация клипов",
@@ -1214,9 +1244,10 @@ export async function trainVoiceModel(
   });
 
   const needMore = qa.acceptedCount < TARGET_TRAIN_CLIPS || coveragePct < 80;
+  const lexiconSummary = `лексикон ${pack.lexiconSize} (аудио ${pack.audioLexiconSize}, пока TTS ${pack.provisionalLexiconSize})`;
   const detail = needMore
-    ? `Модель «${project.name}» обучена (${quality}, ${pack.wordUnitCount} слов / ${pack.fragmentUnitCount} фрагм.). Для лучшего качества: ещё ${Math.max(0, TARGET_TRAIN_CLIPS - qa.acceptedCount)} клипов и привязка к фразам (покрытие ${coveragePct}%).`
-    : `Модель «${project.name}» обучена (${quality}, ${pack.wordUnitCount} слов / ${pack.fragmentUnitCount} фрагм.). Голос в каталоге; можно донабирать фразы и переобучать.`;
+    ? `Модель «${project.name}» обучена (${quality}, ${lexiconSummary}, wav ${pack.wordUnitCount}). Для качества: запишите длинные тексты и ещё ${Math.max(0, TARGET_TRAIN_CLIPS - qa.acceptedCount)} клипов (покрытие ${coveragePct}%).`
+    : `Модель «${project.name}» обучена (${quality}, ${lexiconSummary}, wav ${pack.wordUnitCount}). Голос в каталоге; донабирайте и переобучайте.`;
 
   const updated = touchProject(projectId, {
     status: needMore ? "ready_partial" : "ready",
@@ -1251,6 +1282,9 @@ export async function trainVoiceModel(
       packPath: packDir,
       wordUnitCount: pack.wordUnitCount,
       fragmentUnitCount: pack.fragmentUnitCount,
+      lexiconSize: pack.lexiconSize,
+      audioLexiconSize: pack.audioLexiconSize,
+      provisionalLexiconSize: pack.provisionalLexiconSize,
     },
   };
 }
@@ -1443,6 +1477,8 @@ export function getCustomVoiceCorpus(voiceId: string): CustomVoiceCorpus {
     }
     const units: CustomVoiceCorpusUnit[] = [];
     for (const u of pack.units) {
+      // Provisional text-only entries stay out of stitching — system TTS covers them.
+      if (u.provisional || !u.file) continue;
       if (u.kind === "phrase") {
         units.push({
           phraseId: u.sourcePhraseId,

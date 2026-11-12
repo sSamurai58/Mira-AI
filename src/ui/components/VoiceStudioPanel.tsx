@@ -267,9 +267,18 @@ export function VoiceStudioPanel(props: {
             });
           });
       const words =
-        res.report.wordUnitCount != null
-          ? ` · слов ${res.report.wordUnitCount}`
-          : "";
+        res.report.lexiconSize != null
+          ? ` · лексикон ${res.report.lexiconSize}` +
+            (res.report.audioLexiconSize != null
+              ? ` (аудио ${res.report.audioLexiconSize}` +
+                (res.report.provisionalLexiconSize
+                  ? `, TTS ${res.report.provisionalLexiconSize}`
+                  : "") +
+                ")"
+              : "")
+          : res.report.wordUnitCount != null
+            ? ` · слов ${res.report.wordUnitCount}`
+            : "";
       setNote(
         `${res.report.ok ? "OK" : "FAIL"} · ${res.report.detail} · аудио ${res.report.acceptedClips}, покрытие ${res.report.coveragePct}%${words}`,
       );

@@ -9,6 +9,7 @@ import {
   openStore,
 } from "../electron/store";
 import {
+  addCustomPhrase,
   createVoiceProject,
   deleteVoicePhrase,
   generatePhrases,
@@ -195,6 +196,29 @@ async function main() {
   assert.ok(
     (trained.report.wordUnitCount ?? 0) > 0,
     "report should include word unit count",
+  );
+  assert.ok(
+    (trained.report.lexiconSize ?? 0) >= (trained.report.audioLexiconSize ?? 0),
+    "lexicon includes audio + provisional words",
+  );
+  const lexiconBefore = trained.report.lexiconSize ?? 0;
+  assert.ok(
+    (trained.report.provisionalLexiconSize ?? 0) > 0 ||
+      (trained.report.lexiconSize ?? 0) >
+        (trained.report.audioLexiconSize ?? 0),
+    "unrecorded generated texts should contribute provisional lexicon entries",
+  );
+
+  // Novel unrecorded words must enlarge lexicon on retrain.
+  addCustomPhrase(
+    project.id,
+    "Ксилофонный квазарный гиперболоид флуктуационно телепортирует зигзагообразный псевдоним.",
+  );
+  const afterNovel = await trainVoiceModel(project.id);
+  assert.ok(afterNovel.report.ok, afterNovel.report.detail);
+  assert.ok(
+    (afterNovel.report.lexiconSize ?? 0) > lexiconBefore,
+    `lexicon should grow after novel text: ${lexiconBefore} → ${afterNovel.report.lexiconSize}`,
   );
 
   // retrain after another clip keeps stable voice id

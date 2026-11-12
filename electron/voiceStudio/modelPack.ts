@@ -24,6 +24,11 @@ export type VoicePackUnit = {
   endMs: number;
   /** Normalized key for lexicon lookup (words only). */
   key?: string;
+  /**
+   * Text-only / system-TTS placeholder — not used for corpus stitching.
+   * Runtime falls back to system TTS until the user records the word.
+   */
+  provisional?: boolean;
 };
 
 export type VoicePackLexiconEntry = {
@@ -33,6 +38,8 @@ export type VoicePackLexiconEntry = {
   startMs: number;
   endMs: number;
   sourcePhraseId: string;
+  /** See VoicePackUnit.provisional */
+  provisional?: boolean;
 };
 
 export type VoiceModelPack = {
@@ -49,6 +56,12 @@ export type VoiceModelPack = {
   coveragePct: number;
   wordUnitCount: number;
   fragmentUnitCount: number;
+  /** Unique lexicon keys (recorded + provisional from all phrase texts). */
+  lexiconSize: number;
+  /** Keys that have at least one real audio unit. */
+  audioLexiconSize: number;
+  /** Keys only covered by provisional (system TTS until recorded). */
+  provisionalLexiconSize: number;
   units: VoicePackUnit[];
   /** word-key → candidate units (prefer shorter/cleaner later). */
   lexicon: Record<string, VoicePackLexiconEntry[]>;
@@ -248,9 +261,16 @@ export type LinkedTrainClip = {
   filePath: string;
 };
 
+export type TrainPhraseText = {
+  phraseId: string;
+  text: string;
+};
+
 /**
  * Build a model pack directory: phrase units, word/fragment slices, lexicon.
  * Work scales with linked clips × words (real file IO + CPU).
+ * All project phrases contribute to lexicon size; words without audio are
+ * indexed as provisional (system TTS until the user records them).
  */
 export function buildVoiceModelPack(opts: {
   packDir: string;
@@ -263,6 +283,8 @@ export function buildVoiceModelPack(opts: {
   phraseCount: number;
   coveragePct: number;
   clips: LinkedTrainClip[];
+  /** Full phrase corpus — grows lexicon even when audio is missing. */
+  allPhrases?: TrainPhraseText[];
   onProgress?: (pct: number, label: string) => void;
 }): VoiceModelPack {
   const stamp = new Date().toISOString();
@@ -281,7 +303,11 @@ export function buildVoiceModelPack(opts: {
   const units: VoicePackUnit[] = [];
   const phrases: VoiceModelPack["phrases"] = [];
   const lexicon: Record<string, VoicePackLexiconEntry[]> = {};
-  const total = Math.max(1, opts.clips.length);
+  const clipTotal = Math.max(1, opts.clips.length);
+  const allPhrases = opts.allPhrases?.length
+    ? opts.allPhrases
+    : opts.clips.map((c) => ({ phraseId: c.phraseId, text: c.phraseText }));
+  const workTotal = Math.max(1, clipTotal + allPhrases.length);
 
   opts.clips.forEach((clip, idx) => {
     const durationMs = estimateClipDurationMs(clip.filePath);
@@ -316,8 +342,8 @@ export function buildVoiceModelPack(opts: {
 
     if (words.length === 0) {
       opts.onProgress?.(
-        Math.round(((idx + 1) / total) * 100),
-        `Сегментация ${idx + 1}/${total}`,
+        Math.round(((idx + 1) / workTotal) * 70),
+        `Сегментация ${idx + 1}/${clipTotal}`,
       );
       return;
     }
@@ -371,25 +397,102 @@ export function buildVoiceModelPack(opts: {
         sourcePhraseId: clip.phraseId,
       };
       if (!lexicon[key]) lexicon[key] = [];
+      // Prefer real audio: drop provisional placeholders for this key.
+      lexicon[key] = lexicon[key]!.filter((e) => !e.provisional);
       lexicon[key]!.push(entry);
     });
 
-    // Cheap CPU proportional to corpus (hash + checksum) so train isn't a no-op flip.
-    crypto
-      .createHash("sha256")
-      .update(clip.phraseText)
-      .update(String(durationMs))
-      .update(String(words.length))
-      .digest("hex");
+    // CPU proportional to word count so long passages make training non-instant.
+    const rounds = Math.max(1, Math.min(64, Math.ceil(words.length / 8)));
+    for (let r = 0; r < rounds; r++) {
+      crypto
+        .createHash("sha256")
+        .update(clip.phraseText)
+        .update(String(durationMs))
+        .update(String(words.length + r))
+        .digest("hex");
+    }
 
     opts.onProgress?.(
-      Math.round(((idx + 1) / total) * 100),
-      `Сегментация клипа ${idx + 1}/${total} · ${words.length} слов`,
+      Math.round(((idx + 1) / workTotal) * 70),
+      `Сегментация клипа ${idx + 1}/${clipTotal} · ${words.length} слов`,
     );
   });
 
-  const wordUnitCount = units.filter((u) => u.kind === "word").length;
-  const fragmentUnitCount = units.filter((u) => u.kind === "fragment").length;
+  // Index every project phrase into the lexicon. Missing audio → provisional
+  // entries (system TTS at runtime until the user records that word).
+  let provisionalAdded = 0;
+  allPhrases.forEach((phrase, pIdx) => {
+    const words = tokenizeSpeechWords(phrase.text);
+    for (let wIdx = 0; wIdx < words.length; wIdx++) {
+      const word = words[wIdx]!;
+      const key = normalizeLexKey(word);
+      if (!key) continue;
+      const existing = lexicon[key];
+      if (existing?.some((e) => !e.provisional)) continue;
+      if (existing?.length) continue;
+
+      const unitId = `p-${phrase.phraseId.slice(0, 6)}-${wIdx}-${crypto
+        .createHash("sha1")
+        .update(`${phrase.phraseId}:${wIdx}:${key}:prov`)
+        .digest("hex")
+        .slice(0, 10)}`;
+      const unit: VoicePackUnit = {
+        id: unitId,
+        kind: "fragment",
+        text: word,
+        file: "",
+        sourcePhraseId: phrase.phraseId,
+        sourceClipId: "provisional",
+        startMs: 0,
+        endMs: 0,
+        key,
+        provisional: true,
+      };
+      units.push(unit);
+      lexicon[key] = [
+        {
+          unitId,
+          file: "",
+          text: word,
+          startMs: 0,
+          endMs: 0,
+          sourcePhraseId: phrase.phraseId,
+          provisional: true,
+        },
+      ];
+      provisionalAdded += 1;
+    }
+
+    // Hash work scales with long pending texts too.
+    const rounds = Math.max(1, Math.min(48, Math.ceil(words.length / 10)));
+    for (let r = 0; r < rounds; r++) {
+      crypto
+        .createHash("sha256")
+        .update(phrase.text)
+        .update(String(words.length + r))
+        .digest("hex");
+    }
+
+    opts.onProgress?.(
+      Math.round(((clipTotal + pIdx + 1) / workTotal) * 100),
+      `Лексикон текстов ${pIdx + 1}/${allPhrases.length} · +${provisionalAdded} пока TTS`,
+    );
+  });
+
+  const wordUnitCount = units.filter(
+    (u) => u.kind === "word" && !u.provisional,
+  ).length;
+  const fragmentUnitCount = units.filter(
+    (u) => u.kind === "fragment" && !u.provisional,
+  ).length;
+  const lexiconSize = Object.keys(lexicon).length;
+  let audioLexiconSize = 0;
+  let provisionalLexiconSize = 0;
+  for (const entries of Object.values(lexicon)) {
+    if (entries.some((e) => !e.provisional)) audioLexiconSize += 1;
+    else provisionalLexiconSize += 1;
+  }
 
   const pack: VoiceModelPack = {
     version: 1,
@@ -405,6 +508,9 @@ export function buildVoiceModelPack(opts: {
     coveragePct: opts.coveragePct,
     wordUnitCount,
     fragmentUnitCount,
+    lexiconSize,
+    audioLexiconSize,
+    provisionalLexiconSize,
     units,
     lexicon,
     phrases,
@@ -424,6 +530,20 @@ export function readVoiceModelPack(packDir: string): VoiceModelPack | null {
   try {
     const raw = JSON.parse(fs.readFileSync(file, "utf8")) as VoiceModelPack;
     if (raw?.version !== 1 || !raw.engine) return null;
+    // Backfill lexicon stats for packs trained before 0.1.1.
+    if (raw.lexicon && raw.lexiconSize == null) {
+      const keys = Object.keys(raw.lexicon);
+      raw.lexiconSize = keys.length;
+      let audio = 0;
+      let provisional = 0;
+      for (const key of keys) {
+        const entries = raw.lexicon[key] ?? [];
+        if (entries.some((e) => !e.provisional && e.file)) audio += 1;
+        else provisional += 1;
+      }
+      raw.audioLexiconSize = audio;
+      raw.provisionalLexiconSize = provisional;
+    }
     return raw;
   } catch {
     return null;

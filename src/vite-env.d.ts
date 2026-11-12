@@ -696,6 +696,9 @@ interface MiraBridge {
       packPath?: string | null;
       wordUnitCount?: number;
       fragmentUnitCount?: number;
+      lexiconSize?: number;
+      audioLexiconSize?: number;
+      provisionalLexiconSize?: number;
     };
     pack?: unknown;
   }>;
