@@ -6,6 +6,7 @@
  * runtime TTS can stitch novel replies from trained units instead of only
  * replaying exact phrases. Uncovered words fall back to system TTS.
  */
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -228,8 +229,89 @@ function writePcmWav(
   fs.writeFileSync(outPath, Buffer.concat([header, pcm]));
 }
 
+/** Edge fade applied to sliced word units (reduces click on reassembly). */
+export const SLICE_EDGE_FADE_MS = 10;
+/** Search window for zero-crossing snap around cut points. */
+export const SLICE_ZERO_CROSS_MS = 6;
+
+function readPcmInt16MonoFrame(
+  pcm: Buffer,
+  frame: number,
+  channels: number,
+): number {
+  let sum = 0;
+  for (let c = 0; c < channels; c++) {
+    sum += pcm.readInt16LE((frame * channels + c) * 2);
+  }
+  return sum / channels;
+}
+
+function writePcmInt16MonoFrame(
+  pcm: Buffer,
+  frame: number,
+  channels: number,
+  sample: number,
+): void {
+  const v = Math.max(-32768, Math.min(32767, Math.round(sample)));
+  for (let c = 0; c < channels; c++) {
+    pcm.writeInt16LE(v, (frame * channels + c) * 2);
+  }
+}
+
+/** Snap a frame index to the nearest zero-crossing within ±windowFrames. */
+export function snapToZeroCrossing(
+  pcm: Buffer,
+  frame: number,
+  frameCount: number,
+  channels: number,
+  bitsPerSample: number,
+  windowFrames: number,
+): number {
+  if (bitsPerSample !== 16 || frameCount <= 1) {
+    return Math.max(0, Math.min(frameCount, frame));
+  }
+  const lo = Math.max(1, frame - windowFrames);
+  const hi = Math.min(frameCount - 1, frame + windowFrames);
+  let best = frame;
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (let f = lo; f <= hi; f++) {
+    const a = readPcmInt16MonoFrame(pcm, f - 1, channels);
+    const b = readPcmInt16MonoFrame(pcm, f, channels);
+    const crosses = (a <= 0 && b >= 0) || (a >= 0 && b <= 0);
+    const mag = Math.min(Math.abs(a), Math.abs(b));
+    const dist = Math.abs(f - frame);
+    // Prefer true zero-crossings; otherwise lowest |sample| near target.
+    const score = (crosses ? 0 : 1000) + mag + dist * 0.25;
+    if (score < bestScore) {
+      bestScore = score;
+      best = f;
+    }
+  }
+  return best;
+}
+
+function applyEdgeFadeInt16(
+  pcm: Buffer,
+  frameCount: number,
+  channels: number,
+  fadeFrames: number,
+): void {
+  if (fadeFrames <= 0 || frameCount < 4) return;
+  const fade = Math.min(fadeFrames, Math.floor(frameCount / 3));
+  for (let i = 0; i < fade; i++) {
+    const g = 0.5 - 0.5 * Math.cos((Math.PI * i) / Math.max(1, fade));
+    const s0 = readPcmInt16MonoFrame(pcm, i, channels);
+    writePcmInt16MonoFrame(pcm, i, channels, s0 * g);
+    const j = frameCount - 1 - i;
+    const s1 = readPcmInt16MonoFrame(pcm, j, channels);
+    writePcmInt16MonoFrame(pcm, j, channels, s1 * g);
+  }
+}
+
 /**
  * Slice a PCM WAV by millisecond range into a new WAV file.
+ * Snaps cuts to nearby zero-crossings and applies short cosine edge fades
+ * so unit-selection reassembly does not click/buzz at joins.
  * Returns false if source is not slicable PCM (caller should fall back).
  */
 export function sliceWavToFile(
@@ -237,31 +319,143 @@ export function sliceWavToFile(
   outPath: string,
   startMs: number,
   endMs: number,
+  opts?: { fadeMs?: number; zeroCrossMs?: number },
 ): boolean {
   const info = parseWavInfo(srcPath);
   if (!info) return false;
   const bytesPerSample = (info.bitsPerSample / 8) * info.channels;
-  const startByte =
-    Math.floor((startMs / 1000) * info.sampleRate) * bytesPerSample;
-  const endByte =
-    Math.ceil((endMs / 1000) * info.sampleRate) * bytesPerSample;
-  const clampedStart = Math.max(0, Math.min(info.dataSize, startByte));
-  const clampedEnd = Math.max(
-    clampedStart,
-    Math.min(info.dataSize, endByte),
-  );
-  const length = clampedEnd - clampedStart;
-  if (length <= 0) return false;
+  const frameCountTotal = Math.floor(info.dataSize / bytesPerSample);
+  if (frameCountTotal <= 0) return false;
+
+  let startFrame = Math.floor((startMs / 1000) * info.sampleRate);
+  let endFrame = Math.ceil((endMs / 1000) * info.sampleRate);
+  startFrame = Math.max(0, Math.min(frameCountTotal - 1, startFrame));
+  endFrame = Math.max(startFrame + 1, Math.min(frameCountTotal, endFrame));
+
   const fd = fs.openSync(srcPath, "r");
   try {
+    // Read a padded region so zero-crossing search can look past the cut.
+    const zcMs = opts?.zeroCrossMs ?? SLICE_ZERO_CROSS_MS;
+    const zcFrames = Math.max(
+      1,
+      Math.floor((zcMs / 1000) * info.sampleRate),
+    );
+    const readStart = Math.max(0, startFrame - zcFrames);
+    const readEnd = Math.min(frameCountTotal, endFrame + zcFrames);
+    const readFrames = readEnd - readStart;
+    const region = Buffer.alloc(readFrames * bytesPerSample);
+    fs.readSync(
+      fd,
+      region,
+      0,
+      region.length,
+      info.dataOffset + readStart * bytesPerSample,
+    );
+
+    if (info.bitsPerSample === 16) {
+      const localStart = startFrame - readStart;
+      const localEnd = endFrame - readStart;
+      startFrame =
+        readStart +
+        snapToZeroCrossing(
+          region,
+          localStart,
+          readFrames,
+          info.channels,
+          info.bitsPerSample,
+          zcFrames,
+        );
+      endFrame =
+        readStart +
+        snapToZeroCrossing(
+          region,
+          localEnd,
+          readFrames,
+          info.channels,
+          info.bitsPerSample,
+          zcFrames,
+        );
+      if (endFrame <= startFrame) endFrame = Math.min(frameCountTotal, startFrame + 1);
+    }
+
+    const length = (endFrame - startFrame) * bytesPerSample;
+    if (length <= 0) return false;
     const pcm = Buffer.alloc(length);
-    fs.readSync(fd, pcm, 0, length, info.dataOffset + clampedStart);
+    fs.readSync(fd, pcm, 0, length, info.dataOffset + startFrame * bytesPerSample);
+
+    if (info.bitsPerSample === 16) {
+      const fadeMs = opts?.fadeMs ?? SLICE_EDGE_FADE_MS;
+      const fadeFrames = Math.max(
+        1,
+        Math.floor((fadeMs / 1000) * info.sampleRate),
+      );
+      applyEdgeFadeInt16(
+        pcm,
+        endFrame - startFrame,
+        info.channels,
+        fadeFrames,
+      );
+    }
+
     fs.mkdirSync(path.dirname(outPath), { recursive: true });
     writePcmWav(outPath, pcm, info);
     return true;
   } finally {
     fs.closeSync(fd);
   }
+}
+
+/**
+ * Transcode compressed / non-PCM audio to mono 24 kHz PCM WAV via ffmpeg.
+ * Returns the wav path on success, or null if ffmpeg is missing / fails.
+ */
+export function convertAudioToPcmWav(
+  srcPath: string,
+  outPath?: string,
+): string | null {
+  const dest =
+    outPath ??
+    path.join(
+      path.dirname(srcPath),
+      `${path.basename(srcPath, path.extname(srcPath))}.pcm16.wav`,
+    );
+  if (fs.existsSync(dest)) {
+    const existing = parseWavInfo(dest);
+    if (existing) return dest;
+  }
+  try {
+    execFileSync(
+      "ffmpeg",
+      [
+        "-y",
+        "-i",
+        srcPath,
+        "-ac",
+        "1",
+        "-ar",
+        "24000",
+        "-c:a",
+        "pcm_s16le",
+        dest,
+      ],
+      { stdio: ["ignore", "ignore", "pipe"], timeout: 120_000 },
+    );
+    return parseWavInfo(dest) ? dest : null;
+  } catch {
+    try {
+      if (fs.existsSync(dest)) fs.unlinkSync(dest);
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }
+}
+
+/** Ensure a clip path is slicable PCM WAV (convert in place beside source). */
+export function ensureSlicableWav(filePath: string): string {
+  if (parseWavInfo(filePath)) return filePath;
+  const converted = convertAudioToPcmWav(filePath);
+  return converted ?? filePath;
 }
 
 export function estimateClipDurationMs(filePath: string): number {
@@ -370,8 +564,8 @@ export function buildVoiceModelPack(opts: {
       return;
     }
 
-    // Energy-weighted alignment when PCM WAV is available; else equal-time.
-    // (Not neural attention alignment — desktop unit-selection proxy.)
+    // Spectral-flux + energy valley alignment when PCM WAV is available;
+    // else equal-time. (Not neural attention — desktop unit-selection proxy.)
     const bounds = estimateWordBoundariesByEnergy(
       clip.filePath,
       words.length,

@@ -25,7 +25,8 @@ let activeCustomAudio: HTMLAudioElement | null = null;
 let activeBufferSource: AudioBufferSourceNode | null = null;
 let sharedAudioCtx: AudioContext | null = null;
 
-const CROSSFADE_SEC = 0.018;
+/** Slightly longer equal-power join — pairs with faded word-unit edges. */
+const CROSSFADE_SEC = 0.028;
 
 export function isTtsAvailable(): boolean {
   const engine = getActiveTtsEngine();
@@ -185,6 +186,30 @@ function sliceBuffer(
   return out;
 }
 
+/** Naive linear resample so mixed clip rates do not pitch-shift on stitch. */
+function resampleBuffer(
+  ctx: AudioContext,
+  source: AudioBuffer,
+  targetRate: number,
+): AudioBuffer {
+  if (source.sampleRate === targetRate) return source;
+  const ratio = targetRate / source.sampleRate;
+  const frames = Math.max(1, Math.round(source.length * ratio));
+  const out = ctx.createBuffer(source.numberOfChannels, frames, targetRate);
+  for (let ch = 0; ch < source.numberOfChannels; ch++) {
+    const src = source.getChannelData(ch);
+    const dst = out.getChannelData(ch);
+    for (let i = 0; i < frames; i++) {
+      const x = i / ratio;
+      const i0 = Math.floor(x);
+      const i1 = Math.min(src.length - 1, i0 + 1);
+      const t = x - i0;
+      dst[i] = src[i0]! * (1 - t) + src[i1]! * t;
+    }
+  }
+  return out;
+}
+
 /** Concatenate buffers with a short equal-power crossfade. */
 export function concatenateWithCrossfade(
   ctx: AudioContext,
@@ -198,11 +223,12 @@ export function concatenateWithCrossfade(
 
   const channels = Math.max(...buffers.map((b) => b.numberOfChannels));
   const rate = buffers[0]!.sampleRate;
+  const normalized = buffers.map((b) => resampleBuffer(ctx, b, rate));
   const xf = Math.max(1, Math.floor(crossfadeSec * rate));
 
-  let total = buffers[0]!.length;
-  for (let i = 1; i < buffers.length; i++) {
-    total += Math.max(0, buffers[i]!.length - xf);
+  let total = normalized[0]!.length;
+  for (let i = 1; i < normalized.length; i++) {
+    total += Math.max(0, normalized[i]!.length - xf);
   }
 
   const out = ctx.createBuffer(channels, Math.max(1, total), rate);
@@ -210,8 +236,8 @@ export function concatenateWithCrossfade(
   for (let ch = 0; ch < channels; ch++) outs.push(out.getChannelData(ch));
 
   let writeAt = 0;
-  for (let i = 0; i < buffers.length; i++) {
-    const buf = buffers[i]!;
+  for (let i = 0; i < normalized.length; i++) {
+    const buf = normalized[i]!;
     const fade = i === 0 ? 0 : Math.min(xf, buf.length, writeAt);
     for (let ch = 0; ch < channels; ch++) {
       const src =

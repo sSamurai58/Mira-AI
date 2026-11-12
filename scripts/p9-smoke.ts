@@ -27,11 +27,17 @@ import {
   textAudioMismatch,
 } from "../electron/voiceStudio/audioFeatures";
 import {
+  convertAudioToPcmWav,
+  parseWavInfo,
+  sliceWavToFile,
+} from "../electron/voiceStudio/modelPack";
+import {
   extractMelFromWav,
   melL1,
   melToSummary,
 } from "../electron/voiceStudio/melSpectrogram";
 import { NEURAL_TTS_CURRICULUM } from "../electron/voiceStudio/melTrainer";
+import { execFileSync } from "node:child_process";
 
 loadConfig(true);
 process.env.LLM_PROVIDER = "mock";
@@ -140,7 +146,7 @@ async function main() {
     "sample-phrase.wav",
   );
 
-  // PCM features + energy alignment (unit-selection, not neural).
+  // PCM features + spectral/energy alignment (unit-selection, not neural).
   const sampleFeat = extractClipAudioFeatures(
     sample,
     fs.statSync(sample).size,
@@ -151,6 +157,132 @@ async function main() {
   const bounds = estimateWordBoundariesByEnergy(sample, 4);
   assert.equal(bounds.length, 4);
   assert.ok(bounds[0]!.endMs > bounds[0]!.startMs);
+
+  // Synthetic bursts with silence gaps: cuts should land in quiet valleys,
+  // not mid-burst (old equal-energy mid-waveform chops).
+  const burstPath = path.resolve(
+    process.cwd(),
+    "seed",
+    "voice-studio",
+    "_smoke-bursts.wav",
+  );
+  {
+    const sr = 16000;
+    const total = sr * 2; // 2s
+    const pcm = Buffer.alloc(total * 2);
+    const writeTone = (from: number, to: number, hz: number) => {
+      for (let i = from; i < to; i++) {
+        const t = i / sr;
+        const env =
+          i < from + 80
+            ? (i - from) / 80
+            : i > to - 80
+              ? (to - i) / 80
+              : 1;
+        const s = Math.sin(2 * Math.PI * hz * t) * 0.45 * env;
+        pcm.writeInt16LE((s * 32767) | 0, i * 2);
+      }
+    };
+    // Three tone bursts (~0.35s) separated by ~0.25s silence.
+    writeTone(0, Math.floor(sr * 0.35), 440);
+    writeTone(Math.floor(sr * 0.6), Math.floor(sr * 0.95), 660);
+    writeTone(Math.floor(sr * 1.2), Math.floor(sr * 1.55), 880);
+    const header = Buffer.alloc(44);
+    header.write("RIFF", 0);
+    header.writeUInt32LE(36 + pcm.length, 4);
+    header.write("WAVE", 8);
+    header.write("fmt ", 12);
+    header.writeUInt32LE(16, 16);
+    header.writeUInt16LE(1, 20);
+    header.writeUInt16LE(1, 22);
+    header.writeUInt32LE(sr, 24);
+    header.writeUInt32LE(sr * 2, 28);
+    header.writeUInt16LE(2, 32);
+    header.writeUInt16LE(16, 34);
+    header.write("data", 36);
+    header.writeUInt32LE(pcm.length, 40);
+    fs.writeFileSync(burstPath, Buffer.concat([header, pcm]));
+  }
+  const burstBounds = estimateWordBoundariesByEnergy(burstPath, 3);
+  assert.equal(burstBounds.length, 3);
+  // Internal cuts should sit in silence windows (~350–600ms and ~950–1200ms).
+  assert.ok(
+    burstBounds[0]!.endMs >= 300 && burstBounds[0]!.endMs <= 650,
+    `cut0 in first silence, got ${burstBounds[0]!.endMs}`,
+  );
+  assert.ok(
+    burstBounds[1]!.endMs >= 900 && burstBounds[1]!.endMs <= 1250,
+    `cut1 in second silence, got ${burstBounds[1]!.endMs}`,
+  );
+
+  // Sliced unit edges must be near-zero after fade + zero-cross snap.
+  const sliceOut = path.resolve(
+    process.cwd(),
+    "seed",
+    "voice-studio",
+    "_smoke-slice.wav",
+  );
+  assert.equal(
+    sliceWavToFile(burstPath, sliceOut, 100, 400),
+    true,
+    "sliceWavToFile should succeed",
+  );
+  {
+    const info = parseWavInfo(sliceOut);
+    assert.ok(info, "sliced wav header");
+    const fd = fs.openSync(sliceOut, "r");
+    try {
+      const pcm = Buffer.alloc(info!.dataSize);
+      fs.readSync(fd, pcm, 0, info!.dataSize, info!.dataOffset);
+      const first = Math.abs(pcm.readInt16LE(0));
+      const last = Math.abs(pcm.readInt16LE(info!.dataSize - 2));
+      assert.ok(first < 800, `fade-in edge too hot: ${first}`);
+      assert.ok(last < 800, `fade-out edge too hot: ${last}`);
+    } finally {
+      fs.closeSync(fd);
+    }
+  }
+
+  // Compressed → PCM path (user m4a / AyuGram clips).
+  const m4aPath = path.resolve(
+    process.cwd(),
+    "seed",
+    "voice-studio",
+    "_smoke-clip.m4a",
+  );
+  const m4aWav = path.resolve(
+    process.cwd(),
+    "seed",
+    "voice-studio",
+    "_smoke-clip.pcm16.wav",
+  );
+  try {
+    execFileSync(
+      "ffmpeg",
+      [
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        "sine=frequency=500:duration=0.6",
+        "-c:a",
+        "aac",
+        m4aPath,
+      ],
+      { stdio: "ignore" },
+    );
+    const converted = convertAudioToPcmWav(m4aPath, m4aWav);
+    assert.ok(converted, "ffmpeg m4a→wav");
+    assert.ok(parseWavInfo(converted!), "converted must be PCM wav");
+  } finally {
+    for (const p of [burstPath, sliceOut, m4aPath, m4aWav]) {
+      try {
+        fs.unlinkSync(p);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
 
   // Mel spectrogram pipeline (FFT → filterbank).
   const mel = extractMelFromWav(sample);

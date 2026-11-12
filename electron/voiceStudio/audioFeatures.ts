@@ -215,7 +215,57 @@ export function extractClipAudioFeatures(
 }
 
 /**
- * Energy-weighted word boundaries (forced-alignment proxy).
+ * Frame-wise RMS + spectral flux (band-vector change) for cut scoring.
+ * Flux peaks mark frequency-content transitions; energy valleys mark pauses.
+ */
+function frameEnergyAndFlux(
+  samples: Float32Array,
+  sampleRate: number,
+): { energies: number[]; flux: number[]; hop: number; frameLen: number } {
+  const frameLen = Math.max(8, Math.floor((FRAME_MS / 1000) * sampleRate));
+  const hop = Math.max(4, Math.floor((HOP_MS / 1000) * sampleRate));
+  const energies: number[] = [];
+  const bandSeries: Array<[number, number, number]> = [];
+  for (let start = 0; start + frameLen <= samples.length; start += hop) {
+    const frame = samples.subarray(start, start + frameLen);
+    energies.push(frameRms(frame));
+    bandSeries.push([
+      goertzelPower(frame, sampleRate, 300),
+      goertzelPower(frame, sampleRate, 1200),
+      goertzelPower(frame, sampleRate, 3200),
+    ]);
+  }
+  const flux: number[] = new Array(energies.length).fill(0);
+  for (let i = 1; i < bandSeries.length; i++) {
+    const a = bandSeries[i - 1]!;
+    const b = bandSeries[i]!;
+    const sa = a[0] + a[1] + a[2] || 1;
+    const sb = b[0] + b[1] + b[2] || 1;
+    // L1 change of normalized band mix = frequency-content shift.
+    flux[i] =
+      Math.abs(a[0]! / sa - b[0]! / sb) +
+      Math.abs(a[1]! / sa - b[1]! / sb) +
+      Math.abs(a[2]! / sa - b[2]! / sb);
+  }
+  return { energies, flux, hop, frameLen };
+}
+
+function frameIndexToMs(
+  frame: number,
+  frameCount: number,
+  padMs: number,
+  usable: number,
+): number {
+  if (frameCount <= 0) return padMs;
+  return padMs + (frame / frameCount) * usable;
+}
+
+/**
+ * Spectral/energy word boundaries (forced-alignment proxy).
+ *
+ * 1) Partition by cumulative speech energy (rough equal-energy slots).
+ * 2) Snap each internal cut to the best nearby frame: low RMS (pause) and
+ *    high spectral flux (frequency-band transition) — avoids mid-vowel chops.
  * Falls back to equal-time if energy is flat / unusable.
  */
 export function estimateWordBoundariesByEnergy(
@@ -245,49 +295,88 @@ export function estimateWordBoundariesByEnergy(
   }
 
   const { samples, sampleRate } = pcm;
-  const frameLen = Math.max(8, Math.floor((FRAME_MS / 1000) * sampleRate));
-  const hop = Math.max(4, Math.floor((HOP_MS / 1000) * sampleRate));
-  const energies: number[] = [];
-  for (let start = 0; start + frameLen <= samples.length; start += hop) {
-    energies.push(frameRms(samples.subarray(start, start + frameLen)));
-  }
+  const { energies, flux } = frameEnergyAndFlux(samples, sampleRate);
   if (energies.length < n * 2) return equal();
 
   const sorted = [...energies].sort((a, b) => a - b);
   const floor = sorted[Math.floor(sorted.length * 0.15)] ?? 0;
+  const ceiling = sorted[Math.floor(sorted.length * 0.85)] ?? floor + 1e-6;
+  const dyn = Math.max(1e-6, ceiling - floor * 0.5);
   const weights = energies.map((e) => Math.max(1e-6, e - floor * 0.5));
   const total = weights.reduce((a, b) => a + b, 0);
   if (total <= 1e-5) return equal();
 
-  const target = total / n;
-  const bounds: WordBoundary[] = [];
+  const maxFlux = Math.max(...flux, 1e-9);
+  // Lower score = better cut: prefer quiet frames with a band-mix jump.
+  const cutScore = (i: number): number => {
+    const eNorm = Math.max(0, (energies[i]! - floor * 0.5) / dyn);
+    const fNorm = flux[i]! / maxFlux;
+    return eNorm * 1.15 - fNorm * 0.55;
+  };
+
+  const searchRadius = Math.max(
+    2,
+    Math.min(18, Math.floor(energies.length / (n * 3))),
+  );
+
+  // Nominal cut frames from cumulative energy, then snap to best valley/flux.
+  const cutFrames: number[] = [];
   let acc = 0;
-  let wordIdx = 0;
-  let startFrame = 0;
-  for (let i = 0; i < weights.length; i++) {
+  let nextTarget = 1;
+  for (let i = 0; i < weights.length && nextTarget < n; i++) {
     acc += weights[i]!;
-    const isLast = wordIdx === n - 1;
-    if (!isLast && acc < target * (wordIdx + 1)) continue;
-    const endFrame = isLast ? weights.length : i + 1;
-    const startMs =
-      padMs + (startFrame / weights.length) * usable;
-    const endMs = padMs + (endFrame / weights.length) * usable;
+    if (acc < (total / n) * nextTarget) continue;
+    const nominal = i;
+    const lo = Math.max(
+      cutFrames.length ? cutFrames[cutFrames.length - 1]! + 2 : 1,
+      nominal - searchRadius,
+    );
+    const hi = Math.min(weights.length - 2, nominal + searchRadius);
+    let best = nominal;
+    let bestScore = Number.POSITIVE_INFINITY;
+    for (let f = lo; f <= hi; f++) {
+      const s = cutScore(f);
+      if (s < bestScore) {
+        bestScore = s;
+        best = f;
+      }
+    }
+    cutFrames.push(best);
+    nextTarget += 1;
+  }
+  while (cutFrames.length < n - 1) {
+    const prev = cutFrames[cutFrames.length - 1] ?? 0;
+    const rem = n - 1 - cutFrames.length;
+    const step = Math.max(
+      2,
+      Math.floor((weights.length - prev - 1) / (rem + 1)),
+    );
+    cutFrames.push(Math.min(weights.length - 2, prev + step));
+  }
+
+  const bounds: WordBoundary[] = [];
+  let startFrame = 0;
+  for (let w = 0; w < n; w++) {
+    const endFrame = w === n - 1 ? weights.length : cutFrames[w]!;
+    const startMs = frameIndexToMs(startFrame, weights.length, padMs, usable);
+    const endMs = frameIndexToMs(endFrame, weights.length, padMs, usable);
     bounds.push({
       startMs,
       endMs: Math.max(startMs + 12, endMs),
     });
-    wordIdx += 1;
     startFrame = endFrame;
-    if (wordIdx >= n) break;
   }
-  while (bounds.length < n) {
-    const last = bounds[bounds.length - 1];
-    const startMs = last ? last.endMs : padMs;
-    bounds.push({
-      startMs,
-      endMs: Math.min(padMs + usable, startMs + usable / n),
-    });
+  // Ensure monotonic non-overlapping coverage of the usable window.
+  for (let i = 1; i < bounds.length; i++) {
+    if (bounds[i]!.startMs < bounds[i - 1]!.endMs) {
+      bounds[i]!.startMs = bounds[i - 1]!.endMs;
+    }
+    if (bounds[i]!.endMs <= bounds[i]!.startMs) {
+      bounds[i]!.endMs = bounds[i]!.startMs + 12;
+    }
   }
+  const last = bounds[bounds.length - 1];
+  if (last) last.endMs = Math.max(last.endMs, padMs + usable);
   return bounds.slice(0, n);
 }
 

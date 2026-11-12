@@ -49,7 +49,7 @@ export const NEURAL_TTS_CURRICULUM: CurriculumRow[] = [
   {
     concept: "attention",
     neural: "Attention текст↔mel кадры",
-    mira: "Energy / equal-time выравнивание слов по клипу",
+    mira: "Spectral-flux + energy valley выравнивание слов (zero-cross slice)",
     status: "proxy",
   },
   {

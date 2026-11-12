@@ -5,6 +5,7 @@ import { getOwnerId } from "../owner";
 import {
   VOICE_PACK_ENGINE,
   buildVoiceModelPack,
+  ensureSlicableWav,
   normalizeLexKey,
   readVoiceModelPack,
   tokenizeSpeechWords,
@@ -1177,11 +1178,18 @@ export async function trainVoiceModel(
     const phrase = phraseById.get(clip.phrase_id);
     if (!phrase) continue;
     seenPhrase.add(clip.phrase_id);
+    // Retrain may still see legacy compressed clips — convert before slice.
+    const filePath = ensureSlicableWav(clip.file_path);
+    if (filePath !== clip.file_path) {
+      openStore()
+        .prepare(`UPDATE voice_clips SET file_path = ? WHERE id = ?`)
+        .run(filePath, clip.id);
+    }
     linkedClips.push({
       clipId: clip.id,
       phraseId: phrase.id,
       phraseText: phrase.text,
-      filePath: clip.file_path,
+      filePath,
     });
   }
 
@@ -1222,7 +1230,7 @@ export async function trainVoiceModel(
   emit(
     "segment",
     24,
-    `Выравнивание единиц (energy / equal-time ≈ attention): ${linkedClips.length} клипов, ${allPhraseTexts.length} текстов, ~${corpusWordHint} слов…`,
+    `Выравнивание единиц (spectral/energy + zero-cross ≈ attention): ${linkedClips.length} клипов, ${allPhraseTexts.length} текстов, ~${corpusWordHint} слов…`,
   );
   await sleep(
     Math.max(
@@ -1337,7 +1345,7 @@ export async function trainVoiceModel(
     pipeline: [
       "1. Пары текст↔аудио + QA (шум/тишина/клиппинг/mismatch)",
       "2. Mel spectrogram (FFT→filterbank) + RMS признаки",
-      "3. Выравнивание единиц (energy / equal-time ≈ attention proxy)",
+      "3. Выравнивание единиц (spectral/energy + zero-cross ≈ attention proxy)",
       "4. Лексикон (аудио + provisional TTS)",
       "5. Эпохи mel L1 refinement + priors/gain/duration",
       "6. model-pack + публикация в каталог",
@@ -1531,11 +1539,16 @@ export function importClip(opts: {
     : path.join(destDir, `${Date.now()}-${base}`);
   if (!alreadyInDest) fs.copyFileSync(abs, dest);
 
+  // Compressed imports (m4a/webm/mp3/ogg) → PCM WAV so frequency/energy
+  // alignment and word slicing can run; otherwise units stay unsliced fragments.
+  const slicable = ensureSlicableWav(dest);
+  const clipPath = slicable !== dest ? slicable : dest;
+
   const clip: VoiceClipRow = {
     id: crypto.randomUUID(),
     project_id: opts.projectId,
     phrase_id: phraseId,
-    file_path: dest,
+    file_path: clipPath,
     qa_json: null,
     accepted: 0,
     created_at: new Date().toISOString(),
