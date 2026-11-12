@@ -13,7 +13,7 @@
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
 | Дорожная карта | Must + future F* закрыты (partial→done stubs where noted) |
 
-**Сейчас:** **0.1.7 WIP** (не публиковать). Ветка `cursor/release-0-1-7-6838`. Latest опубликованный: **0.1.6** — https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.6
+**Сейчас:** **0.1.7 опубликован** (Latest). Ветка `cursor/release-0-1-7-6838` @ `d75191a`. Release: https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.7
 
 
 ## Решения
@@ -22,9 +22,10 @@
 
 | Дата | Решение | Почему |
 |------|---------|--------|
-| 2026-11-12 | **0.1.7 WIP: Voice Studio neural TTS CPU** (encoder/attention/decoder/Adam/vocoder/RLHF; не публиковать) | Curriculum proxies→real TS-MLP; CUDA kernels not bundled — CPU path + optional CUDA detect; unit-stitch fallback; docs/mira-tts-report-0.1.7.md |
-| 2026-11-12 | **0.1.7 WIP: Voice Studio нарезка/сращивание** (+ chat diversity earlier on branch; не публиковать) | 0.1.4 spectral-flux+10ms fade всё ещё резал mid-phoneme / криво склеивал; text-weighted + island boundaries, hysteresis, pad, min duration, OLA+RMS stitch; после обновления — re-import + полная пересборка |
-| 2026-11-12 | **Релиз 0.1.6 опубликован** (`v0.1.6`, Latest) | Portal Workshop overlays; plain-language TTS curriculum table; phrase-generation lexical novelty/coverage; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.6 |
+| 2026-11-12 | **Релиз 0.1.7 опубликован** (`v0.1.7`, Latest) | Neural TTS CPU curriculum; Voice Studio slice/stitch; core XP growth; chat diversity; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.7 |
+| 2026-11-12 | **0.1.7: Voice Studio neural TTS CPU** (encoder/attention/decoder/Adam/vocoder/RLHF) | Curriculum proxies→real TS-MLP; CUDA kernels not bundled — CPU path + optional CUDA detect; unit-stitch fallback; docs/mira-tts-report-0.1.7.md |
+| 2026-11-12 | **0.1.7: Voice Studio нарезка/сращивание** (+ chat diversity) | 0.1.4 spectral-flux+10ms fade всё ещё резал mid-phoneme / криво склеивал; text-weighted + island boundaries, hysteresis, pad, min duration, OLA+RMS stitch; после обновления — re-import + полная пересборка |
+| 2026-11-12 | **Релиз 0.1.6 опубликован** (`v0.1.6`) | Portal Workshop overlays; plain-language TTS curriculum table; phrase-generation lexical novelty/coverage; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.6 |
 | 2026-11-12 | Voice Studio: новые генерации фраз → новизна словаря (частоты корпуса, предлоги/частицы, soft-filter повторов) | Учиться = расширять покрытие, а не повторять одни и те же слова десятки/сотни раз |
 | 2026-11-12 | Workshop overlays (`Обученные фразы`, CatalogEdit) → `createPortal(document.body)` | Sticky `.workshop-layout > .settings-nav` z-index 2 sits above `.workshop-main` (z=0); in-tree `modal-backdrop` z=40 was trapped |
 | 2026-11-12 | **Релиз 0.1.5 опубликован** (`v0.1.5`) | Themed ConfirmModal/AppConfirm + frameless TitleBar; Integrations blank-UI (hide/show, shell, portal, hash); ThemeSelect phrase-bind close; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.5 |

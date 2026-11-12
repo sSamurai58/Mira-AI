@@ -1,6 +1,6 @@
 # Отчёт Mira Voice Studio — v0.1.7 (neural TTS CPU path)
 
-**Версия:** 0.1.7 (WIP, не публиковать)  
+**Версия:** 0.1.7 — https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.7  
 **Ветка:** `cursor/release-0-1-7-6838`  
 **Дата:** 2026-11-12
 

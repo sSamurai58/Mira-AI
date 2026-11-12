@@ -345,11 +345,11 @@ UX: **Создать → фразы → загрузить → Mira сама о�
 - [x] Публикация GitHub Release **0.1.6** — https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.6 (tag `v0.1.6` @ `8baa1da`)
 - [ ] MCP runtime / OAuth (по-прежнему later; после явной команды)
 
-## 2026-11-12 — Релиз 0.1.7 WIP (не публиковать)
+## 2026-11-12 — Релиз 0.1.7 ✅
 
-Ветка `cursor/release-0-1-7-6838`. Пакет **0.1.7** (bump уже на ветке).
+Ветка `cursor/release-0-1-7-6838` @ `d75191a`. Пакет **0.1.7**. Latest GitHub Release.
 
-Контекст: Voice Studio **нарезка** всё ещё режет слова рано/криво, **нет нормального сращивания** после 0.1.4 (`02ad96d`). Не про chat text templates.
+Контекст: Voice Studio **нарезка** всё ещё резала слова рано/криво, **нет нормального сращивания** после 0.1.4 (`02ad96d`). Не про chat text templates.
 
 - [x] Boundaries: speech-island map when gaps match words; else text-weighted prior + hysteresis valley/flux snap; onset/offset pad; min word duration; reject tiny crumbs
 - [x] Stitch: zero-cross OLA, adaptive 22–55 ms crossfade, RMS level-match (`tts.ts` + `stitchPcmInt16OverlapAdd`)
@@ -357,7 +357,9 @@ UX: **Создать → фразы → загрузить → Mira сама о�
 - [x] p9 smoke: uneven words, tiny-slice reject, stitch RMS
 - [x] Neural TTS curriculum: encoder/attention/decoder/stop/TF/Adam/vocoder/RLHF/CPU path — все «есть»; CUDA kernels честно optional
 - [x] Inference: synthesizeCustomVoiceNeural + A/B RLHF IPC; docs/mira-tts-report-0.1.7.md
-- [ ] Публикация / tag — **только после явной команды**
+- [x] Chat diversity: anti-repeat для шаблонных Habarovsk/plan меню
+- [x] Core level XP growth (фикс «застрял на 5»)
+- [x] Публикация GitHub Release **0.1.7** — https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.7 (tag `v0.1.7` @ `d75191a`)
 
 ## Шаблон новой темы
 
