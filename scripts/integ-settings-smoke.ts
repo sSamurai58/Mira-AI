@@ -9,6 +9,7 @@
  *    content must be app-region no-drag so clicks/triggers reach Integrations
  * 5) Screen click aside uses hide/show (not minimize/restore) for frameless
  * 6) ConfirmModal portals to document.body (triggers stay above chrome)
+ * 7) Voice Studio trained-phrases + CatalogEditModal also portal (Workshop nav rail)
  */
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -107,6 +108,36 @@ async function main() {
     confirmSrc,
     /createPortal/,
     "ConfirmModal must portal to document.body for trigger/integration confirms",
+  );
+
+  const voiceStudioSrc = fs.readFileSync(
+    path.join(root, "src/ui/components/VoiceStudioPanel.tsx"),
+    "utf8",
+  );
+  assert.match(
+    voiceStudioSrc,
+    /createPortal\([\s\S]*voice-phrases-modal[\s\S]*document\.body/,
+    "Voice Studio trained-phrases modal must portal to document.body above Workshop nav",
+  );
+
+  const catalogEditSrc = fs.readFileSync(
+    path.join(root, "src/ui/components/CatalogEditModal.tsx"),
+    "utf8",
+  );
+  assert.match(
+    catalogEditSrc,
+    /createPortal\(modal,\s*document\.body\)/,
+    "CatalogEditModal must portal to document.body above Workshop nav",
+  );
+
+  const workshopNavCss =
+    css.match(/\.workshop-layout\s*>\s*\.settings-nav\s*\{[\s\S]*?\n\}/)?.[0] ??
+    "";
+  assert.ok(workshopNavCss, ".workshop-layout > .settings-nav rule missing");
+  assert.match(
+    workshopNavCss,
+    /z-index:\s*2/,
+    "Workshop left nav stays sticky z-index 2 — overlays must portal, not fight it",
   );
 
   loadConfig(true);

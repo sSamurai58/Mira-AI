@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { createPortal } from "react-dom";
 import { AutoGrowTextarea } from "./AutoGrowTextarea";
 
 export type CatalogEditDraft = {
@@ -53,7 +54,9 @@ export function CatalogEditModal({
     }
   }
 
-  return (
+  // Portal to <body> so Workshop sticky left-nav (z-index above .workshop-main)
+  // cannot paint over the editor overlay.
+  const modal = (
     <div
       className="modal-backdrop"
       role="presentation"
@@ -179,4 +182,7 @@ export function CatalogEditModal({
       </form>
     </div>
   );
+
+  if (typeof document === "undefined") return modal;
+  return createPortal(modal, document.body);
 }

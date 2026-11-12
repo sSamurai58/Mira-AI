@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { useAppConfirm } from "./AppConfirm";
 import { ThemeSelect } from "./ThemeSelect";
 import { clearActiveVoiceId, setActiveVoiceId } from "../voice/catalog";
@@ -1313,124 +1314,132 @@ export function VoiceStudioPanel(props: {
       {note ? <p className="muted" style={{ margin: 0 }}>{note}</p> : null}
       {busy ? <p className="muted mono">busy: {busy}</p> : null}
 
-      {trainedOpen && project ? (
-        <div
-          className="modal-backdrop"
-          role="presentation"
-          onClick={() => closeTrainedPanel()}
-        >
-          <div
-            className="modal modal-wide modal-resizable voice-phrases-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="voice-trained-title"
-            onClick={(e) => e.stopPropagation()}
-          >
+      {trainedOpen && project
+        ? createPortal(
             <div
-              className="row"
-              style={{ alignItems: "flex-start", gap: "0.5rem" }}
+              className="modal-backdrop"
+              role="presentation"
+              onClick={() => closeTrainedPanel()}
             >
-              <div style={{ flex: 1 }}>
-                <h2 id="voice-trained-title" style={{ margin: 0 }}>
-                  Обученные фразы · {project.name}
-                </h2>
-                <p className="muted" style={{ margin: "0.35rem 0 0" }}>
-                  {learnedPhrases.length} в модели · номера из корпуса 1…
-                  {phrases.length || "N"} · {corpusReadyLabel}
-                </p>
-                <p className="muted" style={{ margin: "0.35rem 0 0" }}>
-                  «Перезагрузить» удаляет аудио, возвращает текст в необученные
-                  для новой загрузки и убирает фразу отсюда. После новой записи
-                  нажмите «Полная пересборка».
-                </p>
+              <div
+                className="modal modal-wide modal-resizable voice-phrases-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="voice-trained-title"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div
+                  className="row"
+                  style={{ alignItems: "flex-start", gap: "0.5rem" }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <h2 id="voice-trained-title" style={{ margin: 0 }}>
+                      Обученные фразы · {project.name}
+                    </h2>
+                    <p className="muted" style={{ margin: "0.35rem 0 0" }}>
+                      {learnedPhrases.length} в модели · номера из корпуса 1…
+                      {phrases.length || "N"} · {corpusReadyLabel}
+                    </p>
+                    <p className="muted" style={{ margin: "0.35rem 0 0" }}>
+                      «Перезагрузить» удаляет аудио, возвращает текст в
+                      необученные для новой загрузки и убирает фразу отсюда.
+                      После новой записи нажмите «Полная пересборка».
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn catalog-edit-close"
+                    aria-label="Закрыть"
+                    onClick={() => closeTrainedPanel()}
+                  >
+                    <svg
+                      viewBox="0 0 16 16"
+                      width="12"
+                      height="12"
+                      aria-hidden
+                    >
+                      <path
+                        d="M3.2 3.2l9.6 9.6M12.8 3.2L3.2 12.8"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </button>
+                </div>
+
+                <div className="voice-phrases-modal-list">
+                  {learnedPhrases.length === 0 ? (
+                    <span className="muted">Пока нет обученных фраз</span>
+                  ) : (
+                    learnedPhrases.map((p) => {
+                      const clip = bestClipForPhrase(p.id);
+                      const n = phraseDisplayNo(phrases, p.id);
+                      return (
+                        <div key={p.id} className="voice-phrase-row">
+                          <div className="voice-phrase-row-main muted mono">
+                            <span>
+                              {n}. {p.recorded ? "✓" : "○"} {p.text}
+                            </span>
+                            <span className="voice-phrase-row-meta">
+                              {clip
+                                ? clip.accepted
+                                  ? "аудио ✓"
+                                  : "аудио ×"
+                                : "нет аудио"}
+                            </span>
+                          </div>
+                          <div
+                            className="row"
+                            style={{ flexWrap: "wrap", gap: "0.35rem" }}
+                          >
+                            <button
+                              type="button"
+                              className="btn"
+                              disabled={Boolean(busy) || !clip}
+                              onClick={() => void playPhraseAudio(p.id)}
+                            >
+                              {playingPhraseId === p.id ? "▶…" : "Слушать"}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn"
+                              disabled={Boolean(busy)}
+                              title="Удалить аудио и вернуть текст в необученные"
+                              onClick={() => void resetLearnedPhrase(p)}
+                            >
+                              Перезагрузить
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                <div className="modal-actions">
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => closeTrainedPanel()}
+                  >
+                    Закрыть
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={Boolean(busy) || !canTrain}
+                    onClick={() => void trainModel()}
+                  >
+                    {busy === "train" ? "Сборка…" : "Полная пересборка"}
+                  </button>
+                </div>
               </div>
-              <button
-                type="button"
-                className="btn catalog-edit-close"
-                aria-label="Закрыть"
-                onClick={() => closeTrainedPanel()}
-              >
-                <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden>
-                  <path
-                    d="M3.2 3.2l9.6 9.6M12.8 3.2L3.2 12.8"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </button>
-            </div>
-
-            <div className="voice-phrases-modal-list">
-              {learnedPhrases.length === 0 ? (
-                <span className="muted">Пока нет обученных фраз</span>
-              ) : (
-                learnedPhrases.map((p) => {
-                  const clip = bestClipForPhrase(p.id);
-                  const n = phraseDisplayNo(phrases, p.id);
-                  return (
-                    <div key={p.id} className="voice-phrase-row">
-                      <div className="voice-phrase-row-main muted mono">
-                        <span>
-                          {n}. {p.recorded ? "✓" : "○"} {p.text}
-                        </span>
-                        <span className="voice-phrase-row-meta">
-                          {clip
-                            ? clip.accepted
-                              ? "аудио ✓"
-                              : "аудио ×"
-                            : "нет аудио"}
-                        </span>
-                      </div>
-                      <div
-                        className="row"
-                        style={{ flexWrap: "wrap", gap: "0.35rem" }}
-                      >
-                        <button
-                          type="button"
-                          className="btn"
-                          disabled={Boolean(busy) || !clip}
-                          onClick={() => void playPhraseAudio(p.id)}
-                        >
-                          {playingPhraseId === p.id ? "▶…" : "Слушать"}
-                        </button>
-                        <button
-                          type="button"
-                          className="btn"
-                          disabled={Boolean(busy)}
-                          title="Удалить аудио и вернуть текст в необученные"
-                          onClick={() => void resetLearnedPhrase(p)}
-                        >
-                          Перезагрузить
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-
-            <div className="modal-actions">
-              <button
-                type="button"
-                className="btn"
-                onClick={() => closeTrainedPanel()}
-              >
-                Закрыть
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={Boolean(busy) || !canTrain}
-                onClick={() => void trainModel()}
-              >
-                {busy === "train" ? "Сборка…" : "Полная пересборка"}
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }
