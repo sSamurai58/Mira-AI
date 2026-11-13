@@ -121,6 +121,89 @@ export function humanizeUpdateError(raw: unknown): string {
 }
 
 let autoCheckTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingAutoReason: "renderer-ready" | "focus" | "boot-fallback" | null =
+  null;
+let checkInFlight: Promise<UpdateStatus> | null = null;
+let lastAutoCheckAt = 0;
+let rendererReadyScheduled = false;
+
+/** Min gap between automatic (non-manual) checks — avoids spam on focus. */
+const AUTO_CHECK_COOLDOWN_MS = 5 * 60_000;
+/** Delay after renderer is ready so UpdateHudToast can subscribe first. */
+const AFTER_RENDERER_READY_MS = 1200;
+
+const AUTO_REASON_PRIORITY: Record<
+  "renderer-ready" | "focus" | "boot-fallback",
+  number
+> = {
+  "boot-fallback": 1,
+  focus: 2,
+  "renderer-ready": 3,
+};
+
+/**
+ * Packaged auto-check. Prefer calling after the BrowserWindow has finished
+ * loading — a blind boot timer races the renderer IPC listener and drops
+ * `mira:update-event` (Electron does not queue sends for late subscribers).
+ */
+export function scheduleAutoUpdateCheck(
+  reason: "renderer-ready" | "focus" | "boot-fallback" = "renderer-ready",
+): void {
+  if (!app.isPackaged) return;
+
+  // Don't let focus/boot-fallback cancel a pending renderer-ready check.
+  if (
+    autoCheckTimer &&
+    pendingAutoReason &&
+    AUTO_REASON_PRIORITY[reason] < AUTO_REASON_PRIORITY[pendingAutoReason]
+  ) {
+    if (reason === "focus") {
+      broadcast?.("mira:update-event", getUpdateStatus());
+    }
+    return;
+  }
+
+  if (autoCheckTimer) clearTimeout(autoCheckTimer);
+  pendingAutoReason = reason;
+
+  const delay =
+    reason === "renderer-ready"
+      ? AFTER_RENDERER_READY_MS
+      : reason === "focus"
+        ? 400
+        : 4_000;
+
+  autoCheckTimer = setTimeout(() => {
+    autoCheckTimer = null;
+    pendingAutoReason = null;
+    const now = Date.now();
+    // Focus/boot-fallback: respect cooldown. First renderer-ready always runs.
+    if (
+      reason !== "renderer-ready" &&
+      lastAutoCheckAt > 0 &&
+      now - lastAutoCheckAt < AUTO_CHECK_COOLDOWN_MS
+    ) {
+      // Still push current status so a pending update re-surfaces in the HUD.
+      broadcast?.("mira:update-event", getUpdateStatus());
+      return;
+    }
+    // Only one "first paint" renderer-ready check per process.
+    if (reason === "renderer-ready" && rendererReadyScheduled) {
+      broadcast?.("mira:update-event", getUpdateStatus());
+      return;
+    }
+    if (reason === "renderer-ready") rendererReadyScheduled = true;
+    lastAutoCheckAt = now;
+    void checkForUpdates().catch(() => undefined);
+  }, delay);
+}
+
+/** Re-send latest status (e.g. after renderer mounts / window focused). */
+export function pushUpdateStatus(): UpdateStatus {
+  const snap = getUpdateStatus();
+  broadcast?.("mira:update-event", snap);
+  return snap;
+}
 
 export function initUpdater(send: Broadcast): void {
   broadcast = send;
@@ -216,11 +299,10 @@ export function initUpdater(send: Broadcast): void {
     });
   });
 
-  // Packaged: auto-check shortly after boot so HUD toast can surface updates.
-  if (autoCheckTimer) clearTimeout(autoCheckTimer);
-  autoCheckTimer = setTimeout(() => {
-    void checkForUpdates().catch(() => undefined);
-  }, 2500);
+  // Fallback only: real auto-check is scheduled from BrowserWindow
+  // did-finish-load (see scheduleAutoUpdateCheck in main). This covers the
+  // rare case where the window never reports load.
+  scheduleAutoUpdateCheck("boot-fallback");
 }
 
 export async function checkForUpdates(): Promise<UpdateStatus> {
@@ -235,33 +317,41 @@ export async function checkForUpdates(): Promise<UpdateStatus> {
     });
   }
 
-  try {
-    setStatus({
-      channel: "checking",
-      detail: "Проверка GitHub Releases…",
-      progress: null,
-      canDownload: false,
-      canInstall: false,
-    });
-    const result = await autoUpdater.checkForUpdates();
-    if (!result) {
+  if (checkInFlight) return checkInFlight;
+
+  checkInFlight = (async () => {
+    try {
+      setStatus({
+        channel: "checking",
+        detail: "Проверка GitHub Releases…",
+        progress: null,
+        canDownload: false,
+        canInstall: false,
+      });
+      const result = await autoUpdater.checkForUpdates();
+      if (!result) {
+        return setStatus({
+          channel: "error",
+          detail: humanizeUpdateError(
+            "empty checkForUpdates — часто нет latest.yml для Windows в релизе",
+          ),
+        });
+      }
+      // Status events above will refine channel; return latest snapshot
+      return getUpdateStatus();
+    } catch (err) {
       return setStatus({
         channel: "error",
-        detail: humanizeUpdateError(
-          "empty checkForUpdates — часто нет latest.yml для Windows в релизе",
-        ),
+        detail: humanizeUpdateError(err),
+        canDownload: false,
+        canInstall: false,
       });
+    } finally {
+      checkInFlight = null;
     }
-    // Status events above will refine channel; return latest snapshot
-    return getUpdateStatus();
-  } catch (err) {
-    return setStatus({
-      channel: "error",
-      detail: humanizeUpdateError(err),
-      canDownload: false,
-      canInstall: false,
-    });
-  }
+  })();
+
+  return checkInFlight;
 }
 
 export async function downloadUpdate(): Promise<UpdateStatus> {

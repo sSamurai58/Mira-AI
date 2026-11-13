@@ -15,6 +15,17 @@ export type MiraChangelogEntry = {
 
 export const MIRA_CHANGELOG: MiraChangelogEntry[] = [
   {
+    version: "0.1.13",
+    date: "13.11.2026",
+    summary:
+      "Плавающий MIRA · UPDATE toast появляется сам при старте и возврате в приложение.",
+    bullets: [
+      "Автопроверка после did-finish-load (без гонки с подпиской renderer)",
+      "Повторный показ при focus/visibility, если обновление ещё доступно",
+      "«Скрыть» действует на сессию для той же версии — без спама",
+    ],
+  },
+  {
     version: "0.1.12",
     date: "13.11.2026",
     summary:

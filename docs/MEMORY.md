@@ -13,7 +13,7 @@
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
 | Дорожная карта | Must + future F* закрыты (partial→done stubs where noted) |
 
-**Сейчас:** **0.1.12 WIP** (не публиковать / не тегировать). Ветка `cursor/release-0-1-12-6838` от `v0.1.11`. Кастомные команды + раздел «Переводчик» (быстрый HTTP / через ИИ).
+**Сейчас:** **0.1.13 WIP** (не публиковать / не тегировать). Ветка `cursor/release-0-1-13-6838` от `v0.1.12`. Автопоказ MIRA · UPDATE toast при старте/focus.
 
 
 ## Решения
@@ -22,6 +22,7 @@
 
 | Дата | Решение | Почему |
 |------|---------|--------|
+| 2026-11-13 | **0.1.13 WIP: auto UpdateHudToast** | Boot-таймер 2.5s в `initUpdater` стрелял до подписки renderer → `mira:update-event` терялся; проверка после `did-finish-load` + focus push; no publish |
 | 2026-11-13 | **0.1.12 WIP: dialog TTS screech fix** | EL `/stream` без sniff → PCM/JSON as mpeg = помехи; mic open while speaking = feedback; validate MP3 + non-stream default + Web Speech/neural fallback; no publish |
 | 2026-11-13 | **0.1.11 WIP: pack + update HUD toast** | MCP runtime scaffolding; EL stream/IVC/settings/Flash; wake pluggable; EPUB/AV ASR; FTS; WebGL LOD; auto-update floating HUD; no publish |
 | 2026-11-13 | **0.1.10 WIP: живое ядро + Home HUD** | После 0.1.9 Home выглядел «замороженным»: idle wave `animation:none`, медленный orbit, статичные плитки; rAF усилен, idle pulse, latency tick, reduced-motion = slow drift |

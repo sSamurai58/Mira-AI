@@ -71,7 +71,9 @@ import {
   getUpdateStatus,
   initUpdater,
   openReleasesPage,
+  pushUpdateStatus,
   quitAndInstall,
+  scheduleAutoUpdateCheck,
 } from "./updater";
 import {
   closeStore,
@@ -271,6 +273,15 @@ function createWindow(): BrowserWindow {
     }
   }, 2500);
 
+  // Auto-update HUD: check only after the renderer can receive IPC events.
+  // A boot-time timer in initUpdater used to fire while loadFile was still
+  // in flight — mira:update-event was dropped and the toast never appeared
+  // until the user clicked «Проверить обновления».
+  win.webContents.once("did-finish-load", () => {
+    pushUpdateStatus();
+    scheduleAutoUpdateCheck("renderer-ready");
+  });
+
   const emitChromeState = () => {
     if (win.isDestroyed()) return;
     win.webContents.send("mira:window-state", {
@@ -283,7 +294,12 @@ function createWindow(): BrowserWindow {
   win.on("unmaximize", emitChromeState);
   win.on("enter-full-screen", emitChromeState);
   win.on("leave-full-screen", emitChromeState);
-  win.on("focus", emitChromeState);
+  win.on("focus", () => {
+    emitChromeState();
+    // Returning to the app: surface a pending update (or re-check, throttled).
+    pushUpdateStatus();
+    scheduleAutoUpdateCheck("focus");
+  });
   win.on("blur", emitChromeState);
 
   win.webContents.on("did-fail-load", (_e, code, desc, url, isMainFrame) => {
