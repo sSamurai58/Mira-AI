@@ -7,6 +7,7 @@ import {
   computeCoreXp,
   coreLevelRingPct,
   levelFromXp,
+  miraLevelToHoloScale,
   syncCoreLevelFromProgress,
   xpThresholdForLevel,
   type CoreProgressSignals,
@@ -45,6 +46,15 @@ function main() {
   assert.equal(levelFromXp(xpThresholdForLevel(5)), 5);
   assert.ok(levelFromXp(xpThresholdForLevel(6)) >= 6);
   assert.ok(levelFromXp(10_000) > 20);
+
+  // Holographic visibility 0…4 tracks Mira level (anchors from 0.1.9).
+  assert.ok(Math.abs(miraLevelToHoloScale(1) - 0.3) < 1e-9);
+  assert.ok(Math.abs(miraLevelToHoloScale(5) - 2) < 1e-9);
+  assert.ok(Math.abs(miraLevelToHoloScale(15) - 3.5) < 1e-9);
+  assert.equal(miraLevelToHoloScale(50), 4);
+  assert.equal(miraLevelToHoloScale(100), 4);
+  assert.ok(miraLevelToHoloScale(3) > miraLevelToHoloScale(1));
+  assert.ok(miraLevelToHoloScale(10) > miraLevelToHoloScale(5));
 
   // Dialogue outweighs static catalog skills.
   const chatHeavy = computeCoreXp({

@@ -27,7 +27,7 @@ function toCoreVoice(state: VoiceState): CoreVoice {
   return "idle";
 }
 
-/** Living 3D holographic core — WebGL particles; SVG fallback if GL unavailable. */
+/** Living 3D holographic core — WebGL2 line shells + bloom; SVG fallback if GL unavailable. */
 export function CoreOrb({
   level = 4,
   voiceState = "idle",
@@ -37,6 +37,7 @@ export function CoreOrb({
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const handleRef = useRef<CoreHandle | null>(null);
+  const prevLevelRef = useRef(lv);
   const [useFallback, setUseFallback] = useState(false);
 
   useEffect(() => {
@@ -81,7 +82,11 @@ export function CoreOrb({
   }, []);
 
   useEffect(() => {
+    const prev = prevLevelRef.current;
     handleRef.current?.setLevel(lv);
+    // Subtle «Вспышка» when Mira levels up (setLevel also flashes on growth).
+    if (lv > prev) handleRef.current?.flash();
+    prevLevelRef.current = lv;
   }, [lv]);
 
   useEffect(() => {

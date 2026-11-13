@@ -31,6 +31,33 @@ export function normalizeCoreLevel(n: number): number {
   return Math.max(1, Math.round(n));
 }
 
+/**
+ * Map Mira core level (1…∞) onto the holographic visibility scale 0…4
+ * (ядро → внутренний контур → средняя схема → внешняя оболочка).
+ *
+ * Anchors: L1→0.3, L5→2, L15→3.5, L50+→4 (full shells).
+ */
+export function miraLevelToHoloScale(level: number): number {
+  const lv = normalizeCoreLevel(level);
+  const keys: Array<{ l: number; v: number }> = [
+    { l: 1, v: 0.3 },
+    { l: 5, v: 2 },
+    { l: 15, v: 3.5 },
+    { l: 50, v: 4 },
+  ];
+  if (lv <= keys[0]!.l) return keys[0]!.v;
+  if (lv >= keys[keys.length - 1]!.l) return 4;
+  for (let i = 0; i < keys.length - 1; i++) {
+    const a = keys[i]!;
+    const b = keys[i + 1]!;
+    if (lv <= b.l) {
+      const t = (lv - a.l) / (b.l - a.l);
+      return a.v + (b.v - a.v) * t;
+    }
+  }
+  return 4;
+}
+
 export function loadCoreLevel(): number {
   const n = Number(localStorage.getItem(LEVEL_KEY) ?? "1");
   return normalizeCoreLevel(n);
