@@ -18,6 +18,7 @@ import {
 } from "../components/CatalogEditModal";
 import { LibraryPanel } from "../components/LibraryPanel";
 import { NotesFilesPanel } from "../components/NotesFilesPanel";
+import { CustomCommandsPanel } from "../components/CustomCommandsPanel";
 import { PathsPanel } from "../components/PathsPanel";
 import { StubBadge } from "../components/StubBadge";
 import { TerminalView } from "../components/TerminalView";
@@ -42,6 +43,7 @@ const SEGMENTS = [
   { id: "skills", label: "Скиллы", phase: "P3" },
   { id: "protocols", label: "Протоколы", phase: "P3" },
   { id: "paths", label: "Пути", phase: "P12" },
+  { id: "commands", label: "Кастомные команды", phase: "P12" },
   { id: "voices", label: "Голоса", phase: "P9" },
   { id: "library", label: "Обучение", phase: "P8" },
   { id: "notes", label: "Заметки/файлы", phase: "F2/F5" },
@@ -696,6 +698,7 @@ export function WorkshopPage() {
       ) : null}
 
       {segment === "paths" ? <PathsPanel /> : null}
+      {segment === "commands" ? <CustomCommandsPanel /> : null}
       {segment === "terminal" ? <TerminalView /> : null}
       {segment === "library" ? <LibraryPanel /> : null}
       {segment === "notes" ? <NotesFilesPanel /> : null}

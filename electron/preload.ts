@@ -479,6 +479,24 @@ contextBridge.exposeInMainWorld("mira", {
   openAppPath: (id: string) => call("mira:open-app-path", id),
   pickAppPath: (kind?: "program" | "folder" | "file") =>
     call("mira:pick-app-path", kind),
+  listCustomCommands: () => call("mira:list-custom-commands"),
+  upsertCustomCommand: (payload: {
+    id?: string;
+    name: string;
+    phrases?: string[];
+    steps?: Array<{
+      id: string;
+      type: "open_url" | "launch" | "keys" | "pause" | "say";
+      value: string;
+    }>;
+    reply?: string;
+    enabled?: boolean;
+  }) => call("mira:upsert-custom-command", payload),
+  deleteCustomCommand: (id: string) => call("mira:delete-custom-command", id),
+  setCustomCommandEnabled: (id: string, enabled: boolean) =>
+    call("mira:set-custom-command-enabled", id, enabled),
+  runCustomCommand: (id: string, opts?: { dryRun?: boolean }) =>
+    call("mira:run-custom-command", id, opts),
   listProfiles: () => call("mira:list-profiles"),
   getProfilesSnapshot: () => call("mira:get-profiles-snapshot"),
   getActiveProfile: () => call("mira:get-active-profile"),

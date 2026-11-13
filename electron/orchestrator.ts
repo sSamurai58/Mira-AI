@@ -94,6 +94,10 @@ import {
   looksLikeAppPathIntent,
 } from "./future/appPaths";
 import {
+  handleCustomCommandsFromChat,
+  looksLikeCustomCommandIntent,
+} from "./future/customCommands";
+import {
   buildReplyDiversityBlock,
   CHAT_DIVERSITY_SYSTEM_RULES,
 } from "./chatDiversity";
@@ -466,6 +470,57 @@ export async function sendChatMessage(
         messagingBlock =
           "[Мессенджер] Не удалось разобрать получателя/текст. Пример: «Напиши Ивану в Telegram, что встречу переносим».";
       }
+    } else if (looksLikeCustomCommandIntent(text)) {
+      // Мастерская → Кастомные команды: action chain + optional fixed reply.
+      const res = await handleCustomCommandsFromChat(text);
+      desktopUsed = res.used;
+      desktopBlock = res.block;
+
+      emit({
+        type: "context",
+        skills: skills.map((s) => ({ id: s.id, name: s.name })),
+        protocol: protocol ? { id: protocol.id, name: protocol.name } : null,
+        web: null,
+        desktop: desktopUsed,
+        messaging: null,
+        terminal: null,
+        learned: null,
+        blender: null,
+        addon: null,
+      });
+
+      const replyText =
+        res.reply.trim() ||
+        `Команда «${res.matched.name}» выполнена.`;
+      emit({
+        type: "phase",
+        phase: "llm",
+        detail: "Кастомная команда…",
+      });
+      emit({ type: "assistant_start", sessionId: session.id });
+      emit({ type: "token", text: replyText });
+      const assistantUtterance = addUtterance(
+        session.id,
+        "assistant",
+        replyText,
+      );
+      emit({
+        type: "assistant_done",
+        utterance: assistantUtterance,
+        memoryUsed: [],
+        skillsUsed: skills.map((s) => ({ id: s.id, name: s.name })),
+        protocolUsed: protocol
+          ? { id: protocol.id, name: protocol.name }
+          : null,
+        webUsed: null,
+        desktopUsed,
+        messagingUsed: null,
+        terminalUsed: null,
+        learnedUsed: null,
+        blenderUsed: null,
+        addonUsed: null,
+      });
+      return getSession(session.id) ?? session;
     } else if (looksLikeAppPathIntent(text)) {
       // Voice tags from Мастерская → Пути (before generic «открой файл/сайт»).
       const res = await handleAppPathsFromChat(text);

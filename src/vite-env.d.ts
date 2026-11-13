@@ -1185,6 +1185,96 @@ interface MiraBridge {
   pickAppPath: (
     kind?: "program" | "folder" | "file",
   ) => Promise<{ canceled: boolean; path: string | null }>;
+  listCustomCommands: () => Promise<
+    Array<{
+      id: string;
+      name: string;
+      phrases: string[];
+      steps: Array<{
+        id: string;
+        type: "open_url" | "launch" | "keys" | "pause" | "say";
+        value: string;
+      }>;
+      reply: string;
+      enabled: boolean;
+      created_at: string;
+      updated_at: string;
+    }>
+  >;
+  upsertCustomCommand: (payload: {
+    id?: string;
+    name: string;
+    phrases?: string[];
+    steps?: Array<{
+      id: string;
+      type: "open_url" | "launch" | "keys" | "pause" | "say";
+      value: string;
+    }>;
+    reply?: string;
+    enabled?: boolean;
+  }) => Promise<{
+    id: string;
+    name: string;
+    phrases: string[];
+    steps: Array<{
+      id: string;
+      type: "open_url" | "launch" | "keys" | "pause" | "say";
+      value: string;
+    }>;
+    reply: string;
+    enabled: boolean;
+    created_at: string;
+    updated_at: string;
+  }>;
+  deleteCustomCommand: (id: string) => Promise<{ ok: boolean }>;
+  setCustomCommandEnabled: (
+    id: string,
+    enabled: boolean,
+  ) => Promise<{
+    id: string;
+    name: string;
+    phrases: string[];
+    steps: Array<{
+      id: string;
+      type: "open_url" | "launch" | "keys" | "pause" | "say";
+      value: string;
+    }>;
+    reply: string;
+    enabled: boolean;
+    created_at: string;
+    updated_at: string;
+  } | null>;
+  runCustomCommand: (
+    id: string,
+    opts?: { dryRun?: boolean },
+  ) => Promise<{
+    ok: boolean;
+    command?: {
+      id: string;
+      name: string;
+      phrases: string[];
+      steps: Array<{
+        id: string;
+        type: "open_url" | "launch" | "keys" | "pause" | "say";
+        value: string;
+      }>;
+      reply: string;
+      enabled: boolean;
+      created_at: string;
+      updated_at: string;
+    };
+    steps?: Array<{
+      index: number;
+      type: "open_url" | "launch" | "keys" | "pause" | "say";
+      value: string;
+      ok: boolean;
+      detail: string;
+    }>;
+    spoken?: string[];
+    reply?: string;
+    detail: string;
+    dryRun?: boolean;
+  }>;
   listProfiles: () => Promise<
     Array<{
       id: string;

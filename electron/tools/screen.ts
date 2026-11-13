@@ -32,6 +32,13 @@ export type ScreenTypeResult = {
   detail: string;
 };
 
+export type ScreenKeysResult = {
+  ok: boolean;
+  keys: string;
+  mode: ScreenClickMode;
+  detail: string;
+};
+
 function isElectronRuntime(): boolean {
   return typeof process.versions.electron === "string";
 }
@@ -464,9 +471,250 @@ export async function typeText(text: string): Promise<ScreenTypeResult> {
   }
 }
 
+/** Parse «ctrl+shift+s» / «win+shift+s» style shortcuts into platform tokens. */
+export function parseKeyCombo(raw: string): string[] {
+  return raw
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .split("+")
+    .map((p) => p.trim())
+    .filter(Boolean);
+}
+
+const XDOTOOL_KEY: Record<string, string> = {
+  ctrl: "ctrl",
+  control: "ctrl",
+  shift: "shift",
+  alt: "alt",
+  option: "alt",
+  win: "super",
+  meta: "super",
+  cmd: "super",
+  command: "super",
+  super: "super",
+  enter: "Return",
+  return: "Return",
+  esc: "Escape",
+  escape: "Escape",
+  tab: "Tab",
+  space: "space",
+  backspace: "BackSpace",
+  delete: "Delete",
+  up: "Up",
+  down: "Down",
+  left: "Left",
+  right: "Right",
+};
+
+const SENDKEYS_KEY: Record<string, string> = {
+  ctrl: "^",
+  control: "^",
+  shift: "+",
+  alt: "%",
+  option: "%",
+  win: "^{ESC}", // best-effort; SendKeys has no Win — use VK path below
+  meta: "",
+  cmd: "",
+  command: "",
+  super: "",
+  enter: "{ENTER}",
+  return: "{ENTER}",
+  esc: "{ESC}",
+  escape: "{ESC}",
+  tab: "{TAB}",
+  space: " ",
+  backspace: "{BACKSPACE}",
+  delete: "{DELETE}",
+  up: "{UP}",
+  down: "{DOWN}",
+  left: "{LEFT}",
+  right: "{RIGHT}",
+};
+
+function toXdotoolKey(part: string): string {
+  if (XDOTOOL_KEY[part]) return XDOTOOL_KEY[part];
+  if (/^f([1-9]|1[0-2])$/.test(part)) return part.toUpperCase();
+  if (part.length === 1) return part;
+  return part;
+}
+
+async function keysViaXdotool(parts: string[]): Promise<void> {
+  const mapped = parts.map(toXdotoolKey);
+  await execFileAsync("xdotool", ["key", "--", mapped.join("+")], {
+    timeout: 8000,
+  });
+}
+
+/**
+ * Win32 key combo via SendInput virtual-key codes (modifiers held, then key).
+ * Falls back to SendKeys for simple non-win combos.
+ */
+async function keysViaWin32(parts: string[]): Promise<void> {
+  const vkMap: Record<string, number> = {
+    ctrl: 0x11,
+    control: 0x11,
+    shift: 0x10,
+    alt: 0x12,
+    option: 0x12,
+    win: 0x5b,
+    meta: 0x5b,
+    cmd: 0x5b,
+    command: 0x5b,
+    super: 0x5b,
+    enter: 0x0d,
+    return: 0x0d,
+    esc: 0x1b,
+    escape: 0x1b,
+    tab: 0x09,
+    space: 0x20,
+    backspace: 0x08,
+    delete: 0x2e,
+    up: 0x26,
+    down: 0x28,
+    left: 0x25,
+    right: 0x27,
+  };
+  for (let i = 1; i <= 12; i++) vkMap[`f${i}`] = 0x6f + i; // F1=0x70
+
+  const vks: number[] = [];
+  for (const p of parts) {
+    if (vkMap[p] !== undefined) {
+      vks.push(vkMap[p]);
+      continue;
+    }
+    if (p.length === 1) {
+      const ch = p.toUpperCase().charCodeAt(0);
+      if (ch >= 0x30 && ch <= 0x39) vks.push(ch); // 0-9
+      else if (ch >= 0x41 && ch <= 0x5a) vks.push(ch); // A-Z
+      else throw new Error(`Неизвестная клавиша: ${p}`);
+      continue;
+    }
+    throw new Error(`Неизвестная клавиша: ${p}`);
+  }
+
+  const vkList = vks.join(", ");
+  const script = [
+    "Add-Type -TypeDefinition @'",
+    "using System;",
+    "using System.Runtime.InteropServices;",
+    "public static class MiraHotkey {",
+    "  [StructLayout(LayoutKind.Sequential)] public struct INPUT { public uint type; public KEYBDINPUT ki; }",
+    "  [StructLayout(LayoutKind.Sequential)] public struct KEYBDINPUT {",
+    "    public ushort wVk; public ushort wScan; public uint dwFlags; public uint time; public IntPtr dwExtraInfo;",
+    "  }",
+    "  [DllImport(\"user32.dll\")] public static extern uint SendInput(uint n, INPUT[] p, int cb);",
+    "  public const uint INPUT_KEYBOARD = 1;",
+    "  public const uint KEYUP = 0x0002;",
+    "  public static void Chord(ushort[] keys) {",
+    "    foreach (ushort k in keys) {",
+    "      INPUT[] d = new INPUT[1];",
+    "      d[0].type = INPUT_KEYBOARD; d[0].ki.wVk = k;",
+    "      SendInput(1, d, Marshal.SizeOf(typeof(INPUT)));",
+    "    }",
+    "    for (int i = keys.Length - 1; i >= 0; i--) {",
+    "      INPUT[] u = new INPUT[1];",
+    "      u[0].type = INPUT_KEYBOARD; u[0].ki.wVk = keys[i]; u[0].ki.dwFlags = KEYUP;",
+    "      SendInput(1, u, Marshal.SizeOf(typeof(INPUT)));",
+    "    }",
+    "  }",
+    "}",
+    "'@",
+    `$keys = [uint16[]]@(${vkList})`,
+    "[MiraHotkey]::Chord($keys)",
+  ].join("\n");
+
+  await execFileAsync(
+    "powershell.exe",
+    ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+    { timeout: 8000, windowsHide: true },
+  );
+}
+
+/**
+ * Press a key chord like «ctrl+shift+s».
+ * Trusted custom-command path: respects SCREEN_CONTROL_ENABLED, no per-press confirm.
+ */
+export async function pressKeys(
+  raw: string,
+  opts?: { dryRun?: boolean },
+): Promise<ScreenKeysResult> {
+  const keys = raw.trim();
+  const parts = parseKeyCombo(keys);
+  if (!parts.length) {
+    return {
+      ok: false,
+      keys,
+      mode: "dry-run",
+      detail: "Пустая комбинация клавиш",
+    };
+  }
+
+  if (opts?.dryRun) {
+    return {
+      ok: true,
+      keys,
+      mode: "dry-run",
+      detail: `Проверка: нажать ${parts.join("+")}`,
+    };
+  }
+
+  const policy = getScreenPolicy();
+  if (!policy.enabled || !policy.controlEnabled) {
+    return {
+      ok: true,
+      keys,
+      mode: "dry-run",
+      detail: `Контроль экрана выключен — зафиксировано нажатие ${parts.join("+")}`,
+    };
+  }
+
+  if (!isElectronRuntime()) {
+    return {
+      ok: true,
+      keys,
+      mode: "dry-run",
+      detail: `Зафиксировано без GUI: ${parts.join("+")}`,
+    };
+  }
+
+  try {
+    return await withMiraWindowsAside(async () => {
+      if (process.platform === "win32") {
+        await keysViaWin32(parts);
+        return {
+          ok: true,
+          keys,
+          mode: "win32" as const,
+          detail: `Нажато ${parts.join("+")} (Win32)`,
+        };
+      }
+      await keysViaXdotool(parts);
+      return {
+        ok: true,
+        keys,
+        mode: "xdotool" as const,
+        detail: `Нажато ${parts.join("+")} (xdotool)`,
+      };
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      ok: true,
+      keys,
+      mode: "dry-run",
+      detail: `Системный hotkey недоступен (${message.slice(0, 120)}). Зафиксировано dry-run.`,
+    };
+  }
+}
+
 export function formatScreenBlock(
-  kind: "capture" | "click" | "type",
-  payload: ScreenCaptureResult | ScreenClickResult | ScreenTypeResult,
+  kind: "capture" | "click" | "type" | "keys",
+  payload:
+    | ScreenCaptureResult
+    | ScreenClickResult
+    | ScreenTypeResult
+    | ScreenKeysResult,
   visionNote?: string | null,
 ): string {
   if (kind === "capture") {
@@ -480,6 +728,10 @@ export function formatScreenBlock(
   if (kind === "type") {
     const t = payload as ScreenTypeResult;
     return `[Экран: type ${t.mode}]\n«${t.text}» · ${t.detail}`;
+  }
+  if (kind === "keys") {
+    const k = payload as ScreenKeysResult;
+    return `[Экран: keys ${k.mode}]\n«${k.keys}» · ${k.detail}`;
   }
   const c = payload as ScreenClickResult;
   return `[Экран: click ${c.mode}]\n(${c.x}, ${c.y}) · ${c.detail}`;

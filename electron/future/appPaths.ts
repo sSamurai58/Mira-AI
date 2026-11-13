@@ -533,6 +533,42 @@ export async function openAppPathById(id: string): Promise<{
   return openAppPathRow(row);
 }
 
+/** Open an arbitrary path (program / folder / file) without an app_paths row. */
+export async function openPathTarget(target: string): Promise<{
+  ok: boolean;
+  detail: string;
+}> {
+  const trimmed = target.trim();
+  if (!trimmed) {
+    return { ok: false, detail: "Путь не задан" };
+  }
+  let kind: AppPathKind = "file";
+  try {
+    if (fs.existsSync(trimmed) && fs.statSync(trimmed).isDirectory()) {
+      kind = "folder";
+    } else if (
+      /\.(exe|bat|cmd|lnk|app)$/i.test(trimmed) ||
+      (!path.extname(trimmed) && process.platform !== "win32")
+    ) {
+      kind = "program";
+    }
+  } catch {
+    /* keep file */
+  }
+  const synthetic: AppPathRow = {
+    id: "adhoc",
+    kind,
+    name: path.basename(trimmed) || trimmed,
+    path: trimmed,
+    tags: [],
+    enabled: true,
+    created_at: "",
+    updated_at: "",
+  };
+  const res = await openAppPathRow(synthetic);
+  return { ok: res.ok, detail: res.detail };
+}
+
 export async function openAppPathRow(row: AppPathRow): Promise<{
   ok: boolean;
   detail: string;

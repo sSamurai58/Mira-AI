@@ -170,6 +170,14 @@ import {
   type AppPathKind,
 } from "./future/appPaths";
 import {
+  deleteCustomCommand,
+  listCustomCommands,
+  runCustomCommandById,
+  setCustomCommandEnabled,
+  upsertCustomCommand,
+  type CustomCommandStep,
+} from "./future/customCommands";
+import {
   deleteProfile,
   getActiveProfile,
   getProfilesSnapshot,
@@ -1071,6 +1079,39 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
     "mira:pick-app-path",
     (_e, kind?: AppPathKind) =>
       pickAppPathDialog(kind === "folder" || kind === "file" ? kind : "program"),
+  );
+
+  on("mira:list-custom-commands", () => listCustomCommands());
+  on(
+    "mira:upsert-custom-command",
+    (
+      _e,
+      payload: {
+        id?: string;
+        name: string;
+        phrases?: string[];
+        steps?: CustomCommandStep[];
+        reply?: string;
+        enabled?: boolean;
+      },
+    ) => upsertCustomCommand(payload),
+  );
+  on(
+    "mira:delete-custom-command",
+    (_e, id: string) => deleteCustomCommand(String(id ?? "")),
+    { privileged: true },
+  );
+  on(
+    "mira:set-custom-command-enabled",
+    (_e, id: string, enabled: boolean) =>
+      setCustomCommandEnabled(String(id ?? ""), Boolean(enabled)),
+  );
+  on(
+    "mira:run-custom-command",
+    (_e, id: string, opts?: { dryRun?: boolean }) =>
+      runCustomCommandById(String(id ?? ""), {
+        dryRun: Boolean(opts?.dryRun),
+      }),
   );
 
   on("mira:list-profiles", () => listProfiles());
