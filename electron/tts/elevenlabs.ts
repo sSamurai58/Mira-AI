@@ -10,6 +10,9 @@ import { loadConfig } from "../config";
 
 export const DEFAULT_ELEVENLABS_VOICE_ID = "YjESejviApN7SHrbfnA2";
 export const DEFAULT_ELEVENLABS_MODEL_ID = "eleven_multilingual_v2";
+/** Short replies prefer Flash for lower latency (0.1.11). */
+export const SHORT_REPLY_FLASH_MODEL_ID = "eleven_flash_v2_5";
+export const SHORT_REPLY_CHAR_LIMIT = 160;
 
 export const ELEVENLABS_MODELS = [
   {
@@ -36,6 +39,13 @@ export const ELEVENLABS_MODELS = [
 
 export type ElevenLabsModelId = (typeof ELEVENLABS_MODELS)[number]["id"];
 
+export type ElevenLabsVoiceSettings = {
+  stability: number;
+  similarityBoost: number;
+  style: number;
+  useSpeakerBoost: boolean;
+};
+
 export type ElevenLabsStatus = {
   hasKey: boolean;
   voiceId: string;
@@ -43,6 +53,18 @@ export type ElevenLabsStatus = {
   connected: boolean;
   detail: string;
   subscription?: string | null;
+  /** Remaining credits when user probe succeeds. */
+  characterCount?: number | null;
+  characterLimit?: number | null;
+  voiceSettings?: ElevenLabsVoiceSettings;
+};
+
+export type ElevenLabsVoiceInfo = {
+  voiceId: string;
+  name: string;
+  category: string;
+  previewUrl: string | null;
+  labels: Record<string, string>;
 };
 
 export type ElevenLabsSynthResult = {
@@ -75,6 +97,43 @@ export function getElevenLabsModelId(): string {
   const raw = process.env.ELEVENLABS_MODEL_ID?.trim();
   if (raw && ELEVENLABS_MODELS.some((m) => m.id === raw)) return raw;
   return DEFAULT_ELEVENLABS_MODEL_ID;
+}
+
+function clamp01(n: number, fallback: number): number {
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, Math.min(1, n));
+}
+
+/** Stability / similarity / style from env (0…1). */
+export function getElevenLabsVoiceSettings(): ElevenLabsVoiceSettings {
+  loadConfig();
+  return {
+    stability: clamp01(
+      Number(process.env.ELEVENLABS_STABILITY ?? 0.45),
+      0.45,
+    ),
+    similarityBoost: clamp01(
+      Number(process.env.ELEVENLABS_SIMILARITY ?? 0.75),
+      0.75,
+    ),
+    style: clamp01(Number(process.env.ELEVENLABS_STYLE ?? 0.35), 0.35),
+    useSpeakerBoost:
+      (process.env.ELEVENLABS_SPEAKER_BOOST ?? "true").trim().toLowerCase() !==
+      "false",
+  };
+}
+
+/** Pick Flash/Turbo for short replies unless user forced a specific model via opts. */
+export function pickModelForText(text: string, forced?: string): string {
+  if (forced?.trim()) return forced.trim();
+  const configured = getElevenLabsModelId();
+  const clean = text.trim();
+  if (clean.length > 0 && clean.length <= SHORT_REPLY_CHAR_LIMIT) {
+    // Prefer Flash for short; Turbo if user already chose turbo family.
+    if (configured.includes("turbo")) return configured;
+    return SHORT_REPLY_FLASH_MODEL_ID;
+  }
+  return configured;
 }
 
 function mapHttpError(status: number, bodyText: string): string {
@@ -129,6 +188,7 @@ export async function getElevenLabsStatus(
   const key = apiKey();
   const voiceId = getElevenLabsVoiceId();
   const modelId = getElevenLabsModelId();
+  const voiceSettings = getElevenLabsVoiceSettings();
   if (!key) {
     return {
       hasKey: false,
@@ -137,6 +197,7 @@ export async function getElevenLabsStatus(
       connected: false,
       detail: "Нет ключа — добавьте ELEVENLABS_API_KEY в Настройках",
       subscription: null,
+      voiceSettings,
     };
   }
   if (!probe) {
@@ -147,6 +208,7 @@ export async function getElevenLabsStatus(
       connected: true,
       detail: "Ключ сохранён · готов к озвучке",
       subscription: null,
+      voiceSettings,
     };
   }
 
@@ -162,6 +224,7 @@ export async function getElevenLabsStatus(
       connected: false,
       detail: fetched.detail,
       subscription: null,
+      voiceSettings,
     };
   }
   const { res } = fetched;
@@ -174,21 +237,37 @@ export async function getElevenLabsStatus(
       connected: false,
       detail: mapHttpError(res.status, body),
       subscription: null,
+      voiceSettings,
     };
   }
   const json = (await res.json().catch(() => null)) as {
-    subscription?: { tier?: string; status?: string };
+    subscription?: {
+      tier?: string;
+      status?: string;
+      character_count?: number;
+      character_limit?: number;
+    };
   } | null;
   const tier = json?.subscription?.tier || json?.subscription?.status || null;
+  const characterCount = json?.subscription?.character_count ?? null;
+  const characterLimit = json?.subscription?.character_limit ?? null;
+  let quota = "";
+  if (characterCount != null && characterLimit != null) {
+    const left = Math.max(0, characterLimit - characterCount);
+    quota = ` · квота ${left.toLocaleString("ru-RU")} / ${characterLimit.toLocaleString("ru-RU")}`;
+  }
   return {
     hasKey: true,
     voiceId,
     modelId,
     connected: true,
     detail: tier
-      ? `Подключено · план ${tier}`
-      : "Подключено к ElevenLabs",
+      ? `Подключено · план ${tier}${quota}`
+      : `Подключено к ElevenLabs${quota}`,
     subscription: tier,
+    characterCount,
+    characterLimit,
+    voiceSettings,
   };
 }
 
@@ -204,10 +283,25 @@ function cleanupTemp(): void {
   lastTempPath = null;
 }
 
+function buildVoiceSettingsBody(
+  overrides?: Partial<ElevenLabsVoiceSettings>,
+): Record<string, unknown> {
+  const s = { ...getElevenLabsVoiceSettings(), ...overrides };
+  return {
+    stability: s.stability,
+    similarity_boost: s.similarityBoost,
+    style: s.style,
+    use_speaker_boost: s.useSpeakerBoost,
+  };
+}
+
 export async function synthesizeElevenLabs(opts: {
   text: string;
   voiceId?: string;
   modelId?: string;
+  /** Prefer streaming endpoint `/stream` (default true in 0.1.11). */
+  stream?: boolean;
+  voiceSettings?: Partial<ElevenLabsVoiceSettings>;
 }): Promise<ElevenLabsSynthResult> {
   const clean = (opts.text || "").trim();
   if (!clean) {
@@ -224,7 +318,7 @@ export async function synthesizeElevenLabs(opts: {
   }
 
   const voiceId = (opts.voiceId || getElevenLabsVoiceId()).trim();
-  const modelId = (opts.modelId || getElevenLabsModelId()).trim();
+  const modelId = pickModelForText(clean, opts.modelId);
   if (!voiceId) {
     return { ok: false, detail: "Не задан Voice ID ElevenLabs" };
   }
@@ -232,13 +326,16 @@ export async function synthesizeElevenLabs(opts: {
   const body: Record<string, unknown> = {
     text: clean,
     model_id: modelId,
+    voice_settings: buildVoiceSettingsBody(opts.voiceSettings),
   };
   // eleven_v3 / flash / turbo accept language_code; multilingual_v2 ignores it.
   if (modelId !== "eleven_multilingual_v2") {
     body.language_code = "ru";
   }
 
-  const url = `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`;
+  const useStream = opts.stream !== false;
+  const base = `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`;
+  const url = `${useStream ? `${base}/stream` : base}?output_format=mp3_44100_128`;
   const fetched = await safeFetch(url, {
     method: "POST",
     headers: {
@@ -255,6 +352,10 @@ export async function synthesizeElevenLabs(opts: {
   const { res } = fetched;
   if (!res.ok) {
     const errText = await res.text().catch(() => "");
+    // Stream endpoint may 404 on older accounts — retry non-stream once.
+    if (useStream && (res.status === 404 || res.status === 405)) {
+      return synthesizeElevenLabs({ ...opts, stream: false });
+    }
     return {
       ok: false,
       detail: mapHttpError(res.status, errText),
@@ -289,7 +390,7 @@ export async function synthesizeElevenLabs(opts: {
   const mimeType = "audio/mpeg";
   return {
     ok: true,
-    detail: `ElevenLabs · ${modelId}`,
+    detail: `ElevenLabs · ${modelId}${useStream ? " · stream" : ""}`,
     mimeType,
     audioBase64,
     dataUrl: `data:${mimeType};base64,${audioBase64}`,
@@ -298,4 +399,158 @@ export async function synthesizeElevenLabs(opts: {
     modelId,
     voiceId,
   };
+}
+
+export async function listElevenLabsVoices(): Promise<{
+  ok: boolean;
+  detail: string;
+  voices: ElevenLabsVoiceInfo[];
+}> {
+  const key = apiKey();
+  if (!key) {
+    return {
+      ok: false,
+      detail: "Нет ELEVENLABS_API_KEY",
+      voices: [
+        {
+          voiceId: DEFAULT_ELEVENLABS_VOICE_ID,
+          name: "Mira preset",
+          category: "preset",
+          previewUrl: null,
+          labels: { mira: "default" },
+        },
+      ],
+    };
+  }
+  const fetched = await safeFetch("https://api.elevenlabs.io/v1/voices", {
+    method: "GET",
+    headers: { "xi-api-key": key, Accept: "application/json" },
+  });
+  if (!fetched.ok) {
+    return { ok: false, detail: fetched.detail, voices: [] };
+  }
+  const { res } = fetched;
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    return { ok: false, detail: mapHttpError(res.status, body), voices: [] };
+  }
+  const json = (await res.json().catch(() => null)) as {
+    voices?: Array<{
+      voice_id?: string;
+      name?: string;
+      category?: string;
+      preview_url?: string;
+      labels?: Record<string, string>;
+    }>;
+  } | null;
+  const voices: ElevenLabsVoiceInfo[] = (json?.voices ?? [])
+    .filter((v) => v.voice_id)
+    .map((v) => ({
+      voiceId: v.voice_id!,
+      name: v.name || v.voice_id!,
+      category: v.category || "unknown",
+      previewUrl: v.preview_url || null,
+      labels: v.labels || {},
+    }));
+  // Ensure preset always listed.
+  if (!voices.some((v) => v.voiceId === DEFAULT_ELEVENLABS_VOICE_ID)) {
+    voices.unshift({
+      voiceId: DEFAULT_ELEVENLABS_VOICE_ID,
+      name: "Mira preset",
+      category: "preset",
+      previewUrl: null,
+      labels: { mira: "default" },
+    });
+  }
+  return {
+    ok: true,
+    detail: `Голосов: ${voices.length}`,
+    voices,
+  };
+}
+
+/**
+ * Instant Voice Clone: upload studio clips → ElevenLabs IVC when key present.
+ */
+export async function cloneElevenLabsVoice(opts: {
+  name: string;
+  description?: string;
+  /** Absolute paths to audio files (wav/mp3). */
+  filePaths: string[];
+}): Promise<{
+  ok: boolean;
+  detail: string;
+  voiceId?: string;
+}> {
+  const key = apiKey();
+  if (!key) {
+    return {
+      ok: false,
+      detail:
+        "Нет ELEVENLABS_API_KEY — Instant Voice Clone недоступен. Сохраните ключ в Настройках.",
+    };
+  }
+  const name = (opts.name || "").trim() || "Mira clone";
+  const files = (opts.filePaths || []).filter((p) => {
+    try {
+      return p && fs.existsSync(p) && fs.statSync(p).isFile();
+    } catch {
+      return false;
+    }
+  });
+  if (!files.length) {
+    return {
+      ok: false,
+      detail: "Нет аудиофайлов для клона. Запишите клипы в Студии голоса.",
+    };
+  }
+
+  try {
+    const form = new FormData();
+    form.append("name", name);
+    if (opts.description?.trim()) {
+      form.append("description", opts.description.trim());
+    }
+    for (const fp of files.slice(0, 25)) {
+      const buf = fs.readFileSync(fp);
+      const blob = new Blob([new Uint8Array(buf)], {
+        type: fp.toLowerCase().endsWith(".mp3") ? "audio/mpeg" : "audio/wav",
+      });
+      form.append("files", blob, path.basename(fp));
+    }
+
+    const fetched = await safeFetch(
+      "https://api.elevenlabs.io/v1/voices/add",
+      {
+        method: "POST",
+        headers: { "xi-api-key": key },
+        body: form,
+      },
+    );
+    if (!fetched.ok) {
+      return { ok: false, detail: fetched.detail };
+    }
+    const { res } = fetched;
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      return { ok: false, detail: mapHttpError(res.status, errText) };
+    }
+    const json = (await res.json().catch(() => null)) as {
+      voice_id?: string;
+    } | null;
+    const voiceId = json?.voice_id?.trim();
+    if (!voiceId) {
+      return { ok: false, detail: "ElevenLabs не вернул voice_id" };
+    }
+    return {
+      ok: true,
+      detail: `Instant Voice Clone создан · ${voiceId}`,
+      voiceId,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      detail: err instanceof Error ? err.message : String(err),
+    };
+  }
 }

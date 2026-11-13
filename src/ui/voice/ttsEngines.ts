@@ -1,8 +1,4 @@
-export type TtsEngineId =
-  | "webspeech"
-  | "neural-pack"
-  | "elevenlabs"
-  | "edge-stub";
+export type TtsEngineId = "webspeech" | "neural-pack" | "elevenlabs";
 
 export type TtsEngineInfo = {
   id: TtsEngineId;
@@ -18,8 +14,11 @@ export const DEFAULT_ELEVENLABS_VOICE_ID = "YjESejviApN7SHrbfnA2";
 
 export function getActiveTtsEngine(): TtsEngineId {
   const v = localStorage.getItem(KEY);
-  // Migrate retired stub → ElevenLabs cloud engine.
-  if (v === "edge-stub") return "elevenlabs";
+  // Migrate retired edge-stub → ElevenLabs cloud engine.
+  if (v === "edge-stub") {
+    localStorage.setItem(KEY, "elevenlabs");
+    return "elevenlabs";
+  }
   if (
     v === "neural-pack" ||
     v === "elevenlabs" ||
@@ -30,7 +29,7 @@ export function getActiveTtsEngine(): TtsEngineId {
   return "webspeech";
 }
 
-export function setActiveTtsEngine(id: TtsEngineId): TtsEngineId {
+export function setActiveTtsEngine(id: TtsEngineId | "edge-stub"): TtsEngineId {
   const next: TtsEngineId = id === "edge-stub" ? "elevenlabs" : id;
   localStorage.setItem(KEY, next);
   return next;

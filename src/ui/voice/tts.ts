@@ -32,7 +32,7 @@ const CROSSFADE_MAX_SEC = 0.055;
 
 export function isTtsAvailable(): boolean {
   const engine = getActiveTtsEngine();
-  if (engine === "edge-stub") return false;
+  // edge-stub retired in 0.1.8+
   // Corpus / neural-pack is selected as ready even without speechSynthesis
   // (Electron clip playback; headless smoke still reports engine ready).
   if (engine === "neural-pack") return true;
@@ -635,12 +635,6 @@ export function speakText(
   handlers: SpeakHandlers = {},
 ): void {
   const engine = getActiveTtsEngine();
-  if (engine === "edge-stub") {
-    handlers.onError?.(
-      "Edge stub заменён на ElevenLabs. Выберите ElevenLabs в Настройках → Голос.",
-    );
-    return;
-  }
 
   const gen = ++speakGeneration;
   const isCurrent = () => gen === speakGeneration;

@@ -69,6 +69,9 @@ export function SettingsElevenLabsSection({
   const [models, setModels] = useState<
     Array<{ id: string; label: string; detail: string }>
   >([...FALLBACK_MODELS]);
+  const [voices, setVoices] = useState<
+    Array<{ voiceId: string; name: string; category: string }>
+  >([]);
 
   async function refreshStatus(probe = false) {
     if (!window.mira?.getElevenLabsStatus) {
@@ -113,6 +116,22 @@ export function SettingsElevenLabsSection({
           /* keep fallback */
         }
       }
+      if (window.mira?.listElevenLabsVoices) {
+        try {
+          const res = await window.mira.listElevenLabsVoices();
+          if (!cancelled && res?.voices?.length) {
+            setVoices(
+              res.voices.map((v) => ({
+                voiceId: v.voiceId,
+                name: v.name,
+                category: v.category,
+              })),
+            );
+          }
+        } catch {
+          /* optional */
+        }
+      }
       if (!cancelled) await refreshStatus(false);
     })();
     return () => {
@@ -137,6 +156,16 @@ export function SettingsElevenLabsSection({
       (draft.ELEVENLABS_VOICE_ID || "").trim() || DEFAULT_ELEVENLABS_VOICE_ID;
     patch.ELEVENLABS_MODEL_ID =
       (draft.ELEVENLABS_MODEL_ID || "").trim() || "eleven_multilingual_v2";
+    for (const k of [
+      "ELEVENLABS_STABILITY",
+      "ELEVENLABS_SIMILARITY",
+      "ELEVENLABS_STYLE",
+      "ELEVENLABS_SPEAKER_BOOST",
+    ] as const) {
+      if (draft[k] != null && String(draft[k]).trim() !== "") {
+        patch[k] = String(draft[k]).trim();
+      }
+    }
 
     if (!Object.keys(patch).length) {
       setNote("Нечего сохранять");
@@ -317,7 +346,7 @@ export function SettingsElevenLabsSection({
             placeholder={DEFAULT_ELEVENLABS_VOICE_ID}
           />
         </Field>
-        <Field label="Модель" hint={modelHint}>
+        <Field label="Модель" hint={`${modelHint} · короткие реплики → Flash`}>
           <ThemeSelect
             aria-label="Модель ElevenLabs"
             value={draft.ELEVENLABS_MODEL_ID || "eleven_multilingual_v2"}
@@ -326,6 +355,64 @@ export function SettingsElevenLabsSection({
               label: m.label,
             }))}
             onChange={(id) => setField("ELEVENLABS_MODEL_ID", id)}
+          />
+        </Field>
+      </div>
+
+      {voices.length > 0 ? (
+        <Field label="Голоса аккаунта" hint="Список из ElevenLabs API · выберите или оставьте пресет">
+          <ThemeSelect
+            aria-label="Голос ElevenLabs из аккаунта"
+            value={draft.ELEVENLABS_VOICE_ID || DEFAULT_ELEVENLABS_VOICE_ID}
+            options={voices.map((v) => ({
+              value: v.voiceId,
+              label: `${v.name} (${v.category})`,
+            }))}
+            onChange={(id) => setField("ELEVENLABS_VOICE_ID", id)}
+          />
+        </Field>
+      ) : null}
+
+      <div className="integ-grid-2">
+        <Field label="Stability" hint="0…1 · устойчивость тембра">
+          <input
+            type="number"
+            min={0}
+            max={1}
+            step={0.05}
+            value={draft.ELEVENLABS_STABILITY ?? "0.45"}
+            onChange={(e) => setField("ELEVENLABS_STABILITY", e.target.value)}
+          />
+        </Field>
+        <Field label="Similarity" hint="0…1 · похожесть на оригинал">
+          <input
+            type="number"
+            min={0}
+            max={1}
+            step={0.05}
+            value={draft.ELEVENLABS_SIMILARITY ?? "0.75"}
+            onChange={(e) => setField("ELEVENLABS_SIMILARITY", e.target.value)}
+          />
+        </Field>
+        <Field label="Style" hint="0…1 · выразительность">
+          <input
+            type="number"
+            min={0}
+            max={1}
+            step={0.05}
+            value={draft.ELEVENLABS_STYLE ?? "0.35"}
+            onChange={(e) => setField("ELEVENLABS_STYLE", e.target.value)}
+          />
+        </Field>
+        <Field label="Speaker boost" hint="true / false">
+          <ThemeSelect
+            aria-label="Speaker boost"
+            value={draft.ELEVENLABS_SPEAKER_BOOST ?? "true"}
+            options={[
+              { value: "true", label: "Вкл" },
+              { value: "false", label: "Выкл" },
+            ]}
+            onChange={(id) => setField("ELEVENLABS_SPEAKER_BOOST", id)}
           />
         </Field>
       </div>

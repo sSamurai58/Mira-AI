@@ -6,9 +6,12 @@ import {
   DEFAULT_ELEVENLABS_MODEL_ID,
   DEFAULT_ELEVENLABS_VOICE_ID,
   ELEVENLABS_MODELS,
+  SHORT_REPLY_FLASH_MODEL_ID,
   getElevenLabsModelId,
   getElevenLabsStatus,
   getElevenLabsVoiceId,
+  getElevenLabsVoiceSettings,
+  pickModelForText,
   synthesizeElevenLabs,
 } from "../electron/tts/elevenlabs.ts";
 import {
@@ -42,6 +45,16 @@ async function main() {
   assert.equal(DEFAULT_ELEVENLABS_MODEL_ID, "eleven_multilingual_v2");
   assert.ok(ELEVENLABS_MODELS.some((m) => m.id === "eleven_multilingual_v2"));
   assert.ok(ELEVENLABS_MODELS.some((m) => m.id === "eleven_v3"));
+  assert.ok(ELEVENLABS_MODELS.some((m) => m.id === "eleven_flash_v2_5"));
+
+  const settings = getElevenLabsVoiceSettings();
+  assert.ok(settings.stability >= 0 && settings.stability <= 1);
+  assert.ok(settings.similarityBoost >= 0 && settings.similarityBoost <= 1);
+  assert.equal(pickModelForText("Привет!"), SHORT_REPLY_FLASH_MODEL_ID);
+  assert.equal(
+    pickModelForText("x".repeat(200), "eleven_multilingual_v2"),
+    "eleven_multilingual_v2",
+  );
 
   delete process.env.ELEVENLABS_API_KEY;
   delete process.env.ELEVENLABS_VOICE_ID;
