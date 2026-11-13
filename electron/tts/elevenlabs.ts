@@ -295,11 +295,94 @@ function buildVoiceSettingsBody(
   };
 }
 
+/** MPEG frame sync (0xFFE?) or ID3v2 tag — reject JSON/PCM labeled as mp3. */
+export function looksLikeMp3(buf: Buffer | Uint8Array): boolean {
+  if (!buf || buf.length < 3) return false;
+  // ID3v2
+  if (buf[0] === 0x49 && buf[1] === 0x44 && buf[2] === 0x33) return true;
+  // MPEG audio frame sync: 11 set bits
+  if (buf[0] === 0xff && (buf[1]! & 0xe0) === 0xe0) return true;
+  // Some encoders pad a few bytes before the first frame — scan a short window.
+  const limit = Math.min(buf.length - 1, 256);
+  for (let i = 1; i < limit; i++) {
+    if (buf[i] === 0xff && (buf[i + 1]! & 0xe0) === 0xe0) return true;
+  }
+  return false;
+}
+
+export function looksLikeJsonPayload(buf: Buffer | Uint8Array): boolean {
+  if (!buf?.length) return false;
+  const head = Buffer.from(buf.subarray(0, Math.min(48, buf.length)))
+    .toString("utf8")
+    .trimStart();
+  return head.startsWith("{") || head.startsWith("[");
+}
+
+export function looksLikeWav(buf: Buffer | Uint8Array): boolean {
+  return (
+    !!buf &&
+    buf.length >= 12 &&
+    buf[0] === 0x52 &&
+    buf[1] === 0x49 &&
+    buf[2] === 0x46 &&
+    buf[3] === 0x46 &&
+    buf[8] === 0x57 &&
+    buf[9] === 0x41 &&
+    buf[10] === 0x56 &&
+    buf[11] === 0x45
+  );
+}
+
+/**
+ * Sniff body + Content-Type so we never play PCM/JSON as audio/mpeg
+ * (that produces screech/static in the dialog).
+ */
+export function sniffElevenLabsAudio(
+  buf: Buffer | Uint8Array,
+  contentType?: string | null,
+): { ok: true; mimeType: "audio/mpeg" | "audio/wav" } | { ok: false; detail: string } {
+  const ct = (contentType || "").toLowerCase();
+  if (ct.includes("application/json") || ct.includes("text/")) {
+    return {
+      ok: false,
+      detail: `ElevenLabs вернул не-аудио Content-Type (${contentType || "unknown"})`,
+    };
+  }
+  if (looksLikeJsonPayload(buf)) {
+    return { ok: false, detail: "ElevenLabs вернул JSON вместо аудио" };
+  }
+  if (looksLikeMp3(buf)) {
+    return { ok: true, mimeType: "audio/mpeg" };
+  }
+  if (looksLikeWav(buf) || ct.includes("wav") || ct.includes("pcm")) {
+    // Dialog path expects MP3 data URLs; refuse PCM/WAV masquerading as mpeg.
+    return {
+      ok: false,
+      detail:
+        "ElevenLabs вернул PCM/WAV вместо MP3 — отказ (иначе скрип/помехи)",
+    };
+  }
+  if (ct.includes("audio/mpeg") || ct.includes("audio/mp3")) {
+    // Header claims MP3 but magic missing — still unsafe to play.
+    return {
+      ok: false,
+      detail: "Тело ответа не похоже на MP3 (битый stream)",
+    };
+  }
+  return {
+    ok: false,
+    detail: "Неизвестный формат аудио ElevenLabs (ожидался MP3)",
+  };
+}
+
 export async function synthesizeElevenLabs(opts: {
   text: string;
   voiceId?: string;
   modelId?: string;
-  /** Prefer streaming endpoint `/stream` (default true in 0.1.11). */
+  /**
+   * Use `/stream` when true. Default is **false** (0.1.12): non-stream convert
+   * returns a complete MP3. Stream still available, but invalid bodies fall back.
+   */
   stream?: boolean;
   voiceSettings?: Partial<ElevenLabsVoiceSettings>;
 }): Promise<ElevenLabsSynthResult> {
@@ -333,7 +416,8 @@ export async function synthesizeElevenLabs(opts: {
     body.language_code = "ru";
   }
 
-  const useStream = opts.stream !== false;
+  // Opt-in stream: default convert path avoids PCM/chunk artifacts labeled as mpeg.
+  const useStream = opts.stream === true;
   const base = `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}`;
   const url = `${useStream ? `${base}/stream` : base}?output_format=mp3_44100_128`;
   const fetched = await safeFetch(url, {
@@ -364,8 +448,12 @@ export async function synthesizeElevenLabs(opts: {
     };
   }
 
+  const contentType = res.headers.get("content-type");
   const buf = Buffer.from(await res.arrayBuffer());
   if (!buf.length) {
+    if (useStream) {
+      return synthesizeElevenLabs({ ...opts, stream: false });
+    }
     return {
       ok: false,
       detail: "ElevenLabs вернул пустой аудиоответ",
@@ -374,10 +462,25 @@ export async function synthesizeElevenLabs(opts: {
     };
   }
 
+  const sniffed = sniffElevenLabsAudio(buf, contentType);
+  if (!sniffed.ok) {
+    // Prefer non-stream convert over playing corrupt/PCM stream as speech.
+    if (useStream) {
+      return synthesizeElevenLabs({ ...opts, stream: false });
+    }
+    return {
+      ok: false,
+      detail: sniffed.detail,
+      modelId,
+      voiceId,
+    };
+  }
+
   cleanupTemp();
+  const ext = sniffed.mimeType === "audio/wav" ? "wav" : "mp3";
   const tempPath = path.join(
     os.tmpdir(),
-    `mira-elevenlabs-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.mp3`,
+    `mira-elevenlabs-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`,
   );
   try {
     fs.writeFileSync(tempPath, buf);
@@ -387,7 +490,7 @@ export async function synthesizeElevenLabs(opts: {
   }
 
   const audioBase64 = buf.toString("base64");
-  const mimeType = "audio/mpeg";
+  const mimeType = sniffed.mimeType;
   return {
     ok: true,
     detail: `ElevenLabs · ${modelId}${useStream ? " · stream" : ""}`,

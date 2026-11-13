@@ -433,7 +433,8 @@ async function speakCustomVoice(
     return;
   }
 
-  // Prefer real neural inference path when weights exist.
+  // Prefer real neural inference path when weights exist — but reject
+  // vocoder noise (untrained / bad mel) so dialog never gets screech-only.
   if (window.mira?.readVoicePreview) {
     try {
       const neural = await window.mira.synthesizeCustomVoiceNeural(
@@ -442,18 +443,23 @@ async function speakCustomVoice(
       );
       if (!isCurrent()) return;
       if (neural.ok && neural.wavPath) {
-        handlers.onStatus?.(
-          neural.detail || "Нейро-синтез (encoder→decoder→vocoder)",
-        );
         const ctx = getAudioContext();
         const cache = new Map<string, AudioBuffer>();
         const buf = await decodeClip(ctx, neural.wavPath, cache);
         if (!isCurrent()) return;
-        handlers.onStart?.();
-        await playAudioBuffer(ctx, buf, isCurrent);
-        if (!isCurrent()) return;
-        handlers.onEnd?.();
-        return;
+        if (audioBufferSoundsLikeSpeech(buf)) {
+          handlers.onStatus?.(
+            neural.detail || "Нейро-синтез (encoder→decoder→vocoder)",
+          );
+          handlers.onStart?.();
+          await playAudioBuffer(ctx, buf, isCurrent);
+          if (!isCurrent()) return;
+          handlers.onEnd?.();
+          return;
+        }
+        handlers.onStatus?.(
+          "Нейро-синтез похож на шум — склейка клипов / Web Speech",
+        );
       }
     } catch {
       // Fall through to unit-stitch / Web Speech.
@@ -554,6 +560,31 @@ async function speakCustomVoice(
   }
 }
 
+/** Reject near-silence / white-noise buffers so we never leave screech as output. */
+export function audioBufferSoundsLikeSpeech(buf: AudioBuffer): boolean {
+  if (!buf || buf.length < 32) return false;
+  const data = buf.getChannelData(0);
+  const rms = channelRms(data);
+  if (rms < 0.008 || rms > 0.98) return false;
+  let zc = 0;
+  for (let i = 1; i < data.length; i++) {
+    if ((data[i - 1]! >= 0) !== (data[i]! >= 0)) zc += 1;
+  }
+  const zcr = zc / data.length;
+  // Speech ZCR is moderate; raw PCM-as-float / white noise sits near ~0.5.
+  if (zcr > 0.38) return false;
+  return true;
+}
+
+async function decodeDataUrlToBuffer(
+  ctx: AudioContext,
+  dataUrl: string,
+): Promise<AudioBuffer> {
+  const res = await fetch(dataUrl);
+  const raw = await res.arrayBuffer();
+  return ctx.decodeAudioData(raw.slice(0));
+}
+
 async function speakElevenLabs(
   text: string,
   handlers: SpeakHandlers,
@@ -574,6 +605,7 @@ async function speakElevenLabs(
   handlers.onStatus?.("ElevenLabs: синтез…");
   let result: Awaited<ReturnType<NonNullable<typeof window.mira.synthesizeElevenLabs>>>;
   try {
+    // Prefer validated MP3; main process falls back from /stream → convert.
     result = await window.mira.synthesizeElevenLabs({ text: clean });
   } catch (err) {
     if (!isCurrent()) return;
@@ -586,46 +618,38 @@ async function speakElevenLabs(
   }
   if (!isCurrent()) return;
   if (!result.ok || !result.dataUrl) {
-    handlers.onError?.(
+    handlers.onStatus?.(
       result.detail ||
-        "ElevenLabs не ответил. Проверьте ключ, квоту и сеть — или выберите Web Speech.",
+        "ElevenLabs не ответил — запасной Web Speech",
     );
+    speakWebSpeech(clean, null, handlers, isCurrent);
     return;
   }
 
   handlers.onStatus?.(result.detail || "ElevenLabs");
-  const audio = new Audio(result.dataUrl);
-  activeCustomAudio = audio;
-  audio.onplay = () => {
-    if (!isCurrent()) {
-      try {
-        audio.pause();
-      } catch {
-        /* ignore */
-      }
+
+  // Decode + speech-likeness gate before play — never blast corrupt stream/PCM.
+  try {
+    const ctx = getAudioContext();
+    const buf = await decodeDataUrlToBuffer(ctx, result.dataUrl);
+    if (!isCurrent()) return;
+    if (!audioBufferSoundsLikeSpeech(buf)) {
+      handlers.onStatus?.(
+        "ElevenLabs: аудио похоже на шум — запасной Web Speech",
+      );
+      speakWebSpeech(clean, null, handlers, isCurrent);
       return;
     }
     handlers.onStart?.();
-  };
-  audio.onended = () => {
-    if (activeCustomAudio === audio) activeCustomAudio = null;
+    await playAudioBuffer(ctx, buf, isCurrent);
     if (!isCurrent()) return;
     handlers.onEnd?.();
-  };
-  audio.onerror = () => {
-    if (activeCustomAudio === audio) activeCustomAudio = null;
+  } catch {
     if (!isCurrent()) return;
-    handlers.onError?.("Не удалось воспроизвести аудио ElevenLabs");
-  };
-  try {
-    await audio.play();
-  } catch (err) {
-    if (!isCurrent()) return;
-    handlers.onError?.(
-      err instanceof Error
-        ? `Воспроизведение: ${err.message}`
-        : "Воспроизведение ElevenLabs заблокировано",
+    handlers.onStatus?.(
+      "ElevenLabs: не удалось декодировать — запасной Web Speech",
     );
+    speakWebSpeech(clean, null, handlers, isCurrent);
   }
 }
 

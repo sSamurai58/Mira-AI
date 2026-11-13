@@ -176,9 +176,11 @@ export function ChatPage({
     };
   }, []);
 
-  // Mic level for HUD bars when listening (best-effort).
+  // Mic level for HUD bars when listening only.
+  // Never open the mic while TTS is playing — speakers→mic feedback is the
+  // classic “озвучки нет, одни помехи/скрипы” regression from 0.1.11 HUD.
   useEffect(() => {
-    if (voiceState !== "listening" && voiceState !== "speaking") {
+    if (voiceState !== "listening") {
       setMicLevel(0);
       return;
     }

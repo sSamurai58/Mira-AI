@@ -13,7 +13,7 @@
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
 | Дорожная карта | Must + future F* закрыты (partial→done stubs where noted) |
 
-**Сейчас:** **0.1.11 WIP** (не публиковать / не тегировать). Ветка `cursor/release-0-1-11-6838` от `v0.1.10`.
+**Сейчас:** **0.1.12 WIP** (не публиковать / не тегировать). Ветка `cursor/release-0-1-12-6838` от `v0.1.11`.
 
 
 ## Решения
@@ -22,6 +22,7 @@
 
 | Дата | Решение | Почему |
 |------|---------|--------|
+| 2026-11-13 | **0.1.12 WIP: dialog TTS screech fix** | EL `/stream` без sniff → PCM/JSON as mpeg = помехи; mic open while speaking = feedback; validate MP3 + non-stream default + Web Speech/neural fallback; no publish |
 | 2026-11-13 | **0.1.11 WIP: pack + update HUD toast** | MCP runtime scaffolding; EL stream/IVC/settings/Flash; wake pluggable; EPUB/AV ASR; FTS; WebGL LOD; auto-update floating HUD; no publish |
 | 2026-11-13 | **0.1.10 WIP: живое ядро + Home HUD** | После 0.1.9 Home выглядел «замороженным»: idle wave `animation:none`, медленный orbit, статичные плитки; rAF усилен, idle pulse, latency tick, reduced-motion = slow drift |
 | 2026-11-13 | **0.1.9 WIP: голографическое ядро WebGL2** | Пользовательский single-file HTML (4 слоя, MAX blend, bloom) портирован в `coreWebgl`; Mira L→vis 0…4 (L1≈0.3…L50=4); flash на level-up; reduced-motion |

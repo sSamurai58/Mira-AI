@@ -155,7 +155,7 @@
 | # | Возможность | Статус | Примечание |
 |---|-------------|--------|-----------|
 | 1 | Полноценный диалог | `partial` | P1+P2: текст + голос (PTT); мультимодал глубже позже |
-| 2 | Человечная речь | `partial` | Web Speech + Neural pack + ElevenLabs stream/IVC (0.1.11); voice settings |
+| 2 | Человечная речь | `partial` | Web Speech + Neural pack + ElevenLabs (0.1.12: MP3 sniff + non-stream default, stream fallback); voice settings |
 | 3 | Память разговоров | `partial` | SQLite utterances + FTS5 (fallback LIKE) + подъём в контекст |
 | 4 | Интернет | `partial` | P4: web.search (DDG) + web.fetch + WEB_* policy + confirm fetch |
 | 5 | Claude / Gemini / GPT / Grok | `partial` | OpenAI + Claude + Gemini + Grok (xAI) + offline/mock |

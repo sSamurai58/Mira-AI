@@ -11,7 +11,11 @@ import {
   getElevenLabsStatus,
   getElevenLabsVoiceId,
   getElevenLabsVoiceSettings,
+  looksLikeJsonPayload,
+  looksLikeMp3,
+  looksLikeWav,
   pickModelForText,
+  sniffElevenLabsAudio,
   synthesizeElevenLabs,
 } from "../electron/tts/elevenlabs.ts";
 import {
@@ -54,6 +58,30 @@ async function main() {
   assert.equal(
     pickModelForText("x".repeat(200), "eleven_multilingual_v2"),
     "eleven_multilingual_v2",
+  );
+
+  // Audio sniff: never treat JSON/PCM as playable MP3 (dialog screech guard).
+  const id3 = Buffer.from([0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0xff, 0xfb]);
+  const mpegFrame = Buffer.from([
+    0xff, 0xfb, 0x90, 0x00, 0x00, 0x00, 0x00, 0x00,
+  ]);
+  const jsonBody = Buffer.from('{"detail":{"status":"error"}}', "utf8");
+  const wavBody = Buffer.alloc(12);
+  wavBody.write("RIFF", 0);
+  wavBody.writeUInt32LE(36, 4);
+  wavBody.write("WAVE", 8);
+  assert.equal(looksLikeMp3(id3), true);
+  assert.equal(looksLikeMp3(mpegFrame), true);
+  assert.equal(looksLikeMp3(jsonBody), false);
+  assert.equal(looksLikeJsonPayload(jsonBody), true);
+  assert.equal(looksLikeWav(wavBody), true);
+  assert.equal(sniffElevenLabsAudio(id3, "audio/mpeg").ok, true);
+  assert.equal(sniffElevenLabsAudio(jsonBody, "application/json").ok, false);
+  assert.equal(sniffElevenLabsAudio(wavBody, "audio/wav").ok, false);
+  assert.equal(
+    sniffElevenLabsAudio(Buffer.from([0x00, 0x01, 0x02, 0x03]), "audio/mpeg")
+      .ok,
+    false,
   );
 
   delete process.env.ELEVENLABS_API_KEY;
