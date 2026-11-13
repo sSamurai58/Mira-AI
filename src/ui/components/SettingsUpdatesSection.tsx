@@ -8,6 +8,7 @@ import { StubBadge } from "./StubBadge";
 import { IntegCard } from "./SettingsFormBits";
 
 const RELEASES_URL = "https://github.com/sSamurai58/Mira-AI/releases";
+const CHANGELOG_PREVIEW_COUNT = 5;
 
 const DEMO_STATUS: MiraUpdateStatus = {
   channel: "idle",
@@ -27,6 +28,7 @@ export function SettingsUpdatesSection() {
   const [status, setStatus] = useState<MiraUpdateStatus>(DEMO_STATUS);
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [changelogExpanded, setChangelogExpanded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -136,6 +138,11 @@ export function SettingsUpdatesSection() {
   const currentNorm =
     normalizeMiraVersion(APP_VERSION) ||
     normalizeMiraVersion(status.currentVersion);
+
+  const changelogHasMore = MIRA_CHANGELOG.length > CHANGELOG_PREVIEW_COUNT;
+  const visibleChangelog = changelogExpanded
+    ? MIRA_CHANGELOG
+    : MIRA_CHANGELOG.slice(0, CHANGELOG_PREVIEW_COUNT);
 
   return (
     <>
@@ -264,7 +271,7 @@ export function SettingsUpdatesSection() {
           </p>
         </header>
         <ol className="update-history-list">
-          {MIRA_CHANGELOG.map((entry) => {
+          {visibleChangelog.map((entry) => {
             const isCurrent =
               normalizeMiraVersion(entry.version) === currentNorm;
             return (
@@ -294,6 +301,18 @@ export function SettingsUpdatesSection() {
             );
           })}
         </ol>
+        {changelogHasMore ? (
+          <div className="update-history-more">
+            <button
+              type="button"
+              className="btn update-history-more-btn"
+              onClick={() => setChangelogExpanded((v) => !v)}
+              aria-expanded={changelogExpanded}
+            >
+              {changelogExpanded ? "Свернуть" : "Показать больше"}
+            </button>
+          </div>
+        ) : null}
       </section>
     </>
   );

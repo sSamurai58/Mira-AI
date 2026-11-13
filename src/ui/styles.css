@@ -4085,6 +4085,27 @@ select:disabled {
   margin-bottom: 0;
 }
 
+.update-history-more {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+.update-history-more-btn {
+  min-width: 11rem;
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--inset));
+  color: var(--text);
+  font-weight: 600;
+}
+
+.update-history-more-btn:hover {
+  background: color-mix(in srgb, var(--accent) 22%, var(--bg-elevated));
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
 @media (max-width: 900px) {
   .integ-help,
   .integ-grid-2 {

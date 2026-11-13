@@ -13,7 +13,7 @@
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
 | Дорожная карта | Must + future F* закрыты (partial→done stubs where noted) |
 
-**Сейчас:** **0.1.13 WIP** (не публиковать / не тегировать). Ветка `cursor/release-0-1-13-6838` от `v0.1.12`. Auto UpdateHudToast + polish карточек Путей.
+**Сейчас:** **0.1.14 WIP** (не публиковать / не тегировать). Ветка `cursor/release-0-1-14-6838` от `v0.1.13`. История обновлений: 5 версий + «Показать больше».
 
 
 ## Решения
@@ -22,6 +22,7 @@
 
 | Дата | Решение | Почему |
 |------|---------|--------|
+| 2026-11-13 | **0.1.14 WIP: changelog preview 5** | Длинный список в Settings → Обновления; по умолчанию `slice(0, 5)`, «Показать больше» / «Свернуть»; бейдж «у вас» сохранён; no publish |
 | 2026-11-13 | **0.1.13 WIP: Paths card polish** | Outline kind-иконки почти не видны на тёмных карточках; filled brand tiles (Chrome/Discord/…) + иерархия/теги/кнопки; no publish |
 | 2026-11-13 | **0.1.13 WIP: auto UpdateHudToast** | Boot-таймер 2.5s в `initUpdater` стрелял до подписки renderer → `mira:update-event` терялся; проверка после `did-finish-load` + focus push; no publish |
 | 2026-11-13 | **0.1.12 WIP: dialog TTS screech fix** | EL `/stream` без sniff → PCM/JSON as mpeg = помехи; mic open while speaking = feedback; validate MP3 + non-stream default + Web Speech/neural fallback; no publish |

@@ -15,6 +15,17 @@ export type MiraChangelogEntry = {
 
 export const MIRA_CHANGELOG: MiraChangelogEntry[] = [
   {
+    version: "0.1.14",
+    date: "13.11.2026",
+    summary:
+      "История обновлений: по умолчанию пять последних версий, остальное — по «Показать больше».",
+    bullets: [
+      "Settings → Обновления: slice(0, 5) для «История обновлений»",
+      "Кнопка «Показать больше» / «Свернуть» в теме Mira",
+      "Бейдж «у вас» без изменений",
+    ],
+  },
+  {
     version: "0.1.13",
     date: "13.11.2026",
     summary:
