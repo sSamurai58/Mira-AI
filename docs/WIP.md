@@ -32,7 +32,7 @@ Future **F1–F13** — только после стабилизации must (�
 | Поле | Значение |
 |------|----------|
 | Текущая фаза | **Realize-all ✅** |
-| Следующее действие | 0.1.13 auto update toast — review / pack; **не публиковать** без OK |
+| Следующее действие | 0.1.13 Paths polish + auto update toast — review; **не публиковать** без OK |
 | Запрещено сейчас | Publish / tag 0.1.13 без явного OK |
 
 
@@ -345,13 +345,14 @@ UX: **Создать → фразы → загрузить → Mira сама о�
 - [x] Публикация GitHub Release **0.1.6** — https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.6 (tag `v0.1.6` @ `8baa1da`)
 - [ ] MCP runtime / OAuth (по-прежнему later; после явной команды)
 
-## 2026-11-13 — Релиз 0.1.13 WIP (auto update HUD toast)
+## 2026-11-13 — Релиз 0.1.13 WIP (auto update HUD toast + Paths polish)
 
 Ветка `cursor/release-0-1-13-6838` от `v0.1.12`. Пакет **0.1.13**. **Не публиковать.**
 
 - [x] Bump 0.1.13
 - [x] Auto-check after `did-finish-load` (fix boot-timer race)
 - [x] Push/re-check on window focus (throttled); session dismiss respected
+- [x] Paths cards: brand-colored app icons + clearer hierarchy / tags / actions
 - [ ] Publish / tag — только после явной команды
 
 ## 2026-11-13 — Релиз 0.1.12 WIP (dialog TTS screech)

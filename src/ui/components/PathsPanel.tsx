@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { emitActionLog } from "../actionLog";
+import { AppPathIcon, resolveAppPathIconId } from "./AppPathIcon";
 import { useAppConfirm } from "./AppConfirm";
 import { StubBadge } from "./StubBadge";
 import {
@@ -503,83 +504,92 @@ export function PathsPanel() {
         </p>
       ) : (
         <div className="paths-grid">
-          {filtered.map((item) => (
-            <article key={item.id} className="paths-card panel">
-              <div className="paths-card-head">
-                <span className="paths-card-icon" aria-hidden>
-                  {kindIcon(item.kind)}
-                </span>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <div className="row" style={{ gap: 8, alignItems: "center" }}>
-                    <strong className="paths-card-name">{item.name}</strong>
-                    <span
-                      className={`paths-status-dot ${item.enabled ? "is-on" : ""}`}
-                      title={item.enabled ? "Включён" : "Выключен"}
-                      aria-hidden
-                    />
-                  </div>
-                  <div className="paths-card-kind muted">
-                    {KIND_LABEL[item.kind]}
-                  </div>
-                </div>
-                <label className="row" style={{ gap: 4 }} title="В голосе">
-                  <input
-                    type="checkbox"
-                    checked={item.enabled}
-                    onChange={(e) =>
-                      void toggleEnabled(item, e.target.checked)
-                    }
-                  />
-                </label>
-              </div>
-
-              <div className="paths-card-path mono">
-                {item.path.trim()
-                  ? item.path
-                  : "Путь не задан — нажмите «Изменить»"}
-              </div>
-
-              <div className="paths-card-tags">
-                {item.tags.length === 0 ? (
-                  <span className="muted" style={{ fontSize: "0.85rem" }}>
-                    Нет фраз
+          {filtered.map((item) => {
+            const iconId = resolveAppPathIconId(item);
+            const pathMissing = !item.path.trim();
+            return (
+              <article
+                key={item.id}
+                className={`paths-card panel ${item.enabled ? "is-enabled" : "is-disabled"}`}
+              >
+                <div className="paths-card-head">
+                  <span
+                    className={`paths-card-icon paths-card-icon--${iconId}`}
+                    aria-hidden
+                  >
+                    <AppPathIcon id={iconId} size={40} />
                   </span>
-                ) : (
-                  item.tags.map((tag) => (
-                    <span key={tag} className="paths-tag-chip is-readonly">
-                      {tag}
-                    </span>
-                  ))
-                )}
-              </div>
+                  <div className="paths-card-title">
+                    <div className="paths-card-title-row">
+                      <strong className="paths-card-name">{item.name}</strong>
+                      <span
+                        className={`paths-status-dot ${item.enabled ? "is-on" : ""}`}
+                        title={item.enabled ? "Включён" : "Выключен"}
+                        aria-hidden
+                      />
+                    </div>
+                    <div className="paths-card-kind">{KIND_LABEL[item.kind]}</div>
+                  </div>
+                  <label className="paths-card-enable" title="В голосе">
+                    <input
+                      type="checkbox"
+                      checked={item.enabled}
+                      aria-label={`«${item.name}» в голосе`}
+                      onChange={(e) =>
+                        void toggleEnabled(item, e.target.checked)
+                      }
+                    />
+                  </label>
+                </div>
 
-              <div className="row paths-card-actions">
-                <button
-                  type="button"
-                  className="btn paths-open-btn"
-                  style={{ flex: 1 }}
-                  onClick={() => void openPath(item)}
-                  disabled={!item.path.trim()}
+                <div
+                  className={`paths-card-path mono ${pathMissing ? "is-empty" : ""}`}
+                  title={pathMissing ? undefined : item.path}
                 >
-                  Открыть
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => openEdit(item)}
-                >
-                  Изменить
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-danger"
-                  onClick={() => void removePath(item)}
-                >
-                  Удалить
-                </button>
-              </div>
-            </article>
-          ))}
+                  {pathMissing
+                    ? "Путь не задан — нажмите «Изменить»"
+                    : item.path}
+                </div>
+
+                <div className="paths-card-tags">
+                  {item.tags.length === 0 ? (
+                    <span className="paths-tags-empty">Нет фраз</span>
+                  ) : (
+                    item.tags.map((tag) => (
+                      <span key={tag} className="paths-tag-chip is-readonly">
+                        {tag}
+                      </span>
+                    ))
+                  )}
+                </div>
+
+                <div className="row paths-card-actions">
+                  <button
+                    type="button"
+                    className="btn paths-open-btn"
+                    onClick={() => void openPath(item)}
+                    disabled={pathMissing}
+                  >
+                    Открыть
+                  </button>
+                  <button
+                    type="button"
+                    className="btn paths-edit-btn"
+                    onClick={() => openEdit(item)}
+                  >
+                    Изменить
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-danger paths-delete-btn"
+                    onClick={() => void removePath(item)}
+                  >
+                    Удалить
+                  </button>
+                </div>
+              </article>
+            );
+          })}
         </div>
       )}
 
