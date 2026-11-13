@@ -5112,7 +5112,9 @@ body.mira-hud-root *::-webkit-scrollbar {
     0 6px 16px color-mix(in srgb, #000 35%, transparent);
 }
 
-.paths-card-icon svg {
+.paths-card-icon svg,
+.paths-card-icon img,
+.paths-card-icon > span {
   display: block;
   width: 40px;
   height: 40px;
