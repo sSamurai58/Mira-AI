@@ -463,6 +463,22 @@ contextBridge.exposeInMainWorld("mira", {
   listMail: (folder?: string) => call("mira:list-mail", folder),
   getMediaStatus: () => call("mira:get-media-status"),
   searchFiles: (query?: string) => call("mira:search-files", query),
+  listAppPaths: () => call("mira:list-app-paths"),
+  upsertAppPath: (payload: {
+    id?: string;
+    kind: "program" | "folder" | "file";
+    name: string;
+    path?: string;
+    tags?: string[];
+    enabled?: boolean;
+  }) => call("mira:upsert-app-path", payload),
+  deleteAppPath: (id: string) => call("mira:delete-app-path", id),
+  setAppPathEnabled: (id: string, enabled: boolean) =>
+    call("mira:set-app-path-enabled", id, enabled),
+  autodiscoverAppPaths: () => call("mira:autodiscover-app-paths"),
+  openAppPath: (id: string) => call("mira:open-app-path", id),
+  pickAppPath: (kind?: "program" | "folder" | "file") =>
+    call("mira:pick-app-path", kind),
   listProfiles: () => call("mira:list-profiles"),
   getProfilesSnapshot: () => call("mira:get-profiles-snapshot"),
   getActiveProfile: () => call("mira:get-active-profile"),

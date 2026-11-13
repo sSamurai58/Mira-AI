@@ -1110,6 +1110,81 @@ interface MiraBridge {
   listMail: (folder?: string) => Promise<unknown[]>;
   getMediaStatus: () => Promise<unknown>;
   searchFiles: (query?: string) => Promise<string[]>;
+  listAppPaths: () => Promise<
+    Array<{
+      id: string;
+      kind: "program" | "folder" | "file";
+      name: string;
+      path: string;
+      tags: string[];
+      enabled: boolean;
+      created_at: string;
+      updated_at: string;
+    }>
+  >;
+  upsertAppPath: (payload: {
+    id?: string;
+    kind: "program" | "folder" | "file";
+    name: string;
+    path?: string;
+    tags?: string[];
+    enabled?: boolean;
+  }) => Promise<{
+    id: string;
+    kind: "program" | "folder" | "file";
+    name: string;
+    path: string;
+    tags: string[];
+    enabled: boolean;
+    created_at: string;
+    updated_at: string;
+  }>;
+  deleteAppPath: (id: string) => Promise<{ ok: boolean }>;
+  setAppPathEnabled: (
+    id: string,
+    enabled: boolean,
+  ) => Promise<{
+    id: string;
+    kind: "program" | "folder" | "file";
+    name: string;
+    path: string;
+    tags: string[];
+    enabled: boolean;
+    created_at: string;
+    updated_at: string;
+  } | null>;
+  autodiscoverAppPaths: () => Promise<{
+    scanned: number;
+    updated: number;
+    created: number;
+    paths: Array<{
+      id: string;
+      kind: "program" | "folder" | "file";
+      name: string;
+      path: string;
+      tags: string[];
+      enabled: boolean;
+      created_at: string;
+      updated_at: string;
+    }>;
+  }>;
+  openAppPath: (id: string) => Promise<{
+    ok: boolean;
+    detail: string;
+    path?: {
+      id: string;
+      kind: "program" | "folder" | "file";
+      name: string;
+      path: string;
+      tags: string[];
+      enabled: boolean;
+      created_at: string;
+      updated_at: string;
+    };
+  }>;
+  pickAppPath: (
+    kind?: "program" | "folder" | "file",
+  ) => Promise<{ canceled: boolean; path: string | null }>;
   listProfiles: () => Promise<
     Array<{
       id: string;

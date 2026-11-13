@@ -37,6 +37,7 @@
     "f9:smoke": "tsx scripts/f9-smoke.ts",
     "f-rest:smoke": "tsx scripts/f-rest-smoke.ts",
     "f-all:smoke": "tsx scripts/f-all-smoke.ts",
+    "paths:smoke": "tsx scripts/paths-smoke.ts",
     "pack": "npm run build && electron-builder --config electron-builder.yml",
     "pack:dir": "npm run build && electron-builder --config electron-builder.yml --dir",
     "pack:win": "npm run build && electron-builder --win --x64 --config electron-builder.yml --publish never",

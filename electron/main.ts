@@ -160,6 +160,16 @@ import { getMailPolicy, listMail } from "./future/mail";
 import { getMediaStatus } from "./future/media";
 import { searchFiles } from "./future/files";
 import {
+  autodiscoverAppPaths,
+  deleteAppPath,
+  listAppPaths,
+  openAppPathById,
+  pickAppPathDialog,
+  setAppPathEnabled,
+  upsertAppPath,
+  type AppPathKind,
+} from "./future/appPaths";
+import {
   deleteProfile,
   getActiveProfile,
   getProfilesSnapshot,
@@ -1031,6 +1041,37 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
   on("mira:list-mail", (_e, folder?: string) => listMail(folder ?? "inbox"));
   on("mira:get-media-status", () => getMediaStatus());
   on("mira:search-files", (_e, query?: string) => searchFiles(query ?? "", 30));
+
+  on("mira:list-app-paths", () => listAppPaths());
+  on(
+    "mira:upsert-app-path",
+    (
+      _e,
+      payload: {
+        id?: string;
+        kind: AppPathKind;
+        name: string;
+        path?: string;
+        tags?: string[];
+        enabled?: boolean;
+      },
+    ) => upsertAppPath(payload),
+  );
+  on("mira:delete-app-path", (_e, id: string) => deleteAppPath(String(id ?? "")), {
+    privileged: true,
+  });
+  on(
+    "mira:set-app-path-enabled",
+    (_e, id: string, enabled: boolean) =>
+      setAppPathEnabled(String(id ?? ""), Boolean(enabled)),
+  );
+  on("mira:autodiscover-app-paths", () => autodiscoverAppPaths());
+  on("mira:open-app-path", (_e, id: string) => openAppPathById(String(id ?? "")));
+  on(
+    "mira:pick-app-path",
+    (_e, kind?: AppPathKind) =>
+      pickAppPathDialog(kind === "folder" || kind === "file" ? kind : "program"),
+  );
 
   on("mira:list-profiles", () => listProfiles());
   on("mira:get-profiles-snapshot", () => getProfilesSnapshot());

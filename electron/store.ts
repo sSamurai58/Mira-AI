@@ -308,6 +308,17 @@ export function openStore(): DatabaseSync {
       path TEXT,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS app_paths (
+      id TEXT PRIMARY KEY,
+      kind TEXT NOT NULL,
+      name TEXT NOT NULL,
+      path TEXT NOT NULL DEFAULT '',
+      tags_json TEXT NOT NULL DEFAULT '[]',
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_app_paths_kind ON app_paths(kind);
   `);
 
   try {

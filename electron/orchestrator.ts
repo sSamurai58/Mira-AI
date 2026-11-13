@@ -90,6 +90,10 @@ import { handleMailFromChat, looksLikeMailIntent } from "./future/mail";
 import { handleMediaFromChat, looksLikeMediaIntent } from "./future/media";
 import { handleNotesFromChat, looksLikeNotesIntent } from "./future/notes";
 import {
+  handleAppPathsFromChat,
+  looksLikeAppPathIntent,
+} from "./future/appPaths";
+import {
   buildReplyDiversityBlock,
   CHAT_DIVERSITY_SYSTEM_RULES,
 } from "./chatDiversity";
@@ -462,6 +466,11 @@ export async function sendChatMessage(
         messagingBlock =
           "[Мессенджер] Не удалось разобрать получателя/текст. Пример: «Напиши Ивану в Telegram, что встречу переносим».";
       }
+    } else if (looksLikeAppPathIntent(text)) {
+      // Voice tags from Мастерская → Пути (before generic «открой файл/сайт»).
+      const res = await handleAppPathsFromChat(text);
+      desktopUsed = res.used;
+      desktopBlock = res.block;
     } else if (looksLikeNotesIntent(text)) {
       const res = handleNotesFromChat(text);
       addonUsed = res.used;
