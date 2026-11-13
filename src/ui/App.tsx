@@ -1,13 +1,36 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { APP_NAME, APP_PHASE } from "../config";
+import { APP_NAME, APP_VERSION } from "../config";
+import {
+  installActionLogBridge,
+  logAppError,
+  logConfirmResolved,
+  logVoiceState,
+} from "./actionLog";
+import { installAutoGrowTextareas } from "./autoGrowTextareas";
+import { AppConfirmProvider } from "./components/AppConfirm";
 import { ConfirmModal } from "./components/ConfirmModal";
 import { ErrorBanner } from "./components/ErrorBanner";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { TitleBar } from "./components/TitleBar";
+import { UpdateHudToast } from "./components/UpdateHudToast";
 import { ChatPage } from "./pages/ChatPage";
 import { HudPage } from "./pages/HudPage";
 import { MemoryPage } from "./pages/MemoryPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { TranslatePage } from "./pages/TranslatePage";
 import { WorkshopPage } from "./pages/WorkshopPage";
-import { loadCoreLevel } from "./coreLevel";
+import {
+  applyBgPattern,
+  loadStoredBgPatternId,
+  type BgPatternId,
+} from "./backgrounds";
+import { CoreLevelChip } from "./components/CoreLevelChip";
+import {
+  CORE_PROGRESS_EVENT,
+  coreLevelRingPct,
+  loadCoreLevel,
+  syncCoreLevelFromProgress,
+} from "./coreLevel";
 import {
   applyTheme,
   loadStoredThemeId,
@@ -21,12 +44,18 @@ import { getUiLang, t } from "./i18n";
 import { getVoiceEngineStatus } from "./voice/engineStatus";
 import type { VoiceState } from "./voiceState";
 
-type RootNav = "home" | "chat" | "memory" | "workshop" | "settings";
+type RootNav =
+  | "home"
+  | "chat"
+  | "memory"
+  | "workshop"
+  | "translate"
+  | "settings";
 
 function navItems(): {
   id: RootNav;
   label: string;
-  tone: "accent" | "success" | "warning" | "danger";
+  tone: "accent" | "success" | "warning" | "danger" | "translate";
 }[] {
   const lang = getUiLang();
   return [
@@ -34,6 +63,7 @@ function navItems(): {
     { id: "chat", label: t("chat", lang), tone: "accent" },
     { id: "memory", label: t("memory", lang), tone: "success" },
     { id: "workshop", label: t("workshop", lang), tone: "warning" },
+    { id: "translate", label: t("translate", lang), tone: "translate" },
     { id: "settings", label: t("settings", lang), tone: "danger" },
   ];
 }
@@ -77,6 +107,34 @@ function NavIcon({ id }: { id: RootNav }) {
       </svg>
     );
   }
+  if (id === "translate") {
+    return (
+      <svg {...common} className="nav-ico nav-ico-translate">
+        <text
+          x="3.5"
+          y="15.5"
+          fill="currentColor"
+          stroke="none"
+          fontSize="11"
+          fontWeight="700"
+          fontFamily="var(--font-sans)"
+        >
+          文
+        </text>
+        <text
+          x="12.5"
+          y="18"
+          fill="currentColor"
+          stroke="none"
+          fontSize="10"
+          fontWeight="700"
+          fontFamily="var(--font-sans)"
+        >
+          A
+        </text>
+      </svg>
+    );
+  }
   return (
     <svg {...common}>
       <circle cx="12" cy="12" r="3" />
@@ -92,6 +150,9 @@ export function App() {
 
   function navFromHash(hash: string): RootNav {
     if (hash.includes("settings")) return "settings";
+    if (hash.includes("translate") || hash.includes("translator")) {
+      return "translate";
+    }
     if (hash.includes("workshop")) return "workshop";
     if (hash.includes("memory")) return "memory";
     if (hash.includes("chat") || hash.includes("dialog")) return "chat";
@@ -109,6 +170,8 @@ export function App() {
         return "#/memory";
       case "workshop":
         return "#/workshop";
+      case "translate":
+        return "#/translate";
       case "settings":
         return "#/settings";
       default:
@@ -127,6 +190,9 @@ export function App() {
     }
   }, []);
   const [themeId, setThemeId] = useState<ThemeId>(() => loadStoredThemeId());
+  const [bgPatternId, setBgPatternId] = useState<BgPatternId>(() =>
+    loadStoredBgPatternId(),
+  );
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [pendingConfirm, setPendingConfirm] =
     useState<MiraConfirmRequest | null>(null);
@@ -136,6 +202,7 @@ export function App() {
   const [healthText, setHealthText] = useState("Проверка store…");
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [coreLevel, setCoreLevel] = useState(() => loadCoreLevel());
+  const [coreXp, setCoreXp] = useState(0);
   const [autoSpeak, setAutoSpeak] = useState(() => {
     if (localStorage.getItem("mira.autoSpeak") === "1") return true;
     if (localStorage.getItem("mira.autoSpeak") === "0") return false;
@@ -149,8 +216,21 @@ export function App() {
   }, [themeId]);
 
   useEffect(() => {
+    applyBgPattern(bgPatternId);
+  }, [bgPatternId]);
+
+  useEffect(() => installAutoGrowTextareas(), []);
+
+  useEffect(() => installActionLogBridge(), []);
+
+  useEffect(() => {
     localStorage.setItem("mira.voiceState", voiceState);
+    logVoiceState(voiceState);
   }, [voiceState]);
+
+  useEffect(() => {
+    if (errorMessage) logAppError(errorMessage);
+  }, [errorMessage]);
 
   useEffect(() => {
     function onHash() {
@@ -185,6 +265,32 @@ export function App() {
     return () => window.clearInterval(id);
   }, []);
 
+  const applyProgressFromHealth = useCallback((health: MiraHealth) => {
+    const signals = {
+      sessions: health.sessions,
+      utterances: health.utterances,
+      learnedUnits: health.learnedUnits,
+      libraryItems: health.libraryItems,
+      skills: health.skills,
+      voiceProjects: health.voiceProjects,
+      customVoices: health.customVoices,
+      browserVisits: health.browserVisits,
+    };
+    const { level: nextLevel, xp } = syncCoreLevelFromProgress(signals);
+    setCoreXp(xp);
+    setCoreLevel((prev) => (prev === nextLevel ? prev : nextLevel));
+  }, []);
+
+  const refreshCoreLevel = useCallback(async () => {
+    if (!window.mira?.getHealth) return;
+    try {
+      const health = await window.mira.getHealth();
+      applyProgressFromHealth(health);
+    } catch {
+      /* keep last known level */
+    }
+  }, [applyProgressFromHealth]);
+
   const refreshHealth = useCallback(async () => {
     if (!window.mira) {
       setHealthText(
@@ -196,6 +302,7 @@ export function App() {
       const health = await window.mira.getHealth();
       const voice = getVoiceEngineStatus();
       setHealthText(JSON.stringify({ ...health, voice }, null, 2));
+      applyProgressFromHealth(health);
       if (health.llmOk === false && health.llmReason) {
         setErrorMessage(health.llmReason);
       }
@@ -207,11 +314,35 @@ export function App() {
         err instanceof Error ? err.message : "health check failed",
       );
     }
-  }, []);
+  }, [applyProgressFromHealth]);
 
   useEffect(() => {
     void refreshHealth();
   }, [refreshHealth]);
+
+  useEffect(() => {
+    void refreshCoreLevel();
+    const onProgress = () => {
+      void refreshCoreLevel();
+    };
+    window.addEventListener(CORE_PROGRESS_EVENT, onProgress);
+    window.addEventListener("focus", onProgress);
+    const id = window.setInterval(onProgress, 12_000);
+    return () => {
+      window.removeEventListener(CORE_PROGRESS_EVENT, onProgress);
+      window.removeEventListener("focus", onProgress);
+      window.clearInterval(id);
+    };
+  }, [refreshCoreLevel]);
+
+  useEffect(() => {
+    if (!window.mira?.onConfirmDismiss) return;
+    return window.mira.onConfirmDismiss((payload) => {
+      setPendingConfirm((prev) =>
+        prev && payload?.id && prev.id === payload.id ? null : prev,
+      );
+    });
+  }, []);
 
   useEffect(() => {
     if (!window.mira?.onConfirmRequest) return;
@@ -253,165 +384,164 @@ export function App() {
     return <HudPage />;
   }
 
-  const levelPct = (coreLevel / 5) * 100;
-  const ringC = 2 * Math.PI * 24;
-  const ringDash = (levelPct / 100) * ringC;
+  const levelPct = coreLevelRingPct(coreLevel, coreXp);
 
   return (
+    <AppConfirmProvider>
     <div className="app-shell" data-voice={voiceState}>
       <div className="atmosphere" aria-hidden />
       <div className="atmosphere-mid" aria-hidden />
       <div className="atmosphere-grid" aria-hidden />
 
-      <aside className="nav">
-        <div className="brand-row">
-          <img
-            className="brand-logo"
-            src="./brand/mira-mark.svg"
-            width={28}
-            height={30}
-            alt=""
-            aria-hidden
-          />
-          <div className="brand-name">{APP_NAME}</div>
-          <div className="brand-phase">{APP_PHASE}</div>
-        </div>
+      <TitleBar />
 
-        <button
-          type="button"
-          className="btn-new-chat"
-          onClick={requestNewChat}
-        >
-          <span aria-hidden>+</span>
-          Новая беседа
-        </button>
-
-        <nav className="nav-list" aria-label="Основное">
-          {navLabels.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={`nav-btn ${nav === item.id ? "active" : ""}`}
-              data-tone={item.tone}
-              onClick={() => setNav(item.id)}
-            >
-              <NavIcon id={item.id} />
-              <span className="nav-btn-label">{item.label}</span>
-            </button>
-          ))}
-        </nav>
-
-        <div className="nav-spacer" />
-
-        <div className="core-level-card">
-          <div className="core-level-ring" aria-hidden>
-            <svg viewBox="0 0 56 56" width="56" height="56">
-              <circle
-                cx="28"
-                cy="28"
-                r="24"
-                fill="none"
-                stroke="var(--track)"
-                strokeWidth="4"
-              />
-              <circle
-                cx="28"
-                cy="28"
-                r="24"
-                fill="none"
-                stroke="var(--success)"
-                strokeWidth="4"
-                strokeLinecap="round"
-                strokeDasharray={`${ringDash} ${ringC}`}
-                transform="rotate(-90 28 28)"
-              />
-            </svg>
-            <span>
-              {coreLevel}/5
-            </span>
-          </div>
-          <div className="core-level-copy">
-            <strong>Уровень ядра</strong>
-            <span>растёт вместе с ИИ</span>
-          </div>
-        </div>
-      </aside>
-
-      <div className="workspace">
-        {errorMessage ? (
-          <ErrorBanner
-            message={errorMessage}
-            onRetry={() => {
-              setErrorMessage(null);
-              setVoiceState("idle");
-              void refreshHealth();
-            }}
-            onDoctor={openDoctor}
-            onDismiss={() => setErrorMessage(null)}
-          />
-        ) : null}
-
-        <div className="workspace-body">
-          {nav === "home" || nav === "chat" ? (
-            <ChatPage
-              panel={nav === "home" ? "home" : "dialog"}
-              voiceState={voiceState}
-              sessionId={sessionId}
-              onSessionChange={handleSessionChange}
-              onError={setErrorMessage}
-              onVoiceState={setVoiceState}
-              autoSpeak={autoSpeak}
-              coreLevel={coreLevel}
+      <div className="app-shell-body">
+      <ErrorBoundary fallbackTitle="Навигация Mira сбойнула">
+        <aside className="nav">
+          <div className="brand-row">
+            <img
+              className="brand-logo"
+              src="./brand/mira-mark.svg"
+              width={28}
+              height={30}
+              alt=""
+              aria-hidden
             />
-          ) : null}
-          {nav === "memory" ? (
-            <MemoryPage
-              onOpenSession={(id) => {
-                setSessionId(id);
-                setNav("chat");
+            <div className="brand-name">{APP_NAME}</div>
+            <div className="brand-phase" title={`Mira ${APP_VERSION}`}>
+              v{APP_VERSION}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className="btn-new-chat"
+            onClick={requestNewChat}
+          >
+            <span aria-hidden>+</span>
+            Новая беседа
+          </button>
+
+          <nav className="nav-list" aria-label="Основное">
+            {navLabels.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`nav-btn ${nav === item.id ? "active" : ""}`}
+                data-tone={item.tone}
+                onClick={() => setNav(item.id)}
+              >
+                <NavIcon id={item.id} />
+                <span className="nav-btn-label">{item.label}</span>
+              </button>
+            ))}
+          </nav>
+
+          <div className="nav-spacer" />
+
+          <CoreLevelChip level={coreLevel} progressPct={levelPct} />
+        </aside>
+      </ErrorBoundary>
+
+      <ErrorBoundary fallbackTitle="Рабочая область Mira сбойнула">
+        <div className="workspace">
+          {errorMessage ? (
+            <ErrorBanner
+              message={errorMessage}
+              onRetry={() => {
+                setErrorMessage(null);
+                setVoiceState("idle");
+                void refreshHealth();
               }}
+              onDoctor={openDoctor}
+              onDismiss={() => setErrorMessage(null)}
             />
           ) : null}
-          {nav === "workshop" ? <WorkshopPage /> : null}
-          {nav === "settings" ? (
-            <SettingsPage
-              themeId={themeId}
-              onThemeChange={setThemeId}
-              healthText={healthText}
-              onOpenDoctor={openDoctor}
-            />
-          ) : null}
+
+          <div className="workspace-body">
+            {nav === "home" || nav === "chat" ? (
+              <ChatPage
+                panel={nav === "home" ? "home" : "dialog"}
+                voiceState={voiceState}
+                sessionId={sessionId}
+                onSessionChange={handleSessionChange}
+                onError={setErrorMessage}
+                onVoiceState={setVoiceState}
+                autoSpeak={autoSpeak}
+                coreLevel={coreLevel}
+                coreProgressPct={levelPct}
+              />
+            ) : null}
+            {nav === "memory" ? (
+              <MemoryPage
+                onOpenSession={(id) => {
+                  setSessionId(id);
+                  setNav("chat");
+                }}
+              />
+            ) : null}
+            {nav === "workshop" ? <WorkshopPage /> : null}
+            {nav === "translate" ? <TranslatePage /> : null}
+            {nav === "settings" ? (              <SettingsPage
+                themeId={themeId}
+                onThemeChange={setThemeId}
+                bgPatternId={bgPatternId}
+                onBgPatternChange={setBgPatternId}
+                healthText={healthText}
+                onOpenDoctor={openDoctor}
+              />
+            ) : null}
+          </div>
         </div>
+      </ErrorBoundary>
       </div>
 
-      <ConfirmModal
-        open={Boolean(pendingConfirm)}
-        title={pendingConfirm?.title ?? "Подтверждение"}
-        body={pendingConfirm?.body ?? ""}
-        confirmLabel={pendingConfirm?.confirmLabel ?? "Подтвердить"}
-        skillPropose={pendingConfirm?.skillPropose ?? null}
-        onCancel={() => {
-          if (pendingConfirm && window.mira) {
-            void window.mira.respondConfirm(pendingConfirm.id, false);
-          }
-          setPendingConfirm(null);
-        }}
-        onConfirm={(fields) => {
-          if (pendingConfirm && window.mira) {
-            void window.mira.respondConfirm(pendingConfirm.id, true, fields);
-          }
-          setPendingConfirm(null);
-        }}
-      />
+      <ErrorBoundary fallbackTitle="Диалог подтверждения сбойнул">
+        <ConfirmModal
+          open={Boolean(pendingConfirm)}
+          title={pendingConfirm?.title ?? "Подтверждение"}
+          body={pendingConfirm?.body ?? ""}
+          confirmLabel={pendingConfirm?.confirmLabel ?? "Подтвердить"}
+          skillPropose={pendingConfirm?.skillPropose ?? null}
+          bridgeHint
+          onCancel={() => {
+            if (pendingConfirm) {
+              logConfirmResolved(pendingConfirm.id, false, pendingConfirm.title);
+              if (window.mira) {
+                void window.mira.respondConfirm(pendingConfirm.id, false);
+              }
+            }
+            setPendingConfirm(null);
+          }}
+          onConfirm={(fields) => {
+            if (pendingConfirm) {
+              logConfirmResolved(pendingConfirm.id, true, pendingConfirm.title);
+              if (window.mira) {
+                void window.mira.respondConfirm(
+                  pendingConfirm.id,
+                  true,
+                  fields,
+                );
+              }
+            }
+            setPendingConfirm(null);
+          }}
+        />
+      </ErrorBoundary>
 
-      <ConfirmModal
-        open={doctorOpen}
-        title="Doctor"
-        body={doctorBody}
-        confirmLabel="Закрыть"
-        onCancel={() => setDoctorOpen(false)}
-        onConfirm={() => setDoctorOpen(false)}
-      />
+      <ErrorBoundary fallbackTitle="Doctor сбойнул">
+        <ConfirmModal
+          open={doctorOpen}
+          title="Doctor"
+          body={doctorBody}
+          confirmLabel="Закрыть"
+          onCancel={() => setDoctorOpen(false)}
+          onConfirm={() => setDoctorOpen(false)}
+        />
+      </ErrorBoundary>
+
+      <UpdateHudToast />
     </div>
+    </AppConfirmProvider>
   );
 }

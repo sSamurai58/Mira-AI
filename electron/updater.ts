@@ -120,6 +120,8 @@ export function humanizeUpdateError(raw: unknown): string {
     : "Не удалось проверить обновления. Откройте GitHub Releases вручную.";
 }
 
+let autoCheckTimer: ReturnType<typeof setTimeout> | null = null;
+
 export function initUpdater(send: Broadcast): void {
   broadcast = send;
   status.currentVersion = app.getVersion();
@@ -130,7 +132,20 @@ export function initUpdater(send: Broadcast): void {
   wired = true;
 
   autoUpdater.autoDownload = false;
+  // After download: install silently on quit (/S). No NSIS wizard.
   autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.autoRunAppAfterInstall = true;
+  // Keep provider path coherent with electron-builder publish.github
+  // (latest.yml / latest-linux.yml on GitHub Releases for current versioning).
+  try {
+    autoUpdater.setFeedURL({
+      provider: "github",
+      owner: "sSamurai58",
+      repo: "Mira-AI",
+    });
+  } catch {
+    /* electron-updater reads app-update.yml from packaged resources */
+  }
   // Public GitHub Releases; set GH_TOKEN in env for private repos / higher rate limits
   if (process.env.GH_TOKEN || process.env.GITHUB_TOKEN) {
     autoUpdater.requestHeaders = {
@@ -185,7 +200,7 @@ export function initUpdater(send: Broadcast): void {
       channel: "downloaded",
       availableVersion: info.version,
       progress: 100,
-      detail: `Версия ${info.version} скачана. Можно перезапустить.`,
+      detail: `Версия ${info.version} скачана. Установится тихо при перезапуске — без окна установщика.`,
       canDownload: false,
       canInstall: true,
     });
@@ -200,6 +215,12 @@ export function initUpdater(send: Broadcast): void {
       progress: null,
     });
   });
+
+  // Packaged: auto-check shortly after boot so HUD toast can surface updates.
+  if (autoCheckTimer) clearTimeout(autoCheckTimer);
+  autoCheckTimer = setTimeout(() => {
+    void checkForUpdates().catch(() => undefined);
+  }, 2500);
 }
 
 export async function checkForUpdates(): Promise<UpdateStatus> {
@@ -286,9 +307,9 @@ export function quitAndInstall(): { ok: boolean; detail: string } {
       detail: "Нет скачанного обновления. Сначала скачайте.",
     };
   }
-  // isSilent=false, isForceRunAfter=true
-  setTimeout(() => autoUpdater.quitAndInstall(false, true), 250);
-  return { ok: true, detail: "Перезапуск для установки…" };
+  // isSilent=true → NSIS /S (no wizard); isForceRunAfter=true → relaunch Mira
+  setTimeout(() => autoUpdater.quitAndInstall(true, true), 250);
+  return { ok: true, detail: "Тихая установка и перезапуск…" };
 }
 
 export async function openReleasesPage(): Promise<{ ok: boolean; detail: string }> {
