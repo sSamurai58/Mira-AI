@@ -3960,10 +3960,136 @@ select:disabled {
   transition: width 160ms var(--ease-out);
 }
 
+/* Settings → Updates: «История обновлений» (Mira HUD, not Mirada purple) */
+.update-history {
+  margin-top: var(--space-4);
+  padding: var(--space-5) var(--space-4) var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--panel-line) 70%, transparent);
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--bg-elevated) 55%, transparent) 0%,
+      color-mix(in srgb, var(--bg) 88%, #000) 100%
+    );
+}
+
+.update-history-head {
+  margin-bottom: var(--space-5);
+}
+
+.update-history-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.update-history-sub {
+  margin: 6px 0 0;
+  font-size: 0.92rem;
+  color: var(--text-muted);
+}
+
+.update-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.update-history-item {
+  padding: var(--space-4) 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+.update-history-item:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.update-history-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 12px;
+  margin-bottom: 10px;
+}
+
+.update-history-version {
+  font-family: var(--font-display);
+  font-size: 1.02rem;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.update-history-you {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: #ecfdf5;
+  background: color-mix(in srgb, var(--success) 72%, #065f46);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--success) 35%, transparent);
+}
+
+.update-history-date {
+  margin-left: auto;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.update-history-summary {
+  margin: 0 0 10px;
+  color: var(--text);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.update-history-bullets {
+  margin: 0;
+  padding: 0 0 0 1.1rem;
+  list-style: none;
+}
+
+.update-history-bullets > li {
+  position: relative;
+  margin: 0 0 6px;
+  padding-left: 0.15rem;
+  color: var(--text);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.update-history-bullets > li::before {
+  content: "";
+  position: absolute;
+  left: -1rem;
+  top: 0.55em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.update-history-bullets > li:last-child {
+  margin-bottom: 0;
+}
+
 @media (max-width: 900px) {
   .integ-help,
   .integ-grid-2 {
     grid-template-columns: 1fr;
+  }
+
+  .update-history-date {
+    margin-left: 0;
   }
 }
 

@@ -1,4 +1,9 @@
 import { useEffect, useState } from "react";
+import { APP_VERSION } from "../../config";
+import {
+  MIRA_CHANGELOG,
+  normalizeMiraVersion,
+} from "../updateChangelog";
 import { StubBadge } from "./StubBadge";
 import { IntegCard } from "./SettingsFormBits";
 
@@ -127,6 +132,11 @@ export function SettingsUpdatesSection() {
     error: "нет связи / ошибка",
   };
 
+  // Badge must follow product build version (APP_VERSION), not demo updater stub.
+  const currentNorm =
+    normalizeMiraVersion(APP_VERSION) ||
+    normalizeMiraVersion(status.currentVersion);
+
   return (
     <>
       <div className="row">
@@ -243,6 +253,48 @@ export function SettingsUpdatesSection() {
           </p>
         ) : null}
       </IntegCard>
+
+      <section className="update-history" aria-labelledby="update-history-title">
+        <header className="update-history-head">
+          <h2 id="update-history-title" className="update-history-title">
+            История обновлений
+          </h2>
+          <p className="update-history-sub">
+            Что менялось в Mira от версии к версии.
+          </p>
+        </header>
+        <ol className="update-history-list">
+          {MIRA_CHANGELOG.map((entry) => {
+            const isCurrent =
+              normalizeMiraVersion(entry.version) === currentNorm;
+            return (
+              <li key={entry.version} className="update-history-item">
+                <div className="update-history-meta">
+                  <span className="update-history-version">
+                    Версия {entry.version}
+                  </span>
+                  {isCurrent ? (
+                    <span className="update-history-you" title="Текущая версия">
+                      у вас
+                    </span>
+                  ) : null}
+                  <span className="update-history-date">{entry.date}</span>
+                </div>
+                {entry.summary ? (
+                  <p className="update-history-summary">{entry.summary}</p>
+                ) : null}
+                {entry.bullets.length > 0 ? (
+                  <ul className="update-history-bullets">
+                    {entry.bullets.map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </li>
+            );
+          })}
+        </ol>
+      </section>
     </>
   );
 }
