@@ -21,6 +21,12 @@ jobs:
       - name: Install
         run: npm ci
 
+      # p9 smoke generates an m4a seed via ffmpeg to exercise compressed → PCM import.
+      - name: Install ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
       - name: Typecheck
         run: npm run typecheck
 

@@ -7,6 +7,7 @@ import {
   SecretField,
   ToggleRow,
 } from "./SettingsFormBits";
+import { SettingsElevenLabsSection } from "./SettingsElevenLabsSection";
 import {
   boolToEnv,
   isTruthyEnv,
@@ -432,6 +433,8 @@ export function SettingsApiSection() {
           onChange={(v) => setField("XAI_API_KEY", v)}
         />
       </IntegCard>
+
+      <SettingsElevenLabsSection />
     </>
   );
 }

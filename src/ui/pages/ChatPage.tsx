@@ -3,9 +3,11 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type DragEvent,
   type FormEvent,
 } from "react";
+import { emitActionLog } from "../actionLog";
 import { getBrowserLlmLabel, streamBrowserChat } from "../browserLlm";
 import {
   filesToPendingAttachments,
@@ -15,10 +17,12 @@ import {
   type PendingChatAttachment,
 } from "../chat/attachments";
 import { ChatMarkdown } from "../chat/ChatMarkdown";
+import { textForSpeech } from "../chat/codeSpeech";
 import { CoreOrb } from "../components/CoreOrb";
 import { HomeRail } from "../components/HomeRail";
 import { HudCorners } from "../components/HudCorners";
 import { ThemeSelect } from "../components/ThemeSelect";
+import { notifyCoreProgress } from "../coreLevel";
 import {
   localImportLibraryBytes,
   localImportLibraryText,
@@ -26,6 +30,7 @@ import {
 import { createAsrSession, isAsrAvailable } from "../voice/asr";
 import {
   getActiveVoiceId,
+  isCustomVoiceId,
   listCatalogVoices,
   setActiveVoiceId,
 } from "../voice/catalog";
@@ -50,6 +55,8 @@ type ChatPageProps = {
   onVoiceState: (state: VoiceState) => void;
   autoSpeak: boolean;
   coreLevel?: number;
+  /** 0…100 toward next core level (home orb caption). */
+  coreProgressPct?: number;
 };
 
 type Bubble = {
@@ -70,7 +77,8 @@ export function ChatPage({
   onError,
   onVoiceState,
   autoSpeak,
-  coreLevel = 4,
+  coreLevel = 1,
+  coreProgressPct = 0,
 }: ChatPageProps) {
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const [input, setInput] = useState("");
@@ -89,7 +97,11 @@ export function ChatPage({
   const [addToLibrary, setAddToLibrary] = useState(false);
   const [attachNote, setAttachNote] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  /** Last measured first-token / reply latency (seconds); Home «Ответ» tile. */
+  const [replySecs, setReplySecs] = useState(0.4);
+  const [replyDisplay, setReplyDisplay] = useState("~0,4 с");
   const requestIdRef = useRef<string | null>(null);
+  const replyStartRef = useRef<number | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const asrRef = useRef<ReturnType<typeof createAsrSession> | null>(null);
@@ -152,18 +164,17 @@ export function ChatPage({
         onVoiceState("idle");
         return;
       }
-      const spoken = text
-        .replace(/\*\*([^*]+)\*\*/g, "$1")
-        .replace(/__([^_]+)__/g, "$1")
-        .replace(/\*([^*]+)\*/g, "$1")
-        .replace(/_([^_]+)_/g, "$1")
-        .replace(/`([^`]+)`/g, "$1")
-        .replace(/^\s*[-*•]\s+/gm, "")
-        .replace(/\n+/g, " ")
-        .trim();
+      const spoken = textForSpeech(text);
+      if (!spoken) {
+        onVoiceState("idle");
+        return;
+      }
       speakText(spoken, activeVoiceId, {
         onStart: () => onVoiceState("speaking"),
         onEnd: () => onVoiceState("idle"),
+        onStatus: (msg) => {
+          setEngineNote(msg);
+        },
         onError: (msg) => {
           // Soft-fail TTS: keep chat usable in headless / empty-voice envs
           localStorage.setItem("mira.autoSpeak", "0");
@@ -203,10 +214,18 @@ export function ChatPage({
         /* skip bad file */
       }
     }
+    if (titles.length) notifyCoreProgress();
     return titles.length
       ? `Добавлено в обучение (demo): ${titles.join(", ")}. Workshop → Обучение → Разобрать.`
       : null;
   }
+
+  const noteReplyLatency = useCallback((startedAt: number | null) => {
+    if (startedAt == null) return;
+    const secs = Math.min(9.9, Math.max(0.08, (performance.now() - startedAt) / 1000));
+    setReplySecs(secs);
+    replyStartRef.current = null;
+  }, []);
 
   const sendBrowserDemo = useCallback(
     async (
@@ -216,6 +235,7 @@ export function ChatPage({
     ) => {
       const requestId = crypto.randomUUID();
       requestIdRef.current = requestId;
+      replyStartRef.current = performance.now();
       setBusy(true);
       setMemoryNote(null);
       onVoiceState("thinking");
@@ -226,6 +246,12 @@ export function ChatPage({
         (files.length
           ? `📎 ${files.map((f) => f.name).join(", ")}`
           : "");
+      emitActionLog({
+        title: "Сообщение отправлено",
+        reason: (display || trimmed || "вложения").slice(0, 120),
+        tag: "Чат",
+        tone: "accent",
+      });
       setBubbles((prev) => [
         ...prev,
         {
@@ -245,6 +271,14 @@ export function ChatPage({
       let libraryHint: string | null = null;
       if (toLibrary && files.length) {
         libraryHint = await importPendingToLocalLibrary(files);
+        if (libraryHint) {
+          emitActionLog({
+            title: "В библиотеку",
+            reason: libraryHint.slice(0, 120),
+            tag: "Обучение",
+            tone: "success",
+          });
+        }
       }
 
       const history = bubbles
@@ -257,6 +291,9 @@ export function ChatPage({
           history,
           handlers: {
             onToken: (chunk) => {
+              if (replyStartRef.current != null) {
+                noteReplyLatency(replyStartRef.current);
+              }
               setBubbles((prev) =>
                 prev.map((b) =>
                   b.id === `local-assistant-${requestId}`
@@ -266,6 +303,9 @@ export function ChatPage({
               );
             },
             onDone: (full) => {
+              if (replyStartRef.current != null) {
+                noteReplyLatency(replyStartRef.current);
+              }
               const label = getBrowserLlmLabel();
               setBubbles((prev) =>
                 prev.map((b) =>
@@ -280,6 +320,12 @@ export function ChatPage({
                   ? `browser · ${label} · library`
                   : `browser · ${label}`,
               );
+              emitActionLog({
+                title: "Ответ готов",
+                reason: `browser · ${label}`,
+                tag: "Чат",
+                tone: "success",
+              });
               setBusy(false);
               speakAssistant(full);
             },
@@ -287,6 +333,12 @@ export function ChatPage({
               setBusy(false);
               onVoiceState("error");
               onError(err.message);
+              emitActionLog({
+                title: "Сбой диалога",
+                reason: err.message.slice(0, 120),
+                tag: "Ошибка",
+                tone: "danger",
+              });
               setBubbles((prev) => prev.filter((b) => !b.pending));
             },
           },
@@ -341,7 +393,7 @@ export function ChatPage({
         speakAssistant(built);
       }
     },
-    [bubbles, onError, onVoiceState, speakAssistant],
+    [bubbles, noteReplyLatency, onError, onVoiceState, speakAssistant],
   );
 
   const sendText = useCallback(
@@ -365,6 +417,7 @@ export function ChatPage({
 
       const requestId = crypto.randomUUID();
       requestIdRef.current = requestId;
+      replyStartRef.current = performance.now();
       const display =
         trimmed ||
         (files.length
@@ -495,6 +548,9 @@ export function ChatPage({
       }
 
       if (event.type === "token") {
+        if (replyStartRef.current != null) {
+          noteReplyLatency(replyStartRef.current);
+        }
         setBubbles((prev) => {
           const next = [...prev];
           const last = next[next.length - 1];
@@ -510,6 +566,9 @@ export function ChatPage({
       }
 
       if (event.type === "assistant_done") {
+        if (replyStartRef.current != null) {
+          noteReplyLatency(replyStartRef.current);
+        }
         setBubbles((prev) => {
           const next = [...prev];
           const pendingIdx = [...next]
@@ -567,6 +626,7 @@ export function ChatPage({
         setBusy(false);
         requestIdRef.current = null;
         speakAssistant(event.utterance.content);
+        notifyCoreProgress();
       }
 
       if (event.type === "error") {
@@ -577,7 +637,30 @@ export function ChatPage({
         requestIdRef.current = null;
       }
     });
-  }, [onError, onVoiceState, speakAssistant]);
+  }, [noteReplyLatency, onError, onVoiceState, speakAssistant]);
+
+  // Home «Ответ» tile: keep a soft live readout around the last measured latency.
+  useEffect(() => {
+    if (panel !== "home") {
+      const rounded = Math.round(replySecs * 10) / 10;
+      setReplyDisplay(`~${String(rounded).replace(".", ",")} с`);
+      return;
+    }
+    let alive = true;
+    const tick = () => {
+      if (!alive) return;
+      const wobble = Math.sin(performance.now() / 1800) * 0.03;
+      const v = Math.max(0.08, replySecs + wobble);
+      const rounded = Math.round(v * 10) / 10;
+      setReplyDisplay(`~${String(rounded).replace(".", ",")} с`);
+    };
+    tick();
+    const id = window.setInterval(tick, 900);
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+    };
+  }, [panel, replySecs]);
 
   async function handleNewChat() {
     if (!window.mira || busy) return;
@@ -800,9 +883,16 @@ export function ChatPage({
 
   const waveActive =
     voiceState === "listening" || voiceState === "speaking" || Boolean(interim);
+  const voiceOn = Boolean(activeVoiceId);
+  const waveClass = waveActive
+    ? "wave is-live"
+    : voiceOn
+      ? "wave is-idle is-voice-on"
+      : "wave is-idle";
 
   const showHome = panel === "home";
   const showDialog = panel === "dialog";
+  const levelPctClamped = Math.min(100, Math.max(0, coreProgressPct));
 
   return (
     <div className={`home-grid ${showDialog ? "is-dialog-tab" : "is-home-tab"}`}>
@@ -841,37 +931,56 @@ export function ChatPage({
             <div className="core-card-grid">
               <div className="core-col">
                 <CoreOrb level={coreLevel} voiceState={voiceState} size={320} />
-                <div className="level-ticks" aria-hidden>
-                  {Array.from({ length: 5 }, (_, i) => (
-                    <span key={i} className={i < coreLevel ? "on" : ""} />
-                  ))}
+                <div
+                  className="core-level-controls"
+                  aria-live="polite"
+                  aria-label={`Уровень ядра ${coreLevel}`}
+                >
+                  <div className="core-level-value is-live">
+                    <span className="core-level-aura" aria-hidden />
+                    <strong>{coreLevel}</strong>
+                    <span className="muted">уровень</span>
+                    <span
+                      className="core-level-progress"
+                      aria-hidden
+                      style={
+                        {
+                          "--core-level-pct": `${levelPctClamped}%`,
+                        } as CSSProperties
+                      }
+                    />
+                  </div>
                 </div>
                 <p className="core-level-caption muted">
-                  Уровень ядра {coreLevel}/5
+                  Уровень ядра {coreLevel} ·{" "}
+                  {Math.round(levelPctClamped)}% до {coreLevel + 1} · растёт с
+                  диалогами и обучением
                 </p>
               </div>
 
               <div className="core-meta">
                 <div className="stat-row">
-                  <div className="stat-block">
+                  <div className="stat-block is-live">
                     <span className="stat-label">Модель</span>
                     <div className="stat-value" title={modelLabel}>
                       {modelLabel}
                     </div>
                   </div>
-                  <div className="stat-block">
+                  <div className="stat-block is-live">
                     <span className="stat-label">Ответ</span>
-                    <div className="stat-value g2">~0,4 с</div>
+                    <div className="stat-value g2 is-ticking">{replyDisplay}</div>
                   </div>
-                  <div className="stat-block">
+                  <div
+                    className={`stat-block is-live${voiceOn ? " is-voice-on" : ""}`}
+                  >
                     <span className="stat-label">Голос</span>
                     <div className="stat-value g3">
-                      {activeVoiceId ? "on" : "n/a"}
+                      {voiceOn ? "on" : "n/a"}
                     </div>
                   </div>
                 </div>
 
-                <div className="voice-panel">
+                <div className="voice-panel is-live">
                   <div className="voice-panel-top">
                     <h4>Голосовой ввод</h4>
                     {interim ? (
@@ -882,10 +991,7 @@ export function ChatPage({
                       </span>
                     )}
                   </div>
-                  <div
-                    className={`wave ${waveActive ? "" : "is-idle"}`}
-                    aria-hidden
-                  >
+                  <div className={waveClass} aria-hidden>
                     {Array.from({ length: 36 }, (_, i) => (
                       <span
                         key={i}
@@ -1147,7 +1253,13 @@ export function ChatPage({
       {showHome ? (
         <HomeRail
           modelLabel={modelLabel}
-          voiceNote={activeVoiceId ? "voice on" : "voice n/a"}
+          voiceNote={
+            activeVoiceId
+              ? isCustomVoiceId(activeVoiceId)
+                ? "студия"
+                : "voice on"
+              : "voice n/a"
+          }
           voiceState={voiceState}
         />
       ) : null}

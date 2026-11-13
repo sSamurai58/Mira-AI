@@ -1,6 +1,47 @@
 import fs from "node:fs";
 import path from "node:path";
 import { openStore } from "../store";
+import { getOwnerId } from "../owner";
+import {
+  VOICE_PACK_ENGINE,
+  buildVoiceModelPack,
+  ensureSlicableWav,
+  normalizeLexKey,
+  prunePhraseFromVoicePack,
+  readVoiceModelPack,
+  tokenizeSpeechWords,
+  type LinkedTrainClip,
+  type TrainProgressEvent,
+  type VoiceModelPack,
+} from "./modelPack";
+import {
+  extractClipAudioFeatures,
+  noiseLikeness,
+  textAudioMismatch,
+} from "./audioFeatures";
+import {
+  DEFAULT_TRAIN_EPOCHS,
+  NEURAL_METHOD,
+  NEURAL_TTS_CURRICULUM,
+  runMelRefinement,
+  type MelTrainResult,
+} from "./melTrainer";
+import {
+  applyVoicePreference,
+  listPreferenceCandidates,
+  loadPreferences,
+} from "./neural/rlhf";
+import { synthesizeNeuralSpeech } from "./neural/infer";
+import {
+  accumulatePhraseIntoStats,
+  buildCorpusLexStats,
+  buildMissingFunctionSeeds,
+  coverageSeedPool,
+  rankFillersForNovelty,
+  rankSeedsByNovelty,
+  scorePhraseNovelty,
+  type CorpusLexStats,
+} from "./phraseNovelty";
 
 export type VoiceProjectRow = {
   id: string;
@@ -43,18 +84,48 @@ export type CustomVoiceRow = {
   updated_at: string;
 };
 
-const PHRASE_BANK_RU = [
+/** Short replies Mira often speaks — train these first so TTS stays studio voice. */
+const ASSISTANT_COMMON_RU = [
   "Привет, я Mira — твой голосовой помощник.",
+  "Слушаю.",
+  "Да, сделаю это сейчас.",
+  "Хорошо.",
+  "Готово.",
+  "Секунду.",
+  "Принято.",
+  "Спасибо, сообщение отправлено.",
+  "Не совсем поняла, уточни пожалуйста.",
+  "Я на связи.",
+  "До связи.",
+  "Проверяю.",
+  "Нашла.",
+  "Открываю.",
+  "Записываю.",
+  "Готово, можно продолжать.",
+];
+
+const ASSISTANT_COMMON_EN = [
+  "Hello, I am Mira — your voice assistant.",
+  "Listening.",
+  "Yes, I will do that now.",
+  "Okay.",
+  "Done.",
+  "One moment.",
+  "Got it.",
+  "Thanks, message sent.",
+  "I am here if you need me.",
+];
+
+/** Variety / diction bank — fills remaining slots after real assistant lines. */
+const PHRASE_BANK_RU = [
   "Сегодня хороший день, чтобы закончить важную задачу.",
   "Повтори за мной: мягко верни внимание к дыханию.",
   "Номер телефона: плюс семь девятьсот двенадцать.",
   "Открой терминал и выполни проверку статуса.",
   "Я могу искать в памяти прошлые разговоры.",
   "Добавь встречу на пятницу в пятнадцать ноль ноль.",
-  "Спасибо, сообщение отправлено.",
   "Проверь погоду в Москве на завтра.",
   "Фраза для дикции: шесть шипящих шагов по шоссе.",
-  "Короткий ответ: да, сделаю это сейчас.",
   "Длинная фраза нужна, чтобы проверить естественные паузы и темп речи помощника.",
   "Произнеси спокойно: один, два, три, четыре, пять.",
   "Эмоция радости: отличная новость, получилось!",
@@ -67,12 +138,473 @@ const PHRASE_BANK_RU = [
 ];
 
 const PHRASE_BANK_EN = [
-  "Hello, I am Mira — your voice assistant.",
   "Please repeat after me: bring your attention back gently.",
   "Technical line: JSON, API, SQLite, Electron.",
-  "Short confirmation: yes, I will do that now.",
   "Longer line to test pacing, pauses, and natural intonation in speech.",
+  "Check the weather in London for tomorrow.",
+  "Open the terminal and run a status check.",
 ];
+
+const MIN_PHRASE_CHARS = 4;
+/** Hard ceiling for a single training passage (~500 words with room to spare). */
+const MAX_PHRASE_CHARS = 12000;
+
+function countWords(text: string): number {
+  return text
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+}
+
+function clampWordRange(
+  minWords?: number,
+  maxWords?: number,
+): { minWords: number; maxWords: number } {
+  const minW = Math.max(1, Math.min(Number(minWords) || 1, 400));
+  const maxW = Math.max(minW, Math.min(Number(maxWords) || 80, 500));
+  return { minWords: minW, maxWords: maxW };
+}
+
+function phraseCharBudget(maxWords: number): number {
+  return Math.min(MAX_PHRASE_CHARS, Math.max(1200, maxWords * 14 + 160));
+}
+
+function inWordRange(
+  text: string,
+  minWords: number,
+  maxWords: number,
+): boolean {
+  const n = countWords(text);
+  return n >= minWords && n <= maxWords;
+}
+
+const EXPAND_FILLERS_RU = [
+  "Это помогает лучше передать интонацию и ритм речи при обучении голоса.",
+  "Повторите спокойно, чётко и без спешки, сохраняя естественные паузы.",
+  "Длинный фрагмент даёт модели больше материала для устойчивого тембра.",
+  "Скажите фразу так, будто объясняете задачу другу, без спешки и без напряжения.",
+  "Смените темп: сначала медленнее, затем чуть быстрее, но сохраняйте ясность.",
+  "Произнесите числа, имена и короткие команды в одном естественном потоке.",
+  "Обратите внимание на мягкие согласные и ровный выдох в конце предложения.",
+  "Пусть голос звучит уверенно, но без театральности и лишнего давления.",
+  "Добавьте короткую паузу перед важной деталью, затем продолжите спокойно.",
+  "Опишите привычный сценарий: открыть приложение, проверить статус, ответить.",
+  "Тренируйте дикцию на шипящих и свистящих, не ускоряя остальные слова.",
+  "Сделайте акцент на вопросительной интонации, затем на утвердительной.",
+  "Произнесите техническую фразу про API, JSON и локальное хранилище данных.",
+  "Говорите так, будто ведёте живой диалог, а не читаете список слов.",
+  "Повторите ключевые слова с разной эмоциональной окраской: спокойно и тепло.",
+  "Следите, чтобы окончание фразы не проваливалось и не становилось шёпотом.",
+  "Вставьте бытовые детали: погода, время, адрес, короткое подтверждение.",
+  "Пусть ритм речи остаётся ровным даже на длинном непрерывном фрагменте.",
+  "Сформулируйте просьбу, уточнение и благодарность в одном связном абзаце.",
+  "Проверьте, что каждое новое предложение добавляет смысл, а не копирует прошлое.",
+  "Опишите действие на экране: нажать, сохранить, закрыть вкладку, продолжить.",
+  "Говорите имена и адреса чётко, разделяя части короткими естественными паузами.",
+  "Сделайте переход от нейтрального тона к лёгкой радости без резкого скачка.",
+  "Произнесите длинный ответ так, будто помогаете пользователю шаг за шагом.",
+  "Добавьте вариации: команда, вопрос, уточнение и короткое «готово» в финале.",
+  "Сохраняйте естественные паузы на знаках, не дробя слова искусственными сбоями.",
+  "Пусть тембр остаётся узнаваемым, даже когда меняются тема и длина фразы.",
+  "Скажите о проверке статуса, поиске в памяти и отправке короткого сообщения.",
+  "Тренируйте мягкий старт фразы и уверенное, но спокойное завершение мысли.",
+  "Соберите абзац из разных бытовых и рабочих реплик, без дословных повторов.",
+];
+
+const EXPAND_FILLERS_EN = [
+  "This longer line helps capture tone and pacing for voice training.",
+  "Speak clearly and steadily, keeping natural pauses between clauses.",
+  "A longer passage gives the model more material for a stable timbre.",
+  "Say it as if you are explaining a task to a friend, without rush or strain.",
+  "Change the pace: slower first, then a little faster, while staying clear.",
+  "Include numbers, names, and short commands in one natural flow.",
+  "Watch soft consonants and keep a steady breath at the end of each sentence.",
+  "Keep the voice confident, but avoid theatrical pressure or harsh edges.",
+  "Add a short pause before an important detail, then continue calmly.",
+  "Describe a familiar scene: open the app, check status, then reply.",
+  "Practice diction on sibilants without speeding through the rest.",
+  "Shift from a questioning tone into a firm, affirmative finish.",
+  "Speak a technical line about API, JSON, and local data storage.",
+  "Sound like a live conversation, not like a list of memorized words.",
+  "Repeat key words with a calm tone and then with a warmer color.",
+  "Do not let the phrase trail off into a whisper at the end.",
+  "Mix everyday details: weather, time, address, and a short confirmation.",
+  "Keep rhythm even across a long continuous training passage.",
+  "Combine a request, a clarification, and a thank-you in one paragraph.",
+  "Make every new sentence add meaning instead of copying the previous one.",
+  "Describe on-screen actions: click, save, close the tab, continue.",
+  "Say names and addresses clearly, with short natural pauses between parts.",
+  "Move from a neutral tone into light warmth without a sharp jump.",
+  "Deliver a long reply as if guiding the user one step at a time.",
+  "Vary the material: a command, a question, a clarification, and done.",
+  "Keep natural pauses on punctuation without chopping words artificially.",
+  "Keep the timbre recognizable even when topic and length change.",
+  "Mention checking status, searching memory, and sending a short message.",
+  "Train a soft phrase start and a calm, confident ending.",
+  "Build a paragraph from mixed daily and work lines without verbatim repeats.",
+];
+
+const PASSAGE_STARTERS_RU = [
+  "Учебный текст для устойчивого тембра.",
+  "Длинный тренировочный фрагмент речи.",
+  "Связный абзац для обучения голоса.",
+  "Развернутый ответ помощника для дикции.",
+  "Практика естественных пауз и ритма.",
+  "Корпусная фраза с бытовыми деталями.",
+  "Диалоговый текст с командами и уточнениями.",
+  "Речь для проверки интонации и ясности.",
+];
+
+const PASSAGE_STARTERS_EN = [
+  "Training passage for a stable timbre.",
+  "A long spoken fragment for voice learning.",
+  "Connected paragraph for diction practice.",
+  "Extended assistant reply for intonation work.",
+  "Practice for natural pauses and rhythm.",
+  "Corpus line with everyday details.",
+  "Dialog text with commands and clarifications.",
+  "Speech drill for clarity and pacing.",
+];
+
+function hashSeed(text: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function shuffleWithSeed<T>(items: T[], seedText: string): T[] {
+  const arr = [...items];
+  const rng = mulberry32(hashSeed(seedText) || 1);
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    const tmp = arr[i]!;
+    arr[i] = arr[j]!;
+    arr[j] = tmp;
+  }
+  return arr;
+}
+
+/** Stretch short seed text toward minWords with seeded filler variety. */
+function expandTowardMinWords(
+  text: string,
+  minWords: number,
+  charBudget = MAX_PHRASE_CHARS,
+  variationKey = "",
+  lexStats?: CorpusLexStats,
+  lang = "ru-RU",
+): string {
+  let out = text.trim().replace(/\s+/g, " ");
+  if (countWords(out) >= minWords) return out;
+  const looksRu = /[А-Яа-яЁё]/.test(out);
+  const baseFillers = looksRu ? EXPAND_FILLERS_RU : EXPAND_FILLERS_EN;
+  // Prefer fillers that add novel / missing function words when corpus exists.
+  const noveltyOrdered = lexStats
+    ? rankFillersForNovelty(baseFillers, lexStats, lang, new Map())
+    : baseFillers;
+  // Keep novelty-preferred fillers earlier; light shuffle only on the tail.
+  const preferred = lexStats
+    ? [
+        ...noveltyOrdered.slice(0, Math.ceil(noveltyOrdered.length / 2)),
+        ...shuffleWithSeed(
+          noveltyOrdered.slice(Math.ceil(noveltyOrdered.length / 2)),
+          `${variationKey}|tail`,
+        ),
+      ]
+    : shuffleWithSeed(noveltyOrdered, `${variationKey}|${out}|expand`);
+  let i = 0;
+  let guard = 0;
+  const usedFiller = new Set<string>();
+  while (countWords(out) < minWords && guard < 800) {
+    const add = preferred[i % preferred.length]!;
+    i += 1;
+    guard += 1;
+    // Soft-skip exact filler reuse within one expansion when alternatives remain.
+    if (usedFiller.has(add) && usedFiller.size < preferred.length) continue;
+    usedFiller.add(add);
+    const next = `${out} ${add}`.trim();
+    if (next.length > charBudget) break;
+    out = next;
+  }
+  return out;
+}
+
+function trimToMaxWords(text: string, maxWords: number): string {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return text.trim();
+  return words.slice(0, maxWords).join(" ");
+}
+
+function fitPhraseToWordRange(
+  text: string,
+  minWords: number,
+  maxWords: number,
+  variationKey = "",
+  lexStats?: CorpusLexStats,
+  lang = "ru-RU",
+): string | null {
+  const budget = phraseCharBudget(maxWords);
+  let out = text.trim().replace(/\s+/g, " ");
+  if (!out) return null;
+  out = trimToMaxWords(out, maxWords);
+  out = expandTowardMinWords(
+    out,
+    minWords,
+    budget,
+    variationKey || out,
+    lexStats,
+    lang,
+  );
+  out = trimToMaxWords(out, maxWords);
+  if (out.length > budget) {
+    out = out.slice(0, budget).replace(/\s+\S*$/, "").trim();
+    out = trimToMaxWords(out, maxWords);
+  }
+  if (!inWordRange(out, minWords, maxWords)) {
+    // Last resort: build a filler passage that hits the requested word range.
+    const looksRu = /[А-Яа-яЁё]/.test(text);
+    const starters = looksRu ? PASSAGE_STARTERS_RU : PASSAGE_STARTERS_EN;
+    const starter =
+      starters[hashSeed(`${variationKey}|${text}`) % starters.length] ??
+      (looksRu ? "Обучение голоса." : "Voice training.");
+    out = expandTowardMinWords(
+      starter,
+      minWords,
+      budget,
+      `${variationKey}|fallback|${text}`,
+      lexStats,
+      lang,
+    );
+    out = trimToMaxWords(out, maxWords);
+  }
+  if (!inWordRange(out, minWords, maxWords)) return null;
+  return out;
+}
+
+export type GeneratePhrasesOptions = {
+  count?: number;
+  minWords?: number;
+  maxWords?: number;
+};
+
+const MAX_GENERATE_COUNT = 40;
+
+/** Strip markdown/code noise the same way chat TTS does (lightweight). */
+function stripForPhraseSeed(raw: string): string {
+  return raw
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`[^`\n]+`/g, " ")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
+    .replace(/_([^_]+)_/g, "$1")
+    .replace(/^\s*[-*•]\s+/gm, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isUsefulSpeechPhrase(p: string): boolean {
+  if (p.length < MIN_PHRASE_CHARS || p.length > MAX_PHRASE_CHARS) return false;
+  // Skip pure URLs / code-ish lines.
+  if (/^https?:\/\//i.test(p)) return false;
+  if (/[{}<>;=]/.test(p) && /[{}]/.test(p)) return false;
+  // Skip mock / env / tooling chatter — not what Mira says in real speech.
+  if (/mock-модели|LLM_PROVIDER|API-ключ|\.env\b/i.test(p)) return false;
+  if (/skills?\s+в\s+контексте|skills\s+on-demand/i.test(p)) return false;
+  if (/интернет-инструменты/i.test(p)) return false;
+  // Skip chat echo / memory scaffolding — not natural assistant speech.
+  if (/^вы сказали:/i.test(p)) return false;
+  if (/дополнительных фрагментов памяти/i.test(p)) return false;
+  if (/в контекст подтянуты фрагменты/i.test(p)) return false;
+  if (/учтены интернет-данные/i.test(p)) return false;
+  return true;
+}
+
+function splitPhraseCandidates(text: string): string[] {
+  const cleaned = stripForPhraseSeed(text);
+  if (!cleaned) return [];
+  return cleaned
+    .split(/(?<=[.!?…])\s+|\n+/)
+    .map((p) => p.trim().replace(/^["«»„]+|["«»„]+$/g, "").trim())
+    .filter(isUsefulSpeechPhrase);
+}
+
+export type AssistantSpeechStats = {
+  /** Phrase candidates ranked by frequency (then recency). */
+  phrases: Array<{ text: string; count: number; score: number }>;
+  /** Word tokens ranked by frequency across assistant speech. */
+  words: Array<{ word: string; key: string; count: number }>;
+};
+
+/**
+ * Assistant chat → phrase + word frequency stats.
+ * Frequency dominates; recency is a tie-break so the most-used speech wins.
+ */
+export function collectAssistantSpeechStats(opts?: {
+  limitUtterances?: number;
+  limitPhrases?: number;
+  limitWords?: number;
+}): AssistantSpeechStats {
+  const limitU = opts?.limitUtterances ?? 80;
+  const limitP = opts?.limitPhrases ?? 40;
+  const limitW = opts?.limitWords ?? 80;
+  try {
+    const store = openStore();
+    const owner = getOwnerId();
+    const rows = store
+      .prepare(
+        `SELECT u.content AS content
+         FROM utterances u
+         JOIN sessions s ON s.id = u.session_id
+         WHERE s.owner_id = ? AND u.role = 'assistant'
+         ORDER BY u.created_at DESC
+         LIMIT ?`,
+      )
+      .all(owner, limitU) as Array<{ content: string }>;
+
+    const phraseFreq = new Map<
+      string,
+      { text: string; count: number; recency: number }
+    >();
+    const wordFreq = new Map<string, { word: string; count: number }>();
+
+    rows.forEach((row, idx) => {
+      const recency = Math.max(1, limitU - idx);
+      for (const part of splitPhraseCandidates(row.content)) {
+        const key = part.toLowerCase();
+        const prev = phraseFreq.get(key);
+        if (prev) {
+          prev.count += 1;
+          prev.recency = Math.max(prev.recency, recency);
+        } else {
+          phraseFreq.set(key, { text: part, count: 1, recency });
+        }
+      }
+      for (const raw of tokenizeSpeechWords(row.content)) {
+        const key = normalizeLexKey(raw);
+        if (!key || key.length < 2) continue;
+        const prev = wordFreq.get(key);
+        if (prev) prev.count += 1;
+        else wordFreq.set(key, { word: raw, count: 1 });
+      }
+    });
+
+    const phrases = [...phraseFreq.values()]
+      .map((p) => ({
+        text: p.text,
+        count: p.count,
+        // Frequency first (×100), short replies get a small boost, then recency.
+        score: p.count * 100 + (p.text.length <= 80 ? 8 : 0) + p.recency,
+      }))
+      .sort(
+        (a, b) =>
+          b.score - a.score ||
+          b.count - a.count ||
+          a.text.length - b.text.length,
+      )
+      .slice(0, limitP);
+
+    const words = [...wordFreq.entries()]
+      .map(([key, w]) => ({ word: w.word, key, count: w.count }))
+      .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key))
+      .slice(0, limitW);
+
+    return { phrases, words };
+  } catch {
+    return { phrases: [], words: [] };
+  }
+}
+
+/** Recent assistant chat lines → phrase candidates (frequency + recency). */
+export function collectAssistantUsedPhrases(opts?: {
+  limitUtterances?: number;
+  limitPhrases?: number;
+}): string[] {
+  return collectAssistantSpeechStats(opts).phrases.map((p) => p.text);
+}
+
+/** Words already covered by project corpus / trained lexicon (custom TTS). */
+function projectCoveredWordKeys(projectId: string): Set<string> {
+  const covered = new Set<string>();
+  for (const phrase of listPhrases(projectId)) {
+    for (const raw of tokenizeSpeechWords(phrase.text)) {
+      const key = normalizeLexKey(raw);
+      if (key) covered.add(key);
+    }
+  }
+  const project = getVoiceProject(projectId);
+  if (!project?.custom_voice_id) return covered;
+  try {
+    const packDir = studioRoot(project.id, "model-pack");
+    const pack = readVoiceModelPack(packDir);
+    if (pack?.lexicon) {
+      for (const key of Object.keys(pack.lexicon)) covered.add(key);
+    }
+  } catch {
+    // pack optional
+  }
+  return covered;
+}
+
+/**
+ * Pack most-frequent uncovered words into training sentences.
+ * Uncovered tokens keep falling back to system TTS until recorded+trained.
+ */
+function buildFrequentUncoveredSeeds(
+  words: Array<{ word: string; key: string; count: number }>,
+  covered: Set<string>,
+  lang: string,
+  minWords: number,
+  maxWords: number,
+): string[] {
+  const uncovered = words.filter((w) => !covered.has(w.key));
+  if (!uncovered.length) return [];
+  const looksEn = lang.toLowerCase().startsWith("en");
+  const lead = looksEn
+    ? "Please say clearly:"
+    : "Произнесите чётко:";
+  const seeds: string[] = [];
+  let bucket: string[] = [];
+  for (const w of uncovered) {
+    bucket.push(w.word);
+    if (bucket.length >= Math.min(12, Math.max(4, minWords))) {
+      const raw = `${lead} ${bucket.join(" ")}.`;
+      const fitted = fitPhraseToWordRange(raw, minWords, maxWords);
+      if (fitted) seeds.push(fitted);
+      bucket = [];
+      if (seeds.length >= 24) break;
+    }
+  }
+  if (bucket.length && seeds.length < 24) {
+    const raw = `${lead} ${bucket.join(" ")}.`;
+    const fitted = fitPhraseToWordRange(raw, minWords, maxWords);
+    if (fitted) seeds.push(fitted);
+  }
+  return seeds;
+}
+
+function phrasePoolForLang(lang: string): {
+  common: string[];
+  variety: string[];
+} {
+  if (lang.toLowerCase().startsWith("en")) {
+    return { common: ASSISTANT_COMMON_EN, variety: PHRASE_BANK_EN };
+  }
+  return { common: ASSISTANT_COMMON_RU, variety: PHRASE_BANK_RU };
+}
 
 function studioRoot(...parts: string[]): string {
   const { dataRoot } = require("../appPaths") as typeof import("../appPaths");
@@ -198,59 +730,251 @@ export function listPhrases(projectId: string): VoicePhraseRow[] {
   return openStore()
     .prepare(
       `SELECT id, project_id, text, recorded, created_at
-       FROM voice_phrases WHERE project_id = ? ORDER BY created_at ASC`,
+       FROM voice_phrases
+       WHERE project_id = ?
+       ORDER BY created_at ASC, rowid ASC`,
     )
     .all(projectId) as VoicePhraseRow[];
 }
 
 export function generatePhrases(
   projectId: string,
-  count = 5,
+  countOrOpts: number | GeneratePhrasesOptions = 5,
 ): VoicePhraseRow[] {
   const project = getVoiceProject(projectId);
   if (!project) throw new Error("Проект не найден");
-  const existing = listPhrases(projectId).map((p) => p.text.toLowerCase());
-  const bank = project.lang.toLowerCase().startsWith("en")
-    ? PHRASE_BANK_EN
-    : PHRASE_BANK_RU;
-  const fresh = bank.filter((t) => !existing.includes(t.toLowerCase()));
-  if (!fresh.length) {
+  const opts: GeneratePhrasesOptions =
+    typeof countOrOpts === "number" ? { count: countOrOpts } : countOrOpts;
+  const want = Math.max(1, Math.min(opts.count ?? 5, MAX_GENERATE_COUNT));
+  const { minWords, maxWords } = clampWordRange(opts.minWords, opts.maxWords);
+  const existingPhrases = listPhrases(projectId);
+  const existing = new Set(existingPhrases.map((p) => p.text.toLowerCase()));
+  const { common, variety } = phrasePoolForLang(project.lang);
+
+  // Corpus lexical stats: avoid recycling words already used heavily.
+  let lexStats = buildCorpusLexStats(
+    existingPhrases.map((p) => p.text),
+    project.lang,
+  );
+  const corpusMature = lexStats.phraseCount >= 5 || lexStats.totalTokens >= 40;
+
+  const speechStats = collectAssistantSpeechStats({
+    limitUtterances: 120,
+    limitPhrases: 100,
+    limitWords: 100,
+  });
+  const covered = projectCoveredWordKeys(projectId);
+  const frequentUncovered = buildFrequentUncoveredSeeds(
+    speechStats.words,
+    covered,
+    project.lang,
+    minWords,
+    maxWords,
+  );
+
+  // Chat phrases: when corpus is still small, keep frequent speech for bootstrap;
+  // once mature, rank by novelty (penalize saturated content reuse).
+  const chatTexts = speechStats.phrases.map((p) => p.text);
+  const usedRanked = corpusMature
+    ? rankSeedsByNovelty(chatTexts, lexStats, project.lang)
+    : chatTexts;
+
+  const missingFnSeeds = buildMissingFunctionSeeds(
+    lexStats.missingFunctionKeys,
+    project.lang,
+  );
+  const coverageSeeds = rankSeedsByNovelty(
+    [...missingFnSeeds, ...coverageSeedPool(project.lang)],
+    lexStats,
+    project.lang,
+  );
+  const commonRanked = rankSeedsByNovelty(common, lexStats, project.lang);
+  const varietyRanked = rankSeedsByNovelty(variety, lexStats, project.lang);
+  const uncoveredRanked = rankSeedsByNovelty(
+    frequentUncovered,
+    lexStats,
+    project.lang,
+  );
+
+  const ordered: string[] = [];
+  const fromChatKeys = new Set<string>();
+  const fromUncoveredKeys = new Set<string>();
+  const fromCoverageKeys = new Set<string>();
+  let variationSeq = 0;
+  const pushFresh = (
+    list: string[],
+    mark: "chat" | "uncovered" | "coverage" | null = null,
+    allowRepetitive = false,
+  ) => {
+    for (const raw of list) {
+      if (ordered.length >= want) return;
+      variationSeq += 1;
+      const fitted = fitPhraseToWordRange(
+        raw,
+        minWords,
+        maxWords,
+        `${projectId}|${mark ?? "bank"}|${variationSeq}|${raw.slice(0, 48)}`,
+        lexStats,
+        project.lang,
+      );
+      if (!fitted) continue;
+      const key = fitted.toLowerCase();
+      if (existing.has(key)) continue;
+      if (ordered.some((x) => x.toLowerCase() === key)) continue;
+      const nov = scorePhraseNovelty(fitted, lexStats, project.lang);
+      if (!allowRepetitive && nov.tooRepetitive) continue;
+      ordered.push(fitted);
+      lexStats = accumulatePhraseIntoStats(lexStats, fitted, project.lang);
+      if (mark === "chat") fromChatKeys.add(key);
+      if (mark === "uncovered") fromUncoveredKeys.add(key);
+      if (mark === "coverage") fromCoverageKeys.add(key);
+    }
+  };
+
+  // Learning-first order once the corpus has material:
+  // coverage (prepositions/intonation) → novel variety → uncovered TTS gaps →
+  // chat (novelty-ranked) → common. Bootstrap (empty corpus) still seeds chat first.
+  if (corpusMature) {
+    pushFresh(coverageSeeds, "coverage");
+    pushFresh(varietyRanked);
+    pushFresh(uncoveredRanked, "uncovered");
+    pushFresh(usedRanked, "chat");
+    pushFresh(commonRanked);
+  } else {
+    pushFresh(usedRanked, "chat", true);
+    pushFresh(coverageSeeds, "coverage");
+    pushFresh(uncoveredRanked, "uncovered");
+    pushFresh(commonRanked, null, true);
+    pushFresh(varietyRanked);
+  }
+
+  // If still short, re-expand unique seeds (avoid verbatim `raw raw` when mature).
+  if (ordered.length < want) {
+    const extras = [
+      ...coverageSeeds,
+      ...varietyRanked,
+      ...uncoveredRanked,
+      ...usedRanked,
+      ...commonRanked,
+    ];
+    for (const raw of extras) {
+      if (ordered.length >= want) break;
+      variationSeq += 1;
+      const seed = corpusMature ? raw : `${raw} ${raw}`;
+      const fitted = fitPhraseToWordRange(
+        seed,
+        minWords,
+        maxWords,
+        `${projectId}|extra|${variationSeq}|${raw.slice(0, 48)}`,
+        lexStats,
+        project.lang,
+      );
+      if (!fitted) continue;
+      const key = fitted.toLowerCase();
+      if (existing.has(key)) continue;
+      if (ordered.some((x) => x.toLowerCase() === key)) continue;
+      const nov = scorePhraseNovelty(fitted, lexStats, project.lang);
+      if (corpusMature && nov.tooRepetitive) continue;
+      ordered.push(fitted);
+      lexStats = accumulatePhraseIntoStats(lexStats, fitted, project.lang);
+    }
+  }
+
+  const langEn = project.lang.toLowerCase().startsWith("en");
+  const starters = langEn ? PASSAGE_STARTERS_EN : PASSAGE_STARTERS_RU;
+  let synth = 0;
+  while (ordered.length < want && synth < want + 12) {
+    synth += 1;
+    variationSeq += 1;
+    const starter = starters[(synth - 1) % starters.length]!;
+    const seed = `${starter} ${langEn ? `Variant ${synth}.` : `Вариант ${synth}.`}`;
+    const fitted = fitPhraseToWordRange(
+      seed,
+      minWords,
+      maxWords,
+      `${projectId}|synth|${variationSeq}|${synth}|${Date.now()}`,
+      lexStats,
+      project.lang,
+    );
+    if (!fitted) break;
+    const key = fitted.toLowerCase();
+    if (existing.has(key)) continue;
+    if (ordered.some((x) => x.toLowerCase() === key)) continue;
+    const nov = scorePhraseNovelty(fitted, lexStats, project.lang);
+    if (corpusMature && nov.tooRepetitive) continue;
+    ordered.push(fitted);
+    lexStats = accumulatePhraseIntoStats(lexStats, fitted, project.lang);
+  }
+  // Last resort: allow repetitive candidates so count never collapses to [].
+  if (ordered.length < want) {
+    pushFresh(
+      [...coverageSeeds, ...common, ...variety, ...usedRanked],
+      null,
+      true,
+    );
+  }
+  const pick = ordered.slice(0, want);
+
+  if (!pick.length) {
     touchProject(projectId, {
-      recommendation:
-        "Банк фраз исчерпан для демо. Добавьте свои записи или расширьте банк.",
+      recommendation: `Не удалось собрать тексты на ${minWords}–${maxWords} слов. Уменьшите диапазон или добавьте свою фразу ниже.`,
     });
     return [];
   }
-  const pick = fresh.slice(0, Math.max(1, Math.min(count, fresh.length)));
+
   const store = openStore();
   const insert = store.prepare(
     `INSERT INTO voice_phrases (id, project_id, text, recorded, created_at)
      VALUES (?, ?, ?, 0, ?)`,
   );
-  const now = new Date().toISOString();
+  const baseMs = Date.now();
   const rows: VoicePhraseRow[] = [];
-  for (const text of pick) {
+  let fromChat = 0;
+  let fromUncovered = 0;
+  let fromCoverage = 0;
+  for (let i = 0; i < pick.length; i++) {
+    const text = pick[i]!;
+    // Stagger created_at so 1…N order stays stable across refreshes/collapse.
     const row: VoicePhraseRow = {
       id: crypto.randomUUID(),
       project_id: projectId,
       text,
       recorded: 0,
-      created_at: now,
+      created_at: new Date(baseMs + i).toISOString(),
     };
     try {
       insert.run(row.id, row.project_id, row.text, row.created_at);
       rows.push(row);
+      if (fromChatKeys.has(text.toLowerCase())) fromChat += 1;
+      if (fromUncoveredKeys.has(text.toLowerCase())) fromUncovered += 1;
+      if (fromCoverageKeys.has(text.toLowerCase())) fromCoverage += 1;
     } catch {
       // unique dedup race
     }
   }
+  const uncoveredWordCount = speechStats.words.filter(
+    (w) => !covered.has(w.key),
+  ).length;
+  const missingFnLeft = lexStats.missingFunctionKeys.length;
   touchProject(projectId, {
     status: "phrases",
-    recommendation: `Запишите/загрузите аудио для ${rows.length} новых фраз.`,
+    recommendation: rows.length
+      ? `Добавлено ${rows.length} текстов (${minWords}–${maxWords} слов)` +
+        (fromCoverage ? ` · новизна/предлоги: ${fromCoverage}` : "") +
+        (fromChat ? ` · фразы диалога: ${fromChat}` : "") +
+        (fromUncovered
+          ? ` · непокрытые слова: ${fromUncovered}`
+          : uncoveredWordCount
+            ? ` · непокрытых частых слов в речи: ${uncoveredWordCount}`
+            : "") +
+        (missingFnLeft
+          ? ` · ещё не в корпусе служебных слов: ${missingFnLeft}`
+          : " · служебные слова корпуса закрыты") +
+        ". Новые генерации расширяют словарь и избегают частых повторов."
+      : "Новых фраз нет. Добавьте свою.",
   });
   return rows;
 }
-
 export function listClips(projectId: string): VoiceClipRow[] {
   return openStore()
     .prepare(
@@ -264,28 +988,91 @@ function analyzeClipFile(filePath: string, phraseText: string | null) {
   const stat = fs.statSync(filePath);
   const size = stat.size;
   const ext = path.extname(filePath).toLowerCase();
-  const issues: string[] = [];
+  const hardIssues: string[] = [];
+  const warnings: string[] = [];
   if (![".wav", ".flac", ".webm", ".mp3", ".ogg", ".m4a"].includes(ext)) {
-    issues.push("unexpected_format");
+    hardIssues.push("unexpected_format");
   }
-  if (size < 800) issues.push("too_short_or_empty");
-  if (size > 15_000_000) issues.push("too_large");
-  // Heuristic "duration proxy" without decoding: assume ~16kB/s for compressed speech
-  const approxSec = size / 16000;
-  if (approxSec < 0.3) issues.push("likely_silence_or_too_short");
-  if (approxSec > 45) issues.push("too_long");
+  if (size < 800) hardIssues.push("too_short_or_empty");
+  if (size > 15_000_000) hardIssues.push("too_large");
+
+  const features = extractClipAudioFeatures(filePath, size);
+  const approxSec = features.durationMs / 1000;
+  if (approxSec < 0.25) hardIssues.push("likely_silence_or_too_short");
+  if (approxSec > 90) hardIssues.push("too_long");
+
+  if (features.format === "pcm-wav") {
+    if (features.silenceRatio > 0.92) hardIssues.push("mostly_silence");
+    else if (features.silenceRatio > 0.75) warnings.push("high_silence_ratio");
+    if (features.rms < 0.004) hardIssues.push("too_quiet");
+    else if (features.rms < 0.012) warnings.push("low_loudness");
+    if (features.clipRatio > 0.05) hardIssues.push("heavy_clipping");
+    else if (features.clipRatio > 0.015) warnings.push("possible_clipping");
+    if (features.speechScore < 0.18) hardIssues.push("low_speech_likeness");
+    else if (features.speechScore < 0.32) warnings.push("weak_speech_signal");
+  }
+
+  for (const issue of textAudioMismatch(phraseText, features.durationMs)) {
+    // Mismatch is a warning — short seed WAVs still train in smoke/demo,
+    // but the pack quality drops and UI shows the warning.
+    warnings.push(issue);
+  }
+  for (const issue of noiseLikeness(features)) {
+    if (issue === "noisy_or_non_speech" && features.speechScore < 0.2) {
+      hardIssues.push(issue);
+    } else {
+      warnings.push(issue);
+    }
+  }
+
   const textMatch =
     phraseText && phraseText.length > 0
-      ? { expectedChars: phraseText.length, note: "text_provided" }
-      : { expectedChars: 0, note: "no_phrase_link" };
-  const accepted = issues.length === 0;
+      ? {
+          expectedChars: phraseText.length,
+          wordCount: tokenizeSpeechWords(phraseText).length,
+          note: "text_provided",
+        }
+      : { expectedChars: 0, wordCount: 0, note: "no_phrase_link" };
+
+  const issues = [...hardIssues, ...warnings];
+  const accepted = hardIssues.length === 0;
   return {
     size,
     approxSec: Number(approxSec.toFixed(2)),
+    durationMs: Math.round(features.durationMs),
     issues,
+    hardIssues,
+    warnings,
     textMatch,
-    loudness: accepted ? "ok_stub" : "unknown",
-    clipping: "not_detected_stub",
+    features: {
+      format: features.format,
+      rms: Number(features.rms.toFixed(4)),
+      peak: Number(features.peak.toFixed(4)),
+      silenceRatio: Number(features.silenceRatio.toFixed(3)),
+      clipRatio: Number(features.clipRatio.toFixed(4)),
+      bandEnergies: features.bandEnergies.map((b) =>
+        Number(b.toFixed(3)),
+      ) as [number, number, number],
+      speechScore: Number(features.speechScore.toFixed(3)),
+      sampleRate: features.sampleRate,
+    },
+    loudness:
+      features.format === "pcm-wav"
+        ? features.rms >= 0.02
+          ? "ok"
+          : features.rms >= 0.012
+            ? "low"
+            : "too_quiet"
+        : "unknown_compressed",
+    clipping:
+      features.format === "pcm-wav"
+        ? features.clipRatio > 0.05
+          ? "heavy"
+          : features.clipRatio > 0.015
+            ? "possible"
+            : "ok"
+        : "not_analyzed",
+    method: "unit-selection-qa-v1",
     accepted,
   };
 }
@@ -339,128 +1126,348 @@ export type VoiceTrainReport = {
   linkedAccepted: number;
   coveragePct: number;
   detail: string;
+  steps?: Array<{ step: string; label: string; pct: number }>;
+  packPath?: string | null;
+  wordUnitCount?: number;
+  fragmentUnitCount?: number;
+  lexiconSize?: number;
+  audioLexiconSize?: number;
+  provisionalLexiconSize?: number;
+  epochs?: number;
+  trainSteps?: number;
+  initialLoss?: number;
+  finalLoss?: number;
+  melTargets?: number;
+  curriculum?: typeof NEURAL_TTS_CURRICULUM;
+  griffinLimPreview?: string | null;
+  neuralPreview?: string | null;
+  method?: string;
+  neuralTts?: boolean;
+  teacherForceFinal?: number;
+  vocoderSteps?: number;
+  cudaAvailable?: boolean;
+  accelDetail?: string;
+  weightsPath?: string;
 };
 
-/** Train / rebuild local voice model from phrase↔audio corpus. */
-export function trainVoiceModel(projectId: string): {
+export type VoiceTrainProgressHandler = (ev: TrainProgressEvent) => void;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Per-step pause scales with corpus so training is visibly non-instant. */
+function trainStepBudgetMs(linkedAccepted: number, wordsHint = 8): number {
+  // Long generated passages (hundreds of words) must take real time — not ~2s.
+  return Math.min(
+    14_000,
+    320 + linkedAccepted * 140 + Math.max(0, wordsHint) * 16,
+  );
+}
+
+/**
+ * Train / rebuild local voice pack from phrase↔audio pairs.
+ * Pipeline: QA → features → alignment → lexicon → neural mel train (Adam) →
+ * neural vocoder → publish. Unit-selection stitch remains as fallback.
+ */
+export async function trainVoiceModel(
+  projectId: string,
+  onProgress?: VoiceTrainProgressHandler,
+): Promise<{
   project: VoiceProjectRow;
   analysis: ReturnType<typeof analyzeClipFile>[];
   voice: CustomVoiceRow | null;
   report: VoiceTrainReport;
-} {
+  pack: VoiceModelPack | null;
+}> {
   const cur = getVoiceProject(projectId);
   if (!cur) throw new Error("Проект не найден");
 
-  touchProject(projectId, {
-    status: "training",
-    recommendation: "Обучение: QA клипов → сборка корпуса → регистрация модели…",
-  });
+  const steps: Array<{ step: string; label: string; pct: number }> = [];
+  const emit = (
+    step: TrainProgressEvent["step"],
+    pct: number,
+    label: string,
+    detail?: string,
+    extra?: Partial<TrainProgressEvent>,
+  ) => {
+    steps.push({ step, label, pct });
+    if (step !== "done" && step !== "error") {
+      touchProject(projectId, { status: "training", recommendation: label });
+    }
+    onProgress?.({ projectId, step, pct, label, detail, ...extra });
+  };
+
+  emit(
+    "validate",
+    4,
+    "Пары текст↔аудио: проверка клипов и привязок (neural TTS + unit fallback)…",
+  );
+  await sleep(trainStepBudgetMs(1, 0));
 
   const qa = qaProjectClips(projectId);
   const coveragePct =
     qa.phraseCount > 0
       ? Math.round((qa.linkedAccepted / qa.phraseCount) * 100)
       : 0;
+  const warnCount = qa.analyses.reduce(
+    (n, a) => n + ((a.warnings as string[] | undefined)?.length ?? 0),
+    0,
+  );
+
+  const fail = (
+    status: string,
+    detail: string,
+    stage: string,
+  ): Awaited<ReturnType<typeof trainVoiceModel>> => {
+    emit("error", 100, detail);
+    const project = touchProject(projectId, {
+      status,
+      recommendation: detail,
+    });
+    return {
+      project,
+      analysis: qa.analyses,
+      voice: null,
+      pack: null,
+      report: {
+        ok: false,
+        stage,
+        phraseCount: qa.phraseCount,
+        acceptedClips: qa.acceptedCount,
+        linkedAccepted: qa.linkedAccepted,
+        coveragePct: qa.phraseCount > 0 ? coveragePct : 0,
+        detail,
+        steps,
+        packPath: null,
+      },
+    };
+  };
 
   if (qa.phraseCount < 1) {
-    const project = touchProject(projectId, {
-      status: "needs_data",
-      recommendation:
-        "Обучение невозможно: нет фраз. Сгенерируйте или добавьте фразы 1…N, затем привяжите аудио.",
-    });
-    return {
-      project,
-      analysis: qa.analyses,
-      voice: null,
-      report: {
-        ok: false,
-        stage: "needs_data",
-        phraseCount: 0,
-        acceptedClips: qa.acceptedCount,
-        linkedAccepted: qa.linkedAccepted,
-        coveragePct: 0,
-        detail: project.recommendation ?? "Нет фраз",
-      },
-    };
+    return fail(
+      "needs_data",
+      "Обучение невозможно: нет фраз. Сгенерируйте или добавьте фразы 1…N, затем привяжите аудио.",
+      "needs_data",
+    );
   }
-
   if (qa.acceptedCount === 0) {
-    const project = touchProject(projectId, {
-      status: "needs_data",
-      recommendation:
-        "Обучение невозможно: нет принятых клипов. Запишите или загрузите wav/webm к пронумерованным фразам.",
-    });
-    return {
-      project,
-      analysis: qa.analyses,
-      voice: null,
-      report: {
-        ok: false,
-        stage: "needs_data",
-        phraseCount: qa.phraseCount,
-        acceptedClips: 0,
-        linkedAccepted: 0,
-        coveragePct: 0,
-        detail: project.recommendation ?? "Нет данных",
-      },
-    };
+    return fail(
+      "needs_data",
+      "Обучение невозможно: нет принятых клипов. Запишите или загрузите wav/webm к пронумерованным фразам.",
+      "needs_data",
+    );
   }
-
   if (qa.linkedAccepted < MIN_TRAIN_CLIPS) {
-    const project = touchProject(projectId, {
-      status: "ready_to_train",
-      recommendation: `Для обучения нужно минимум ${MIN_TRAIN_CLIPS} принятых клипов, привязанных к фразам (сейчас linked=${qa.linkedAccepted}, accepted=${qa.acceptedCount}).`,
-    });
-    return {
-      project,
-      analysis: qa.analyses,
-      voice: null,
-      report: {
-        ok: false,
-        stage: "ready_to_train",
-        phraseCount: qa.phraseCount,
-        acceptedClips: qa.acceptedCount,
-        linkedAccepted: qa.linkedAccepted,
-        coveragePct,
-        detail: project.recommendation ?? "Мало привязанных клипов",
-      },
-    };
+    return fail(
+      "ready_to_train",
+      `Для обучения нужно минимум ${MIN_TRAIN_CLIPS} принятых клипов, привязанных к фразам (сейчас linked=${qa.linkedAccepted}, accepted=${qa.acceptedCount}).`,
+      "ready_to_train",
+    );
   }
 
-  // Local corpus-pack TTS: pack accepted clips into a custom voice for catalog
-  // synthesis (preview clips + Web Speech fallback until neural trainer ships).
+  emit(
+    "validate",
+    14,
+    `QA пар: ${qa.linkedAccepted} привязанных клипов, покрытие ${coveragePct}%` +
+      (warnCount ? ` · предупреждений ${warnCount}` : ""),
+  );
+  await sleep(trainStepBudgetMs(qa.linkedAccepted, 2));
+
   const project = getVoiceProject(projectId)!;
   const store = openStore();
   const voiceId =
     project.custom_voice_id ?? `mira-studio-${projectId.slice(0, 8)}`;
   const refreshed = listClips(projectId);
-  const preview =
-    refreshed.find((c) => c.accepted === 1)?.file_path ??
-    refreshed[0]?.file_path ??
-    null;
-  const stamp = new Date().toISOString();
+  const phraseById = new Map(
+    listPhrases(projectId).map((p) => [p.id, p] as const),
+  );
+  const linkedClips: LinkedTrainClip[] = [];
+  const seenPhrase = new Set<string>();
+  for (const clip of refreshed) {
+    if (clip.accepted !== 1 || !clip.phrase_id) continue;
+    if (seenPhrase.has(clip.phrase_id)) continue;
+    const phrase = phraseById.get(clip.phrase_id);
+    if (!phrase) continue;
+    seenPhrase.add(clip.phrase_id);
+    // Retrain may still see legacy compressed clips — convert before slice.
+    const filePath = ensureSlicableWav(clip.file_path);
+    if (filePath !== clip.file_path) {
+      openStore()
+        .prepare(`UPDATE voice_clips SET file_path = ? WHERE id = ?`)
+        .run(filePath, clip.id);
+    }
+    linkedClips.push({
+      clipId: clip.id,
+      phraseId: phrase.id,
+      phraseText: phrase.text,
+      filePath,
+    });
+  }
+
+  const pcmLinked = linkedClips.filter((c) => {
+    const ext = path.extname(c.filePath).toLowerCase();
+    return ext === ".wav";
+  }).length;
+
+  emit(
+    "features",
+    18,
+    `Mel spectrogram + RMS / тишина (${pcmLinked}/${linkedClips.length} PCM WAV)…`,
+  );
+  await sleep(
+    Math.max(80, trainStepBudgetMs(linkedClips.length, pcmLinked * 4) / 4),
+  );
+
+  const warnHeavy =
+    warnCount >= Math.max(2, Math.floor(qa.linkedAccepted * 0.6));
   const quality =
-    qa.acceptedCount >= TARGET_TRAIN_CLIPS && coveragePct >= 80
+    !warnHeavy &&
+    qa.acceptedCount >= TARGET_TRAIN_CLIPS &&
+    coveragePct >= 80
       ? "high"
       : qa.acceptedCount >= TARGET_TRAIN_CLIPS
         ? "medium"
         : "draft";
+
+  const allPhraseTexts = listPhrases(projectId).map((p) => ({
+    phraseId: p.id,
+    text: p.text,
+  }));
+  const corpusWordHint = allPhraseTexts.reduce(
+    (sum, p) => sum + tokenizeSpeechWords(p.text).length,
+    0,
+  );
+
+  emit(
+    "segment",
+    24,
+    `Выравнивание единиц (DTW/attention + zero-cross): ${linkedClips.length} клипов, ${allPhraseTexts.length} текстов, ~${corpusWordHint} слов…`,
+  );
+  await sleep(
+    Math.max(
+      100,
+      trainStepBudgetMs(linkedClips.length, Math.min(120, corpusWordHint)) / 3,
+    ),
+  );
+
+  const packDir = studioRoot(projectId, "model-pack");
+  const pack = buildVoiceModelPack({
+    packDir,
+    projectId,
+    voiceId,
+    name: project.name,
+    lang: project.lang,
+    quality,
+    linkedAccepted: qa.linkedAccepted,
+    phraseCount: qa.phraseCount,
+    coveragePct,
+    clips: linkedClips,
+    allPhrases: allPhraseTexts,
+    onProgress: (pct, label) => {
+      emit("segment", 24 + Math.round((pct / 100) * 28), label);
+    },
+  });
+
+  emit(
+    "lexicon",
+    54,
+    `Лексикон: ${pack.lexiconSize} слов · аудио ${pack.audioLexiconSize} · пока TTS ${pack.provisionalLexiconSize} · wav ${pack.wordUnitCount}`,
+  );
+  await sleep(
+    Math.max(
+      80,
+      trainStepBudgetMs(
+        linkedClips.length,
+        Math.max(pack.lexiconSize, corpusWordHint),
+      ) / 3,
+    ),
+  );
+
+  emit(
+    "epochs",
+    56,
+    `Нейро encoder→decoder→vocoder · Adam · ${DEFAULT_TRAIN_EPOCHS} эпох…`,
+  );
+
+  let melTrain: MelTrainResult | null = null;
+  melTrain = runMelRefinement(pack, packDir, linkedClips, {
+    epochs: DEFAULT_TRAIN_EPOCHS,
+    onProgress: (ev) => {
+      const pct =
+        56 + Math.round((ev.epoch / Math.max(1, ev.epochs)) * 24);
+      emit("epochs", Math.min(82, pct), ev.label, undefined, {
+        epoch: ev.epoch,
+        epochs: ev.epochs,
+        loss: ev.loss,
+        melL1: ev.melL1,
+      });
+    },
+  });
+
+  emit(
+    "pack",
+    84,
+    `Пакет + mel-метрики сохранены (${pack.units.length} units, loss ${melTrain.finalLoss.toFixed(4)}, эпох ${melTrain.epochs})`,
+    packDir,
+  );
+  await sleep(
+    trainStepBudgetMs(
+      Math.max(1, Math.floor(linkedClips.length / 2)),
+      Math.min(80, pack.lexiconSize),
+    ),
+  );
+
+  emit("publish", 92, "Публикация голоса в каталог…");
+  await sleep(120);
+
+  const preview =
+    pack.phrases[0]?.clipPath ??
+    refreshed.find((c) => c.accepted === 1)?.file_path ??
+    refreshed[0]?.file_path ??
+    null;
+  const stamp = pack.trainedAt;
   const meta = {
-    engine: "mira-local-corpus-v1",
+    engine: VOICE_PACK_ENGINE,
+    method: melTrain?.method ?? NEURAL_METHOD,
+    neuralTts: true,
+    legacyEngine: "mira-local-corpus-v1",
     trainedAt: stamp,
     quality,
     acceptedClips: qa.acceptedCount,
     linkedAccepted: qa.linkedAccepted,
     phraseCount: qa.phraseCount,
     coveragePct,
-    synthesis:
-      "Корпусный пакет: превью из принятых клипов; синтез новых фраз — Web Speech с профилем голоса до подключения neural trainer.",
-    curriculum: [
-      "1. Фразы (банк / свои)",
-      "2. Аудио 1…N к фразам",
-      "3. QA клипов",
-      "4. Сборка модели",
-      "5. Публикация в каталог",
+    qaWarnings: warnCount,
+    packDir,
+    wordUnitCount: pack.wordUnitCount,
+    fragmentUnitCount: pack.fragmentUnitCount,
+    unitCount: pack.units.length,
+    lexiconSize: pack.lexiconSize,
+    audioLexiconSize: pack.audioLexiconSize,
+    provisionalLexiconSize: pack.provisionalLexiconSize,
+    epochs: melTrain?.epochs ?? 0,
+    trainSteps: melTrain?.steps ?? 0,
+    initialLoss: melTrain?.initialLoss ?? null,
+    finalLoss: melTrain?.finalLoss ?? null,
+    melTargets: melTrain?.melTargets ?? 0,
+    griffinLimPreview: melTrain?.griffinLimPreview ?? null,
+    neuralPreview: melTrain?.neuralPreview ?? null,
+    hqPreview: melTrain?.hqPreview ?? null,
+    teacherForceFinal: melTrain?.teacherForceFinal ?? null,
+    vocoderSteps: melTrain?.vocoderSteps ?? 0,
+    cudaAvailable: melTrain?.cudaAvailable ?? false,
+    accelDetail: melTrain?.accelDetail ?? null,
+    weightsPath: melTrain?.weightsPath ?? null,
+    synthesis: `${VOICE_PACK_ENGINE}: neural text→encoder→mel decoder→vocoder (CPU Adam); unit-stitch fallback; слова без записи — системный TTS. CUDA kernels не бандлятся — GPU только если детектирован на хосте.`,
+    curriculum: NEURAL_TTS_CURRICULUM,
+    pipeline: [
+      "1. Пары текст↔аудио + QA (шум/тишина/клиппинг/mismatch)",
+      "2. Mel spectrogram (FFT→filterbank) + RMS признаки",
+      "3. Выравнивание (DTW grapheme↔mel + soft attention) + unit slices",
+      "4. Лексикон (аудио + provisional TTS)",
+      "5. Нейро эпохи: encoder/decoder Adam + TF schedule + stop BCE + vocoder",
+      "6. model-pack + neural-weights + публикация в каталог",
     ],
   };
   const existing = store
@@ -504,13 +1511,21 @@ export function trainVoiceModel(projectId: string): {
     style: "calm-assistant",
     voiceId,
     trainedQuality: quality,
+    engine: VOICE_PACK_ENGINE,
     promptHint: `Отвечай в характере голоса «${project.name}»: спокойно, коротко, по делу.`,
   });
 
-  const needMore = qa.acceptedCount < TARGET_TRAIN_CLIPS || coveragePct < 80;
+  const needMore =
+    qa.acceptedCount < TARGET_TRAIN_CLIPS || coveragePct < 80 || warnHeavy;
+  const lexiconSummary = `лексикон ${pack.lexiconSize} (аудио ${pack.audioLexiconSize}, пока TTS ${pack.provisionalLexiconSize})`;
+  const lossNote = melTrain
+    ? `, эпох ${melTrain.epochs}, loss ${melTrain.finalLoss.toFixed(4)}`
+    : "";
   const detail = needMore
-    ? `Модель «${project.name}» обучена (${quality}). Для лучшего качества: ещё ${Math.max(0, TARGET_TRAIN_CLIPS - qa.acceptedCount)} клипов и привязка к фразам (покрытие ${coveragePct}%).`
-    : `Модель «${project.name}» обучена (${quality}). Голос в каталоге; можно донабирать фразы и переобучать.`;
+    ? `Neural TTS «${project.name}» (${quality}, ${lexiconSummary}, wav ${pack.wordUnitCount}${lossNote}` +
+      (warnCount ? `, QA-warn ${warnCount}` : "") +
+      `). Запишите чистые длинные тексты и ещё ${Math.max(0, TARGET_TRAIN_CLIPS - qa.acceptedCount)} клипов (покрытие ${coveragePct}%). CPU нейро-пайплайн; CUDA опционально.`
+    : `Neural TTS «${project.name}» (${quality}, ${lexiconSummary}, wav ${pack.wordUnitCount}${lossNote}). Голос в каталоге; A/B донастройка и переобучение доступны.`;
 
   const updated = touchProject(projectId, {
     status: needMore ? "ready_partial" : "ready",
@@ -526,10 +1541,13 @@ export function trainVoiceModel(projectId: string): {
     )
     .get(voiceId) as CustomVoiceRow;
 
+  emit("done", 100, detail);
+
   return {
     project: updated,
     analysis: qa.analyses,
     voice,
+    pack,
     report: {
       ok: true,
       stage: updated.status,
@@ -538,9 +1556,32 @@ export function trainVoiceModel(projectId: string): {
       linkedAccepted: qa.linkedAccepted,
       coveragePct,
       detail,
+      steps,
+      packPath: packDir,
+      wordUnitCount: pack.wordUnitCount,
+      fragmentUnitCount: pack.fragmentUnitCount,
+      lexiconSize: pack.lexiconSize,
+      audioLexiconSize: pack.audioLexiconSize,
+      provisionalLexiconSize: pack.provisionalLexiconSize,
+      epochs: melTrain?.epochs,
+      trainSteps: melTrain?.steps,
+      initialLoss: melTrain?.initialLoss,
+      finalLoss: melTrain?.finalLoss,
+      melTargets: melTrain?.melTargets,
+      curriculum: NEURAL_TTS_CURRICULUM,
+      griffinLimPreview: melTrain?.griffinLimPreview ?? null,
+      neuralPreview: melTrain?.neuralPreview ?? null,
+      method: melTrain?.method ?? NEURAL_METHOD,
+      neuralTts: true,
+      teacherForceFinal: melTrain?.teacherForceFinal,
+      vocoderSteps: melTrain?.vocoderSteps,
+      cudaAvailable: melTrain?.cudaAvailable,
+      accelDetail: melTrain?.accelDetail,
+      weightsPath: melTrain?.weightsPath,
     },
   };
 }
+
 
 /** After clip import: QA only; training is an explicit step. */
 function prepareCorpusAfterImport(projectId: string): {
@@ -550,10 +1591,10 @@ function prepareCorpusAfterImport(projectId: string): {
 } {
   const qa = qaProjectClips(projectId);
   if (qa.acceptedCount === 0) {
+    const issues = qa.analyses[0]?.issues?.slice(0, 4).join(", ") ?? "qa_fail";
     const project = touchProject(projectId, {
       status: "needs_data",
-      recommendation:
-        "Клип не прошёл QA. Запишите длиннее/чище (wav/webm) и привяжите к номеру фразы.",
+      recommendation: `Клип не прошёл QA (${issues}). Нужна чистая речь без сильной тишины/клиппинга; привяжите wav/webm к номеру фразы.`,
     });
     return { project, analysis: qa.analyses, voice: null };
   }
@@ -561,13 +1602,19 @@ function prepareCorpusAfterImport(projectId: string): {
     qa.phraseCount > 0
       ? Math.round((qa.linkedAccepted / qa.phraseCount) * 100)
       : 0;
+  const warnCount = qa.analyses.reduce(
+    (n, a) => n + ((a.warnings as string[] | undefined)?.length ?? 0),
+    0,
+  );
   const ready =
     qa.phraseCount >= 1 && qa.linkedAccepted >= MIN_TRAIN_CLIPS;
   const project = touchProject(projectId, {
     status: ready ? "ready_to_train" : "collecting",
     recommendation: ready
-      ? `Корпус готов к обучению: ${qa.linkedAccepted} клипов привязано к фразам, покрытие ${coveragePct}%. Нажмите «Обучить модель».`
-      : `Нужно ≥${MIN_TRAIN_CLIPS} принятых клипов с привязкой к фразам (сейчас linked=${qa.linkedAccepted}). Нумерация 1…N.`,
+      ? `Корпус готов к neural TTS: ${qa.linkedAccepted} клипов ↔ фразы, покрытие ${coveragePct}%` +
+        (warnCount ? ` · предупреждений QA: ${warnCount}` : "") +
+        `. Нажмите «Собрать голос».`
+      : `Нужно ≥${MIN_TRAIN_CLIPS} принятых клипов с привязкой к фразам (сейчас linked=${qa.linkedAccepted}). Чистая речь + длинные тексты.`,
   });
   return { project, analysis: qa.analyses, voice: null };
 }
@@ -619,11 +1666,16 @@ export function importClip(opts: {
     : path.join(destDir, `${Date.now()}-${base}`);
   if (!alreadyInDest) fs.copyFileSync(abs, dest);
 
+  // Compressed imports (m4a/webm/mp3/ogg) → PCM WAV so frequency/energy
+  // alignment and word slicing can run; otherwise units stay unsliced fragments.
+  const slicable = ensureSlicableWav(dest);
+  const clipPath = slicable !== dest ? slicable : dest;
+
   const clip: VoiceClipRow = {
     id: crypto.randomUUID(),
     project_id: opts.projectId,
     phrase_id: phraseId,
-    file_path: dest,
+    file_path: clipPath,
     qa_json: null,
     accepted: 0,
     created_at: new Date().toISOString(),
@@ -699,6 +1751,98 @@ export function getCustomVoice(id: string): CustomVoiceRow | null {
       )
       .get(id) as CustomVoiceRow | undefined) ?? null
   );
+}
+
+export type CustomVoiceCorpusUnit = {
+  phraseId: string;
+  text: string;
+  filePath: string;
+  /** Pre-aligned slice from model pack (optional). */
+  startFrac?: number;
+  endFrac?: number;
+};
+
+export type CustomVoiceCorpus = {
+  voice: CustomVoiceRow;
+  units: CustomVoiceCorpusUnit[];
+};
+
+/** Phrase + word/fragment units for compositional corpus TTS. */
+export function getCustomVoiceCorpus(voiceId: string): CustomVoiceCorpus {
+  const voice = getCustomVoice(voiceId);
+  if (!voice) throw new Error("Голос не найден");
+
+  const packDir = studioRoot(voice.project_id, "model-pack");
+  const pack = readVoiceModelPack(packDir);
+  if (pack && pack.units.length) {
+    const phraseDur = new Map<string, number>();
+    for (const u of pack.units) {
+      if (u.kind === "phrase") phraseDur.set(u.sourcePhraseId, u.endMs || 1);
+    }
+    const units: CustomVoiceCorpusUnit[] = [];
+    for (const u of pack.units) {
+      // Provisional text-only entries stay out of stitching — system TTS covers them.
+      if (u.provisional || !u.file) continue;
+      if (u.kind === "phrase") {
+        units.push({
+          phraseId: u.sourcePhraseId,
+          text: u.text,
+          filePath: u.file,
+        });
+        continue;
+      }
+      // Word / fragment: sliced WAV → full file; else frac into phrase clip.
+      const sliced = u.kind === "word" && u.file.endsWith(".wav");
+      if (sliced) {
+        units.push({
+          phraseId: u.sourcePhraseId,
+          text: u.text,
+          filePath: u.file,
+          startFrac: 0,
+          endFrac: 1,
+        });
+      } else {
+        const total = Math.max(1, phraseDur.get(u.sourcePhraseId) ?? u.endMs);
+        units.push({
+          phraseId: u.sourcePhraseId,
+          text: u.text,
+          filePath: u.file,
+          startFrac: Math.max(0, u.startMs / total),
+          endFrac: Math.min(1, Math.max(u.startMs + 1, u.endMs) / total),
+        });
+      }
+    }
+    return { voice, units };
+  }
+
+  const rows = openStore()
+    .prepare(
+      `SELECT c.phrase_id AS phraseId, p.text AS text, c.file_path AS filePath, c.created_at AS createdAt
+       FROM voice_clips c
+       JOIN voice_phrases p ON p.id = c.phrase_id
+       WHERE c.project_id = ?
+         AND c.accepted = 1
+         AND c.phrase_id IS NOT NULL
+       ORDER BY c.created_at DESC`,
+    )
+    .all(voice.project_id) as Array<{
+    phraseId: string;
+    text: string;
+    filePath: string;
+    createdAt: string;
+  }>;
+  const seen = new Set<string>();
+  const units: CustomVoiceCorpusUnit[] = [];
+  for (const row of rows) {
+    if (seen.has(row.phraseId)) continue;
+    seen.add(row.phraseId);
+    units.push({
+      phraseId: row.phraseId,
+      text: row.text,
+      filePath: row.filePath,
+    });
+  }
+  return { voice, units };
 }
 
 export function updateVoiceProject(
@@ -823,6 +1967,158 @@ export function addCustomPhrase(
   return row;
 }
 
+/** Delete an untrained phrase (no accepted linked clip) and its orphan clips. */
+export function deleteVoicePhrase(phraseId: string): {
+  ok: boolean;
+  detail: string;
+  deletedId: string | null;
+} {
+  const store = openStore();
+  const phrase = store
+    .prepare(
+      `SELECT id, project_id, text, recorded
+       FROM voice_phrases WHERE id = ?`,
+    )
+    .get(phraseId) as
+    | { id: string; project_id: string; text: string; recorded: number }
+    | undefined;
+  if (!phrase) {
+    return { ok: false, detail: "Фраза не найдена", deletedId: null };
+  }
+  const accepted = store
+    .prepare(
+      `SELECT COUNT(*) AS c FROM voice_clips
+       WHERE phrase_id = ? AND accepted = 1`,
+    )
+    .get(phraseId) as { c: number };
+  if (accepted.c > 0 || phrase.recorded) {
+    return {
+      ok: false,
+      detail: "Обученную / записанную фразу удалить нельзя — только необученные",
+      deletedId: null,
+    };
+  }
+  const clips = store
+    .prepare(
+      `SELECT id, file_path FROM voice_clips WHERE phrase_id = ?`,
+    )
+    .all(phraseId) as Array<{ id: string; file_path: string }>;
+  for (const clip of clips) {
+    try {
+      if (clip.file_path && fs.existsSync(clip.file_path)) {
+        fs.unlinkSync(clip.file_path);
+      }
+    } catch {
+      // best-effort file cleanup
+    }
+  }
+  store.prepare(`DELETE FROM voice_clips WHERE phrase_id = ?`).run(phraseId);
+  store.prepare(`DELETE FROM voice_phrases WHERE id = ?`).run(phraseId);
+  touchProject(phrase.project_id, {
+    recommendation: `Удалена необученная фраза: ${phrase.text.slice(0, 64)}${phrase.text.length > 64 ? "…" : ""}`,
+  });
+  return { ok: true, detail: "Фраза удалена", deletedId: phraseId };
+}
+
+const MIN_LINKED_FOR_READY = 3;
+
+/**
+ * «Перезагрузить» for a learned phrase: delete its audio clips, keep the
+ * phrase text in the permanent corpus (`voice_phrases`) so it returns to the
+ * pending / «Необученные» upload queue, and prune orphaned model-pack units.
+ */
+export function resetVoicePhraseAudio(phraseId: string): {
+  ok: boolean;
+  detail: string;
+  phraseId: string | null;
+  projectId: string | null;
+  deletedClips: number;
+  needsRebuild: boolean;
+} {
+  const store = openStore();
+  const phrase = store
+    .prepare(
+      `SELECT id, project_id, text, recorded
+       FROM voice_phrases WHERE id = ?`,
+    )
+    .get(phraseId) as
+    | { id: string; project_id: string; text: string; recorded: number }
+    | undefined;
+  if (!phrase) {
+    return {
+      ok: false,
+      detail: "Фраза не найдена",
+      phraseId: null,
+      projectId: null,
+      deletedClips: 0,
+      needsRebuild: false,
+    };
+  }
+
+  const clips = store
+    .prepare(
+      `SELECT id, file_path FROM voice_clips WHERE phrase_id = ?`,
+    )
+    .all(phraseId) as Array<{ id: string; file_path: string }>;
+
+  for (const clip of clips) {
+    try {
+      if (clip.file_path && fs.existsSync(clip.file_path)) {
+        fs.unlinkSync(clip.file_path);
+      }
+    } catch {
+      // best-effort file cleanup
+    }
+  }
+  store.prepare(`DELETE FROM voice_clips WHERE phrase_id = ?`).run(phraseId);
+  store
+    .prepare(`UPDATE voice_phrases SET recorded = 0 WHERE id = ?`)
+    .run(phraseId);
+
+  const packDir = studioRoot(phrase.project_id, "model-pack");
+  const pruned = prunePhraseFromVoicePack(packDir, phraseId);
+  const project = getVoiceProject(phrase.project_id);
+  const hadModel = Boolean(project?.custom_voice_id) || pruned.removedUnits > 0;
+
+  const linkedLeft = store
+    .prepare(
+      `SELECT COUNT(*) AS c FROM voice_clips
+       WHERE project_id = ? AND accepted = 1 AND phrase_id IS NOT NULL`,
+    )
+    .get(phrase.project_id) as { c: number };
+
+  const preview =
+    phrase.text.length > 48
+      ? `${phrase.text.slice(0, 47)}…`
+      : phrase.text;
+  const needsRebuild = hadModel;
+  const status =
+    linkedLeft.c >= MIN_LINKED_FOR_READY
+      ? hadModel
+        ? "ready_partial"
+        : "ready_to_train"
+      : linkedLeft.c > 0
+        ? "collecting"
+        : "phrases";
+  const detail = needsRebuild
+    ? `Аудио сброшено · «${preview}» снова в текстах для загрузки. Запишите новое аудио, затем «Полная пересборка».`
+    : `Аудио сброшено · «${preview}» снова в текстах для загрузки.`;
+
+  touchProject(phrase.project_id, {
+    status,
+    recommendation: detail,
+  });
+
+  return {
+    ok: true,
+    detail,
+    phraseId: phrase.id,
+    projectId: phrase.project_id,
+    deletedClips: clips.length,
+    needsRebuild,
+  };
+}
+
 export function getStudioSnapshot(projectId?: string) {
   const projects = listVoiceProjects();
   const project = projectId
@@ -834,5 +2130,95 @@ export function getStudioSnapshot(projectId?: string) {
     phrases: project ? listPhrases(project.id) : [],
     clips: project ? listClips(project.id) : [],
     customVoices: listCustomVoices(),
+  };
+}
+
+/** A/B preference candidates for RLHF UI (neural vs griffin/HQ). */
+export function getVoicePreferenceCandidates(voiceId: string): {
+  voiceId: string;
+  packDir: string | null;
+  aPath: string | null;
+  bPath: string | null;
+  labelA: string;
+  labelB: string;
+  preferences: ReturnType<typeof loadPreferences>;
+  sampleText: string;
+} {
+  const voice = getCustomVoice(voiceId);
+  if (!voice) throw new Error("Голос не найден");
+  const packDir = studioRoot(voice.project_id, "model-pack");
+  const c = listPreferenceCandidates(packDir);
+  const phrases = listPhrases(voice.project_id);
+  const sampleText =
+    phrases.find((p) => p.recorded)?.text ??
+    phrases[0]?.text ??
+    voice.name;
+  return {
+    voiceId,
+    packDir: fs.existsSync(packDir) ? packDir : null,
+    ...c,
+    preferences: loadPreferences(packDir),
+    sampleText,
+  };
+}
+
+/** Apply user A/B preference (RLHF) to neural weights + unit priors. */
+export function submitVoicePreference(opts: {
+  voiceId: string;
+  preferred: "a" | "b";
+  text?: string;
+}): ReturnType<typeof applyVoicePreference> {
+  const voice = getCustomVoice(opts.voiceId);
+  if (!voice) throw new Error("Голос не найден");
+  const packDir = studioRoot(voice.project_id, "model-pack");
+  const pack = readVoiceModelPack(packDir);
+  if (!pack) throw new Error("model-pack не найден — сначала соберите голос");
+  const c = listPreferenceCandidates(packDir);
+  if (!c.aPath || !c.bPath) {
+    throw new Error(
+      "Нет пары A/B для сравнения (нужны neural и griffin/HQ preview после обучения)",
+    );
+  }
+  return applyVoicePreference({
+    packDir,
+    pack,
+    text: (opts.text ?? "").trim() || voice.name,
+    aPath: c.aPath,
+    bPath: c.bPath,
+    preferred: opts.preferred,
+  });
+}
+
+/** Neural inference: text → encoder → decoder → vocoder WAV. */
+export function synthesizeCustomVoiceNeural(
+  voiceId: string,
+  text: string,
+): {
+  ok: boolean;
+  wavPath: string | null;
+  detail: string;
+  frameCount?: number;
+  durationMs?: number;
+  method?: string;
+} {
+  const voice = getCustomVoice(voiceId);
+  if (!voice) throw new Error("Голос не найден");
+  const packDir = studioRoot(voice.project_id, "model-pack");
+  const result = synthesizeNeuralSpeech(packDir, text);
+  if (!result) {
+    return {
+      ok: false,
+      wavPath: null,
+      detail:
+        "Нейро-веса не найдены или текст пуст. Соберите голос (neural-weights.json).",
+    };
+  }
+  return {
+    ok: true,
+    wavPath: result.wavPath,
+    frameCount: result.frameCount,
+    durationMs: result.durationMs,
+    method: result.method,
+    detail: `Нейро-синтез ${result.frameCount} кадров · ${Math.round(result.durationMs)} мс`,
   };
 }

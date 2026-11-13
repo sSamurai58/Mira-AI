@@ -7,6 +7,9 @@ export type MiraPublicConfig = {
   hasAnthropicKey?: boolean;
   hasGeminiKey?: boolean;
   hasXaiKey?: boolean;
+  hasElevenLabsKey?: boolean;
+  elevenLabsVoiceId?: string;
+  elevenLabsModelId?: string;
   openaiBaseUrl: string;
   xaiBaseUrl?: string;
   databasePath: string;
@@ -54,11 +57,20 @@ export type MiraCatalogItem = {
   relativePath: string;
 };
 
+export type MiraConfirmSkillPropose = {
+  defaultId: string;
+  defaultName: string;
+  summary: string;
+  existingIds: string[];
+  sourceTitle: string;
+};
+
 export type MiraConfirmRequest = {
   id: string;
   title: string;
   body: string;
   confirmLabel?: string;
+  skillPropose?: MiraConfirmSkillPropose;
 };
 
 export type MiraChatEvent =
@@ -112,6 +124,17 @@ const call = (channel: string, ...args: unknown[]) =>
 
 contextBridge.exposeInMainWorld("mira", {
   getHealth: () => call("mira:get-health"),
+  getSystemLoad: (): Promise<{
+    cpu: number;
+    ram: number;
+    ramUsedGb: number;
+    ramTotalGb: number;
+    gpu: number | null;
+    vramUsedGb: number | null;
+    vramTotalGb: number | null;
+    gpuSource: "nvidia-smi" | "windows-counter" | "drm" | "none";
+    ts: number;
+  }> => call("mira:get-system-load"),
   getConfig: (): Promise<MiraPublicConfig> => call("mira:get-config"),
   getSettingsEnv: (): Promise<{
     values: Record<string, string>;
@@ -182,6 +205,8 @@ contextBridge.exposeInMainWorld("mira", {
     enabled: boolean;
     body: string;
   }) => call("mira:save-skill", item),
+  deleteSkill: (id: string) => call("mira:delete-skill", id),
+  deleteProtocol: (id: string) => call("mira:delete-protocol", id),
   getWebPolicy: () => call("mira:get-web-policy"),
   getScreenPolicy: () => call("mira:get-screen-policy"),
   getBrowserPolicy: () => call("mira:get-browser-policy"),
@@ -256,8 +281,10 @@ contextBridge.exposeInMainWorld("mira", {
     bytes: number[] | Uint8Array;
     fileName: string;
     title?: string;
+    extractedText?: string;
   }) => call("mira:import-library-bytes", payload),
   processLibraryItem: (id: string) => call("mira:process-library-item", id),
+  deleteLibraryItem: (id: string) => call("mira:delete-library-item", id),
   proposeLibrarySkill: (id: string) => call("mira:propose-library-skill", id),
   listLearnedUnits: (libraryItemId?: string) =>
     call("mira:list-learned-units", libraryItemId),
@@ -268,6 +295,8 @@ contextBridge.exposeInMainWorld("mira", {
     call("mira:voice-studio-snapshot", projectId),
   listVoiceProjects: () => call("mira:list-voice-projects"),
   listCustomVoices: () => call("mira:list-custom-voices"),
+  getCustomVoiceCorpus: (voiceId: string) =>
+    call("mira:get-custom-voice-corpus", voiceId),
   createVoiceProject: (payload?: { name?: string; lang?: string }) =>
     call("mira:create-voice-project", payload),
   updateVoiceProject: (payload: { id: string; name?: string; lang?: string }) =>
@@ -278,10 +307,66 @@ contextBridge.exposeInMainWorld("mira", {
   deleteCustomVoice: (id: string) => call("mira:delete-custom-voice", id),
   addVoicePhrase: (projectId: string, text: string) =>
     call("mira:add-voice-phrase", projectId, text),
+  deleteVoicePhrase: (phraseId: string) =>
+    call("mira:delete-voice-phrase", phraseId),
+  resetVoicePhraseAudio: (phraseId: string) =>
+    call("mira:reset-voice-phrase-audio", phraseId),
   trainVoiceModel: (projectId: string) =>
     call("mira:train-voice-model", projectId),
-  generateVoicePhrases: (projectId: string, count?: number) =>
-    call("mira:generate-voice-phrases", projectId, count),
+  getVoicePreferenceCandidates: (voiceId: string) =>
+    call("mira:get-voice-preference-candidates", voiceId),
+  submitVoicePreference: (payload: {
+    voiceId: string;
+    preferred: "a" | "b";
+    text?: string;
+  }) => call("mira:submit-voice-preference", payload),
+  synthesizeCustomVoiceNeural: (voiceId: string, text: string) =>
+    call("mira:synthesize-custom-voice-neural", voiceId, text),
+  getElevenLabsStatus: (probe?: boolean) =>
+    call("mira:elevenlabs-status", probe ?? false),
+  synthesizeElevenLabs: (payload: {
+    text: string;
+    voiceId?: string;
+    modelId?: string;
+  }) => call("mira:elevenlabs-synthesize", payload),
+  listElevenLabsModels: () => call("mira:elevenlabs-models"),
+  onVoiceTrainProgress: (
+    handler: (payload: {
+      projectId: string;
+      step: string;
+      pct: number;
+      label: string;
+      detail?: string;
+      epoch?: number;
+      epochs?: number;
+      loss?: number;
+      melL1?: number;
+    }) => void,
+  ) => {
+    const listener = (
+      _event: IpcRendererEvent,
+      payload: {
+        projectId: string;
+        step: string;
+        pct: number;
+        label: string;
+        detail?: string;
+        epoch?: number;
+        epochs?: number;
+        loss?: number;
+        melL1?: number;
+      },
+    ) => handler(payload);
+    ipcRenderer.on("mira:voice-train-progress", listener);
+    return () =>
+      ipcRenderer.removeListener("mira:voice-train-progress", listener);
+  },
+  generateVoicePhrases: (
+    projectId: string,
+    countOrOpts?:
+      | number
+      | { count?: number; minWords?: number; maxWords?: number },
+  ) => call("mira:generate-voice-phrases", projectId, countOrOpts),
   importVoiceClip: (payload: {
     projectId: string;
     sourcePath: string;
@@ -368,6 +453,36 @@ contextBridge.exposeInMainWorld("mira", {
   deleteProfile: (id: string) => call("mira:delete-profile", id),
   getHudPolicy: () => call("mira:get-hud-policy"),
   toggleHud: () => call("mira:toggle-hud"),
+  windowMinimize: () => call("mira:window-minimize"),
+  windowMaximizeToggle: (): Promise<{ ok: boolean; maximized?: boolean }> =>
+    call("mira:window-maximize-toggle"),
+  windowClose: () => call("mira:window-close"),
+  windowGetState: (): Promise<{
+    maximized: boolean;
+    fullscreen: boolean;
+    focused: boolean;
+  }> => call("mira:window-get-state"),
+  windowSetChrome: (payload: {
+    backgroundColor?: string;
+  }): Promise<{ ok: boolean }> => call("mira:window-set-chrome", payload),
+  onWindowState: (
+    handler: (state: {
+      maximized: boolean;
+      fullscreen: boolean;
+      focused: boolean;
+    }) => void,
+  ) => {
+    const listener = (
+      _event: IpcRendererEvent,
+      state: {
+        maximized: boolean;
+        fullscreen: boolean;
+        focused: boolean;
+      },
+    ) => handler(state);
+    ipcRenderer.on("mira:window-state", listener);
+    return () => ipcRenderer.removeListener("mira:window-state", listener);
+  },
   respondConfirm: (
     id: string,
     accepted: boolean,
@@ -384,6 +499,12 @@ contextBridge.exposeInMainWorld("mira", {
       handler(req);
     ipcRenderer.on("mira:confirm-request", listener);
     return () => ipcRenderer.removeListener("mira:confirm-request", listener);
+  },
+  onConfirmDismiss: (handler: (payload: { id: string }) => void) => {
+    const listener = (_event: IpcRendererEvent, payload: { id: string }) =>
+      handler(payload);
+    ipcRenderer.on("mira:confirm-dismiss", listener);
+    return () => ipcRenderer.removeListener("mira:confirm-dismiss", listener);
   },
   onChatEvent: (
     handler: (payload: { requestId: string; event: MiraChatEvent }) => void,
