@@ -42,8 +42,9 @@ export async function createOrFocusHud(opts?: {
 
   const { BrowserWindow, screen } = await import("electron");
   const display = screen.getPrimaryDisplay();
-  const width = 360;
-  const height = 120;
+  // Compact themed card — tall enough to avoid native scroll chrome.
+  const width = 320;
+  const height = 118;
   const x = display.workArea.x + display.workArea.width - width - 24;
   const y = display.workArea.y + 24;
 
@@ -55,8 +56,12 @@ export async function createOrFocusHud(opts?: {
     frame: false,
     transparent: true,
     resizable: false,
+    maximizable: false,
+    minimizable: false,
+    fullscreenable: false,
     skipTaskbar: true,
     alwaysOnTop: policy.alwaysOnTop,
+    hasShadow: false,
     backgroundColor: "#00000000",
     title: "Mira HUD",
     webPreferences: {
@@ -66,6 +71,14 @@ export async function createOrFocusHud(opts?: {
       sandbox: false,
     },
   });
+
+  // Keep the floating chip above normal windows without stealing focus loops.
+  try {
+    win.setAlwaysOnTop(policy.alwaysOnTop, "floating");
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  } catch {
+    /* platforms differ */
+  }
 
   hudWindow = win;
 

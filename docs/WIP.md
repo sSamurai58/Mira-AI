@@ -32,8 +32,8 @@ Future **F1–F13** — только после стабилизации must (�
 | Поле | Значение |
 |------|----------|
 | Текущая фаза | **Realize-all ✅** |
-| Следующее действие | Publish mira (private) — ждать подтверждения пользователя |
-| Запрещено сейчас | Republish без явного OK |
+| Следующее действие | Дальше по запросу |
+| Запрещено сейчас | Republish / retag 0.1.13 без явного OK |
 
 
 ### Стартовые допущения стека (подтвердить в P0 → MEMORY)
@@ -308,6 +308,132 @@ UX: **Создать → фразы → загрузить → Mira сама о�
 | F13 | Логи + Doctor (mic / API / Blender…) | ✅ Doctor F13 + app_logs/jsonl viewer; f13:smoke |
 
 Открытые вопросы F* — см. предыдущие итерации; поднимать при входе в конкретный F#.
+
+---
+
+## 2026-11-12 — MCP каталог + релиз 0.1.4 ✅
+
+План правды: `docs/MCP.md`. UI: Настройки → MCP, этапы 1/2/3/5/6/7/8/9/10 как плитки  
+(6 Dev, 7 Design/креатив с Blender + `builtinHint`). Карточки: длинное описание,
+ссылки docs/setup/OAuth/API, hints полей, ≥3 voice examples; draft-only 0.1.4.
+
+- [x] Документ плана всех категорий
+- [x] Раздел MCP + плитки + подробные модалки (brand icons, stages 6+7, links/hints)
+- [x] Публикация GitHub Release **0.1.4** — https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.4 (tag `v0.1.4` @ `3493529`)
+- [ ] MCP runtime / OAuth (не в 0.1.4; следующий релиз после явной команды)
+
+## 2026-11-12 — Релиз 0.1.5 ✅
+
+Ветка `cursor/release-0-1-5-6838` @ `f1b8424`. Пакет **0.1.5**.
+
+- [x] Bump `package.json` / `package-lock.json` → 0.1.5 (`__MIRA_VERSION__` / UI)
+- [x] In-app confirm modals (`AppConfirm` / `ConfirmModal`) вместо native `window.confirm`
+- [x] Frameless themed `TitleBar` (window chrome follows theme tokens)
+- [x] Integrations blank-UI fix (hide/show screen control, opaque shell, portal confirms, Settings hash)
+- [x] ThemeSelect phrase-bind dropdown close fix (Voice Studio)
+- [x] Публикация GitHub Release **0.1.5** — https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.5 (tag `v0.1.5` @ `f1b8424`)
+- [ ] MCP runtime / OAuth (по-прежнему later; после явной команды)
+
+## 2026-11-12 — Релиз 0.1.6 ✅
+
+Ветка `cursor/release-0-1-6-6838` @ `8baa1da`. Пакет **0.1.6**. Latest GitHub Release.
+
+- [x] Bump `package.json` / `package-lock.json` → 0.1.6 (`__MIRA_VERSION__` / UI)
+- [x] Voice Studio «Обученные фразы» modal + CatalogEditModal → `createPortal(document.body)` (nav rail z-index)
+- [x] Plain-language Voice Studio TTS curriculum / train report table
+- [x] Voice Studio phrase generate: corpus word-frequency novelty — avoid recycling saturated words; cover missing prepositions/particles; diversify intonation seeds (`phraseNovelty.ts`)
+- [x] Публикация GitHub Release **0.1.6** — https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.6 (tag `v0.1.6` @ `8baa1da`)
+- [ ] MCP runtime / OAuth (по-прежнему later; после явной команды)
+
+## 2026-11-13 — Релиз 0.1.13 ✅ (auto toast + Paths + ThemeSelect + 16 actions)
+
+Ветка `cursor/release-0-1-13-6838` @ `dfdcfd9`. Пакет **0.1.13**. Latest GitHub Release.
+
+- [x] Bump 0.1.13
+- [x] Auto-check after `did-finish-load` (fix boot-timer race)
+- [x] Push/re-check on window focus (throttled); session dismiss respected
+- [x] Paths cards: brand-colored app icons + clearer hierarchy / tags / actions
+- [x] Translator language dropdowns → ThemeSelect
+- [x] Custom Commands: 16 action types (type/click/clipboard/paths/notify/window/terminal)
+- [x] Публикация GitHub Release **0.1.13** — https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.13 (tag `v0.1.13` @ `dfdcfd9`)
+
+## 2026-11-13 — Релиз 0.1.12 ✅ (TTS fix + Paths/Commands/Translator)
+
+Ветка `cursor/release-0-1-12-6838` @ `c9e72d0`. Пакет **0.1.12**.
+
+- [x] Bump 0.1.12
+- [x] ElevenLabs: sniff MP3 vs JSON/PCM; default non-stream convert; `/stream` → convert fallback
+- [x] Dialog playback: decode + speech-likeness gate; Web Speech fallback (no screech-only)
+- [x] Neural vocoder noise → unit-stitch / Web Speech fallback
+- [x] Home HUD: mic level only while listening (no speakers→mic feedback while TTS)
+- [x] `elevenlabs:smoke` sniff asserts
+- [x] Settings Updates: «История обновлений» 0.1.4–0.1.12
+- [x] Workshop Paths: voice-tagged app/folder/file launchers
+- [x] Workshop Custom Commands: voice triggers + action chains
+- [x] Translator: Быстрый HTTP + Через ИИ
+- [x] Публикация GitHub Release **0.1.12** — https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.12 (tag `v0.1.12` @ `c9e72d0`)
+
+## 2026-11-13 — Релиз 0.1.11 ✅ (pack + update HUD)
+
+Ветка `cursor/release-0-1-11-6838` @ `c124393`. Пакет **0.1.11**.
+
+- [x] Bump 0.1.11
+- [x] MCP runtime scaffolding + honest draft/connected + Tier A probes
+- [x] ElevenLabs `/stream`, voice settings, voice list, IVC, Flash for short
+- [x] Wake pluggable + Porcupine stub; barge-in hint; Home TTS status; mic bars
+- [x] Auto-check updates + floating Mira HUD toast
+- [x] EPUB ZIP/OPF; AV ASR best-effort; FTS memory; WebGL LOD; SendInput
+- [x] Neural train worker; reimport+rebuild; post-train clip hint; docs sync
+- [x] Публикация GitHub Release **0.1.11** — https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.11 (tag `v0.1.11` @ `c124393`)
+
+## 2026-11-13 — Релиз 0.1.10 WIP (живое ядро + Home HUD)
+
+Ветка `cursor/release-0-1-10-6838` от `v0.1.9`. Пакет **0.1.10**. **Не публиковать** без OK.
+
+- [x] Bump 0.1.10
+- [x] WebGL core: faster orbit/layer spin, idle luminance pulse, context-lost recovery, visibility resume
+- [x] Home HUD: level aura + progress sheen, voice bars idle pulse (voice on), reply latency tick, live tiles
+- [x] `prefers-reduced-motion`: slow drift instead of full freeze for core/HUD
+- [ ] Publish GitHub Release — только после явного OK
+
+## 2026-11-13 — Релиз 0.1.9 WIP (голографическое ядро)
+
+Ветка `cursor/release-0-1-9-6838` от `v0.1.8`. Пакет **0.1.9**. **Не публиковать** без OK.
+
+- [x] Bump 0.1.9
+- [x] Port user WebGL2 holographic core → `src/ui/core/coreWebgl.ts` (+ shaders/geometry modules)
+- [x] Mira level → visibility 0…4 (`miraLevelToHoloScale`: L1≈0.3, L5→2, L15→3.5, L50+→4)
+- [x] Flash on level-up; reduced-motion slows spin/orbit
+- [x] Reference HTML → `docs/mira-holo-core-ref.html`
+- [ ] Publish GitHub Release — только после явного OK
+
+## 2026-11-12 — Релиз 0.1.8 WIP (ElevenLabs TTS)
+
+Ветка `cursor/release-0-1-8-6838` от tip 0.1.7. Пакет **0.1.8**. **Не публиковать** без OK.
+
+- [x] Bump 0.1.8
+- [x] Electron main: `POST /v1/text-to-speech/{voice_id}` + status (`electron/tts/elevenlabs.ts`)
+- [x] Settings: ключ save/delete, Voice ID пресет `YjESejviApN7SHrbfnA2`, модель, тест, статус
+- [x] Движок TTS `elevenlabs` (замена `edge-stub`); speak path в chat/voice
+- [x] `.env.example` + Doctor finding; smoke `elevenlabs:smoke`
+- [ ] Пользователь: **ELEVENLABS_API_KEY** из кабинета + план/кредиты + сеть
+- [ ] Publish GitHub Release — только после явного OK
+
+## 2026-11-12 — Релиз 0.1.7 ✅
+
+Ветка `cursor/release-0-1-7-6838` @ `d75191a`. Пакет **0.1.7**. Latest GitHub Release.
+
+Контекст: Voice Studio **нарезка** всё ещё резала слова рано/криво, **нет нормального сращивания** после 0.1.4 (`02ad96d`). Не про chat text templates.
+
+- [x] Boundaries: speech-island map when gaps match words; else text-weighted prior + hysteresis valley/flux snap; onset/offset pad; min word duration; reject tiny crumbs
+- [x] Stitch: zero-cross OLA, adaptive 22–55 ms crossfade, RMS level-match (`tts.ts` + `stitchPcmInt16OverlapAdd`)
+- [x] UI note: после обновления — re-import + полная пересборка
+- [x] p9 smoke: uneven words, tiny-slice reject, stitch RMS
+- [x] Neural TTS curriculum: encoder/attention/decoder/stop/TF/Adam/vocoder/RLHF/CPU path — все «есть»; CUDA kernels честно optional
+- [x] Inference: synthesizeCustomVoiceNeural + A/B RLHF IPC; docs/mira-tts-report-0.1.7.md
+- [x] Chat diversity: anti-repeat для шаблонных Habarovsk/plan меню
+- [x] Core level XP growth (фикс «застрял на 5»)
+- [x] Публикация GitHub Release **0.1.7** — https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.7 (tag `v0.1.7` @ `d75191a`)
 
 ## Шаблон новой темы
 

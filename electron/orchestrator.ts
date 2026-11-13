@@ -89,15 +89,54 @@ import { handleIotFromChat, looksLikeIotIntent } from "./future/iot";
 import { handleMailFromChat, looksLikeMailIntent } from "./future/mail";
 import { handleMediaFromChat, looksLikeMediaIntent } from "./future/media";
 import { handleNotesFromChat, looksLikeNotesIntent } from "./future/notes";
+import {
+  handleAppPathsFromChat,
+  looksLikeAppPathIntent,
+} from "./future/appPaths";
+import {
+  handleCustomCommandsFromChat,
+  looksLikeCustomCommandIntent,
+} from "./future/customCommands";
+import {
+  buildReplyDiversityBlock,
+  CHAT_DIVERSITY_SYSTEM_RULES,
+} from "./chatDiversity";
 
-const SYSTEM_PROMPT = [
+const BASE_SYSTEM_PROMPT = [
   "Ты Mira — локальный голосовой ИИ-помощник.",
   "Отвечай на языке пользователя, выразительно и по делу.",
   "Формат ответа: Markdown — **жирный**, *курсив*, __подчёркнутый__ где уместно; списки через «- »; обязательно несколько коротких абзацев (не одна длинная строка).",
   "Если в контексте есть интернет/погода/память/инструменты — опирайся только на них и дождись их данных: не пиши заранее, что данных нет, пока блок инструментов пуст или помечен как ошибка.",
   "Если блок погоды или поиска уже содержит цифры — используй их как актуальные и не предлагай «проверьте сайт» без нужды.",
   "Skills подключаются только по необходимости.",
+  CHAT_DIVERSITY_SYSTEM_RULES,
 ].join(" ");
+
+async function buildSystemPrompt(): Promise<string> {
+  const parts = [BASE_SYSTEM_PROMPT];
+  try {
+    const { getActiveProfile } = await import("./profiles");
+    const profile = getActiveProfile();
+    if (profile?.notes?.trim() || profile?.voiceId) {
+      parts.push(
+        [
+          "[Профиль голоса / стиля]",
+          profile.name ? `Имя профиля: ${profile.name}.` : "",
+          profile.voiceId ? `Привязанный voiceId: ${profile.voiceId}.` : "",
+          profile.notes?.trim()
+            ? `Стиль речи / характер: ${profile.notes.trim()}`
+            : "",
+          "Учитывай профиль в тоне и формулировках ответа.",
+        ]
+          .filter(Boolean)
+          .join(" "),
+      );
+    }
+  } catch {
+    /* profiles optional */
+  }
+  return parts.join("\n");
+}
 
 export type ChatStreamEvent =
   | { type: "user"; utterance: UtteranceRow }
@@ -271,9 +310,9 @@ function buildUserContentWithAttachments(
   return { storedText, promptText, images };
 }
 
-function maybeImportAttachmentsToLibrary(
+async function maybeImportAttachmentsToLibrary(
   attachments: ChatAttachmentInput[],
-): string[] {
+): Promise<string[]> {
   const imported: string[] = [];
   for (const a of attachments) {
     try {
@@ -288,10 +327,11 @@ function maybeImportAttachmentsToLibrary(
       }
       if (a.dataBase64) {
         const bytes = Buffer.from(a.dataBase64, "base64");
-        const item = importLibraryBytes({
+        const item = await importLibraryBytes({
           bytes,
           fileName: a.name,
           title: a.name.replace(/\.[^.]+$/, "") || a.name,
+          extractedText: a.text,
         });
         imported.push(item.title);
       }
@@ -332,7 +372,7 @@ export async function sendChatMessage(
 
   let libraryNote: string | null = null;
   if (input.addToLibrary && attachments.length) {
-    const titles = maybeImportAttachmentsToLibrary(attachments);
+    const titles = await maybeImportAttachmentsToLibrary(attachments);
     if (titles.length) {
       libraryNote = `Добавлено в материалы обучения: ${titles.join(", ")}. Workshop → Обучение → «Разобрать».`;
     }
@@ -430,6 +470,62 @@ export async function sendChatMessage(
         messagingBlock =
           "[Мессенджер] Не удалось разобрать получателя/текст. Пример: «Напиши Ивану в Telegram, что встречу переносим».";
       }
+    } else if (looksLikeCustomCommandIntent(text)) {
+      // Мастерская → Кастомные команды: action chain + optional fixed reply.
+      const res = await handleCustomCommandsFromChat(text);
+      desktopUsed = res.used;
+      desktopBlock = res.block;
+
+      emit({
+        type: "context",
+        skills: skills.map((s) => ({ id: s.id, name: s.name })),
+        protocol: protocol ? { id: protocol.id, name: protocol.name } : null,
+        web: null,
+        desktop: desktopUsed,
+        messaging: null,
+        terminal: null,
+        learned: null,
+        blender: null,
+        addon: null,
+      });
+
+      const replyText =
+        res.reply.trim() ||
+        `Команда «${res.matched.name}» выполнена.`;
+      emit({
+        type: "phase",
+        phase: "llm",
+        detail: "Кастомная команда…",
+      });
+      emit({ type: "assistant_start", sessionId: session.id });
+      emit({ type: "token", text: replyText });
+      const assistantUtterance = addUtterance(
+        session.id,
+        "assistant",
+        replyText,
+      );
+      emit({
+        type: "assistant_done",
+        utterance: assistantUtterance,
+        memoryUsed: [],
+        skillsUsed: skills.map((s) => ({ id: s.id, name: s.name })),
+        protocolUsed: protocol
+          ? { id: protocol.id, name: protocol.name }
+          : null,
+        webUsed: null,
+        desktopUsed,
+        messagingUsed: null,
+        terminalUsed: null,
+        learnedUsed: null,
+        blenderUsed: null,
+        addonUsed: null,
+      });
+      return getSession(session.id) ?? session;
+    } else if (looksLikeAppPathIntent(text)) {
+      // Voice tags from Мастерская → Пути (before generic «открой файл/сайт»).
+      const res = await handleAppPathsFromChat(text);
+      desktopUsed = res.used;
+      desktopBlock = res.block;
     } else if (looksLikeNotesIntent(text)) {
       const res = handleNotesFromChat(text);
       addonUsed = res.used;
@@ -459,38 +555,64 @@ export async function sendChatMessage(
       addonUsed = res.used;
       addonBlock = res.block;
     } else if (looksLikeScreenSeeIntent(text) && getScreenPolicy().enabled) {
-
       const shot = await captureScreen();
       let visionNote: string | null = null;
+      // Attach PNG to multimodal chat path when the model supports vision.
+      try {
+        const fs = await import("node:fs");
+        if (shot.path && fs.existsSync(shot.path)) {
+          const b64 = fs.readFileSync(shot.path).toString("base64");
+          if (b64.length > 32) {
+            images.push({ mimeType: "image/png", dataBase64: b64 });
+            visionNote =
+              "(снимок экрана передан модели как изображение — опиши по пикселям)";
+            desktopUsed = "screen-capture:multimodal";
+          }
+        }
+      } catch {
+        /* keep metadata path */
+      }
+      // Also run dedicated vision describe for providers / when image attach fails.
       try {
         const vision = await describeScreenshot(shot.path);
-        visionNote = vision.text;
-        desktopUsed = `screen-capture:${vision.mode}`;
+        if (vision.mode === "vision" || !visionNote) {
+          visionNote = vision.text;
+        } else if (vision.text) {
+          visionNote = `${visionNote}\n${vision.text}`;
+        }
+        if (!desktopUsed?.includes("multimodal")) {
+          desktopUsed = `screen-capture:${vision.mode}`;
+        }
       } catch (err) {
-        visionNote =
-          err instanceof Error ? err.message : "vision unavailable";
-        desktopUsed = "screen-capture";
+        if (!visionNote) {
+          visionNote =
+            err instanceof Error ? err.message : "vision unavailable";
+        }
+        if (!desktopUsed) desktopUsed = "screen-capture";
       }
       desktopBlock = formatScreenBlock("capture", shot, visionNote);
-
     } else if (
       looksLikeScreenControlIntent(text) &&
       getScreenPolicy().controlEnabled
     ) {
       const typed = parseTypeText(text);
-      if (typed && !parseClickCoords(text)) {
+      const coords = parseClickCoords(text);
+      if (typed && !coords) {
         const typedResult = await typeText(typed);
         desktopUsed = typedResult.ok
           ? `screen-type:${typedResult.mode}`
           : "screen-type-denied";
         desktopBlock = formatScreenBlock("type", typedResult);
-      } else {
-        const coords = parseClickCoords(text) ?? { x: 100, y: 100 };
+      } else if (coords) {
         const click = await clickAt(coords.x, coords.y);
         desktopUsed = click.ok
           ? `screen-click:${click.mode}`
           : "screen-click-denied";
         desktopBlock = formatScreenBlock("click", click);
+      } else {
+        desktopUsed = "screen-control-need-coords";
+        desktopBlock =
+          "[Экран: control]\nНужны явные координаты, например: «кликни 640, 360». Без координат клик не выполняется (защита от случайного клика по окну Mira).";
       }
     } else if (looksLikeBrowserOpenIntent(text) && getBrowserPolicy().enabled) {
       const url = extractOpenUrl(text);
@@ -625,9 +747,17 @@ export async function sendChatMessage(
     : [];
   const memoryBlock = buildMemoryBlock(memoryHits);
   const skillsBlock = buildSkillsBlock(skills);
+  const diversityBlock = buildReplyDiversityBlock(history, {
+    memorySnippets: memoryHits.map((h) => h.content),
+  });
 
-  const messages: ChatMessage[] = [{ role: "system", content: SYSTEM_PROMPT }];
+  const messages: ChatMessage[] = [
+    { role: "system", content: await buildSystemPrompt() },
+  ];
   if (memoryBlock) messages.push({ role: "system", content: memoryBlock });
+  if (diversityBlock) {
+    messages.push({ role: "system", content: diversityBlock });
+  }
   if (skillsBlock) messages.push({ role: "system", content: skillsBlock });
   if (protocol) {
     messages.push({ role: "system", content: buildProtocolBlock(protocol) });

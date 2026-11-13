@@ -114,7 +114,7 @@ export function formatAttachmentsForPrompt(
     } else if (a.kind === "pdf") {
       parts.push(
         a.text?.trim() ||
-          "(PDF без текстового слоя в браузере — откройте в Electron Workshop → Обучение для разбора)",
+          "(PDF: текст не извлечён — файл без текстового слоя или OCR не справился)",
       );
     } else {
       parts.push(`(бинарный файл «${a.name}», содержимое не извлечено в чат)`);
@@ -168,8 +168,27 @@ export async function fileToPendingAttachment(
       : dataUrl;
     return { ...base, dataBase64 };
   }
-  // pdf / audio / video / binary: keep metadata; optional tiny base64 for electron import
-  if (kind === "pdf" || kind === "binary") {
+  if (kind === "pdf") {
+    const dataUrl = await readAsDataUrl(file);
+    const dataBase64 = dataUrl.includes(",")
+      ? dataUrl.split(",")[1] ?? ""
+      : dataUrl;
+    try {
+      const { extractPdfInBrowser } = await import("../library/pdfClient");
+      const extracted = await extractPdfInBrowser(file);
+      return {
+        ...base,
+        dataBase64,
+        text: extracted.text
+          ? extracted.text.slice(0, MAX_TEXT_EXTRACT_CHARS)
+          : undefined,
+      };
+    } catch {
+      return { ...base, dataBase64 };
+    }
+  }
+  // audio / video / binary: keep metadata; optional base64 for electron import
+  if (kind === "binary") {
     const dataUrl = await readAsDataUrl(file);
     const dataBase64 = dataUrl.includes(",")
       ? dataUrl.split(",")[1] ?? ""

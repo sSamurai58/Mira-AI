@@ -1,5 +1,8 @@
 /// <reference types="vite/client" />
 
+/** Injected from package.json by Vite `define` in vite.config.ts */
+declare const __MIRA_VERSION__: string;
+
 interface SpeechRecognition extends EventTarget {
   lang: string;
   interimResults: boolean;
@@ -28,6 +31,9 @@ type MiraPublicConfig = {
   hasAnthropicKey?: boolean;
   hasGeminiKey?: boolean;
   hasXaiKey?: boolean;
+  hasElevenLabsKey?: boolean;
+  elevenLabsVoiceId?: string;
+  elevenLabsModelId?: string;
   openaiBaseUrl: string;
   xaiBaseUrl?: string;
   databasePath: string;
@@ -74,6 +80,7 @@ type MiraCatalogItem = {
   body: string;
   filePath: string;
   relativePath: string;
+  updatedAt?: string;
 };
 
 type MiraConfirmSkillPropose = {
@@ -287,8 +294,21 @@ type MiraUpdateStatus = {
   releasesUrl?: string;
 };
 
+type MiraSystemLoad = {
+  cpu: number;
+  ram: number;
+  ramUsedGb: number;
+  ramTotalGb: number;
+  gpu: number | null;
+  vramUsedGb: number | null;
+  vramTotalGb: number | null;
+  gpuSource: "nvidia-smi" | "windows-counter" | "drm" | "none";
+  ts: number;
+};
+
 interface MiraBridge {
   getHealth: () => Promise<MiraHealth>;
+  getSystemLoad: () => Promise<MiraSystemLoad>;
   getConfig: () => Promise<MiraPublicConfig>;
   getSettingsEnv: () => Promise<{
     values: Record<string, string>;
@@ -311,6 +331,16 @@ interface MiraBridge {
   ) => Promise<{ session: MiraSession; utterances: MiraUtterance[] } | null>;
   searchMemory: (query: string) => Promise<MiraMemoryHit[]>;
   testLlm: () => Promise<{ ok: boolean; detail: string }>;
+  translateAi: (payload: {
+    text: string;
+    source: string;
+    target: string;
+  }) => Promise<{
+    ok: boolean;
+    text: string;
+    provider?: string;
+    error?: string;
+  }>;
   sendChat: (payload: {
     sessionId?: string | null;
     text: string;
@@ -360,6 +390,12 @@ interface MiraBridge {
     enabled: boolean;
     body: string;
   }) => Promise<MiraCatalogItem>;
+  deleteSkill: (
+    id: string,
+  ) => Promise<{ ok: boolean; detail: string; deletedId: string | null }>;
+  deleteProtocol: (
+    id: string,
+  ) => Promise<{ ok: boolean; detail: string; deletedId: string | null }>;
   getWebPolicy: () => Promise<{
     enabled: boolean;
     allowlist: string[];
@@ -546,6 +582,9 @@ interface MiraBridge {
     fields?: { skillId?: string; skillName?: string },
   ) => Promise<{ ok: boolean }>;
   onConfirmRequest: (handler: (req: MiraConfirmRequest) => void) => () => void;
+  onConfirmDismiss: (
+    handler: (payload: { id: string }) => void,
+  ) => () => void;
   onChatEvent: (
     handler: (payload: { requestId: string; event: MiraChatEvent }) => void,
   ) => () => void;
@@ -580,6 +619,7 @@ interface MiraBridge {
     bytes: number[] | Uint8Array;
     fileName: string;
     title?: string;
+    extractedText?: string;
   }) => Promise<MiraLibraryItem>;
   processLibraryItem: (id: string) => Promise<{
     item: MiraLibraryItem;
@@ -587,6 +627,9 @@ interface MiraBridge {
     plan: string[];
     units: MiraLearnedUnit[];
   }>;
+  deleteLibraryItem: (
+    id: string,
+  ) => Promise<{ ok: boolean; detail: string; deletedId: string | null }>;
   proposeLibrarySkill: (
     id: string,
   ) => Promise<{ ok: boolean; detail: string; skillId: string | null }>;
@@ -610,6 +653,16 @@ interface MiraBridge {
   }>;
   listVoiceProjects: () => Promise<MiraVoiceProject[]>;
   listCustomVoices: () => Promise<MiraCustomVoice[]>;
+  getCustomVoiceCorpus: (voiceId: string) => Promise<{
+    voice: MiraCustomVoice;
+    units: Array<{
+      phraseId: string;
+      text: string;
+      filePath: string;
+      startFrac?: number;
+      endFrac?: number;
+    }>;
+  }>;
   createVoiceProject: (payload?: {
     name?: string;
     lang?: string;
@@ -638,6 +691,19 @@ interface MiraBridge {
     projectId: string,
     text: string,
   ) => Promise<MiraVoicePhrase>;
+  deleteVoicePhrase: (phraseId: string) => Promise<{
+    ok: boolean;
+    detail: string;
+    deletedId: string | null;
+  }>;
+  resetVoicePhraseAudio: (phraseId: string) => Promise<{
+    ok: boolean;
+    detail: string;
+    phraseId: string | null;
+    projectId: string | null;
+    deletedClips: number;
+    needsRebuild: boolean;
+  }>;
   trainVoiceModel: (projectId: string) => Promise<{
     project: MiraVoiceProject;
     analysis: unknown[];
@@ -650,11 +716,210 @@ interface MiraBridge {
       linkedAccepted: number;
       coveragePct: number;
       detail: string;
+      steps?: Array<{ step: string; label: string; pct: number }>;
+      packPath?: string | null;
+      wordUnitCount?: number;
+      fragmentUnitCount?: number;
+      lexiconSize?: number;
+      audioLexiconSize?: number;
+      provisionalLexiconSize?: number;
+      epochs?: number;
+      trainSteps?: number;
+      initialLoss?: number;
+      finalLoss?: number;
+      melTargets?: number;
+      curriculum?: Array<{
+        concept: string;
+        neural: string;
+        mira: string;
+        status: string;
+        title?: string;
+        meaning?: string;
+        miraPlain?: string;
+        group?: string;
+      }>;
+      griffinLimPreview?: string | null;
+      neuralPreview?: string | null;
+      method?: string;
+      neuralTts?: boolean;
+      teacherForceFinal?: number;
+      vocoderSteps?: number;
+      cudaAvailable?: boolean;
+      accelDetail?: string;
+      weightsPath?: string;
+    };
+    pack?: unknown;
+  }>;
+  getVoicePreferenceCandidates: (voiceId: string) => Promise<{
+    voiceId: string;
+    packDir: string | null;
+    aPath: string | null;
+    bPath: string | null;
+    labelA: string;
+    labelB: string;
+    sampleText: string;
+    preferences: {
+      version: number;
+      pairs: Array<{
+        id: string;
+        text: string;
+        preferred: "a" | "b";
+        createdAt: string;
+        lossBefore?: number;
+        lossAfter?: number;
+      }>;
+      updatesApplied: number;
     };
   }>;
+  submitVoicePreference: (payload: {
+    voiceId: string;
+    preferred: "a" | "b";
+    text?: string;
+  }) => Promise<{
+    ok: boolean;
+    detail: string;
+    unitPriorsUpdated: number;
+    lossBefore: number;
+    lossAfter: number;
+  }>;
+  synthesizeCustomVoiceNeural: (
+    voiceId: string,
+    text: string,
+  ) => Promise<{
+    ok: boolean;
+    wavPath: string | null;
+    detail: string;
+    frameCount?: number;
+    durationMs?: number;
+    method?: string;
+  }>;
+  getElevenLabsStatus?: (probe?: boolean) => Promise<{
+    hasKey: boolean;
+    voiceId: string;
+    modelId: string;
+    connected: boolean;
+    detail: string;
+    subscription?: string | null;
+    characterCount?: number | null;
+    characterLimit?: number | null;
+    voiceSettings?: {
+      stability: number;
+      similarityBoost: number;
+      style: number;
+      useSpeakerBoost: boolean;
+    };
+  }>;
+  synthesizeElevenLabs?: (payload: {
+    text: string;
+    voiceId?: string;
+    modelId?: string;
+    stream?: boolean;
+    voiceSettings?: {
+      stability?: number;
+      similarityBoost?: number;
+      style?: number;
+      useSpeakerBoost?: boolean;
+    };
+  }) => Promise<{
+    ok: boolean;
+    detail: string;
+    mimeType?: string;
+    audioBase64?: string;
+    dataUrl?: string;
+    tempPath?: string | null;
+    bytes?: number;
+    modelId?: string;
+    voiceId?: string;
+  }>;
+  listElevenLabsModels?: () => Promise<
+    Array<{ id: string; label: string; detail: string }>
+  >;
+  listElevenLabsVoices?: () => Promise<{
+    ok: boolean;
+    detail: string;
+    voices: Array<{
+      voiceId: string;
+      name: string;
+      category: string;
+      previewUrl: string | null;
+      labels: Record<string, string>;
+    }>;
+  }>;
+  cloneElevenLabsVoice?: (payload: {
+    name: string;
+    description?: string;
+    filePaths: string[];
+  }) => Promise<{ ok: boolean; detail: string; voiceId?: string }>;
+  mcpRuntimeList?: () => Promise<
+    Record<
+      string,
+      {
+        connectorId: string;
+        state: string;
+        detail: string;
+        transport: string;
+        tools: string[];
+        lastCheckedAt: string;
+        live: boolean;
+      }
+    >
+  >;
+  mcpRuntimeStatus?: (
+    connectorId?: string,
+  ) => Promise<
+    Array<{
+      connectorId: string;
+      state: string;
+      detail: string;
+      transport: string;
+      tools: string[];
+      lastCheckedAt: string;
+      live: boolean;
+    }>
+  >;
+  mcpConnect?: (payload: {
+    connectorId: string;
+    command?: string;
+    args?: string[];
+    url?: string;
+    fields?: Record<string, string>;
+    auth?: "oauth" | "api-key" | "local" | "bridge";
+  }) => Promise<{
+    connectorId: string;
+    state: string;
+    detail: string;
+    transport: string;
+    tools: string[];
+    lastCheckedAt: string;
+    live: boolean;
+  }>;
+  mcpDisconnect?: (connectorId: string) => Promise<{
+    connectorId: string;
+    state: string;
+    detail: string;
+    transport: string;
+    tools: string[];
+    lastCheckedAt: string;
+    live: boolean;
+  }>;
+  onVoiceTrainProgress?: (
+    handler: (payload: {
+      projectId: string;
+      step: string;
+      pct: number;
+      label: string;
+      detail?: string;
+      epoch?: number;
+      epochs?: number;
+      loss?: number;
+      melL1?: number;
+    }) => void,
+  ) => () => void;
   generateVoicePhrases: (
     projectId: string,
-    count?: number,
+    countOrOpts?:
+      | number
+      | { count?: number; minWords?: number; maxWords?: number },
   ) => Promise<MiraVoicePhrase[]>;
   importVoiceClip: (payload: {
     projectId: string;
@@ -855,6 +1120,171 @@ interface MiraBridge {
   listMail: (folder?: string) => Promise<unknown[]>;
   getMediaStatus: () => Promise<unknown>;
   searchFiles: (query?: string) => Promise<string[]>;
+  listAppPaths: () => Promise<
+    Array<{
+      id: string;
+      kind: "program" | "folder" | "file";
+      name: string;
+      path: string;
+      tags: string[];
+      enabled: boolean;
+      created_at: string;
+      updated_at: string;
+    }>
+  >;
+  upsertAppPath: (payload: {
+    id?: string;
+    kind: "program" | "folder" | "file";
+    name: string;
+    path?: string;
+    tags?: string[];
+    enabled?: boolean;
+  }) => Promise<{
+    id: string;
+    kind: "program" | "folder" | "file";
+    name: string;
+    path: string;
+    tags: string[];
+    enabled: boolean;
+    created_at: string;
+    updated_at: string;
+  }>;
+  deleteAppPath: (id: string) => Promise<{ ok: boolean }>;
+  setAppPathEnabled: (
+    id: string,
+    enabled: boolean,
+  ) => Promise<{
+    id: string;
+    kind: "program" | "folder" | "file";
+    name: string;
+    path: string;
+    tags: string[];
+    enabled: boolean;
+    created_at: string;
+    updated_at: string;
+  } | null>;
+  autodiscoverAppPaths: () => Promise<{
+    scanned: number;
+    updated: number;
+    created: number;
+    paths: Array<{
+      id: string;
+      kind: "program" | "folder" | "file";
+      name: string;
+      path: string;
+      tags: string[];
+      enabled: boolean;
+      created_at: string;
+      updated_at: string;
+    }>;
+  }>;
+  openAppPath: (id: string) => Promise<{
+    ok: boolean;
+    detail: string;
+    path?: {
+      id: string;
+      kind: "program" | "folder" | "file";
+      name: string;
+      path: string;
+      tags: string[];
+      enabled: boolean;
+      created_at: string;
+      updated_at: string;
+    };
+  }>;
+  pickAppPath: (
+    kind?: "program" | "folder" | "file",
+  ) => Promise<{ canceled: boolean; path: string | null }>;
+  listCustomCommands: () => Promise<
+    Array<{
+      id: string;
+      name: string;
+      phrases: string[];
+      steps: Array<{
+        id: string;
+        type: "open_url" | "launch" | "open_path" | "open_folder" | "keys" | "type" | "click" | "clipboard_copy" | "clipboard_paste" | "pause" | "say" | "notify" | "hud_say" | "window_minimize" | "window_close" | "terminal";
+        value: string;
+      }>;
+      reply: string;
+      enabled: boolean;
+      created_at: string;
+      updated_at: string;
+    }>
+  >;
+  upsertCustomCommand: (payload: {
+    id?: string;
+    name: string;
+    phrases?: string[];
+    steps?: Array<{
+      id: string;
+      type: "open_url" | "launch" | "open_path" | "open_folder" | "keys" | "type" | "click" | "clipboard_copy" | "clipboard_paste" | "pause" | "say" | "notify" | "hud_say" | "window_minimize" | "window_close" | "terminal";
+      value: string;
+    }>;
+    reply?: string;
+    enabled?: boolean;
+  }) => Promise<{
+    id: string;
+    name: string;
+    phrases: string[];
+    steps: Array<{
+      id: string;
+      type: "open_url" | "launch" | "open_path" | "open_folder" | "keys" | "type" | "click" | "clipboard_copy" | "clipboard_paste" | "pause" | "say" | "notify" | "hud_say" | "window_minimize" | "window_close" | "terminal";
+      value: string;
+    }>;
+    reply: string;
+    enabled: boolean;
+    created_at: string;
+    updated_at: string;
+  }>;
+  deleteCustomCommand: (id: string) => Promise<{ ok: boolean }>;
+  setCustomCommandEnabled: (
+    id: string,
+    enabled: boolean,
+  ) => Promise<{
+    id: string;
+    name: string;
+    phrases: string[];
+    steps: Array<{
+      id: string;
+      type: "open_url" | "launch" | "open_path" | "open_folder" | "keys" | "type" | "click" | "clipboard_copy" | "clipboard_paste" | "pause" | "say" | "notify" | "hud_say" | "window_minimize" | "window_close" | "terminal";
+      value: string;
+    }>;
+    reply: string;
+    enabled: boolean;
+    created_at: string;
+    updated_at: string;
+  } | null>;
+  runCustomCommand: (
+    id: string,
+    opts?: { dryRun?: boolean },
+  ) => Promise<{
+    ok: boolean;
+    command?: {
+      id: string;
+      name: string;
+      phrases: string[];
+      steps: Array<{
+        id: string;
+        type: "open_url" | "launch" | "open_path" | "open_folder" | "keys" | "type" | "click" | "clipboard_copy" | "clipboard_paste" | "pause" | "say" | "notify" | "hud_say" | "window_minimize" | "window_close" | "terminal";
+        value: string;
+      }>;
+      reply: string;
+      enabled: boolean;
+      created_at: string;
+      updated_at: string;
+    };
+    steps?: Array<{
+      index: number;
+      type: "open_url" | "launch" | "open_path" | "open_folder" | "keys" | "type" | "click" | "clipboard_copy" | "clipboard_paste" | "pause" | "say" | "notify" | "hud_say" | "window_minimize" | "window_close" | "terminal";
+      value: string;
+      ok: boolean;
+      detail: string;
+    }>;
+    spoken?: string[];
+    reply?: string;
+    detail: string;
+    dryRun?: boolean;
+  }>;
   listProfiles: () => Promise<
     Array<{
       id: string;
@@ -902,6 +1332,24 @@ interface MiraBridge {
     open: boolean;
   }>;
   toggleHud: () => Promise<{ open: boolean }>;
+  windowMinimize: () => Promise<{ ok: boolean }>;
+  windowMaximizeToggle: () => Promise<{ ok: boolean; maximized?: boolean }>;
+  windowClose: () => Promise<{ ok: boolean }>;
+  windowGetState: () => Promise<{
+    maximized: boolean;
+    fullscreen: boolean;
+    focused: boolean;
+  }>;
+  windowSetChrome: (payload: {
+    backgroundColor?: string;
+  }) => Promise<{ ok: boolean }>;
+  onWindowState: (
+    handler: (state: {
+      maximized: boolean;
+      fullscreen: boolean;
+      focused: boolean;
+    }) => void,
+  ) => () => void;
 }
 
 

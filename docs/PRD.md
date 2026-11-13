@@ -155,21 +155,21 @@
 | # | Возможность | Статус | Примечание |
 |---|-------------|--------|-----------|
 | 1 | Полноценный диалог | `partial` | P1+P2: текст + голос (PTT); мультимодал глубже позже |
-| 2 | Человечная речь | `partial` | P2: Web Speech TTS + выбор системного голоса; cloud TTS — позже |
-| 3 | Память разговоров | `partial` | P1: SQLite utterances + LIKE-поиск + подъём в контекст |
+| 2 | Человечная речь | `partial` | Web Speech + Neural pack + ElevenLabs (0.1.12: MP3 sniff + non-stream default, stream fallback); voice settings |
+| 3 | Память разговоров | `partial` | SQLite utterances + FTS5 (fallback LIKE) + подъём в контекст |
 | 4 | Интернет | `partial` | P4: web.search (DDG) + web.fetch + WEB_* policy + confirm fetch |
 | 5 | Claude / Gemini / GPT / Grok | `partial` | OpenAI + Claude + Gemini + Grok (xAI) + offline/mock |
 
-| 6 | Видимость экрана | `partial` | P5: desktopCapturer → PNG + метаданные в контекст; vision pixels — later |
-| 7 | Контроль экрана | `partial` | P5: клик/ввод + confirm; xdotool / dry-run |
+| 6 | Видимость экрана | `partial` | desktopCapturer → PNG + multimodal image attach + vision describe |
+| 7 | Контроль экрана | `partial` | клик/ввод + confirm; xdotool / Win32 SendInput / dry-run |
 | 8 | Браузер | `partial` | P5: open URL + история Mira/Chromium; вкладки/deep control — later |
 | 9 | Скиллы | `partial` | P3: md-каталог; on-demand triggers; не весь каталог в контексте |
 | 10 | Протоколы | `partial` | P3: md + Панель CRUD/Run; триггер из Диалога |
 | 11 | Голоса | `partial` | P2 системные TTS + P9 custom voices из студии в каталоге |
 | 12 | Мессенджеры | `partial` | P6: Telegram send/reply + confirm; WA/IG stubs |
 | 13 | Blender 3D | `partial` | P10: CLI bpy bridge + dry-run; demo scene; skills on-demand |
-| 14 | Обучение по материалам | `partial` | P8: library→analyze→learned_units→dialog; skill confirm; PDF/AV stub |
-| 15 | Студия голоса | `partial` | P9: цикл 15.1–15.9; corpus TTS stub; neural train later |
+| 14 | Обучение по материалам | `partial` | library→analyze→learned; PDF + EPUB ZIP/OPF; AV sidecar/whisper/ffmpeg |
+| 15 | Студия голоса | `partial` | цикл 15.1–15.9; neural CPU train (worker) + unit stitch; IVC→EL |
 | 16 | Терминал | `partial` | P7: xterm + node-pty multi-session; dialog commands + confirm; prefs |
 
 ### На будущее (не must)
@@ -184,12 +184,13 @@
 | F6 | Заметки | `partial` | notes table + Memory UI |
 | F7 | Музыка / медиа | `partial` | local playlist stub |
 | F8 | Мультиязычность | `partial` | ru/en UI + ASR lang |
-| F9 | Wake-word + barge-in | `partial` | Web Speech wake watch; barge-in → listening; Settings |
+| F9 | Wake-word + barge-in | `partial` | Pluggable wake (Web Speech + Porcupine stub); barge-in Space hint |
 | F10 | Профили пользователя | `partial` | data/profiles.json; UI Общие; secrets в .env |
 
 | F11 | Backup / export / import / «забыть» | `partial` | mira-backup-v1; secrets opt-in; forget + confirm |
 | F12 | Режим подтверждений | `partial` | always/smart/dangerous-list + Settings |
 | F13 | Логи и Doctor | `partial` | findings+fix; app_logs + jsonl; UI Настройки→Данные |
+| F-MCP | MCP-подключения сайтов/программ | `partial` | Каталог + runtime scaffolding/OAuth Tier A probes (0.1.11). План: `docs/MCP.md` |
 
 ### Платформа
 
