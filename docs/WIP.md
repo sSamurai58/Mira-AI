@@ -32,8 +32,8 @@ Future **F1–F13** — только после стабилизации must (�
 | Поле | Значение |
 |------|----------|
 | Текущая фаза | **Realize-all ✅** |
-| Следующее действие | 0.1.12 dialog TTS screech fix — review / OK перед publish |
-| Запрещено сейчас | Publish / tag 0.1.12 без явного OK |
+| Следующее действие | Дальше по запросу |
+| Запрещено сейчас | Republish / retag 0.1.12 без явного OK |
 
 
 ### Стартовые допущения стека (подтвердить в P0 → MEMORY)
@@ -345,9 +345,9 @@ UX: **Создать → фразы → загрузить → Mira сама о�
 - [x] Публикация GitHub Release **0.1.6** — https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.6 (tag `v0.1.6` @ `8baa1da`)
 - [ ] MCP runtime / OAuth (по-прежнему later; после явной команды)
 
-## 2026-11-13 — Релиз 0.1.12 WIP (dialog TTS screech)
+## 2026-11-13 — Релиз 0.1.12 ✅ (TTS fix + Paths/Commands/Translator)
 
-Ветка `cursor/release-0-1-12-6838` от `v0.1.11`. Пакет **0.1.12**. **Не публиковать.**
+Ветка `cursor/release-0-1-12-6838` @ `c9e72d0`. Пакет **0.1.12**. Latest GitHub Release.
 
 - [x] Bump 0.1.12
 - [x] ElevenLabs: sniff MP3 vs JSON/PCM; default non-stream convert; `/stream` → convert fallback
@@ -355,11 +355,15 @@ UX: **Создать → фразы → загрузить → Mira сама о�
 - [x] Neural vocoder noise → unit-stitch / Web Speech fallback
 - [x] Home HUD: mic level only while listening (no speakers→mic feedback while TTS)
 - [x] `elevenlabs:smoke` sniff asserts
-- [ ] Publish / tag — только после явной команды
+- [x] Settings Updates: «История обновлений» 0.1.4–0.1.12
+- [x] Workshop Paths: voice-tagged app/folder/file launchers
+- [x] Workshop Custom Commands: voice triggers + action chains
+- [x] Translator: Быстрый HTTP + Через ИИ
+- [x] Публикация GitHub Release **0.1.12** — https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.12 (tag `v0.1.12` @ `c9e72d0`)
 
-## 2026-11-13 — Релиз 0.1.11 WIP (pack + update HUD)
+## 2026-11-13 — Релиз 0.1.11 ✅ (pack + update HUD)
 
-Ветка `cursor/release-0-1-11-6838` от `v0.1.10`. Пакет **0.1.11**. **Не публиковать.**
+Ветка `cursor/release-0-1-11-6838` @ `c124393`. Пакет **0.1.11**.
 
 - [x] Bump 0.1.11
 - [x] MCP runtime scaffolding + honest draft/connected + Tier A probes
@@ -368,7 +372,7 @@ UX: **Создать → фразы → загрузить → Mira сама о�
 - [x] Auto-check updates + floating Mira HUD toast
 - [x] EPUB ZIP/OPF; AV ASR best-effort; FTS memory; WebGL LOD; SendInput
 - [x] Neural train worker; reimport+rebuild; post-train clip hint; docs sync
-- [ ] Publish / tag — только после явной команды
+- [x] Публикация GitHub Release **0.1.11** — https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.11 (tag `v0.1.11` @ `c124393`)
 
 ## 2026-11-13 — Релиз 0.1.10 WIP (живое ядро + Home HUD)
 

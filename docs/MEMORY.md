@@ -13,7 +13,7 @@
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
 | Дорожная карта | Must + future F* закрыты (partial→done stubs where noted) |
 
-**Сейчас:** **0.1.12 WIP** (не публиковать / не тегировать). Ветка `cursor/release-0-1-12-6838` от `v0.1.11`. Кастомные команды + раздел «Переводчик» (быстрый HTTP / через ИИ).
+**Сейчас:** **0.1.12 опубликован** (`v0.1.12`, Latest). Ветка `cursor/release-0-1-12-6838` @ `c9e72d0`. https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.12
 
 
 ## Решения
@@ -22,8 +22,10 @@
 
 | Дата | Решение | Почему |
 |------|---------|--------|
-| 2026-11-13 | **0.1.12 WIP: dialog TTS screech fix** | EL `/stream` без sniff → PCM/JSON as mpeg = помехи; mic open while speaking = feedback; validate MP3 + non-stream default + Web Speech/neural fallback; no publish |
-| 2026-11-13 | **0.1.11 WIP: pack + update HUD toast** | MCP runtime scaffolding; EL stream/IVC/settings/Flash; wake pluggable; EPUB/AV ASR; FTS; WebGL LOD; auto-update floating HUD; no publish |
+| 2026-11-13 | **Релиз 0.1.12 опубликован** (`v0.1.12`, Latest) | TTS screech fix; update history; Paths; Custom Commands; Translator; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.12 |
+| 2026-11-13 | **0.1.12: dialog TTS screech fix + Paths/Commands/Translator** | EL `/stream` без sniff → PCM/JSON as mpeg = помехи; mic open while speaking = feedback; validate MP3 + non-stream default; Paths/Custom Commands; Переводчик |
+| 2026-11-13 | **Релиз 0.1.11 опубликован** (`v0.1.11`) | MCP runtime; EL stream/IVC/Flash; wake pluggable; EPUB/AV ASR; FTS; vision; WebGL LOD; update HUD toast; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.11 |
+| 2026-11-13 | **0.1.11: pack + update HUD toast** | MCP runtime scaffolding; EL stream/IVC/settings/Flash; wake pluggable; EPUB/AV ASR; FTS; WebGL LOD; auto-update floating HUD |
 | 2026-11-13 | **0.1.10 WIP: живое ядро + Home HUD** | После 0.1.9 Home выглядел «замороженным»: idle wave `animation:none`, медленный orbit, статичные плитки; rAF усилен, idle pulse, latency tick, reduced-motion = slow drift |
 | 2026-11-13 | **0.1.9 WIP: голографическое ядро WebGL2** | Пользовательский single-file HTML (4 слоя, MAX blend, bloom) портирован в `coreWebgl`; Mira L→vis 0…4 (L1≈0.3…L50=4); flash на level-up; reduced-motion |
 | 2026-11-12 | **0.1.8 WIP: ElevenLabs TTS** (voice_id `YjESejviApN7SHrbfnA2`) | Облачный TTS в Electron main (`xi-api-key` из `ELEVENLABS_API_KEY`); stub `edge-stub` → `elevenlabs`; ключ нужен от пользователя — Voice ID ≠ API key |
