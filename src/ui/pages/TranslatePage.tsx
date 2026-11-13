@@ -6,6 +6,7 @@ import {
   type FormEvent,
 } from "react";
 import { AutoGrowTextarea } from "../components/AutoGrowTextarea";
+import { ThemeSelect } from "../components/ThemeSelect";
 import { createAsrSession, isAsrAvailable } from "../voice/asr";
 import { peekActiveVoiceId } from "../voice/catalog";
 import { speakText, stopSpeaking } from "../voice/tts";
@@ -23,6 +24,16 @@ import { quickTranslate } from "../translate/quickTranslate";
 type Mode = "quick" | "ai";
 
 const DEBOUNCE_MS = 480;
+
+const SOURCE_LANG_OPTIONS = [
+  { value: DETECT_CODE, label: "Определить язык" },
+  ...TRANSLATE_LANGS.map((l) => ({ value: l.code, label: l.label })),
+];
+
+const TARGET_LANG_OPTIONS = TRANSLATE_LANGS.map((l) => ({
+  value: l.code,
+  label: l.label,
+}));
 
 export function TranslatePage() {
   const [mode, setMode] = useState<Mode>("quick");
@@ -267,20 +278,16 @@ export function TranslatePage() {
 
         <div className="translate-controls">
           <div className="translate-lang-row">
-            <label className="translate-lang-select">
-              <span className="sr-only">Исходный язык</span>
-              <select
+            {/* div, not label: ThemeSelect buttons break when wrapped in <label> */}
+            <div className="translate-lang-select">
+              <ThemeSelect
+                aria-label="Исходный язык"
+                className="translate-lang-theme-select"
                 value={sourceLang}
-                onChange={(e) => setSourceLang(e.target.value)}
-              >
-                <option value={DETECT_CODE}>Определить язык</option>
-                {TRANSLATE_LANGS.map((l) => (
-                  <option key={l.code} value={l.code}>
-                    {l.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+                options={SOURCE_LANG_OPTIONS}
+                onChange={setSourceLang}
+              />
+            </div>
 
             <button
               type="button"
@@ -301,24 +308,20 @@ export function TranslatePage() {
               </svg>
             </button>
 
-            <label className="translate-lang-select">
-              <span className="sr-only">Язык перевода</span>
-              <select
+            <div className="translate-lang-select">
+              <ThemeSelect
+                aria-label="Язык перевода"
+                className="translate-lang-theme-select"
                 value={targetLang}
-                onChange={(e) => {
-                  setTargetLang(e.target.value);
+                options={TARGET_LANG_OPTIONS}
+                onChange={(code) => {
+                  setTargetLang(code);
                   if (mode === "quick" && sourceText.trim()) {
                     scheduleQuick(sourceText);
                   }
                 }}
-              >
-                {TRANSLATE_LANGS.map((l) => (
-                  <option key={l.code} value={l.code}>
-                    {l.label}
-                  </option>
-                ))}
-              </select>
-            </label>
+              />
+            </div>
           </div>
 
           <div
