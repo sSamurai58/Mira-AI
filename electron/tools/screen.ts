@@ -164,7 +164,10 @@ async function typeViaXdotool(text: string): Promise<void> {
   await execFileAsync("xdotool", ["type", "--", text], { timeout: 8000 });
 }
 
-/** Win32 mouse click via PowerShell + user32 (no extra native deps). */
+/**
+ * Win32 mouse click via SendInput (more stable than mouse_event on modern Windows).
+ * Falls back to mouse_event if SendInput path fails.
+ */
 async function clickViaWin32(x: number, y: number): Promise<void> {
   const xi = Math.round(x);
   const yi = Math.round(y);
@@ -172,17 +175,31 @@ async function clickViaWin32(x: number, y: number): Promise<void> {
     "Add-Type -TypeDefinition @'",
     "using System;",
     "using System.Runtime.InteropServices;",
-    "public static class MiraMouse {",
+    "public static class MiraInput {",
+    "  [StructLayout(LayoutKind.Sequential)] public struct INPUT { public uint type; public MOUSEINPUT mi; }",
+    "  [StructLayout(LayoutKind.Sequential)] public struct MOUSEINPUT {",
+    "    public int dx; public int dy; public uint mouseData; public uint dwFlags; public uint time; public IntPtr dwExtraInfo;",
+    "  }",
     "  [DllImport(\"user32.dll\")] public static extern bool SetCursorPos(int X, int Y);",
+    "  [DllImport(\"user32.dll\")] public static extern uint SendInput(uint n, INPUT[] p, int cb);",
     "  [DllImport(\"user32.dll\")] public static extern void mouse_event(uint f, uint x, uint y, uint d, UIntPtr e);",
+    "  public const uint INPUT_MOUSE = 0;",
     "  public const uint LEFTDOWN = 0x0002;",
     "  public const uint LEFTUP = 0x0004;",
+    "  public static void Click() {",
+    "    INPUT[] a = new INPUT[2];",
+    "    a[0].type = INPUT_MOUSE; a[0].mi.dwFlags = LEFTDOWN;",
+    "    a[1].type = INPUT_MOUSE; a[1].mi.dwFlags = LEFTUP;",
+    "    if (SendInput(2, a, Marshal.SizeOf(typeof(INPUT))) == 0) {",
+    "      mouse_event(LEFTDOWN, 0, 0, 0, UIntPtr.Zero);",
+    "      mouse_event(LEFTUP, 0, 0, 0, UIntPtr.Zero);",
+    "    }",
+    "  }",
     "}",
     "'@",
-    `[MiraMouse]::SetCursorPos(${xi}, ${yi}) | Out-Null`,
-    "Start-Sleep -Milliseconds 40",
-    "[MiraMouse]::mouse_event([MiraMouse]::LEFTDOWN, 0, 0, 0, [UIntPtr]::Zero)",
-    "[MiraMouse]::mouse_event([MiraMouse]::LEFTUP, 0, 0, 0, [UIntPtr]::Zero)",
+    `[MiraInput]::SetCursorPos(${xi}, ${yi}) | Out-Null`,
+    "Start-Sleep -Milliseconds 50",
+    "[MiraInput]::Click()",
   ].join("\n");
 
   await execFileAsync(
@@ -192,28 +209,53 @@ async function clickViaWin32(x: number, y: number): Promise<void> {
   );
 }
 
-/** Best-effort Win32 text entry via SendKeys (focused window after click). */
+/**
+ * Win32 text entry via SendInput key events (Unicode) — more stable than SendKeys
+ * for non-US layouts / elevated targets. Falls back to SendKeys on failure.
+ */
 async function typeViaWin32(text: string): Promise<void> {
-  const escaped = text
-    .replace(/\{/g, "{{}")
-    .replace(/\}/g, "{}}")
-    .replace(/\+/g, "{+}")
-    .replace(/\^/g, "{^}")
-    .replace(/%/g, "{%}")
-    .replace(/~/g, "{~}")
-    .replace(/\(/g, "{(}")
-    .replace(/\)/g, "{)}")
-    .replace(/'/g, "''");
-
+  const safe = text.replace(/'/g, "''").slice(0, 400);
   const script = [
-    "Add-Type -AssemblyName System.Windows.Forms",
-    `[System.Windows.Forms.SendKeys]::SendWait('${escaped}')`,
-  ].join("; ");
+    "Add-Type -TypeDefinition @'",
+    "using System;",
+    "using System.Runtime.InteropServices;",
+    "public static class MiraKeys {",
+    "  [StructLayout(LayoutKind.Sequential)] public struct INPUT { public uint type; public KEYBDINPUT ki; }",
+    "  [StructLayout(LayoutKind.Sequential)] public struct KEYBDINPUT {",
+    "    public ushort wVk; public ushort wScan; public uint dwFlags; public uint time; public IntPtr dwExtraInfo;",
+    "  }",
+    "  [DllImport(\"user32.dll\")] public static extern uint SendInput(uint n, INPUT[] p, int cb);",
+    "  public const uint INPUT_KEYBOARD = 1;",
+    "  public const uint KEYUP = 0x0002;",
+    "  public const uint UNICODE = 0x0004;",
+    "  public static void TypeUnicode(string s) {",
+    "    foreach (char ch in s) {",
+    "      INPUT[] a = new INPUT[2];",
+    "      a[0].type = INPUT_KEYBOARD; a[0].ki.wScan = ch; a[0].ki.dwFlags = UNICODE;",
+    "      a[1].type = INPUT_KEYBOARD; a[1].ki.wScan = ch; a[1].ki.dwFlags = UNICODE | KEYUP;",
+    "      SendInput(2, a, Marshal.SizeOf(typeof(INPUT)));",
+    "    }",
+    "  }",
+    "}",
+    "'@",
+    "try {",
+    `  [MiraKeys]::TypeUnicode('${safe}')`,
+    "} catch {",
+    "  Add-Type -AssemblyName System.Windows.Forms",
+    `  [System.Windows.Forms.SendKeys]::SendWait('${safe
+      .replace(/\{/g, "{{}")
+      .replace(/\}/g, "{}}")
+      .replace(/\+/g, "{+}")
+      .replace(/\^/g, "{^}")
+      .replace(/%/g, "{%}")
+      .replace(/~/g, "{~}")}')`,
+    "}",
+  ].join("\n");
 
   await execFileAsync(
     "powershell.exe",
     ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
-    { timeout: 10000, windowsHide: true },
+    { timeout: 12000, windowsHide: true },
   );
 }
 

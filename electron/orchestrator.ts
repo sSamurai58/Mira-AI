@@ -94,7 +94,7 @@ import {
   CHAT_DIVERSITY_SYSTEM_RULES,
 } from "./chatDiversity";
 
-const SYSTEM_PROMPT = [
+const BASE_SYSTEM_PROMPT = [
   "Ты Mira — локальный голосовой ИИ-помощник.",
   "Отвечай на языке пользователя, выразительно и по делу.",
   "Формат ответа: Markdown — **жирный**, *курсив*, __подчёркнутый__ где уместно; списки через «- »; обязательно несколько коротких абзацев (не одна длинная строка).",
@@ -103,6 +103,32 @@ const SYSTEM_PROMPT = [
   "Skills подключаются только по необходимости.",
   CHAT_DIVERSITY_SYSTEM_RULES,
 ].join(" ");
+
+async function buildSystemPrompt(): Promise<string> {
+  const parts = [BASE_SYSTEM_PROMPT];
+  try {
+    const { getActiveProfile } = await import("./profiles");
+    const profile = getActiveProfile();
+    if (profile?.notes?.trim() || profile?.voiceId) {
+      parts.push(
+        [
+          "[Профиль голоса / стиля]",
+          profile.name ? `Имя профиля: ${profile.name}.` : "",
+          profile.voiceId ? `Привязанный voiceId: ${profile.voiceId}.` : "",
+          profile.notes?.trim()
+            ? `Стиль речи / характер: ${profile.notes.trim()}`
+            : "",
+          "Учитывай профиль в тоне и формулировках ответа.",
+        ]
+          .filter(Boolean)
+          .join(" "),
+      );
+    }
+  } catch {
+    /* profiles optional */
+  }
+  return parts.join("\n");
+}
 
 export type ChatStreamEvent =
   | { type: "user"; utterance: UtteranceRow }
@@ -465,20 +491,42 @@ export async function sendChatMessage(
       addonUsed = res.used;
       addonBlock = res.block;
     } else if (looksLikeScreenSeeIntent(text) && getScreenPolicy().enabled) {
-
       const shot = await captureScreen();
       let visionNote: string | null = null;
+      // Attach PNG to multimodal chat path when the model supports vision.
+      try {
+        const fs = await import("node:fs");
+        if (shot.path && fs.existsSync(shot.path)) {
+          const b64 = fs.readFileSync(shot.path).toString("base64");
+          if (b64.length > 32) {
+            images.push({ mimeType: "image/png", dataBase64: b64 });
+            visionNote =
+              "(снимок экрана передан модели как изображение — опиши по пикселям)";
+            desktopUsed = "screen-capture:multimodal";
+          }
+        }
+      } catch {
+        /* keep metadata path */
+      }
+      // Also run dedicated vision describe for providers / when image attach fails.
       try {
         const vision = await describeScreenshot(shot.path);
-        visionNote = vision.text;
-        desktopUsed = `screen-capture:${vision.mode}`;
+        if (vision.mode === "vision" || !visionNote) {
+          visionNote = vision.text;
+        } else if (vision.text) {
+          visionNote = `${visionNote}\n${vision.text}`;
+        }
+        if (!desktopUsed?.includes("multimodal")) {
+          desktopUsed = `screen-capture:${vision.mode}`;
+        }
       } catch (err) {
-        visionNote =
-          err instanceof Error ? err.message : "vision unavailable";
-        desktopUsed = "screen-capture";
+        if (!visionNote) {
+          visionNote =
+            err instanceof Error ? err.message : "vision unavailable";
+        }
+        if (!desktopUsed) desktopUsed = "screen-capture";
       }
       desktopBlock = formatScreenBlock("capture", shot, visionNote);
-
     } else if (
       looksLikeScreenControlIntent(text) &&
       getScreenPolicy().controlEnabled
@@ -639,7 +687,9 @@ export async function sendChatMessage(
     memorySnippets: memoryHits.map((h) => h.content),
   });
 
-  const messages: ChatMessage[] = [{ role: "system", content: SYSTEM_PROMPT }];
+  const messages: ChatMessage[] = [
+    { role: "system", content: await buildSystemPrompt() },
+  ];
   if (memoryBlock) messages.push({ role: "system", content: memoryBlock });
   if (diversityBlock) {
     messages.push({ role: "system", content: diversityBlock });

@@ -23,6 +23,8 @@ import {
   extractPdfBuffer,
   isReadablePdfText,
 } from "./pdfExtract";
+import { extractEpubText } from "./epubExtract";
+import { extractAvTranscript } from "./avTranscript";
 
 export type LibraryAnalysis = {
   theses: string[];
@@ -123,39 +125,18 @@ export async function extractContent(
   }
   if (mediaType === "epub") {
     try {
-      const raw = fs.readFileSync(filePath);
-      const asText = raw.toString("utf8");
-      const htmlish = asText
-        .replace(/<[^>]+>/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
-      if (htmlish.length > 80) {
-        return {
-          text: htmlish.slice(0, 50_000),
-          note: "epub: best-effort utf8/html strip",
-        };
-      }
-      return {
-        text: `[epub] ${path.basename(filePath)} принят; полный ZIP/OPF парсер — later.`,
-        note: "epub extract stub",
-      };
+      const extracted = extractEpubText(filePath);
+      return { text: extracted.text, note: extracted.note };
     } catch {
       return { text: `[epub] extract failed`, note: "extract failed" };
     }
   }
   if (mediaType === "audio" || mediaType === "video") {
-    const st = fs.statSync(filePath);
-    const side = sidecarTranscript(filePath);
-    if (side) {
-      return {
-        text: side,
-        note: `${mediaType}: sidecar transcript`,
-      };
-    }
-    return {
-      text: `[${mediaType} meta] ${path.basename(filePath)} · ${Math.round(st.size / 1024)} КБ · mtime=${st.mtime.toISOString()}\nТранскрипт ASR: положите рядом .txt/.md/.srt с тем же именем.`,
-      note: `${mediaType} metadata + sidecar hint`,
-    };
+    const av = await extractAvTranscript(
+      filePath,
+      mediaType === "video" ? "video" : "audio",
+    );
+    return { text: av.text, note: `${av.note} · method=${av.method}` };
   }
   const text = fs.readFileSync(filePath, "utf8");
   return { text: text.slice(0, 50_000), note: "unknown → utf8 best-effort" };
