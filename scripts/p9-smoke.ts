@@ -786,7 +786,16 @@ async function main() {
       text: prefs.sampleText,
     });
     assert.equal(pref.ok, true, pref.detail);
-    assert.ok(pref.lossAfter <= pref.lossBefore + 0.5, "preference applied");
+    assert.equal(pref.pair.preferred, "a");
+    assert.ok(
+      Number.isFinite(pref.lossBefore) && Number.isFinite(pref.lossAfter),
+      "preference losses recorded",
+    );
+    // Preference is always persisted; neural nudge must not explode loss.
+    assert.ok(
+      pref.lossAfter <= pref.lossBefore + 0.5,
+      `preference applied (loss ${pref.lossBefore}→${pref.lossAfter})`,
+    );
   }
 
   // «Перезагрузить»: drop audio, keep phrase text in corpus, prune pack units.

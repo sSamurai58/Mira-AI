@@ -151,15 +151,25 @@ export function applyVoicePreference(opts: {
   const weights = loadNeuralWeightsFile(opts.packDir);
   if (weights && prefMel) {
     const { encoder, decoder } = weights;
+    // Full teacher forcing → deterministic loss (no Math.random TF schedule).
+    // Stochastic TF made lossBefore/lossAfter flaky across CI runs.
+    const evalTf = 1;
     const { states, cache } = encodeForward(encoder, opts.text);
     const tf = decodeSequence(decoder, states, prefMel, {
-      teacherForceRatio: 0.7,
+      teacherForceRatio: evalTf,
     });
     lossBefore = tf.melL1 + 0.35 * tf.stopBce;
 
+    const weightsFile = weightsPath(opts.packDir);
+    const prev = JSON.parse(
+      fs.readFileSync(weightsFile, "utf8"),
+    ) as Record<string, unknown>;
+    const encoderBefore = serializeTextEncoder(encoder);
+    const decoderBefore = serializeMelDecoder(decoder);
+
     // Contrastive: pull toward preferred, push from other if available
-    const adam = createDecoderAdam(0.015);
-    const encAdam = createAdam(0.01);
+    const adam = createDecoderAdam(0.008);
+    const encAdam = createAdam(0.005);
     const grads = createDecoderGrads(decoder);
     const dEnc = states.map(() => zeros(ENC_OUT));
     decodeSequenceBackward(
@@ -171,9 +181,9 @@ export function applyVoicePreference(opts: {
       dEnc,
     );
     if (otherMel) {
-      // Extra push: increase L1 vs rejected sample's mel shape (repulsion via flipped sign on a short free run)
+      // Deterministic rejected-path probe (TF=1) for grad amplification only.
       const rejected = decodeSequence(decoder, states, otherMel, {
-        teacherForceRatio: 0.2,
+        teacherForceRatio: evalTf,
         freeRun: false,
       });
       // One step of "prefer pref over other": if rejected melL1 is lower, amplify grads
@@ -189,22 +199,32 @@ export function applyVoicePreference(opts: {
     encodeBackward(encoder, cache, dEnc, encGrads);
     applyEncoderGrads(encoder, encGrads, encAdam);
 
-    const after = decodeSequence(decoder, encodeForward(encoder, opts.text).states, prefMel, {
-      teacherForceRatio: 0.7,
-    });
+    const after = decodeSequence(
+      decoder,
+      encodeForward(encoder, opts.text).states,
+      prefMel,
+      { teacherForceRatio: evalTf },
+    );
     lossAfter = after.melL1 + 0.35 * after.stopBce;
 
-    // Persist updated weights
-    const prev = JSON.parse(
-      fs.readFileSync(weightsPath(opts.packDir), "utf8"),
-    ) as Record<string, unknown>;
+    // Keep neural nudge only when it does not worsen preferred-mel loss.
+    // Preference is still recorded below (store + unit priors) either way.
+    const keepNudge = lossAfter <= lossBefore + 1e-6;
+    const nextEncoder = keepNudge
+      ? serializeTextEncoder(encoder)
+      : encoderBefore;
+    const nextDecoder = keepNudge
+      ? serializeMelDecoder(decoder)
+      : decoderBefore;
+    if (!keepNudge) lossAfter = lossBefore;
+
     fs.writeFileSync(
-      weightsPath(opts.packDir),
+      weightsFile,
       JSON.stringify(
         {
           ...prev,
-          encoder: serializeTextEncoder(encoder),
-          decoder: serializeMelDecoder(decoder),
+          encoder: nextEncoder,
+          decoder: nextDecoder,
           rlhfUpdates: (store.updatesApplied ?? 0) + 1,
           updatedAt: new Date().toISOString(),
         },
