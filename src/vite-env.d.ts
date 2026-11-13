@@ -1202,7 +1202,7 @@ interface MiraBridge {
       phrases: string[];
       steps: Array<{
         id: string;
-        type: "open_url" | "launch" | "keys" | "pause" | "say";
+        type: "open_url" | "launch" | "open_path" | "open_folder" | "keys" | "type" | "click" | "clipboard_copy" | "clipboard_paste" | "pause" | "say" | "notify" | "hud_say" | "window_minimize" | "window_close" | "terminal";
         value: string;
       }>;
       reply: string;
@@ -1217,7 +1217,7 @@ interface MiraBridge {
     phrases?: string[];
     steps?: Array<{
       id: string;
-      type: "open_url" | "launch" | "keys" | "pause" | "say";
+      type: "open_url" | "launch" | "open_path" | "open_folder" | "keys" | "type" | "click" | "clipboard_copy" | "clipboard_paste" | "pause" | "say" | "notify" | "hud_say" | "window_minimize" | "window_close" | "terminal";
       value: string;
     }>;
     reply?: string;
@@ -1228,7 +1228,7 @@ interface MiraBridge {
     phrases: string[];
     steps: Array<{
       id: string;
-      type: "open_url" | "launch" | "keys" | "pause" | "say";
+      type: "open_url" | "launch" | "open_path" | "open_folder" | "keys" | "type" | "click" | "clipboard_copy" | "clipboard_paste" | "pause" | "say" | "notify" | "hud_say" | "window_minimize" | "window_close" | "terminal";
       value: string;
     }>;
     reply: string;
@@ -1246,7 +1246,7 @@ interface MiraBridge {
     phrases: string[];
     steps: Array<{
       id: string;
-      type: "open_url" | "launch" | "keys" | "pause" | "say";
+      type: "open_url" | "launch" | "open_path" | "open_folder" | "keys" | "type" | "click" | "clipboard_copy" | "clipboard_paste" | "pause" | "say" | "notify" | "hud_say" | "window_minimize" | "window_close" | "terminal";
       value: string;
     }>;
     reply: string;
@@ -1265,7 +1265,7 @@ interface MiraBridge {
       phrases: string[];
       steps: Array<{
         id: string;
-        type: "open_url" | "launch" | "keys" | "pause" | "say";
+        type: "open_url" | "launch" | "open_path" | "open_folder" | "keys" | "type" | "click" | "clipboard_copy" | "clipboard_paste" | "pause" | "say" | "notify" | "hud_say" | "window_minimize" | "window_close" | "terminal";
         value: string;
       }>;
       reply: string;
@@ -1275,7 +1275,7 @@ interface MiraBridge {
     };
     steps?: Array<{
       index: number;
-      type: "open_url" | "launch" | "keys" | "pause" | "say";
+      type: "open_url" | "launch" | "open_path" | "open_folder" | "keys" | "type" | "click" | "clipboard_copy" | "clipboard_paste" | "pause" | "say" | "notify" | "hud_say" | "window_minimize" | "window_close" | "terminal";
       value: string;
       ok: boolean;
       detail: string;

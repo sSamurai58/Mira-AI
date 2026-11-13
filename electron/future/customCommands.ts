@@ -1,19 +1,38 @@
 /**
  * Workshop «Кастомные команды»: voice-triggered action chains.
- * Persist in SQLite; run open URL / launch path / keys / pause / say.
+ * Persist in SQLite; run open URL / launch / keys / type / click / clipboard /
+ * paths / folder / pause / say / notify / window / terminal.
  */
 import fs from "node:fs";
 import { openStore } from "../store";
-import { openPathTarget } from "./appPaths";
+import {
+  getAppPath,
+  listAppPaths,
+  openAppPathById,
+  openPathTarget,
+  type AppPathRow,
+} from "./appPaths";
 import { openBrowserUrl } from "../tools/browser";
-import { pressKeys } from "../tools/screen";
+import { clickAt, pressKeys, typeText } from "../tools/screen";
+import { executeTerminalFromChat } from "../tools/terminal";
 
 export type CustomCommandActionType =
   | "open_url"
   | "launch"
+  | "open_path"
+  | "open_folder"
   | "keys"
+  | "type"
+  | "click"
+  | "clipboard_copy"
+  | "clipboard_paste"
   | "pause"
-  | "say";
+  | "say"
+  | "notify"
+  | "hud_say"
+  | "window_minimize"
+  | "window_close"
+  | "terminal";
 
 export type CustomCommandStep = {
   id: string;
@@ -61,12 +80,23 @@ export type CommandRunResult = {
   dryRun: boolean;
 };
 
-const ACTION_TYPES: CustomCommandActionType[] = [
+export const ACTION_TYPES: CustomCommandActionType[] = [
   "open_url",
   "launch",
+  "open_path",
+  "open_folder",
   "keys",
+  "type",
+  "click",
+  "clipboard_copy",
+  "clipboard_paste",
   "pause",
   "say",
+  "notify",
+  "hud_say",
+  "window_minimize",
+  "window_close",
+  "terminal",
 ];
 
 function ensureTable(): void {
@@ -288,17 +318,173 @@ function normalizeUrl(raw: string): string {
   return t;
 }
 
+/** Pause value is seconds by default; suffix ms/мс for milliseconds. */
 function parsePauseMs(raw: string): number {
-  const n = Number.parseFloat(String(raw).replace(",", ".").trim());
+  const t = String(raw ?? "").trim();
+  if (!t) return 1000;
+  const asMs = /(?:ms|мс)\s*$/i.test(t);
+  const numRaw = t
+    .replace(/,/g, ".")
+    .replace(/\s*(мс|ms|s|сек|секунд[аы]?)\s*$/i, "")
+    .trim();
+  const n = Number.parseFloat(numRaw);
   if (!Number.isFinite(n) || n < 0) return 1000;
-  // Allow "1.5" as seconds if value looks small, else treat as ms.
-  if (n > 0 && n < 30 && !/ms/i.test(raw) && !String(raw).includes("мс")) {
-    // Heuristic: bare "2" → 2s; "500" → 500ms; "1500" → 1500ms
-    if (n <= 60 && !/^\d{3,}$/.test(String(raw).trim())) {
-      return Math.round(n * 1000);
+  if (asMs) return Math.min(Math.round(n), 120_000);
+  return Math.min(Math.round(n * 1000), 120_000);
+}
+
+function parseClickCoordsValue(raw: string): { x: number; y: number } | null {
+  const m = String(raw)
+    .trim()
+    .match(/^(\d{1,5})\s*[,;\s]\s*(\d{1,5})$/);
+  if (!m) return null;
+  return { x: Number(m[1]), y: Number(m[2]) };
+}
+
+function resolveAppPathRef(raw: string): AppPathRow | null {
+  const key = raw.trim();
+  if (!key) return null;
+  const byId = getAppPath(key);
+  if (byId) return byId;
+  const norm = normalizePhrase(key);
+  const rows = listAppPaths().filter((p) => p.enabled);
+  let best: AppPathRow | null = null;
+  for (const row of rows) {
+    if (normalizePhrase(row.name) === norm) return row;
+    if (normalizePhrase(row.name).includes(norm) || norm.includes(normalizePhrase(row.name))) {
+      if (!best || row.name.length < best.name.length) best = row;
     }
   }
-  return Math.min(Math.round(n), 120_000);
+  return best;
+}
+
+function isElectronRuntime(): boolean {
+  return typeof process.versions.electron === "string";
+}
+
+async function clipboardWrite(
+  text: string,
+  opts: { dryRun: boolean },
+): Promise<{ ok: boolean; detail: string }> {
+  if (!text) return { ok: false, detail: "Текст для буфера пуст" };
+  if (opts.dryRun) {
+    return {
+      ok: true,
+      detail: `Проверка: копировать «${text.slice(0, 60)}${text.length > 60 ? "…" : ""}»`,
+    };
+  }
+  if (!isElectronRuntime()) {
+    return {
+      ok: true,
+      detail: `Зафиксировано без GUI: буфер «${text.slice(0, 40)}»`,
+    };
+  }
+  try {
+    const { clipboard } = await import("electron");
+    clipboard.writeText(text);
+    return { ok: true, detail: `Скопировано в буфер (${text.length} симв.)` };
+  } catch (err) {
+    return {
+      ok: false,
+      detail: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+async function showNotify(
+  title: string,
+  body: string,
+  opts: { dryRun: boolean },
+): Promise<{ ok: boolean; detail: string }> {
+  if (!body.trim() && !title.trim()) {
+    return { ok: false, detail: "Текст уведомления пуст" };
+  }
+  const t = title.trim() || "Mira";
+  const b = body.trim() || title.trim();
+  if (opts.dryRun) {
+    return { ok: true, detail: `Проверка: уведомление «${t}» — ${b.slice(0, 80)}` };
+  }
+  try {
+    if (isElectronRuntime()) {
+      const { Notification } = await import("electron");
+      if (Notification.isSupported()) {
+        new Notification({ title: t, body: b }).show();
+        return { ok: true, detail: `Уведомление: ${t}` };
+      }
+    }
+  } catch {
+    /* headless */
+  }
+  return { ok: true, detail: `Уведомление зафиксировано (без GUI): ${t}` };
+}
+
+function parseNotifyValue(raw: string): { title: string; body: string } {
+  const t = raw.trim();
+  const sep = t.indexOf("|");
+  if (sep >= 0) {
+    return {
+      title: t.slice(0, sep).trim() || "Mira",
+      body: t.slice(sep + 1).trim(),
+    };
+  }
+  return { title: "Mira", body: t };
+}
+
+async function openFolderInExplorer(
+  target: string,
+  opts: { dryRun: boolean },
+): Promise<{ ok: boolean; detail: string }> {
+  const path = target.trim();
+  if (!path) return { ok: false, detail: "Папка не задана" };
+  if (opts.dryRun) {
+    const exists = fs.existsSync(path);
+    return {
+      ok: exists,
+      detail: exists
+        ? `Проверка: открыть папку «${path}»`
+        : `Папка не найдена: ${path}`,
+    };
+  }
+  if (!fs.existsSync(path)) {
+    return { ok: false, detail: `Папка не найдена: ${path}` };
+  }
+  if (!isElectronRuntime()) {
+    return { ok: true, detail: `Зафиксировано без GUI: папка ${path}` };
+  }
+  try {
+    const { shell } = await import("electron");
+    const st = fs.statSync(path);
+    if (st.isDirectory()) {
+      const err = await shell.openPath(path);
+      return { ok: !err, detail: err || `Открыта папка: ${path}` };
+    }
+    shell.showItemInFolder(path);
+    return { ok: true, detail: `Показано в проводнике: ${path}` };
+  } catch (err) {
+    return {
+      ok: false,
+      detail: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+async function windowAction(
+  kind: "minimize" | "close",
+  opts: { dryRun: boolean },
+): Promise<{ ok: boolean; detail: string }> {
+  const label = kind === "minimize" ? "свернуть окно" : "закрыть окно";
+  if (opts.dryRun) {
+    return { ok: true, detail: `Проверка: ${label} (best-effort)` };
+  }
+  // Best-effort OS shortcut on the focused desktop app (Mira aside).
+  const combo = kind === "minimize" ? "win+down" : "alt+f4";
+  const res = await pressKeys(combo, { dryRun: false });
+  return {
+    ok: res.ok,
+    detail: res.ok
+      ? `${label[0]!.toUpperCase()}${label.slice(1)}: ${res.detail}`
+      : res.detail,
+  };
 }
 
 async function runStep(
@@ -351,6 +537,34 @@ async function runStep(
     return { ...base, ok: res.ok, detail: res.detail };
   }
 
+  if (step.type === "open_path") {
+    const ref = step.value.trim();
+    if (!ref) {
+      return { ...base, ok: false, detail: "Путь из «Пути» не выбран" };
+    }
+    const row = resolveAppPathRef(ref);
+    if (!row) {
+      return { ...base, ok: false, detail: `Путь «${ref}» не найден в Путях` };
+    }
+    if (opts.dryRun) {
+      const exists = fs.existsSync(row.path);
+      return {
+        ...base,
+        ok: exists,
+        detail: exists
+          ? `Проверка: открыть путь «${row.name}» (${row.path})`
+          : `Файл пути не найден: ${row.path}`,
+      };
+    }
+    const res = await openAppPathById(row.id);
+    return { ...base, ok: res.ok, detail: res.detail };
+  }
+
+  if (step.type === "open_folder") {
+    const res = await openFolderInExplorer(step.value, opts);
+    return { ...base, ok: res.ok, detail: res.detail };
+  }
+
   if (step.type === "keys") {
     const combo = step.value.trim();
     if (!combo) {
@@ -360,13 +574,127 @@ async function runStep(
     return { ...base, ok: res.ok, detail: res.detail };
   }
 
+  if (step.type === "type") {
+    const text = step.value;
+    if (!text.trim()) {
+      return { ...base, ok: false, detail: "Текст для ввода пуст" };
+    }
+    const res = await typeText(text, {
+      dryRun: opts.dryRun,
+      skipConfirm: true,
+    });
+    return { ...base, ok: res.ok, detail: res.detail };
+  }
+
+  if (step.type === "click") {
+    const coords = parseClickCoordsValue(step.value);
+    if (!coords) {
+      return {
+        ...base,
+        ok: false,
+        detail: "Координаты клика: укажите «x, y» (например 100, 200)",
+      };
+    }
+    const res = await clickAt(coords.x, coords.y, {
+      dryRun: opts.dryRun,
+      skipConfirm: true,
+    });
+    return { ...base, ok: res.ok, detail: res.detail };
+  }
+
+  if (step.type === "clipboard_copy") {
+    const res = await clipboardWrite(step.value, opts);
+    return { ...base, ok: res.ok, detail: res.detail };
+  }
+
+  if (step.type === "clipboard_paste") {
+    const text = step.value.trim();
+    if (text) {
+      const wrote = await clipboardWrite(text, opts);
+      if (!wrote.ok) return { ...base, ok: false, detail: wrote.detail };
+    }
+    const paste = await pressKeys(
+      process.platform === "darwin" ? "cmd+v" : "ctrl+v",
+      { dryRun: opts.dryRun },
+    );
+    return {
+      ...base,
+      ok: paste.ok,
+      detail: text
+        ? `Вставить из буфера (${text.length} симв.): ${paste.detail}`
+        : `Вставить: ${paste.detail}`,
+    };
+  }
+
   if (step.type === "pause") {
     const ms = parsePauseMs(step.value || "1");
     if (opts.dryRun) {
-      return { ...base, ok: true, detail: `Проверка: пауза ${ms} мс` };
+      return {
+        ...base,
+        ok: true,
+        detail: `Проверка: задержка ${ms} мс (${(ms / 1000).toFixed(ms % 1000 === 0 ? 0 : 2)} с)`,
+      };
     }
     await new Promise((r) => setTimeout(r, ms));
-    return { ...base, ok: true, detail: `Пауза ${ms} мс` };
+    return {
+      ...base,
+      ok: true,
+      detail: `Задержка ${ms} мс`,
+    };
+  }
+
+  if (step.type === "notify") {
+    const { title, body } = parseNotifyValue(step.value);
+    const res = await showNotify(title, body, opts);
+    return { ...base, ok: res.ok, detail: res.detail };
+  }
+
+  if (step.type === "hud_say") {
+    const text = step.value.trim();
+    if (!text) {
+      return { ...base, ok: false, detail: "Текст для HUD пуст" };
+    }
+    if (opts.dryRun) {
+      return { ...base, ok: true, detail: `Проверка: HUD «${text}»` };
+    }
+    try {
+      const { createOrFocusHud } = await import("../hud");
+      await createOrFocusHud();
+    } catch {
+      /* optional */
+    }
+    const note = await showNotify("Mira HUD", text, { dryRun: false });
+    return {
+      ...base,
+      ok: true,
+      detail: note.ok ? `HUD: «${text}»` : `HUD (без уведомления): «${text}»`,
+    };
+  }
+
+  if (step.type === "window_minimize") {
+    const res = await windowAction("minimize", opts);
+    return { ...base, ok: res.ok, detail: res.detail };
+  }
+
+  if (step.type === "window_close") {
+    const res = await windowAction("close", opts);
+    return { ...base, ok: res.ok, detail: res.detail };
+  }
+
+  if (step.type === "terminal") {
+    const cmd = step.value.trim();
+    if (!cmd) {
+      return { ...base, ok: false, detail: "Команда терминала не задана" };
+    }
+    if (opts.dryRun) {
+      return { ...base, ok: true, detail: `Проверка: терминал «${cmd}»` };
+    }
+    const res = await executeTerminalFromChat(cmd);
+    return {
+      ...base,
+      ok: res.ok,
+      detail: res.detail + (res.output ? `\n${res.output.slice(0, 400)}` : ""),
+    };
   }
 
   // say
@@ -393,7 +721,11 @@ export async function runCustomCommand(
     const step = command.steps[i]!;
     const res = await runStep(step, i, { dryRun });
     stepResults.push(res);
-    if (step.type === "say" && res.ok && step.value.trim()) {
+    if (
+      (step.type === "say" || step.type === "hud_say") &&
+      res.ok &&
+      step.value.trim()
+    ) {
       spoken.push(step.value.trim());
     }
   }

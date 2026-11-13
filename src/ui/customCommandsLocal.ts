@@ -6,9 +6,39 @@
 export type CustomCommandActionType =
   | "open_url"
   | "launch"
+  | "open_path"
+  | "open_folder"
   | "keys"
+  | "type"
+  | "click"
+  | "clipboard_copy"
+  | "clipboard_paste"
   | "pause"
-  | "say";
+  | "say"
+  | "notify"
+  | "hud_say"
+  | "window_minimize"
+  | "window_close"
+  | "terminal";
+
+export const ACTION_TYPES: CustomCommandActionType[] = [
+  "open_url",
+  "launch",
+  "open_path",
+  "open_folder",
+  "keys",
+  "type",
+  "click",
+  "clipboard_copy",
+  "clipboard_paste",
+  "pause",
+  "say",
+  "notify",
+  "hud_say",
+  "window_minimize",
+  "window_close",
+  "terminal",
+];
 
 export type CustomCommandStep = {
   id: string;
@@ -101,6 +131,46 @@ export function setLocalCustomCommandEnabled(
   return items[idx]!;
 }
 
+function dryLine(s: CustomCommandStep, i: number): string {
+  const v = s.value || "(пусто)";
+  switch (s.type) {
+    case "open_url":
+      return `${i + 1}. open_url: Проверка: открыть сайт ${v}`;
+    case "launch":
+      return `${i + 1}. launch: Проверка: запустить «${v}»`;
+    case "open_path":
+      return `${i + 1}. open_path: Проверка: путь из Путей «${v}»`;
+    case "open_folder":
+      return `${i + 1}. open_folder: Проверка: открыть папку «${v}»`;
+    case "keys":
+      return `${i + 1}. keys: Проверка: нажать ${v}`;
+    case "type":
+      return `${i + 1}. type: Проверка: ввести «${v}»`;
+    case "click":
+      return `${i + 1}. click: Проверка: клик ${v}`;
+    case "clipboard_copy":
+      return `${i + 1}. clipboard_copy: Проверка: копировать «${v}»`;
+    case "clipboard_paste":
+      return `${i + 1}. clipboard_paste: Проверка: вставить`;
+    case "pause":
+      return `${i + 1}. pause: Проверка: задержка ${s.value || "1"} с`;
+    case "say":
+      return `${i + 1}. say: Проверка: сказать «${v}»`;
+    case "notify":
+      return `${i + 1}. notify: Проверка: уведомление «${v}»`;
+    case "hud_say":
+      return `${i + 1}. hud_say: Проверка: HUD «${v}»`;
+    case "window_minimize":
+      return `${i + 1}. window_minimize: Проверка: свернуть окно`;
+    case "window_close":
+      return `${i + 1}. window_close: Проверка: закрыть окно`;
+    case "terminal":
+      return `${i + 1}. terminal: Проверка: терминал «${v}»`;
+    default:
+      return `${i + 1}. ${s.type}: Проверка`;
+  }
+}
+
 export function runLocalCustomCommandDry(
   id: string,
 ): {
@@ -111,15 +181,12 @@ export function runLocalCustomCommandDry(
 } {
   const item = listLocalCustomCommands().find((c) => c.id === id);
   if (!item) return { ok: false, detail: "Команда не найдена", reply: "", dryRun: true };
-  const lines = item.steps.map((s, i) => {
-    if (s.type === "open_url") return `${i + 1}. open_url: Проверка: открыть сайт ${s.value || "(пусто)"}`;
-    if (s.type === "launch") return `${i + 1}. launch: Проверка: запустить «${s.value || "(пусто)"}»`;
-    if (s.type === "keys") return `${i + 1}. keys: Проверка: нажать ${s.value || "(пусто)"}`;
-    if (s.type === "pause") return `${i + 1}. pause: Проверка: пауза ${s.value || "1"}`;
-    return `${i + 1}. say: Проверка: сказать «${s.value || "(пусто)"}»`;
-  });
+  const lines = item.steps.map((s, i) => dryLine(s, i));
   const spoken = item.steps
-    .filter((s) => s.type === "say" && s.value.trim())
+    .filter(
+      (s) =>
+        (s.type === "say" || s.type === "hud_say") && s.value.trim(),
+    )
     .map((s) => s.value.trim());
   const reply =
     item.reply.trim() ||

@@ -343,15 +343,15 @@ export async function captureScreen(): Promise<ScreenCaptureResult> {
   };
 }
 
+/**
+ * Click at screen coordinates.
+ * Trusted custom-command path: pass `{ skipConfirm: true }` (no per-click dialog).
+ */
 export async function clickAt(
   x: number,
   y: number,
+  opts?: { dryRun?: boolean; skipConfirm?: boolean },
 ): Promise<ScreenClickResult> {
-  const policy = getScreenPolicy();
-  if (!policy.enabled || !policy.controlEnabled) {
-    throw new Error("Контроль экрана выключен.");
-  }
-
   if (
     !Number.isFinite(x) ||
     !Number.isFinite(y) ||
@@ -369,20 +369,56 @@ export async function clickAt(
     };
   }
 
-  const ok = await requestUserConfirm({
-    actionClass: "screen",
-    risk: "high",
-    title: "Подтверждение контроля экрана",
-    body: `Mira хочет выполнить клик по координатам (${Math.round(x)}, ${Math.round(y)}).\nОкно Mira будет временно скрыто на момент клика.\nРазрешить?`,
-    confirmLabel: "Кликнуть",
-  });
-  if (!ok) {
+  if (opts?.dryRun) {
     return {
-      ok: false,
+      ok: true,
       x,
       y,
       mode: "dry-run",
-      detail: "Отклонено пользователем",
+      detail: `Проверка: клик (${Math.round(x)}, ${Math.round(y)})`,
+    };
+  }
+
+  const policy = getScreenPolicy();
+  if (!policy.enabled || !policy.controlEnabled) {
+    if (opts?.skipConfirm) {
+      return {
+        ok: true,
+        x,
+        y,
+        mode: "dry-run",
+        detail: `Контроль экрана выключен — зафиксирован клик (${Math.round(x)}, ${Math.round(y)})`,
+      };
+    }
+    throw new Error("Контроль экрана выключен.");
+  }
+
+  if (!opts?.skipConfirm) {
+    const ok = await requestUserConfirm({
+      actionClass: "screen",
+      risk: "high",
+      title: "Подтверждение контроля экрана",
+      body: `Mira хочет выполнить клик по координатам (${Math.round(x)}, ${Math.round(y)}).\nОкно Mira будет временно скрыто на момент клика.\nРазрешить?`,
+      confirmLabel: "Кликнуть",
+    });
+    if (!ok) {
+      return {
+        ok: false,
+        x,
+        y,
+        mode: "dry-run",
+        detail: "Отклонено пользователем",
+      };
+    }
+  }
+
+  if (!isElectronRuntime()) {
+    return {
+      ok: true,
+      x,
+      y,
+      mode: "dry-run",
+      detail: `Зафиксировано без GUI: клик (${Math.round(x)}, ${Math.round(y)})`,
     };
   }
 
@@ -414,30 +450,65 @@ export async function clickAt(
       x,
       y,
       mode: "dry-run",
-      detail: `Системный клик недоступен (${message.slice(0, 120)}). Действие зафиксировано как dry-run после confirm.`,
+      detail: `Системный клик недоступен (${message.slice(0, 120)}). Действие зафиксировано как dry-run.`,
     };
   }
 }
 
-export async function typeText(text: string): Promise<ScreenTypeResult> {
+/**
+ * Type text into the focused OS control.
+ * Trusted custom-command path: pass `{ skipConfirm: true }`.
+ */
+export async function typeText(
+  text: string,
+  opts?: { dryRun?: boolean; skipConfirm?: boolean },
+): Promise<ScreenTypeResult> {
+  if (opts?.dryRun) {
+    return {
+      ok: true,
+      text,
+      mode: "dry-run",
+      detail: `Проверка: ввести «${text.slice(0, 80)}${text.length > 80 ? "…" : ""}»`,
+    };
+  }
+
   const policy = getScreenPolicy();
   if (!policy.enabled || !policy.controlEnabled) {
+    if (opts?.skipConfirm) {
+      return {
+        ok: true,
+        text,
+        mode: "dry-run",
+        detail: `Контроль экрана выключен — зафиксирован ввод «${text.slice(0, 60)}»`,
+      };
+    }
     throw new Error("Контроль экрана выключен.");
   }
 
-  const ok = await requestUserConfirm({
-    actionClass: "screen",
-    risk: "high",
-    title: "Подтверждение ввода с клавиатуры",
-    body: `Mira хочет ввести текст:\n«${text.slice(0, 200)}»\nОкно Mira будет временно скрыто на момент ввода.\nРазрешить?`,
-    confirmLabel: "Ввести",
-  });
-  if (!ok) {
+  if (!opts?.skipConfirm) {
+    const ok = await requestUserConfirm({
+      actionClass: "screen",
+      risk: "high",
+      title: "Подтверждение ввода с клавиатуры",
+      body: `Mira хочет ввести текст:\n«${text.slice(0, 200)}»\nОкно Mira будет временно скрыто на момент ввода.\nРазрешить?`,
+      confirmLabel: "Ввести",
+    });
+    if (!ok) {
+      return {
+        ok: false,
+        text,
+        mode: "dry-run",
+        detail: "Отклонено пользователем",
+      };
+    }
+  }
+
+  if (!isElectronRuntime()) {
     return {
-      ok: false,
+      ok: true,
       text,
       mode: "dry-run",
-      detail: "Отклонено пользователем",
+      detail: `Зафиксировано без GUI: ввод «${text.slice(0, 60)}»`,
     };
   }
 
@@ -466,7 +537,7 @@ export async function typeText(text: string): Promise<ScreenTypeResult> {
       ok: true,
       text,
       mode: "dry-run",
-      detail: `Системный ввод недоступен (${message.slice(0, 120)}). Ввод зафиксирован как dry-run после confirm.`,
+      detail: `Системный ввод недоступен (${message.slice(0, 120)}). Ввод зафиксирован как dry-run.`,
     };
   }
 }

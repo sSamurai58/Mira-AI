@@ -5394,7 +5394,7 @@ body.mira-hud-root *::-webkit-scrollbar {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-width: 148px;
+  min-width: 168px;
   padding: 8px 12px;
   border-radius: var(--radius-sm);
   border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
@@ -5420,7 +5420,9 @@ body.mira-hud-root *::-webkit-scrollbar {
   z-index: 20;
   top: calc(100% + 4px);
   left: 0;
-  min-width: 100%;
+  min-width: max(100%, 220px);
+  max-height: min(360px, 50vh);
+  overflow-y: auto;
   margin: 0;
   padding: 6px;
   list-style: none;
@@ -5428,6 +5430,11 @@ body.mira-hud-root *::-webkit-scrollbar {
   border: 1px solid color-mix(in srgb, var(--text-muted) 28%, transparent);
   background: color-mix(in srgb, var(--bg-elevated) 92%, var(--bg));
   box-shadow: 0 12px 28px color-mix(in srgb, #000 45%, transparent);
+}
+
+.cc-path-select {
+  flex: 0 1 200px;
+  min-width: 140px;
 }
 
 .cc-type-option {

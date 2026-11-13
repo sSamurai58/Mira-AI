@@ -8,6 +8,7 @@ import {
 } from "react";
 import { emitActionLog } from "../actionLog";
 import {
+  ACTION_TYPES,
   deleteLocalCustomCommand,
   listLocalCustomCommands,
   runLocalCustomCommandDry,
@@ -19,22 +20,49 @@ import {
 } from "../customCommandsLocal";
 import { useAppConfirm } from "./AppConfirm";
 import { StubBadge } from "./StubBadge";
+import { ThemeSelect } from "./ThemeSelect";
 
 const ACTION_LABEL: Record<CustomCommandActionType, string> = {
-  open_url: "Открыть сайт",
+  open_url: "Открыть в браузере",
   launch: "Запустить",
+  open_path: "Открыть путь",
+  open_folder: "Открыть папку",
   keys: "Нажать клавиши",
-  pause: "Пауза",
+  type: "Ввести текст",
+  click: "Клик",
+  clipboard_copy: "Копировать в буфер",
+  clipboard_paste: "Вставить",
+  pause: "Задержка (сек)",
   say: "Сказать",
+  notify: "Уведомление",
+  hud_say: "Сказать в HUD",
+  window_minimize: "Свернуть окно",
+  window_close: "Закрыть окно",
+  terminal: "Команда терминала",
 };
 
+/** Quick-add pills — useful subset (full list is in the type dropdown). */
 const QUICK_ADD: CustomCommandActionType[] = [
   "open_url",
   "launch",
+  "open_path",
+  "type",
+  "click",
   "keys",
+  "clipboard_copy",
+  "clipboard_paste",
   "pause",
   "say",
+  "notify",
+  "open_folder",
 ];
+
+const VALUELESS_TYPES: CustomCommandActionType[] = [
+  "window_minimize",
+  "window_close",
+];
+
+type AppPathOption = { id: string; name: string; path: string };
 
 type Draft = {
   id?: string;
@@ -56,8 +84,8 @@ function emptyStep(type: CustomCommandActionType = "launch"): CustomCommandStep 
     value:
       type === "pause"
         ? "1"
-        : type === "keys"
-          ? ""
+        : type === "click"
+          ? "100, 200"
           : "",
   };
 }
@@ -78,12 +106,33 @@ function stepPlaceholder(type: CustomCommandActionType): string {
       return "https://example.com";
     case "launch":
       return "Путь к программе, файлу или папке";
+    case "open_path":
+      return "id или имя из Путей";
+    case "open_folder":
+      return "Путь к папке";
     case "keys":
       return "ctrl+shift+s";
+    case "type":
+      return "Текст для ввода";
+    case "click":
+      return "x, y — например 100, 200";
+    case "clipboard_copy":
+      return "Текст в буфер обмена";
+    case "clipboard_paste":
+      return "Текст (необязательно) или пусто = вставить";
     case "pause":
-      return "1";
+      return "Секунды, напр. 1.5";
     case "say":
       return "Текст для озвучки";
+    case "notify":
+      return "Заголовок|Текст или просто текст";
+    case "hud_say":
+      return "Текст в HUD / уведомление";
+    case "window_minimize":
+    case "window_close":
+      return "";
+    case "terminal":
+      return "Команда (с подтверждением)";
   }
 }
 
@@ -101,7 +150,7 @@ function ActionIcon({ type }: { type: CustomCommandActionType }) {
       </svg>
     );
   }
-  if (type === "launch") {
+  if (type === "launch" || type === "open_path" || type === "open_folder") {
     return (
       <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden>
         <path
@@ -113,7 +162,7 @@ function ActionIcon({ type }: { type: CustomCommandActionType }) {
       </svg>
     );
   }
-  if (type === "keys") {
+  if (type === "keys" || type === "type") {
     return (
       <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden>
         <rect
@@ -135,6 +184,41 @@ function ActionIcon({ type }: { type: CustomCommandActionType }) {
       </svg>
     );
   }
+  if (type === "click") {
+    return (
+      <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden>
+        <path
+          d="M9 3v8.5l2.2-1.4 1.5 3.2 1.8-.8-1.5-3.2L16 8.2 9 3z"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.3"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+  if (type === "clipboard_copy" || type === "clipboard_paste") {
+    return (
+      <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden>
+        <rect
+          x="6"
+          y="4"
+          width="9"
+          height="12"
+          rx="1.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.4"
+        />
+        <path
+          d="M5 14H4.5A1.5 1.5 0 0 1 3 12.5v-8A1.5 1.5 0 0 1 4.5 3H12"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.3"
+        />
+      </svg>
+    );
+  }
   if (type === "pause") {
     return (
       <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden>
@@ -145,6 +229,69 @@ function ActionIcon({ type }: { type: CustomCommandActionType }) {
           stroke="currentColor"
           strokeWidth="1.4"
           strokeLinecap="round"
+        />
+      </svg>
+    );
+  }
+  if (type === "notify" || type === "hud_say") {
+    return (
+      <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden>
+        <path
+          d="M10 3a5 5 0 0 1 5 5v2.5l1.5 2.5H3.5L5 10.5V8a5 5 0 0 1 5-5z"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.3"
+        />
+        <path
+          d="M8.5 15.5a1.5 1.5 0 0 0 3 0"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.3"
+        />
+      </svg>
+    );
+  }
+  if (type === "window_minimize" || type === "window_close") {
+    return (
+      <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden>
+        <rect
+          x="3.5"
+          y="5"
+          width="13"
+          height="10"
+          rx="1.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.4"
+        />
+        <path
+          d="M3.5 8h13"
+          stroke="currentColor"
+          strokeWidth="1.3"
+        />
+      </svg>
+    );
+  }
+  if (type === "terminal") {
+    return (
+      <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden>
+        <rect
+          x="2.5"
+          y="4"
+          width="15"
+          height="12"
+          rx="1.5"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.4"
+        />
+        <path
+          d="M5.5 8l2.5 2-2.5 2M10 13h4"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
         />
       </svg>
     );
@@ -178,6 +325,7 @@ export function CustomCommandsPanel() {
   const [phraseDraft, setPhraseDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [openStepMenu, setOpenStepMenu] = useState<string | null>(null);
+  const [appPaths, setAppPaths] = useState<AppPathOption[]>([]);
 
   const refresh = useCallback(async () => {
     if (!window.mira?.listCustomCommands) {
@@ -187,9 +335,27 @@ export function CustomCommandsPanel() {
     setItems(await window.mira.listCustomCommands());
   }, []);
 
+  const refreshPaths = useCallback(async () => {
+    if (!window.mira?.listAppPaths) {
+      setAppPaths([]);
+      return;
+    }
+    try {
+      const rows = await window.mira.listAppPaths();
+      setAppPaths(
+        rows
+          .filter((r) => r.enabled)
+          .map((r) => ({ id: r.id, name: r.name, path: r.path })),
+      );
+    } catch {
+      setAppPaths([]);
+    }
+  }, []);
+
   useEffect(() => {
     void refresh();
-  }, [refresh]);
+    void refreshPaths();
+  }, [refresh, refreshPaths]);
 
   useEffect(() => {
     if (!openStepMenu) return;
@@ -205,10 +371,22 @@ export function CustomCommandsPanel() {
     return `${n} команд`;
   }, [items.length]);
 
+  const pathSelectOptions = useMemo(
+    () => [
+      { value: "", label: "Выберите путь…" },
+      ...appPaths.map((p) => ({
+        value: p.id,
+        label: `${p.name}`,
+      })),
+    ],
+    [appPaths],
+  );
+
   function openCreate() {
     setEditor(emptyDraft());
     setPhraseDraft("");
     setNote("");
+    void refreshPaths();
   }
 
   function openEdit(item: CustomCommandItem) {
@@ -222,6 +400,7 @@ export function CustomCommandsPanel() {
     });
     setPhraseDraft("");
     setNote("");
+    void refreshPaths();
   }
 
   function addPhraseFromDraft() {
@@ -286,13 +465,13 @@ export function CustomCommandsPanel() {
     });
   }
 
-  async function browseLaunch(stepId: string) {
+  async function browseLaunch(stepId: string, kind: "program" | "folder" = "program") {
     if (!editor) return;
     if (!window.mira?.pickAppPath) {
       setNote("Выбор файла доступен в Electron");
       return;
     }
-    const res = await window.mira.pickAppPath("program");
+    const res = await window.mira.pickAppPath(kind);
     if (res.canceled || !res.path) return;
     updateStep(stepId, { value: res.path });
   }
@@ -340,7 +519,6 @@ export function CustomCommandsPanel() {
     if (!editor) return;
     setBusy(true);
     try {
-      // Persist draft first so runner has an id (or dry-run local).
       const payload = {
         id: editor.id,
         name: editor.name.trim() || "Черновик",
@@ -407,6 +585,15 @@ export function CustomCommandsPanel() {
       setNote("Запуск доступен в Electron");
       return;
     }
+    const hasTerminal = item.steps.some((s) => s.type === "terminal");
+    if (hasTerminal) {
+      const ok = await confirm({
+        title: "Команда с терминалом",
+        body: `«${item.name}» содержит шаг «Команда терминала». Продолжить?`,
+        confirmLabel: "Запустить",
+      });
+      if (!ok) return;
+    }
     setBusy(true);
     try {
       const res = await window.mira.runCustomCommand(item.id, { dryRun: false });
@@ -420,6 +607,78 @@ export function CustomCommandsPanel() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function renderStepValue(step: CustomCommandStep) {
+    if (VALUELESS_TYPES.includes(step.type)) {
+      return (
+        <span className="muted" style={{ fontSize: "0.85rem" }}>
+          Best-effort для активного окна
+        </span>
+      );
+    }
+
+    if (step.type === "open_path") {
+      return (
+        <div className="row" style={{ gap: 8, flex: 1, minWidth: 0 }}>
+          {appPaths.length > 0 ? (
+            <ThemeSelect
+              className="cc-path-select"
+              aria-label="Путь из Путей"
+              value={
+                appPaths.some((p) => p.id === step.value) ? step.value : ""
+              }
+              options={pathSelectOptions}
+              disabled={busy}
+              onChange={(id) => updateStep(step.id, { value: id })}
+            />
+          ) : null}
+          <input
+            style={{ flex: 1, minWidth: 0 }}
+            value={step.value}
+            disabled={busy}
+            placeholder={stepPlaceholder(step.type)}
+            onChange={(e) => updateStep(step.id, { value: e.target.value })}
+          />
+        </div>
+      );
+    }
+
+    if (step.type === "launch" || step.type === "open_folder") {
+      return (
+        <div className="row" style={{ gap: 8, flex: 1, minWidth: 0 }}>
+          <input
+            style={{ flex: 1, minWidth: 0 }}
+            value={step.value}
+            disabled={busy}
+            placeholder={stepPlaceholder(step.type)}
+            onChange={(e) => updateStep(step.id, { value: e.target.value })}
+          />
+          <button
+            type="button"
+            className="btn"
+            disabled={busy}
+            onClick={() =>
+              void browseLaunch(
+                step.id,
+                step.type === "open_folder" ? "folder" : "program",
+              )
+            }
+          >
+            Выбрать
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <input
+        value={step.value}
+        disabled={busy}
+        placeholder={stepPlaceholder(step.type)}
+        onChange={(e) => updateStep(step.id, { value: e.target.value })}
+      />
+    );
   }
 
   return (
@@ -547,7 +806,7 @@ export function CustomCommandsPanel() {
                         role="listbox"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        {QUICK_ADD.map((t) => (
+                        {ACTION_TYPES.map((t) => (
                           <li key={t}>
                             <button
                               type="button"
@@ -559,10 +818,17 @@ export function CustomCommandsPanel() {
                               role="option"
                               aria-selected={t === step.type}
                               onClick={() => {
+                                const nextValue =
+                                  t === "pause" && !step.value
+                                    ? "1"
+                                    : t === "click" && !step.value
+                                      ? "100, 200"
+                                      : VALUELESS_TYPES.includes(t)
+                                        ? ""
+                                        : step.value;
                                 updateStep(step.id, {
                                   type: t,
-                                  value:
-                                    t === "pause" && !step.value ? "1" : step.value,
+                                  value: nextValue,
                                 });
                                 setOpenStepMenu(null);
                               }}
@@ -575,38 +841,7 @@ export function CustomCommandsPanel() {
                     ) : null}
                   </div>
 
-                  <div className="cc-step-value">
-                    {step.type === "launch" ? (
-                      <div className="row" style={{ gap: 8, flex: 1, minWidth: 0 }}>
-                        <input
-                          style={{ flex: 1, minWidth: 0 }}
-                          value={step.value}
-                          disabled={busy}
-                          placeholder={stepPlaceholder(step.type)}
-                          onChange={(e) =>
-                            updateStep(step.id, { value: e.target.value })
-                          }
-                        />
-                        <button
-                          type="button"
-                          className="btn"
-                          disabled={busy}
-                          onClick={() => void browseLaunch(step.id)}
-                        >
-                          Выбрать
-                        </button>
-                      </div>
-                    ) : (
-                      <input
-                        value={step.value}
-                        disabled={busy}
-                        placeholder={stepPlaceholder(step.type)}
-                        onChange={(e) =>
-                          updateStep(step.id, { value: e.target.value })
-                        }
-                      />
-                    )}
-                  </div>
+                  <div className="cc-step-value">{renderStepValue(step)}</div>
 
                   <div className="cc-step-controls">
                     <button
@@ -697,8 +932,9 @@ export function CustomCommandsPanel() {
           </div>
 
           <p className="muted cc-keys-hint">
-            Клавиши пишутся через плюс: ctrl, shift, alt, win, enter, esc, tab,
-            f1…f12, буквы и цифры. Пример:{" "}
+            Клавиши через плюс: ctrl, shift, alt, win, enter, esc, tab, f1…f12.
+            Задержка — в секундах (суффикс ms/мс для миллисекунд). Клик — «x, y».
+            Терминал запросит подтверждение. Пример:{" "}
             <strong className="cc-keys-example">win+shift+s</strong>
           </p>
         </form>
