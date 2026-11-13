@@ -32,8 +32,8 @@ Future **F1–F13** — только после стабилизации must (�
 | Поле | Значение |
 |------|----------|
 | Текущая фаза | **Realize-all ✅** |
-| Следующее действие | 0.1.10 живое ядро + Home HUD WIP — review / OK перед publish |
-| Запрещено сейчас | Publish / tag 0.1.10 без явного OK |
+| Следующее действие | Дальше по запросу |
+| Запрещено сейчас | Republish / retag 0.1.10 без явного OK |
 
 
 ### Стартовые допущения стека (подтвердить в P0 → MEMORY)
@@ -345,30 +345,31 @@ UX: **Создать → фразы → загрузить → Mira сама о�
 - [x] Публикация GitHub Release **0.1.6** — https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.6 (tag `v0.1.6` @ `8baa1da`)
 - [ ] MCP runtime / OAuth (по-прежнему later; после явной команды)
 
-## 2026-11-13 — Релиз 0.1.10 WIP (живое ядро + Home HUD)
+## 2026-11-13 — Релиз 0.1.10 ✅ (живое ядро + Home HUD)
 
-Ветка `cursor/release-0-1-10-6838` от `v0.1.9`. Пакет **0.1.10**. **Не публиковать** без OK.
+Ветка `cursor/release-0-1-10-6838` @ `4052749`. Пакет **0.1.10**. Latest GitHub Release.
 
 - [x] Bump 0.1.10
 - [x] WebGL core: faster orbit/layer spin, idle luminance pulse, context-lost recovery, visibility resume
 - [x] Home HUD: level aura + progress sheen, voice bars idle pulse (voice on), reply latency tick, live tiles
 - [x] `prefers-reduced-motion`: slow drift instead of full freeze for core/HUD
-- [ ] Publish GitHub Release — только после явного OK
+- [x] Публикация GitHub Release **0.1.10** — https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.10 (tag `v0.1.10` @ `4052749`)
 
-## 2026-11-13 — Релиз 0.1.9 WIP (голографическое ядро)
+## 2026-11-13 — Релиз 0.1.9 ✅ (голографическое ядро)
 
-Ветка `cursor/release-0-1-9-6838` от `v0.1.8`. Пакет **0.1.9**. **Не публиковать** без OK.
+Ветка `cursor/release-0-1-9-6838` @ `f45dd4d`. Пакет **0.1.9**.
 
 - [x] Bump 0.1.9
 - [x] Port user WebGL2 holographic core → `src/ui/core/coreWebgl.ts` (+ shaders/geometry modules)
 - [x] Mira level → visibility 0…4 (`miraLevelToHoloScale`: L1≈0.3, L5→2, L15→3.5, L50+→4)
 - [x] Flash on level-up; reduced-motion slows spin/orbit
 - [x] Reference HTML → `docs/mira-holo-core-ref.html`
-- [ ] Publish GitHub Release — только после явного OK
+- [x] p9 smoke: flaky RLHF preference-loss assert
+- [x] Публикация GitHub Release **0.1.9** — https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.9 (tag `v0.1.9` @ `f45dd4d`)
 
-## 2026-11-12 — Релиз 0.1.8 WIP (ElevenLabs TTS)
+## 2026-11-12 — Релиз 0.1.8 ✅ (ElevenLabs TTS)
 
-Ветка `cursor/release-0-1-8-6838` от tip 0.1.7. Пакет **0.1.8**. **Не публиковать** без OK.
+Ветка `cursor/release-0-1-8-6838` @ `cd23b4e`. Пакет **0.1.8**.
 
 - [x] Bump 0.1.8
 - [x] Electron main: `POST /v1/text-to-speech/{voice_id}` + status (`electron/tts/elevenlabs.ts`)
@@ -376,11 +377,11 @@ UX: **Создать → фразы → загрузить → Mira сама о�
 - [x] Движок TTS `elevenlabs` (замена `edge-stub`); speak path в chat/voice
 - [x] `.env.example` + Doctor finding; smoke `elevenlabs:smoke`
 - [ ] Пользователь: **ELEVENLABS_API_KEY** из кабинета + план/кредиты + сеть
-- [ ] Publish GitHub Release — только после явного OK
+- [x] Публикация GitHub Release **0.1.8** — https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.8 (tag `v0.1.8` @ `cd23b4e`)
 
 ## 2026-11-12 — Релиз 0.1.7 ✅
 
-Ветка `cursor/release-0-1-7-6838` @ `d75191a`. Пакет **0.1.7**. Latest GitHub Release.
+Ветка `cursor/release-0-1-7-6838` @ `d75191a`. Пакет **0.1.7**.
 
 Контекст: Voice Studio **нарезка** всё ещё резала слова рано/криво, **нет нормального сращивания** после 0.1.4 (`02ad96d`). Не про chat text templates.
 
