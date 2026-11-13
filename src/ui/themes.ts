@@ -280,6 +280,37 @@ export function getTheme(id: ThemeId): ThemeDefinition {
   return THEMES.find((t) => t.id === id) ?? THEMES[0];
 }
 
+/** Fired on `window` after theme CSS vars (incl. core plasma) are applied. */
+export const MIRA_THEME_EVENT = "mira:theme";
+
+/** Core plasma band colors derived from theme tokens (hex). */
+export type CoreThemePalette = {
+  cool: string;
+  warm: string;
+  glow: string;
+};
+
+/**
+ * Map Mira theme tokens → plasma bands.
+ * cool = mid filaments (--accent ↔ --success, slight --border)
+ * warm = inner/outer filaments (--warning ↔ --accent)
+ * glow = nucleus (lifted warm↔cool toward white, tinted by --accent)
+ */
+export function corePaletteFromTokens(tokens: ThemeTokens): CoreThemePalette {
+  const coolBase =
+    mixHex(tokens.accent, tokens.success, 0.35) ?? tokens.accent;
+  const cool =
+    liftHex(mixHex(coolBase, tokens.border, 0.12) ?? coolBase, 0.12) ??
+    coolBase;
+  const warm =
+    liftHex(mixHex(tokens.warning, tokens.accent, 0.25) ?? tokens.warning, 0.08) ??
+    tokens.warning;
+  const glowMix = mixHex(warm, cool, 0.35) ?? tokens.accent;
+  const glowTint = mixHex(glowMix, tokens.accent, 0.2) ?? glowMix;
+  const glow = liftHex(glowTint, 0.55) ?? glowTint;
+  return { cool, warm, glow };
+}
+
 export function applyTheme(id: ThemeId): void {
   const theme = getTheme(id);
   const root = document.documentElement;
@@ -305,8 +336,18 @@ export function applyTheme(id: ThemeId): void {
     "--panel-line",
     `color-mix(in srgb, ${tokens.accent} 26%, transparent)`,
   );
+  // Core plasma layers — live uniforms read these via getComputedStyle
+  const core = corePaletteFromTokens(tokens);
+  root.style.setProperty("--core-cool", core.cool);
+  root.style.setProperty("--core-warm", core.warm);
+  root.style.setProperty("--core-glow", core.glow);
   root.dataset.theme = theme.id;
   localStorage.setItem("mira.theme", theme.id);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent(MIRA_THEME_EVENT, { detail: { id: theme.id } }),
+    );
+  }
 }
 
 function mixHex(a: string, b: string, t: number): string | null {
@@ -316,6 +357,16 @@ function mixHex(a: string, b: string, t: number): string | null {
   const m = (x: number, y: number) => Math.round(x + (y - x) * t);
   const to = (n: number) => n.toString(16).padStart(2, "0");
   return `#${to(m(pa[0], pb[0]))}${to(m(pa[1], pb[1]))}${to(m(pa[2], pb[2]))}`;
+}
+
+/** Lift RGB toward white by `amount` (0…1). */
+function liftHex(hex: string, amount: number): string | null {
+  const p = parseHex(hex);
+  if (!p) return null;
+  const lift = (c: number) =>
+    Math.min(255, Math.round(c * (1 - amount) + 255 * amount));
+  const to = (n: number) => n.toString(16).padStart(2, "0");
+  return `#${to(lift(p[0]))}${to(lift(p[1]))}${to(lift(p[2]))}`;
 }
 
 function parseHex(hex: string): [number, number, number] | null {

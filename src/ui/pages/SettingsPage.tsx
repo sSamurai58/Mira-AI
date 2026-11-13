@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 import { StubBadge } from "../components/StubBadge";
 import { SettingsApiSection } from "../components/SettingsApiSection";
+import { SettingsElevenLabsSection } from "../components/SettingsElevenLabsSection";
 import { ToggleRow } from "../components/SettingsFormBits";
 import { SettingsIntegrationsSection } from "../components/SettingsIntegrationsSection";
+import { SettingsMcpSection } from "../components/SettingsMcpSection";
 import { SettingsUpdatesSection } from "../components/SettingsUpdatesSection";
 import { ThemeSelect } from "../components/ThemeSelect";
+import { BG_PATTERNS, type BgPatternId } from "../backgrounds";
 import { THEMES, type ThemeId } from "../themes";
 import {
   getActiveVoiceId,
@@ -34,6 +38,7 @@ const SECTIONS = [
   { id: "voice", label: "Голос и аудио" },
   { id: "api", label: "API и модели" },
   { id: "integrations", label: "Интеграции" },
+  { id: "mcp", label: "MCP" },
   { id: "terminal", label: "Терминал" },
   { id: "data", label: "Данные и приватность" },
   { id: "updates", label: "Обновления" },
@@ -44,6 +49,8 @@ type SectionId = (typeof SECTIONS)[number]["id"];
 type SettingsPageProps = {
   themeId: ThemeId;
   onThemeChange: (id: ThemeId) => void;
+  bgPatternId: BgPatternId;
+  onBgPatternChange: (id: BgPatternId) => void;
   healthText: string;
   onOpenDoctor?: () => void;
 };
@@ -51,11 +58,13 @@ type SettingsPageProps = {
 export function SettingsPage({
   themeId,
   onThemeChange,
+  bgPatternId,
+  onBgPatternChange,
   healthText,
   onOpenDoctor,
 }: SettingsPageProps) {
-  const [section, setSection] = useState<SectionId>(() => {
-    const hash = typeof window !== "undefined" ? window.location.hash : "";
+  function sectionFromHash(hash: string): SectionId {
+    if (hash.includes("mcp")) return "mcp";
     if (hash.includes("integrations")) return "integrations";
     if (hash.includes("api")) return "api";
     if (hash.includes("voice")) return "voice";
@@ -63,8 +72,33 @@ export function SettingsPage({
     if (hash.includes("data")) return "data";
     if (hash.includes("updates")) return "updates";
     if (hash.includes("general")) return "general";
+    if (hash.includes("appearance")) return "appearance";
     return "appearance";
-  });
+  }
+
+  function hashForSection(id: SectionId): string {
+    return id === "appearance" ? "#/settings" : `#/settings/${id}`;
+  }
+
+  const [section, setSectionState] = useState<SectionId>(() =>
+    sectionFromHash(typeof window !== "undefined" ? window.location.hash : ""),
+  );
+
+  function setSection(id: SectionId) {
+    setSectionState(id);
+    const next = hashForSection(id);
+    if (typeof window !== "undefined" && window.location.hash !== next) {
+      window.location.hash = next;
+    }
+  }
+
+  useEffect(() => {
+    function onHash() {
+      setSectionState(sectionFromHash(window.location.hash));
+    }
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
   const [voices, setVoices] = useState<VoiceInfo[]>([]);
   const [activeVoiceId, setActiveVoiceIdState] = useState<string | null>(null);
   const [engineDetail, setEngineDetail] = useState("");
@@ -109,14 +143,16 @@ export function SettingsPage({
 
       <div className="panel stack">
         {section === "appearance" ? (
-          <>
-            <div className="row">
-              <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Темы</h2>
-              <StubBadge label="DESIGN" />
-            </div>
-            <p className="muted" style={{ margin: 0 }}>
-              Акцент зашит в тему. Default — Deep Sea Neon.
-            </p>
+          <div className="appearance-stack">
+            <header className="appearance-block-head">
+              <div className="row">
+                <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Темы</h2>
+                <StubBadge label="DESIGN" />
+              </div>
+              <p className="muted" style={{ margin: 0 }}>
+                Акцент зашит в тему. Default — Deep Sea Neon.
+              </p>
+            </header>
             <div className="theme-grid">
               {THEMES.map((theme) => (
                 <button
@@ -124,27 +160,64 @@ export function SettingsPage({
                   type="button"
                   className={`theme-card ${themeId === theme.id ? "active" : ""}`}
                   onClick={() => onThemeChange(theme.id)}
+                  aria-pressed={themeId === theme.id}
                 >
-                  <strong>{theme.name}</strong>
-                  <div className="swatches">
-                    <span
-                      className="swatch"
-                      style={{ background: theme.tokens.bg }}
-                    />
-                    <span
-                      className="swatch"
-                      style={{ background: theme.tokens.bgElevated }}
-                    />
-                    <span
-                      className="swatch"
-                      style={{ background: theme.tokens.accent }}
-                    />
-                  </div>
-                  <span className="mono muted">{theme.id}</span>
+                  <span
+                    className="theme-card-ribbon"
+                    aria-hidden
+                    style={{
+                      background: `linear-gradient(90deg, ${theme.tokens.bg} 0 34%, ${theme.tokens.bgElevated} 34% 68%, ${theme.tokens.accent} 68% 100%)`,
+                    }}
+                  />
+                  <span className="theme-card-body">
+                    <strong>{theme.name}</strong>
+                    <span className="mono muted">{theme.id}</span>
+                  </span>
+                  {themeId === theme.id ? (
+                    <span className="appearance-check" aria-hidden>
+                      ✓
+                    </span>
+                  ) : null}
                 </button>
               ))}
             </div>
-          </>
+
+            <header className="appearance-block-head">
+              <div className="row">
+                <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Фон · узор</h2>
+                <StubBadge label="STATIC" />
+              </div>
+              <p className="muted" style={{ margin: 0 }}>
+                Статичный паттерн без свечений. Чернила из цвета темы.
+              </p>
+            </header>
+            <div className="bg-pattern-grid">
+              {BG_PATTERNS.map((pat) => (
+                <button
+                  key={pat.id}
+                  type="button"
+                  className={`bg-pattern-card ${bgPatternId === pat.id ? "active" : ""}`}
+                  onClick={() => onBgPatternChange(pat.id)}
+                  aria-pressed={bgPatternId === pat.id}
+                >
+                  <span
+                    className="bg-pattern-preview"
+                    data-bg-preview={pat.id}
+                    aria-hidden
+                  />
+                  <span className="bg-pattern-meta">
+                    <strong>{pat.label}</strong>
+                    <span className="mono muted">{pat.id}</span>
+                  </span>
+                  {bgPatternId === pat.id ? (
+                    <span className="appearance-check" aria-hidden>
+                      ✓
+                    </span>
+                  ) : null}
+                </button>
+              ))}
+            </div>
+          </div>
         ) : null}
 
         {section === "general" ? <GeneralSection /> : null}
@@ -164,7 +237,7 @@ export function SettingsPage({
                 value={ttsEngine}
                 options={listTtsEngines().map((eng) => ({
                   value: eng.id,
-                  label: `${eng.label}${eng.ready ? "" : " (stub)"}`,
+                  label: `${eng.label}${eng.ready ? "" : eng.id === "elevenlabs" ? " (нужен Electron)" : " (недоступен)"}`,
                 }))}
                 onChange={(id) => {
                   setTtsEngine(setActiveTtsEngine(id as TtsEngineId));
@@ -175,6 +248,9 @@ export function SettingsPage({
             <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
               {listTtsEngines().find((e) => e.id === ttsEngine)?.detail}
             </p>
+            {ttsEngine === "elevenlabs" ? (
+              <SettingsElevenLabsSection compact />
+            ) : null}
             <ToggleRow
               label="Автоозвучка ответов"
               hint="Озвучивать ответы Миры автоматически"
@@ -257,6 +333,13 @@ export function SettingsPage({
                     speakText(
                       "Проверка голоса Mira. Звучу ли я достаточно естественно?",
                       activeVoiceId,
+                      {
+                        preferPreview: true,
+                        onStatus: (msg) => {
+                          // Surface studio vs system path for the listen check.
+                          console.info("[mira.tts]", msg);
+                        },
+                      },
                     )
                   }
                 >
@@ -270,7 +353,19 @@ export function SettingsPage({
           </>
         ) : null}
         {section === "api" ? <SettingsApiSection /> : null}
-        {section === "integrations" ? <SettingsIntegrationsSection /> : null}
+        {section === "integrations" ? (
+          <ErrorBoundary
+            key="integrations"
+            fallbackTitle="Интеграции сбойнули"
+          >
+            <SettingsIntegrationsSection />
+          </ErrorBoundary>
+        ) : null}
+        {section === "mcp" ? (
+          <ErrorBoundary fallbackTitle="MCP сбойнул">
+            <SettingsMcpSection />
+          </ErrorBoundary>
+        ) : null}
         {section === "terminal" ? <TerminalSettingsSection /> : null}
         {section === "data" ? (
           <DataPrivacySection

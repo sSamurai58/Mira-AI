@@ -6,6 +6,7 @@ import {
   type DragEvent,
   type FormEvent,
 } from "react";
+import { emitActionLog } from "../actionLog";
 import { getBrowserLlmLabel, streamBrowserChat } from "../browserLlm";
 import {
   filesToPendingAttachments,
@@ -15,10 +16,12 @@ import {
   type PendingChatAttachment,
 } from "../chat/attachments";
 import { ChatMarkdown } from "../chat/ChatMarkdown";
+import { textForSpeech } from "../chat/codeSpeech";
 import { CoreOrb } from "../components/CoreOrb";
 import { HomeRail } from "../components/HomeRail";
 import { HudCorners } from "../components/HudCorners";
 import { ThemeSelect } from "../components/ThemeSelect";
+import { notifyCoreProgress } from "../coreLevel";
 import {
   localImportLibraryBytes,
   localImportLibraryText,
@@ -26,6 +29,7 @@ import {
 import { createAsrSession, isAsrAvailable } from "../voice/asr";
 import {
   getActiveVoiceId,
+  isCustomVoiceId,
   listCatalogVoices,
   setActiveVoiceId,
 } from "../voice/catalog";
@@ -50,6 +54,8 @@ type ChatPageProps = {
   onVoiceState: (state: VoiceState) => void;
   autoSpeak: boolean;
   coreLevel?: number;
+  /** 0…100 toward next core level (home orb caption). */
+  coreProgressPct?: number;
 };
 
 type Bubble = {
@@ -70,7 +76,8 @@ export function ChatPage({
   onError,
   onVoiceState,
   autoSpeak,
-  coreLevel = 4,
+  coreLevel = 1,
+  coreProgressPct = 0,
 }: ChatPageProps) {
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
   const [input, setInput] = useState("");
@@ -152,18 +159,17 @@ export function ChatPage({
         onVoiceState("idle");
         return;
       }
-      const spoken = text
-        .replace(/\*\*([^*]+)\*\*/g, "$1")
-        .replace(/__([^_]+)__/g, "$1")
-        .replace(/\*([^*]+)\*/g, "$1")
-        .replace(/_([^_]+)_/g, "$1")
-        .replace(/`([^`]+)`/g, "$1")
-        .replace(/^\s*[-*•]\s+/gm, "")
-        .replace(/\n+/g, " ")
-        .trim();
+      const spoken = textForSpeech(text);
+      if (!spoken) {
+        onVoiceState("idle");
+        return;
+      }
       speakText(spoken, activeVoiceId, {
         onStart: () => onVoiceState("speaking"),
         onEnd: () => onVoiceState("idle"),
+        onStatus: (msg) => {
+          setEngineNote(msg);
+        },
         onError: (msg) => {
           // Soft-fail TTS: keep chat usable in headless / empty-voice envs
           localStorage.setItem("mira.autoSpeak", "0");
@@ -203,6 +209,7 @@ export function ChatPage({
         /* skip bad file */
       }
     }
+    if (titles.length) notifyCoreProgress();
     return titles.length
       ? `Добавлено в обучение (demo): ${titles.join(", ")}. Workshop → Обучение → Разобрать.`
       : null;
@@ -226,6 +233,12 @@ export function ChatPage({
         (files.length
           ? `📎 ${files.map((f) => f.name).join(", ")}`
           : "");
+      emitActionLog({
+        title: "Сообщение отправлено",
+        reason: (display || trimmed || "вложения").slice(0, 120),
+        tag: "Чат",
+        tone: "accent",
+      });
       setBubbles((prev) => [
         ...prev,
         {
@@ -245,6 +258,14 @@ export function ChatPage({
       let libraryHint: string | null = null;
       if (toLibrary && files.length) {
         libraryHint = await importPendingToLocalLibrary(files);
+        if (libraryHint) {
+          emitActionLog({
+            title: "В библиотеку",
+            reason: libraryHint.slice(0, 120),
+            tag: "Обучение",
+            tone: "success",
+          });
+        }
       }
 
       const history = bubbles
@@ -280,6 +301,12 @@ export function ChatPage({
                   ? `browser · ${label} · library`
                   : `browser · ${label}`,
               );
+              emitActionLog({
+                title: "Ответ готов",
+                reason: `browser · ${label}`,
+                tag: "Чат",
+                tone: "success",
+              });
               setBusy(false);
               speakAssistant(full);
             },
@@ -287,6 +314,12 @@ export function ChatPage({
               setBusy(false);
               onVoiceState("error");
               onError(err.message);
+              emitActionLog({
+                title: "Сбой диалога",
+                reason: err.message.slice(0, 120),
+                tag: "Ошибка",
+                tone: "danger",
+              });
               setBubbles((prev) => prev.filter((b) => !b.pending));
             },
           },
@@ -567,6 +600,7 @@ export function ChatPage({
         setBusy(false);
         requestIdRef.current = null;
         speakAssistant(event.utterance.content);
+        notifyCoreProgress();
       }
 
       if (event.type === "error") {
@@ -841,13 +875,20 @@ export function ChatPage({
             <div className="core-card-grid">
               <div className="core-col">
                 <CoreOrb level={coreLevel} voiceState={voiceState} size={320} />
-                <div className="level-ticks" aria-hidden>
-                  {Array.from({ length: 5 }, (_, i) => (
-                    <span key={i} className={i < coreLevel ? "on" : ""} />
-                  ))}
+                <div
+                  className="core-level-controls"
+                  aria-live="polite"
+                  aria-label={`Уровень ядра ${coreLevel}`}
+                >
+                  <div className="core-level-value">
+                    <strong>{coreLevel}</strong>
+                    <span className="muted">уровень</span>
+                  </div>
                 </div>
                 <p className="core-level-caption muted">
-                  Уровень ядра {coreLevel}/5
+                  Уровень ядра {coreLevel} ·{" "}
+                  {Math.round(Math.min(100, Math.max(0, coreProgressPct)))}% до{" "}
+                  {coreLevel + 1} · растёт с диалогами и обучением
                 </p>
               </div>
 
@@ -1147,7 +1188,13 @@ export function ChatPage({
       {showHome ? (
         <HomeRail
           modelLabel={modelLabel}
-          voiceNote={activeVoiceId ? "voice on" : "voice n/a"}
+          voiceNote={
+            activeVoiceId
+              ? isCustomVoiceId(activeVoiceId)
+                ? "студия"
+                : "voice on"
+              : "voice n/a"
+          }
           voiceState={voiceState}
         />
       ) : null}

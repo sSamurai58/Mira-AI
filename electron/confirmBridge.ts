@@ -119,18 +119,34 @@ export function requestUserConfirmDetailed(
     skillPropose: req.skillPropose,
   };
 
-  const windows = BrowserWindow.getAllWindows();
-  if (windows.length === 0) {
+  // Prefer the main Mira window — never the compact HUD (#/hud), which has no
+  // ConfirmModal and used to leave the main UI stuck behind a dead request.
+  const windows = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed());
+  const targets = windows.filter((w) => {
+    try {
+      const url = w.webContents.getURL();
+      return !url.includes("#/hud") && !url.includes("#hud");
+    } catch {
+      return true;
+    }
+  });
+  const sendTo = targets.length ? targets : windows;
+
+  if (sendTo.length === 0) {
     return Promise.resolve({ accepted: false });
   }
 
-  for (const win of windows) {
+  for (const win of sendTo) {
     win.webContents.send("mira:confirm-request", payload);
   }
 
   return new Promise<ConfirmResult>((resolve) => {
     const timer = setTimeout(() => {
       pending.delete(id);
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (win.isDestroyed()) continue;
+        win.webContents.send("mira:confirm-dismiss", { id });
+      }
       resolve({ accepted: false });
     }, timeoutMs);
     pending.set(id, {

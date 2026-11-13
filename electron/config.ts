@@ -170,6 +170,11 @@ export function getPublicConfig() {
     hasAnthropicKey: Boolean(cfg.anthropicApiKey),
     hasGeminiKey: Boolean(cfg.geminiApiKey),
     hasXaiKey: Boolean(cfg.xaiApiKey),
+    hasElevenLabsKey: Boolean(process.env.ELEVENLABS_API_KEY?.trim()),
+    elevenLabsVoiceId:
+      process.env.ELEVENLABS_VOICE_ID?.trim() || "YjESejviApN7SHrbfnA2",
+    elevenLabsModelId:
+      process.env.ELEVENLABS_MODEL_ID?.trim() || "eleven_multilingual_v2",
     openaiBaseUrl: cfg.openaiBaseUrl,
     xaiBaseUrl: cfg.xaiBaseUrl,
     databasePath: cfg.databasePath,

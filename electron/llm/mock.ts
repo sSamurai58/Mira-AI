@@ -46,6 +46,9 @@ export function createMockAdapter(model = "mock-mira"): LlmAdapter {
         const skillHint = messages.find((m) =>
           m.content.startsWith("[Active skills"),
         );
+        const diversityHint = messages.find((m) =>
+          m.content.startsWith("[Разнообразие ответов"),
+        );
         const reply = [
           "Это ответ mock-модели (без API-ключа).",
           lastUser ? `Вы сказали: «${lastUser.slice(0, 240)}»` : "",
@@ -56,6 +59,9 @@ export function createMockAdapter(model = "mock-mira"): LlmAdapter {
             ? `Учтены интернет-данные: ${webHint.content.slice(0, 280)}…`
             : "Интернет-инструменты для этого хода не вызывались.",
           skillHint ? "Активны skills on-demand." : "Skills в контексте нет.",
+          diversityHint
+            ? "Учтено разнообразие: прошлые шаблонные меню идей запрещены к повтору."
+            : "",
           "Для живой модели: LLM_PROVIDER=openai|claude|gemini|grok и соответствующий API-ключ в .env.",
         ]
 
