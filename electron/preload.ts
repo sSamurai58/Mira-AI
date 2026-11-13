@@ -524,8 +524,17 @@ contextBridge.exposeInMainWorld("mira", {
   getHudPolicy: () => call("mira:get-hud-policy"),
   toggleHud: () => call("mira:toggle-hud"),
   windowMinimize: () => call("mira:window-minimize"),
-  windowMaximizeToggle: (): Promise<{ ok: boolean; maximized?: boolean }> =>
-    call("mira:window-maximize-toggle"),
+  windowMaximizeToggle: (): Promise<{
+    ok: boolean;
+    maximized?: boolean;
+    fullscreen?: boolean;
+  }> => call("mira:window-maximize-toggle"),
+  windowFullscreenToggle: (): Promise<{ ok: boolean; fullscreen?: boolean }> =>
+    call("mira:window-fullscreen-toggle"),
+  windowSetFullscreen: (
+    enabled: boolean,
+  ): Promise<{ ok: boolean; fullscreen?: boolean }> =>
+    call("mira:window-set-fullscreen", enabled),
   windowClose: () => call("mira:window-close"),
   windowGetState: (): Promise<{
     maximized: boolean;

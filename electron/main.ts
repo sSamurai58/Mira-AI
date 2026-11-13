@@ -232,6 +232,43 @@ function appIconPath(): string | undefined {
   return undefined;
 }
 
+/** Exclusive fullscreen covers the OS taskbar; maximize() does not (Windows). */
+function setWindowFullscreen(win: BrowserWindow, enabled: boolean): boolean {
+  if (win.isDestroyed()) return false;
+  if (win.isFullScreen() === enabled) return win.isFullScreen();
+  // setFullScreen uses the display the window is already on — safe for multi-monitor.
+  win.setFullScreen(enabled);
+  return win.isFullScreen();
+}
+
+function toggleWindowFullscreen(win: BrowserWindow): boolean {
+  return setWindowFullscreen(win, !win.isFullScreen());
+}
+
+/**
+ * Titlebar maximize / double-click:
+ * - Windows: exclusive fullscreen so the taskbar is covered (what users call «полный экран»).
+ * - Other platforms: standard maximize; use F11 for exclusive fullscreen.
+ */
+function toggleMaximizeOrFullscreen(win: BrowserWindow): {
+  maximized: boolean;
+  fullscreen: boolean;
+} {
+  if (process.platform === "win32") {
+    toggleWindowFullscreen(win);
+  } else if (win.isFullScreen()) {
+    setWindowFullscreen(win, false);
+  } else if (win.isMaximized()) {
+    win.unmaximize();
+  } else {
+    win.maximize();
+  }
+  return {
+    maximized: win.isMaximized(),
+    fullscreen: win.isFullScreen(),
+  };
+}
+
 function createWindow(): BrowserWindow {
   const icon = appIconPath();
   const win = new BrowserWindow({
@@ -242,6 +279,7 @@ function createWindow(): BrowserWindow {
     // Frameless: themed in-app titlebar (see TitleBar + mira:window-*).
     // Avoids OS accent-colored chrome (e.g. solid purple Windows title bar).
     frame: false,
+    fullscreenable: true,
     ...(process.platform === "darwin"
       ? {
           titleBarStyle: "hiddenInset" as const,
@@ -301,6 +339,15 @@ function createWindow(): BrowserWindow {
     scheduleAutoUpdateCheck("focus");
   });
   win.on("blur", emitChromeState);
+
+  // F11: exclusive fullscreen on the current display (covers taskbar on Windows).
+  // Esc exit is handled in the renderer TitleBar so open modals can take precedence.
+  win.webContents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown" || input.isAutoRepeat) return;
+    if (input.key !== "F11") return;
+    event.preventDefault();
+    if (!win.isDestroyed()) toggleWindowFullscreen(win);
+  });
 
   win.webContents.on("did-fail-load", (_e, code, desc, url, isMainFrame) => {
     if (!isMainFrame || code === -3 /* aborted */) return;
@@ -1176,10 +1223,21 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
   });
   on("mira:window-maximize-toggle", (e) => {
     const win = windowFromEvent(e);
-    if (!win) return { ok: false, maximized: false };
-    if (win.isMaximized()) win.unmaximize();
-    else win.maximize();
-    return { ok: true, maximized: win.isMaximized() };
+    if (!win) return { ok: false, maximized: false, fullscreen: false };
+    const state = toggleMaximizeOrFullscreen(win);
+    return { ok: true, ...state };
+  });
+  on("mira:window-fullscreen-toggle", (e) => {
+    const win = windowFromEvent(e);
+    if (!win) return { ok: false, fullscreen: false };
+    const fullscreen = toggleWindowFullscreen(win);
+    return { ok: true, fullscreen };
+  });
+  on("mira:window-set-fullscreen", (e, enabled?: boolean) => {
+    const win = windowFromEvent(e);
+    if (!win) return { ok: false, fullscreen: false };
+    const fullscreen = setWindowFullscreen(win, Boolean(enabled));
+    return { ok: true, fullscreen };
   });
   on("mira:window-close", (e) => {
     windowFromEvent(e)?.close();

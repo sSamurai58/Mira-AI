@@ -1333,7 +1333,18 @@ interface MiraBridge {
   }>;
   toggleHud: () => Promise<{ open: boolean }>;
   windowMinimize: () => Promise<{ ok: boolean }>;
-  windowMaximizeToggle: () => Promise<{ ok: boolean; maximized?: boolean }>;
+  windowMaximizeToggle: () => Promise<{
+    ok: boolean;
+    maximized?: boolean;
+    fullscreen?: boolean;
+  }>;
+  windowFullscreenToggle: () => Promise<{
+    ok: boolean;
+    fullscreen?: boolean;
+  }>;
+  windowSetFullscreen: (
+    enabled: boolean,
+  ) => Promise<{ ok: boolean; fullscreen?: boolean }>;
   windowClose: () => Promise<{ ok: boolean }>;
   windowGetState: () => Promise<{
     maximized: boolean;

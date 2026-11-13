@@ -6,10 +6,15 @@ import { getTheme, MIRA_THEME_EVENT, type ThemeId } from "../themes";
  * Frameless Electron chrome — drag region + window controls.
  * Colors follow active theme CSS vars; Electron backgroundColor syncs live.
  * Hidden in pure browser/dev (no window.mira window APIs).
+ *
+ * Windows: maximize / titlebar double-click → exclusive fullscreen (covers taskbar).
+ * All platforms: F11 toggles exclusive fullscreen (main process); Esc exits it
+ * when no modal already handled the key.
  */
 export function TitleBar() {
   const electron = typeof window !== "undefined" && Boolean(window.mira?.windowMinimize);
-  const [maximized, setMaximized] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   const isDarwin =
     typeof navigator !== "undefined" &&
     /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
@@ -18,16 +23,31 @@ export function TitleBar() {
     if (!electron || !window.mira) return;
     let cancelled = false;
     void window.mira.windowGetState?.().then((st) => {
-      if (!cancelled && st) setMaximized(Boolean(st.maximized));
+      if (cancelled || !st) return;
+      setFullscreen(Boolean(st.fullscreen));
+      setExpanded(Boolean(st.maximized || st.fullscreen));
     });
     const off = window.mira.onWindowState?.((st) => {
-      setMaximized(Boolean(st.maximized));
+      setFullscreen(Boolean(st.fullscreen));
+      setExpanded(Boolean(st.maximized || st.fullscreen));
     });
     return () => {
       cancelled = true;
       off?.();
     };
   }, [electron]);
+
+  useEffect(() => {
+    if (!electron || !window.mira?.windowSetFullscreen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Escape" || e.defaultPrevented || e.repeat) return;
+      if (!fullscreen) return;
+      e.preventDefault();
+      void window.mira?.windowSetFullscreen?.(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [electron, fullscreen]);
 
   useEffect(() => {
     if (!electron || !window.mira?.windowSetChrome) return;
@@ -98,11 +118,11 @@ export function TitleBar() {
           <button
             type="button"
             className="mira-titlebar-btn"
-            aria-label={maximized ? "Восстановить" : "Развернуть"}
-            title={maximized ? "Восстановить" : "Развернуть"}
+            aria-label={expanded ? "Восстановить" : "Развернуть"}
+            title={expanded ? "Восстановить" : "Развернуть"}
             onClick={() => void window.mira?.windowMaximizeToggle?.()}
           >
-            {maximized ? (
+            {expanded ? (
               <svg viewBox="0 0 12 12" width="10" height="10" aria-hidden>
                 <path
                   d="M3.5 4.5h4v4h-4zM4.5 3.5h4v4"
