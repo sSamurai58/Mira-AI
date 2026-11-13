@@ -790,11 +790,26 @@ interface MiraBridge {
     connected: boolean;
     detail: string;
     subscription?: string | null;
+    characterCount?: number | null;
+    characterLimit?: number | null;
+    voiceSettings?: {
+      stability: number;
+      similarityBoost: number;
+      style: number;
+      useSpeakerBoost: boolean;
+    };
   }>;
   synthesizeElevenLabs?: (payload: {
     text: string;
     voiceId?: string;
     modelId?: string;
+    stream?: boolean;
+    voiceSettings?: {
+      stability?: number;
+      similarityBoost?: number;
+      style?: number;
+      useSpeakerBoost?: boolean;
+    };
   }) => Promise<{
     ok: boolean;
     detail: string;
@@ -809,6 +824,74 @@ interface MiraBridge {
   listElevenLabsModels?: () => Promise<
     Array<{ id: string; label: string; detail: string }>
   >;
+  listElevenLabsVoices?: () => Promise<{
+    ok: boolean;
+    detail: string;
+    voices: Array<{
+      voiceId: string;
+      name: string;
+      category: string;
+      previewUrl: string | null;
+      labels: Record<string, string>;
+    }>;
+  }>;
+  cloneElevenLabsVoice?: (payload: {
+    name: string;
+    description?: string;
+    filePaths: string[];
+  }) => Promise<{ ok: boolean; detail: string; voiceId?: string }>;
+  mcpRuntimeList?: () => Promise<
+    Record<
+      string,
+      {
+        connectorId: string;
+        state: string;
+        detail: string;
+        transport: string;
+        tools: string[];
+        lastCheckedAt: string;
+        live: boolean;
+      }
+    >
+  >;
+  mcpRuntimeStatus?: (
+    connectorId?: string,
+  ) => Promise<
+    Array<{
+      connectorId: string;
+      state: string;
+      detail: string;
+      transport: string;
+      tools: string[];
+      lastCheckedAt: string;
+      live: boolean;
+    }>
+  >;
+  mcpConnect?: (payload: {
+    connectorId: string;
+    command?: string;
+    args?: string[];
+    url?: string;
+    fields?: Record<string, string>;
+    auth?: "oauth" | "api-key" | "local" | "bridge";
+  }) => Promise<{
+    connectorId: string;
+    state: string;
+    detail: string;
+    transport: string;
+    tools: string[];
+    lastCheckedAt: string;
+    live: boolean;
+  }>;
+  mcpDisconnect?: (connectorId: string) => Promise<{
+    connectorId: string;
+    state: string;
+    detail: string;
+    transport: string;
+    tools: string[];
+    lastCheckedAt: string;
+    live: boolean;
+  }>;
   onVoiceTrainProgress?: (
     handler: (payload: {
       projectId: string;

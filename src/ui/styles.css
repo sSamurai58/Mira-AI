@@ -4724,3 +4724,118 @@ body.mira-hud-root *::-webkit-scrollbar {
     animation: pulse-core 12s ease-in-out infinite !important;
   }
 }
+
+/* ——— Update HUD toast (0.1.11) ——— */
+.mira-update-hud {
+  position: fixed;
+  right: 1.1rem;
+  bottom: 1.1rem;
+  z-index: 80;
+  width: min(360px, calc(100vw - 1.6rem));
+  pointer-events: auto;
+  animation: mira-update-hud-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes mira-update-hud-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.mira-update-hud-glow {
+  position: absolute;
+  inset: -1px;
+  border-radius: 16px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent) 55%, transparent),
+    color-mix(in srgb, var(--success, #2dd4a8) 25%, transparent),
+    transparent 70%
+  );
+  opacity: 0.55;
+  filter: blur(10px);
+  pointer-events: none;
+}
+
+.mira-update-hud-body {
+  position: relative;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  background:
+    linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--panel, var(--bg)) 92%, var(--accent)) 0%,
+      color-mix(in srgb, var(--bg) 88%, #000) 100%
+    );
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent),
+    0 18px 40px color-mix(in srgb, #000 45%, transparent);
+  padding: 0.85rem 1rem 0.95rem;
+  backdrop-filter: blur(12px);
+}
+
+.mira-update-hud-kicker {
+  font-size: 0.65rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--accent) 80%, var(--text-muted));
+  margin-bottom: 0.25rem;
+}
+
+.mira-update-hud-title {
+  font-size: 0.98rem;
+  font-weight: 650;
+  color: var(--text);
+  margin: 0 0 0.25rem;
+}
+
+.mira-update-hud-detail {
+  margin: 0 0 0.65rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+.mira-update-hud-progress {
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 70%, transparent);
+  overflow: hidden;
+  margin: 0 0 0.7rem;
+}
+
+.mira-update-hud-progress-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    var(--accent),
+    color-mix(in srgb, var(--accent) 40%, #fff)
+  );
+  transition: width 0.25s ease;
+}
+
+.mira-update-hud-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.mira-update-hud--error .mira-update-hud-kicker {
+  color: color-mix(in srgb, var(--danger, #f87171) 85%, var(--text-muted));
+}
+
+.mira-update-hud--downloaded .mira-update-hud-kicker {
+  color: color-mix(in srgb, var(--success, #2dd4a8) 85%, var(--text-muted));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mira-update-hud {
+    animation: none;
+  }
+}

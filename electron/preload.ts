@@ -328,8 +328,34 @@ contextBridge.exposeInMainWorld("mira", {
     text: string;
     voiceId?: string;
     modelId?: string;
+    stream?: boolean;
+    voiceSettings?: {
+      stability?: number;
+      similarityBoost?: number;
+      style?: number;
+      useSpeakerBoost?: boolean;
+    };
   }) => call("mira:elevenlabs-synthesize", payload),
   listElevenLabsModels: () => call("mira:elevenlabs-models"),
+  listElevenLabsVoices: () => call("mira:elevenlabs-list-voices"),
+  cloneElevenLabsVoice: (payload: {
+    name: string;
+    description?: string;
+    filePaths: string[];
+  }) => call("mira:elevenlabs-clone-voice", payload),
+  mcpRuntimeList: () => call("mira:mcp-runtime-list"),
+  mcpRuntimeStatus: (connectorId?: string) =>
+    call("mira:mcp-runtime-status", connectorId),
+  mcpConnect: (payload: {
+    connectorId: string;
+    command?: string;
+    args?: string[];
+    url?: string;
+    fields?: Record<string, string>;
+    auth?: "oauth" | "api-key" | "local" | "bridge";
+  }) => call("mira:mcp-connect", payload),
+  mcpDisconnect: (connectorId: string) =>
+    call("mira:mcp-disconnect", connectorId),
   onVoiceTrainProgress: (
     handler: (payload: {
       projectId: string;

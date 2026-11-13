@@ -12,6 +12,7 @@ import { ConfirmModal } from "./components/ConfirmModal";
 import { ErrorBanner } from "./components/ErrorBanner";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { TitleBar } from "./components/TitleBar";
+import { UpdateHudToast } from "./components/UpdateHudToast";
 import { ChatPage } from "./pages/ChatPage";
 import { HudPage } from "./pages/HudPage";
 import { MemoryPage } from "./pages/MemoryPage";
@@ -497,6 +498,8 @@ export function App() {
           onConfirm={() => setDoctorOpen(false)}
         />
       </ErrorBoundary>
+
+      <UpdateHudToast />
     </div>
     </AppConfirmProvider>
   );

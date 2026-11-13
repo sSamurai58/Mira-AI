@@ -109,9 +109,17 @@ import {
 } from "./voiceStudio/studio";
 import {
   ELEVENLABS_MODELS,
+  cloneElevenLabsVoice,
   getElevenLabsStatus,
+  listElevenLabsVoices,
   synthesizeElevenLabs,
 } from "./tts/elevenlabs";
+import {
+  connectMcp,
+  disconnectMcp,
+  getMcpRuntimeStatus,
+  listMcpRuntimeStatuses,
+} from "./mcp/runtime";
 import {
   getBlenderPolicy,
   runDemoScene,
@@ -839,16 +847,65 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
     "mira:elevenlabs-synthesize",
     (
       _e,
-      payload: { text: string; voiceId?: string; modelId?: string },
+      payload: {
+        text: string;
+        voiceId?: string;
+        modelId?: string;
+        stream?: boolean;
+        voiceSettings?: {
+          stability?: number;
+          similarityBoost?: number;
+          style?: number;
+          useSpeakerBoost?: boolean;
+        };
+      },
     ) =>
       synthesizeElevenLabs({
         text: payload?.text ?? "",
         voiceId: payload?.voiceId,
         modelId: payload?.modelId,
+        stream: payload?.stream,
+        voiceSettings: payload?.voiceSettings,
       }),
   );
   on("mira:elevenlabs-models", () =>
     ELEVENLABS_MODELS.map((m) => ({ ...m })),
+  );
+  on("mira:elevenlabs-list-voices", () => listElevenLabsVoices());
+  on(
+    "mira:elevenlabs-clone-voice",
+    (
+      _e,
+      payload: { name: string; description?: string; filePaths: string[] },
+    ) =>
+      cloneElevenLabsVoice({
+        name: payload?.name ?? "Mira clone",
+        description: payload?.description,
+        filePaths: payload?.filePaths ?? [],
+      }),
+    { privileged: true },
+  );
+  on("mira:mcp-runtime-list", () => listMcpRuntimeStatuses());
+  on("mira:mcp-runtime-status", (_e, connectorId?: string) =>
+    getMcpRuntimeStatus(connectorId),
+  );
+  on(
+    "mira:mcp-connect",
+    (
+      _e,
+      payload: {
+        connectorId: string;
+        command?: string;
+        args?: string[];
+        url?: string;
+        fields?: Record<string, string>;
+        auth?: "oauth" | "api-key" | "local" | "bridge";
+      },
+    ) => connectMcp(payload),
+    { privileged: true },
+  );
+  on("mira:mcp-disconnect", (_e, connectorId: string) =>
+    disconnectMcp(connectorId),
   );
   on(
     "mira:generate-voice-phrases",

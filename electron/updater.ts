@@ -120,6 +120,8 @@ export function humanizeUpdateError(raw: unknown): string {
     : "Не удалось проверить обновления. Откройте GitHub Releases вручную.";
 }
 
+let autoCheckTimer: ReturnType<typeof setTimeout> | null = null;
+
 export function initUpdater(send: Broadcast): void {
   broadcast = send;
   status.currentVersion = app.getVersion();
@@ -133,6 +135,17 @@ export function initUpdater(send: Broadcast): void {
   // After download: install silently on quit (/S). No NSIS wizard.
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.autoRunAppAfterInstall = true;
+  // Keep provider path coherent with electron-builder publish.github
+  // (latest.yml / latest-linux.yml on GitHub Releases for current versioning).
+  try {
+    autoUpdater.setFeedURL({
+      provider: "github",
+      owner: "sSamurai58",
+      repo: "Mira-AI",
+    });
+  } catch {
+    /* electron-updater reads app-update.yml from packaged resources */
+  }
   // Public GitHub Releases; set GH_TOKEN in env for private repos / higher rate limits
   if (process.env.GH_TOKEN || process.env.GITHUB_TOKEN) {
     autoUpdater.requestHeaders = {
@@ -202,6 +215,12 @@ export function initUpdater(send: Broadcast): void {
       progress: null,
     });
   });
+
+  // Packaged: auto-check shortly after boot so HUD toast can surface updates.
+  if (autoCheckTimer) clearTimeout(autoCheckTimer);
+  autoCheckTimer = setTimeout(() => {
+    void checkForUpdates().catch(() => undefined);
+  }, 2500);
 }
 
 export async function checkForUpdates(): Promise<UpdateStatus> {

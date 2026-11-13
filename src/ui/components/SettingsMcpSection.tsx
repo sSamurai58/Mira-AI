@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { StubBadge } from "./StubBadge";
 import { McpBrandIcon } from "./McpBrandIcon";
 import {
@@ -77,12 +77,13 @@ export function SettingsMcpSection() {
         <div className="mcp-hero-copy">
           <div className="row" style={{ gap: "0.45rem", alignItems: "center" }}>
             <h2 className="mcp-hero-title">MCP</h2>
-            <StubBadge label="0.1.4" />
+            <StubBadge label="runtime" />
           </div>
           <p className="mcp-hero-lead">
-            Подключения сайтов и программ для продуктивности. Выберите плитку —
-            карточка с описанием, ссылками на docs/API и полями черновика.
-            Runtime и OAuth в 0.1.4 ещё не активны.
+            Каталог MCP-коннекторов (стандартный разъём tools/resources). Это не
+            то же самое, что «Интеграции» (встроенные web/экран/Telegram/Blender).
+            Черновик ≠ подключено: статус «подключено» только после успешного
+            handshake / API probe.
           </p>
         </div>
         <div className="mcp-hero-stats" aria-label="Сводка каталога">
@@ -96,7 +97,7 @@ export function SettingsMcpSection() {
           </div>
           <div className="mcp-stat">
             <span className="mcp-stat-value">{markedCount}</span>
-            <span className="mcp-stat-label">к подключению</span>
+            <span className="mcp-stat-label">черновики</span>
           </div>
         </div>
       </header>
@@ -218,6 +219,22 @@ function connectorLinks(c: McpConnector): { label: string; href: string }[] {
   return links;
 }
 
+type McpLiveStatus = {
+  state: string;
+  detail: string;
+  live: boolean;
+  tools: string[];
+};
+
+function runtimeLabel(st: McpLiveStatus | null, draftEnabled: boolean): string {
+  if (st?.live && st.state === "connected") return "подключено";
+  if (st?.state === "connecting") return "подключение…";
+  if (st?.state === "needs-auth") return "нужен OAuth";
+  if (st?.state === "error") return "ошибка";
+  if (draftEnabled || st?.state === "draft") return "черновик";
+  return "не подключено";
+}
+
 function McpConnectorModal(props: {
   connector: McpConnector;
   draft: McpConnectorDraft;
@@ -234,7 +251,32 @@ function McpConnectorModal(props: {
     }
     return init;
   });
+  const [live, setLive] = useState<McpLiveStatus | null>(null);
+  const [busy, setBusy] = useState(false);
   const links = connectorLinks(c);
+
+  async function refreshLive() {
+    if (!window.mira?.mcpRuntimeStatus) return;
+    try {
+      const rows = await window.mira.mcpRuntimeStatus(c.id);
+      const row = Array.isArray(rows) ? rows[0] : rows;
+      if (row) {
+        setLive({
+          state: row.state,
+          detail: row.detail,
+          live: Boolean(row.live),
+          tools: row.tools ?? [],
+        });
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  useEffect(() => {
+    void refreshLive();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [c.id]);
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
@@ -256,6 +298,11 @@ function McpConnectorModal(props: {
               <span className="mcp-tag">Этап {c.stage}</span>
               <span className="mcp-tag">{MCP_AUTH_LABEL[c.auth]}</span>
               <span className="mcp-tag">{MCP_STATUS_LABEL[c.status]}</span>
+              <span
+                className={`mcp-tag ${live?.live ? "mcp-tag-live" : "mcp-tag-draft"}`}
+              >
+                {runtimeLabel(live, enabled)}
+              </span>
             </div>
           </div>
           <button
@@ -365,12 +412,23 @@ function McpConnectorModal(props: {
               checked={enabled}
               onChange={(e) => setEnabled(e.target.checked)}
             />
-            <span>Пометить к подключению</span>
+            <span>Сохранить как черновик (ещё не подключено)</span>
           </label>
 
+          {live ? (
+            <p className="mcp-modal-live" role="status">
+              Runtime: <strong>{runtimeLabel(live, enabled)}</strong>
+              {live.detail ? ` — ${live.detail}` : ""}
+              {live.tools?.length
+                ? ` · tools: ${live.tools.slice(0, 6).join(", ")}`
+                : ""}
+            </p>
+          ) : null}
+
           <p className="muted mcp-modal-foot">
-            MCP-runtime и OAuth в 0.1.4 ещё не активны — только локальный
-            черновик.
+            «Подключить» запускает реальный MCP/OAuth/API probe. Успех →
+            «подключено»; иначе остаётесь в «черновик» / «нужен OAuth» / «ошибка».
+            Не путать с Настройки → Интеграции (built-in tools).
           </p>
         </div>
 
@@ -380,7 +438,25 @@ function McpConnectorModal(props: {
           </button>
           <button
             type="button"
-            className="btn btn-primary"
+            className="btn"
+            disabled={busy || !window.mira?.mcpDisconnect}
+            onClick={() => {
+              void (async () => {
+                setBusy(true);
+                try {
+                  await window.mira?.mcpDisconnect?.(c.id);
+                  await refreshLive();
+                } finally {
+                  setBusy(false);
+                }
+              })();
+            }}
+          >
+            Отключить
+          </button>
+          <button
+            type="button"
+            className="btn"
             onClick={() =>
               onSave({
                 enabled,
@@ -391,6 +467,41 @@ function McpConnectorModal(props: {
             }
           >
             Сохранить черновик
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={busy || !window.mira?.mcpConnect}
+            onClick={() => {
+              void (async () => {
+                setBusy(true);
+                onSave({
+                  enabled: true,
+                  notes,
+                  fields,
+                  updatedAt: new Date().toISOString(),
+                });
+                try {
+                  const st = await window.mira!.mcpConnect!({
+                    connectorId: c.id,
+                    fields,
+                    auth: c.auth,
+                    command: fields.MCP_COMMAND || fields.command,
+                    url: fields.MCP_URL || fields.url,
+                  });
+                  setLive({
+                    state: st.state,
+                    detail: st.detail,
+                    live: Boolean(st.live),
+                    tools: st.tools ?? [],
+                  });
+                } finally {
+                  setBusy(false);
+                }
+              })();
+            }}
+          >
+            {busy ? "Подключение…" : "Подключить"}
           </button>
         </div>
       </div>

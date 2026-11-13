@@ -123,7 +123,13 @@ Zapier, Make, n8n, Activepieces, Shortcuts, Power Automate, AHK
 - [x] Плитки этапов 1,2,3,5,6,7,8,9,10 (вкл. Dev + Design/Blender) с brand-иконками
 - [x] Модалка: описание, ≥3 voice examples, hints полей, внешние ссылки, `builtinHint`, draft-only footer
 - [x] GitHub Release 0.1.4 — https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.4
-- [ ] Реальный MCP runtime / OAuth — **не** в 0.1.4 (следующий релиз после явной команды)
+- [x] MCP runtime scaffolding + honest connect (0.1.11): stdio/HTTP initialize, Tier A GitHub/Slack/Todoist probe, OAuth browser open — **не** fake «подключено»
+
+## 0.1.11 runtime notes
+
+- Черновик (draft) ≠ connected: UI labels reflect `live` only after handshake/probe.
+- Tier A OAuth opens browser consent when Client ID present; token probes for GitHub/Slack/Todoist.
+- Local MCP: set `MCP_COMMAND` / args on the connector card and press «Подключить».
 
 ## Связанные docs
 
