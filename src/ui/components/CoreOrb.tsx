@@ -72,9 +72,19 @@ export function CoreOrb({
     const ro = new ResizeObserver(() => handle.resize());
     ro.observe(wrap);
 
+    // Keep the canvas sized when the Home tab becomes visible again
+    // (rAF may throttle while hidden; a zero-size frame looks frozen).
+    const onVisible = () => {
+      if (document.visibilityState === "visible") handle.resize();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    // First layout pass after mount (clientWidth can be 0 in the same tick).
+    requestAnimationFrame(() => handle.resize());
+
     return () => {
       mo.disconnect();
       window.removeEventListener(MIRA_THEME_EVENT, syncPalette);
+      document.removeEventListener("visibilitychange", onVisible);
       ro.disconnect();
       handle.destroy();
       handleRef.current = null;

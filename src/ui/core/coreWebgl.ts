@@ -216,6 +216,7 @@ export function createCoreWebgl(
   let reduced = prefersReducedMotion();
   let raf = 0;
   let running = true;
+  let contextLost = false;
   let time = 0;
   let prev = performance.now();
   let PR = Math.min(window.devicePixelRatio || 1, 2);
@@ -226,6 +227,8 @@ export function createCoreWebgl(
   let fb2: Fbo;
   let fc1: Fbo;
   let fc2: Fbo;
+  /** Global layer spin boost so mid-level shells stay visibly alive. */
+  const SPEED_BOOST = 1.35;
 
   const quad = gl.createBuffer()!;
   gl.bindBuffer(gl.ARRAY_BUFFER, quad);
@@ -277,7 +280,8 @@ export function createCoreWebgl(
         buffers,
         n: g.W.length / 2,
         seed: i * 1.7 + 0.3,
-        breath: 0.6 + i * 0.23,
+        /** Slightly faster breath rates so shells pulse at a readable cadence. */
+        breath: 0.85 + i * 0.28,
       };
     });
   }
@@ -370,12 +374,28 @@ export function createCoreWebgl(
 
   function frame(now: number) {
     if (!running) return;
+    if (contextLost || gl.isContextLost()) {
+      contextLost = true;
+      raf = 0;
+      return;
+    }
     raf = requestAnimationFrame(frame);
 
-    const dt = Math.min(0.05, (now - prev) / 1000);
+    // Cap dt; also treat huge gaps (tab background / sleep) as a soft resume
+    // so we never freeze with dt≈0 or jump with a multi-second step.
+    let rawDt = (now - prev) / 1000;
+    if (!Number.isFinite(rawDt) || rawDt < 0) rawDt = 1 / 60;
+    if (rawDt > 0.25) {
+      // Resume after throttle: keep continuity without a giant step.
+      prev = now;
+      rawDt = 1 / 60;
+      if (W <= 1 || H <= 1) resize();
+    }
+    const dt = Math.min(0.05, Math.max(1 / 240, rawDt));
     prev = now;
     reduced = prefersReducedMotion();
-    const motion = reduced ? 0.08 : 1;
+    // Reduced motion: very slow drift, never a still frame.
+    const motion = reduced ? 0.22 : 1;
     time += dt * motion;
 
     // Smooth toward Mira-mapped visibility (auto-grow when XP/level rises).
@@ -385,32 +405,39 @@ export function createCoreWebgl(
     lastFloor = fl;
     flashAmt = Math.max(0, flashAmt - dt * 1.1);
 
-    let speedMul = 1;
-    let breathMul = 1;
+    let speedMul = SPEED_BOOST;
+    let breathMul = 1.15;
     let alphaMul = 1;
-    if (voice === "listening") {
-      speedMul = 1.15;
-      breathMul = 1.2;
+    if (voice === "idle") {
+      // Ambient idle: soft luminance pulse so the core never reads as a still.
+      flashAmt = Math.max(
+        flashAmt,
+        0.04 + Math.sin(time * 1.35) * 0.035 + Math.sin(time * 0.47) * 0.02,
+      );
+    } else if (voice === "listening") {
+      speedMul = SPEED_BOOST * 1.2;
+      breathMul = 1.35;
     } else if (voice === "thinking") {
-      speedMul = 1.55;
-      breathMul = 1.45;
+      speedMul = SPEED_BOOST * 1.55;
+      breathMul = 1.55;
     } else if (voice === "speaking") {
-      speedMul = 1.35;
-      breathMul = 1.3;
-      alphaMul = 1.08;
-      flashAmt = Math.max(flashAmt, 0.12 + Math.sin(time * 5.5) * 0.08);
+      speedMul = SPEED_BOOST * 1.4;
+      breathMul = 1.4;
+      alphaMul = 1.1;
+      flashAmt = Math.max(flashAmt, 0.14 + Math.sin(time * 5.5) * 0.1);
     }
     if (reduced) {
-      speedMul *= 0.15;
-      breathMul *= 0.2;
+      speedMul *= 0.35;
+      breathMul *= 0.4;
     }
 
     const asp = W / Math.max(1, H);
     const d = Math.max(4.3, 4.6 / asp);
-    const a = reduced ? 0.35 : time * 0.06;
+    // Orbit ~1.8× reference so mid-level shells visibly turn on Home.
+    const a = reduced ? time * 0.04 : time * 0.11;
     const eye = [
       Math.sin(a) * d * 0.9,
-      Math.sin(time * 0.05) * 0.9 * (reduced ? 0.2 : 1),
+      Math.sin(time * (reduced ? 0.03 : 0.09)) * 0.9 * (reduced ? 0.35 : 1),
       Math.cos(a) * d * 0.9,
     ];
     const P = persp(0.7854, asp, 0.1, 50);
@@ -493,6 +520,46 @@ export function createCoreWebgl(
     gl.disable(gl.BLEND);
   }
 
+  function onContextLost(ev: Event) {
+    ev.preventDefault();
+    contextLost = true;
+    cancelAnimationFrame(raf);
+    raf = 0;
+  }
+
+  function onContextRestored() {
+    try {
+      pS = prog(gl, HOLO_VS, HOLO_FS);
+      pB = prog(gl, HOLO_QV, HOLO_BF);
+      pC = prog(gl, HOLO_QV, HOLO_CF);
+      layers = uploadLayers();
+      // Force FBO rebuild even if canvas pixel size is unchanged.
+      W = 0;
+      H = 0;
+      resize();
+      contextLost = false;
+      prev = performance.now();
+      if (running && !raf) raf = requestAnimationFrame(frame);
+    } catch {
+      // If restore fails, keep contextLost so we stop drawing.
+      contextLost = true;
+    }
+  }
+
+  function onVisibility() {
+    if (document.visibilityState === "visible") {
+      prev = performance.now();
+      if (!contextLost) resize();
+      if (running && !raf && !contextLost) {
+        raf = requestAnimationFrame(frame);
+      }
+    }
+  }
+
+  canvas.addEventListener("webglcontextlost", onContextLost, false);
+  canvas.addEventListener("webglcontextrestored", onContextRestored, false);
+  document.addEventListener("visibilitychange", onVisibility);
+
   resize();
   raf = requestAnimationFrame(frame);
 
@@ -517,6 +584,15 @@ export function createCoreWebgl(
     destroy() {
       running = false;
       cancelAnimationFrame(raf);
+      raf = 0;
+      canvas.removeEventListener("webglcontextlost", onContextLost, false);
+      canvas.removeEventListener(
+        "webglcontextrestored",
+        onContextRestored,
+        false,
+      );
+      document.removeEventListener("visibilitychange", onVisibility);
+      if (contextLost) return;
       for (const layer of layers) {
         for (const b of layer.buffers) gl.deleteBuffer(b);
         gl.deleteVertexArray(layer.vao);

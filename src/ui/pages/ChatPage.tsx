@@ -3,6 +3,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type DragEvent,
   type FormEvent,
 } from "react";
@@ -96,7 +97,11 @@ export function ChatPage({
   const [addToLibrary, setAddToLibrary] = useState(false);
   const [attachNote, setAttachNote] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  /** Last measured first-token / reply latency (seconds); Home «Ответ» tile. */
+  const [replySecs, setReplySecs] = useState(0.4);
+  const [replyDisplay, setReplyDisplay] = useState("~0,4 с");
   const requestIdRef = useRef<string | null>(null);
+  const replyStartRef = useRef<number | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const asrRef = useRef<ReturnType<typeof createAsrSession> | null>(null);
@@ -215,6 +220,13 @@ export function ChatPage({
       : null;
   }
 
+  const noteReplyLatency = useCallback((startedAt: number | null) => {
+    if (startedAt == null) return;
+    const secs = Math.min(9.9, Math.max(0.08, (performance.now() - startedAt) / 1000));
+    setReplySecs(secs);
+    replyStartRef.current = null;
+  }, []);
+
   const sendBrowserDemo = useCallback(
     async (
       trimmed: string,
@@ -223,6 +235,7 @@ export function ChatPage({
     ) => {
       const requestId = crypto.randomUUID();
       requestIdRef.current = requestId;
+      replyStartRef.current = performance.now();
       setBusy(true);
       setMemoryNote(null);
       onVoiceState("thinking");
@@ -278,6 +291,9 @@ export function ChatPage({
           history,
           handlers: {
             onToken: (chunk) => {
+              if (replyStartRef.current != null) {
+                noteReplyLatency(replyStartRef.current);
+              }
               setBubbles((prev) =>
                 prev.map((b) =>
                   b.id === `local-assistant-${requestId}`
@@ -287,6 +303,9 @@ export function ChatPage({
               );
             },
             onDone: (full) => {
+              if (replyStartRef.current != null) {
+                noteReplyLatency(replyStartRef.current);
+              }
               const label = getBrowserLlmLabel();
               setBubbles((prev) =>
                 prev.map((b) =>
@@ -374,7 +393,7 @@ export function ChatPage({
         speakAssistant(built);
       }
     },
-    [bubbles, onError, onVoiceState, speakAssistant],
+    [bubbles, noteReplyLatency, onError, onVoiceState, speakAssistant],
   );
 
   const sendText = useCallback(
@@ -398,6 +417,7 @@ export function ChatPage({
 
       const requestId = crypto.randomUUID();
       requestIdRef.current = requestId;
+      replyStartRef.current = performance.now();
       const display =
         trimmed ||
         (files.length
@@ -528,6 +548,9 @@ export function ChatPage({
       }
 
       if (event.type === "token") {
+        if (replyStartRef.current != null) {
+          noteReplyLatency(replyStartRef.current);
+        }
         setBubbles((prev) => {
           const next = [...prev];
           const last = next[next.length - 1];
@@ -543,6 +566,9 @@ export function ChatPage({
       }
 
       if (event.type === "assistant_done") {
+        if (replyStartRef.current != null) {
+          noteReplyLatency(replyStartRef.current);
+        }
         setBubbles((prev) => {
           const next = [...prev];
           const pendingIdx = [...next]
@@ -611,7 +637,30 @@ export function ChatPage({
         requestIdRef.current = null;
       }
     });
-  }, [onError, onVoiceState, speakAssistant]);
+  }, [noteReplyLatency, onError, onVoiceState, speakAssistant]);
+
+  // Home «Ответ» tile: keep a soft live readout around the last measured latency.
+  useEffect(() => {
+    if (panel !== "home") {
+      const rounded = Math.round(replySecs * 10) / 10;
+      setReplyDisplay(`~${String(rounded).replace(".", ",")} с`);
+      return;
+    }
+    let alive = true;
+    const tick = () => {
+      if (!alive) return;
+      const wobble = Math.sin(performance.now() / 1800) * 0.03;
+      const v = Math.max(0.08, replySecs + wobble);
+      const rounded = Math.round(v * 10) / 10;
+      setReplyDisplay(`~${String(rounded).replace(".", ",")} с`);
+    };
+    tick();
+    const id = window.setInterval(tick, 900);
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+    };
+  }, [panel, replySecs]);
 
   async function handleNewChat() {
     if (!window.mira || busy) return;
@@ -834,9 +883,16 @@ export function ChatPage({
 
   const waveActive =
     voiceState === "listening" || voiceState === "speaking" || Boolean(interim);
+  const voiceOn = Boolean(activeVoiceId);
+  const waveClass = waveActive
+    ? "wave is-live"
+    : voiceOn
+      ? "wave is-idle is-voice-on"
+      : "wave is-idle";
 
   const showHome = panel === "home";
   const showDialog = panel === "dialog";
+  const levelPctClamped = Math.min(100, Math.max(0, coreProgressPct));
 
   return (
     <div className={`home-grid ${showDialog ? "is-dialog-tab" : "is-home-tab"}`}>
@@ -880,39 +936,51 @@ export function ChatPage({
                   aria-live="polite"
                   aria-label={`Уровень ядра ${coreLevel}`}
                 >
-                  <div className="core-level-value">
+                  <div className="core-level-value is-live">
+                    <span className="core-level-aura" aria-hidden />
                     <strong>{coreLevel}</strong>
                     <span className="muted">уровень</span>
+                    <span
+                      className="core-level-progress"
+                      aria-hidden
+                      style={
+                        {
+                          "--core-level-pct": `${levelPctClamped}%`,
+                        } as CSSProperties
+                      }
+                    />
                   </div>
                 </div>
                 <p className="core-level-caption muted">
                   Уровень ядра {coreLevel} ·{" "}
-                  {Math.round(Math.min(100, Math.max(0, coreProgressPct)))}% до{" "}
-                  {coreLevel + 1} · растёт с диалогами и обучением
+                  {Math.round(levelPctClamped)}% до {coreLevel + 1} · растёт с
+                  диалогами и обучением
                 </p>
               </div>
 
               <div className="core-meta">
                 <div className="stat-row">
-                  <div className="stat-block">
+                  <div className="stat-block is-live">
                     <span className="stat-label">Модель</span>
                     <div className="stat-value" title={modelLabel}>
                       {modelLabel}
                     </div>
                   </div>
-                  <div className="stat-block">
+                  <div className="stat-block is-live">
                     <span className="stat-label">Ответ</span>
-                    <div className="stat-value g2">~0,4 с</div>
+                    <div className="stat-value g2 is-ticking">{replyDisplay}</div>
                   </div>
-                  <div className="stat-block">
+                  <div
+                    className={`stat-block is-live${voiceOn ? " is-voice-on" : ""}`}
+                  >
                     <span className="stat-label">Голос</span>
                     <div className="stat-value g3">
-                      {activeVoiceId ? "on" : "n/a"}
+                      {voiceOn ? "on" : "n/a"}
                     </div>
                   </div>
                 </div>
 
-                <div className="voice-panel">
+                <div className="voice-panel is-live">
                   <div className="voice-panel-top">
                     <h4>Голосовой ввод</h4>
                     {interim ? (
@@ -923,10 +991,7 @@ export function ChatPage({
                       </span>
                     )}
                   </div>
-                  <div
-                    className={`wave ${waveActive ? "" : "is-idle"}`}
-                    aria-hidden
-                  >
+                  <div className={waveClass} aria-hidden>
                     {Array.from({ length: 36 }, (_, i) => (
                       <span
                         key={i}

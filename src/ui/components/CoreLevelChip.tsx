@@ -15,11 +15,11 @@ export function CoreLevelChip({ level, progressPct }: CoreLevelChipProps) {
 
   return (
     <div
-      className="core-level-card"
+      className="core-level-card is-live"
       role="status"
       aria-label={`Уровень ядра ${level}, прогресс ${Math.round(clamped)}% до следующего`}
     >
-      <div className="core-level-ring" aria-hidden>
+      <div className="core-level-ring is-live" aria-hidden>
         <svg viewBox="0 0 44 44" width="44" height="44">
           <circle
             className="core-level-ring-track"

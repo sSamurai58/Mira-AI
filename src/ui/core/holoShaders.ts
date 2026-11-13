@@ -14,7 +14,7 @@ void main(){
  vec3 ax=normalize(vec3(sin(t*.13+uSeed),cos(t*.17+uSeed*2.),sin(t*.11+uSeed*3.)+.6));
  float ang=t*uSpeed*uDir*(1.+.3*sin(m.y*2.5/max(uRadius,.1)+aS.y*6.+t*.2));
  a=rot(a,ax,ang);b=rot(b,ax,ang);
- float g=smoothstep(0.,1.,uVis);float sc=(.25+.75*g)*(1.+.04*sin(t*uBreath+uSeed*4.)+.03*uFlash);a*=sc;b*=sc;
+ float g=smoothstep(0.,1.,uVis);float sc=(.25+.75*g)*(1.+.07*sin(t*uBreath+uSeed*4.)+.04*uFlash);a*=sc;b*=sc;
  vec4 mvA=uV*vec4(a,1.),mvB=uV*vec4(b,1.);vec4 ca=uP*mvA,cb=uP*mvB;
  vec2 pa=ca.xy/ca.w*uRes*.5,pb=cb.xy/cb.w*uRes*.5;vec2 dp=pb-pa;float L=length(dp);
  vec2 dn=L>.001?dp/L:vec2(1.,0.);vec2 nr=vec2(-dn.y,dn.x);float e=aQ.x,s=aQ.y,th=aW.x*uPR;

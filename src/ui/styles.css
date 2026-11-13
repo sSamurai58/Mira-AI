@@ -635,6 +635,15 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   transition: stroke-dasharray 0.55s var(--ease-out);
 }
 
+.core-level-ring.is-live .core-level-ring-fill {
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--accent) 55%, transparent));
+  animation: core-ring-breathe 3.6s ease-in-out infinite;
+}
+
+.core-level-card.is-live {
+  animation: core-card-sheen 7s ease-in-out infinite;
+}
+
 .core-level-ring span {
   position: absolute;
   inset: 0;
@@ -1053,12 +1062,13 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
 }
 
 .core-level-value {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
   min-width: 4.5rem;
-  padding: 8px 14px;
+  padding: 8px 14px 12px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--panel-line);
   background: linear-gradient(
@@ -1067,9 +1077,62 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
     color-mix(in srgb, var(--bg-elevated) 48%, transparent)
   );
   box-shadow: inset 0 1px 0 rgba(204, 208, 207, 0.08);
+  overflow: hidden;
+}
+
+.core-level-value.is-live {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--panel-line));
+  box-shadow:
+    inset 0 1px 0 rgba(204, 208, 207, 0.08),
+    0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent),
+    0 0 18px color-mix(in srgb, var(--accent) 16%, transparent);
+  animation: core-level-glow 3.4s ease-in-out infinite;
+}
+
+.core-level-aura {
+  pointer-events: none;
+  position: absolute;
+  inset: -30%;
+  background: radial-gradient(
+    circle at 50% 40%,
+    color-mix(in srgb, var(--accent) 28%, transparent),
+    transparent 62%
+  );
+  opacity: 0.55;
+  animation: core-level-aura 4.2s ease-in-out infinite;
+}
+
+.core-level-progress {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  bottom: 5px;
+  height: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--track) 70%, transparent);
+  overflow: hidden;
+}
+
+.core-level-progress::after {
+  content: "";
+  display: block;
+  height: 100%;
+  width: var(--core-level-pct, 0%);
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 70%, transparent),
+    var(--accent),
+    color-mix(in srgb, var(--success) 55%, var(--accent))
+  );
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 50%, transparent);
+  transition: width 0.6s var(--ease-out);
+  animation: core-progress-sheen 2.8s ease-in-out infinite;
 }
 
 .core-level-value strong {
+  position: relative;
+  z-index: 1;
   font-family: var(--font-display);
   font-size: 1.35rem;
   font-variant-numeric: tabular-nums;
@@ -1077,7 +1140,9 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   color: var(--text);
 }
 
-.core-level-value span {
+.core-level-value > span.muted {
+  position: relative;
+  z-index: 1;
   font-size: 0.72rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1306,6 +1371,18 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   border-radius: 10px;
 }
 
+.stat-block.is-live {
+  animation: stat-block-breathe 5.5s ease-in-out infinite;
+}
+
+.stat-block.is-live.is-voice-on {
+  border-color: color-mix(in srgb, var(--warning) 34%, transparent);
+}
+
+.stat-value.is-ticking {
+  animation: stat-value-tick 2.4s ease-in-out infinite;
+}
+
 .home-grid.is-home-tab .stat-block {
   padding: 12px 14px;
   border-radius: 12px;
@@ -1498,10 +1575,26 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   animation-duration: 0.8s;
 }
 
+.wave.is-live span {
+  animation-duration: 0.85s;
+  opacity: 0.92;
+}
+
+/* Idle must still breathe — never a flat frozen meter. */
 .wave.is-idle span {
-  animation: none;
-  height: 30% !important;
-  opacity: 0.35;
+  height: auto !important;
+  min-height: 18%;
+  opacity: 0.45;
+  animation: wave-idle 2.8s ease-in-out infinite;
+}
+
+.wave.is-idle.is-voice-on span {
+  opacity: 0.7;
+  animation: wave-idle-on 1.9s ease-in-out infinite;
+}
+
+.voice-panel.is-live {
+  animation: voice-panel-breathe 6s ease-in-out infinite;
 }
 
 @keyframes wave {
@@ -1511,6 +1604,126 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   }
   50% {
     transform: scaleY(1);
+  }
+}
+
+@keyframes wave-idle {
+  0%,
+  100% {
+    transform: scaleY(0.28);
+    opacity: 0.32;
+  }
+  50% {
+    transform: scaleY(0.55);
+    opacity: 0.55;
+  }
+}
+
+@keyframes wave-idle-on {
+  0%,
+  100% {
+    transform: scaleY(0.34);
+    opacity: 0.48;
+  }
+  40% {
+    transform: scaleY(0.78);
+    opacity: 0.82;
+  }
+  70% {
+    transform: scaleY(0.5);
+    opacity: 0.62;
+  }
+}
+
+@keyframes core-level-glow {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 1px 0 rgba(204, 208, 207, 0.08),
+      0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent),
+      0 0 14px color-mix(in srgb, var(--accent) 12%, transparent);
+  }
+  50% {
+    box-shadow:
+      inset 0 1px 0 rgba(204, 208, 207, 0.1),
+      0 0 0 1px color-mix(in srgb, var(--accent) 38%, transparent),
+      0 0 22px color-mix(in srgb, var(--accent) 28%, transparent);
+  }
+}
+
+@keyframes core-level-aura {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes core-progress-sheen {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.35);
+  }
+}
+
+@keyframes core-ring-breathe {
+  0%,
+  100% {
+    stroke-opacity: 0.82;
+    filter: drop-shadow(0 0 3px color-mix(in srgb, var(--accent) 40%, transparent));
+  }
+  50% {
+    stroke-opacity: 1;
+    filter: drop-shadow(0 0 7px color-mix(in srgb, var(--accent) 70%, transparent));
+  }
+}
+
+@keyframes core-card-sheen {
+  0%,
+  100% {
+    border-color: var(--panel-line);
+  }
+  50% {
+    border-color: color-mix(in srgb, var(--accent) 28%, var(--panel-line));
+  }
+}
+
+@keyframes stat-block-breathe {
+  0%,
+  100% {
+    border-color: color-mix(in srgb, var(--text-muted) 18%, transparent);
+  }
+  50% {
+    border-color: color-mix(in srgb, var(--accent) 26%, transparent);
+  }
+}
+
+@keyframes stat-value-tick {
+  0%,
+  100% {
+    opacity: 0.88;
+    filter: brightness(1);
+  }
+  50% {
+    opacity: 1;
+    filter: brightness(1.12);
+  }
+}
+
+@keyframes voice-panel-breathe {
+  0%,
+  100% {
+    border-color: var(--panel-line);
+  }
+  50% {
+    border-color: color-mix(in srgb, var(--accent) 32%, var(--panel-line));
   }
 }
 
@@ -4444,5 +4657,70 @@ body.mira-hud-root *::-webkit-scrollbar {
   *::after {
     animation: none !important;
     transition: none !important;
+  }
+
+  /*
+   * Home ядро / HUD: keep a very slow drift so the screen never reads as a
+   * frozen still. More-specific !important shorthands beat the blanket rule.
+   * WebGL also keeps a gentler orbit when reduced-motion is on.
+   */
+  .core-orb-glow {
+    animation: pulse-core 12s ease-in-out infinite !important;
+  }
+
+  .core-level-value.is-live {
+    animation: core-level-glow 12s ease-in-out infinite !important;
+  }
+
+  .core-level-aura {
+    animation: core-level-aura 14s ease-in-out infinite !important;
+  }
+
+  .core-level-progress::after {
+    animation: core-progress-sheen 12s ease-in-out infinite !important;
+  }
+
+  .core-level-ring.is-live .core-level-ring-fill {
+    animation: core-ring-breathe 12s ease-in-out infinite !important;
+  }
+
+  .core-level-card.is-live {
+    animation: core-card-sheen 14s ease-in-out infinite !important;
+  }
+
+  .stat-block.is-live {
+    animation: stat-block-breathe 14s ease-in-out infinite !important;
+  }
+
+  .stat-value.is-ticking {
+    animation: stat-value-tick 12s ease-in-out infinite !important;
+  }
+
+  .voice-panel.is-live {
+    animation: voice-panel-breathe 14s ease-in-out infinite !important;
+  }
+
+  .wave span,
+  .wave.is-live span,
+  .wave.is-idle span,
+  .wave.is-idle.is-voice-on span {
+    animation: wave-idle 12s ease-in-out infinite !important;
+  }
+
+  .core-spin-a,
+  .core-spin-c,
+  .core-spin-e {
+    animation: spin 48s linear infinite !important;
+  }
+
+  .core-spin-b,
+  .core-spin-d,
+  .core-spin-f {
+    animation: spin-rev 56s linear infinite !important;
+  }
+
+  .core-heart,
+  .core-heart-glow {
+    animation: pulse-core 12s ease-in-out infinite !important;
   }
 }

@@ -32,8 +32,8 @@ Future **F1–F13** — только после стабилизации must (�
 | Поле | Значение |
 |------|----------|
 | Текущая фаза | **Realize-all ✅** |
-| Следующее действие | 0.1.9 голографическое ядро WIP — review / OK перед publish |
-| Запрещено сейчас | Publish / tag 0.1.9 без явного OK |
+| Следующее действие | 0.1.10 живое ядро + Home HUD WIP — review / OK перед publish |
+| Запрещено сейчас | Publish / tag 0.1.10 без явного OK |
 
 
 ### Стартовые допущения стека (подтвердить в P0 → MEMORY)
@@ -344,6 +344,16 @@ UX: **Создать → фразы → загрузить → Mira сама о�
 - [x] Voice Studio phrase generate: corpus word-frequency novelty — avoid recycling saturated words; cover missing prepositions/particles; diversify intonation seeds (`phraseNovelty.ts`)
 - [x] Публикация GitHub Release **0.1.6** — https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.6 (tag `v0.1.6` @ `8baa1da`)
 - [ ] MCP runtime / OAuth (по-прежнему later; после явной команды)
+
+## 2026-11-13 — Релиз 0.1.10 WIP (живое ядро + Home HUD)
+
+Ветка `cursor/release-0-1-10-6838` от `v0.1.9`. Пакет **0.1.10**. **Не публиковать** без OK.
+
+- [x] Bump 0.1.10
+- [x] WebGL core: faster orbit/layer spin, idle luminance pulse, context-lost recovery, visibility resume
+- [x] Home HUD: level aura + progress sheen, voice bars idle pulse (voice on), reply latency tick, live tiles
+- [x] `prefers-reduced-motion`: slow drift instead of full freeze for core/HUD
+- [ ] Publish GitHub Release — только после явного OK
 
 ## 2026-11-13 — Релиз 0.1.9 WIP (голографическое ядро)
 
