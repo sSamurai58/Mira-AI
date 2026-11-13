@@ -331,6 +331,16 @@ interface MiraBridge {
   ) => Promise<{ session: MiraSession; utterances: MiraUtterance[] } | null>;
   searchMemory: (query: string) => Promise<MiraMemoryHit[]>;
   testLlm: () => Promise<{ ok: boolean; detail: string }>;
+  translateAi: (payload: {
+    text: string;
+    source: string;
+    target: string;
+  }) => Promise<{
+    ok: boolean;
+    text: string;
+    provider?: string;
+    error?: string;
+  }>;
   sendChat: (payload: {
     sessionId?: string | null;
     text: string;

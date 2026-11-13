@@ -33,6 +33,7 @@ import {
   searchLearnedUnits,
 } from "./library/learn";
 import { runMemorySearch, sendChatMessage } from "./orchestrator";
+import { translateWithLlm } from "./translateAi";
 import { sampleSystemLoad, warmSystemMetrics } from "./systemMetrics";
 import {
   clearTerminalHistory,
@@ -429,6 +430,19 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
     const adapter = createLlmAdapter(cfg);
     return adapter.testConnection();
   });
+
+  on(
+    "mira:translate-ai",
+    async (
+      _e,
+      payload: { text: string; source: string; target: string },
+    ) =>
+      translateWithLlm({
+        text: payload?.text ?? "",
+        source: payload?.source ?? "auto",
+        target: payload?.target ?? "ru",
+      }),
+  );
 
   on(
     "mira:send-chat",

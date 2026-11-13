@@ -17,6 +17,7 @@ import { ChatPage } from "./pages/ChatPage";
 import { HudPage } from "./pages/HudPage";
 import { MemoryPage } from "./pages/MemoryPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { TranslatePage } from "./pages/TranslatePage";
 import { WorkshopPage } from "./pages/WorkshopPage";
 import {
   applyBgPattern,
@@ -43,12 +44,18 @@ import { getUiLang, t } from "./i18n";
 import { getVoiceEngineStatus } from "./voice/engineStatus";
 import type { VoiceState } from "./voiceState";
 
-type RootNav = "home" | "chat" | "memory" | "workshop" | "settings";
+type RootNav =
+  | "home"
+  | "chat"
+  | "memory"
+  | "workshop"
+  | "translate"
+  | "settings";
 
 function navItems(): {
   id: RootNav;
   label: string;
-  tone: "accent" | "success" | "warning" | "danger";
+  tone: "accent" | "success" | "warning" | "danger" | "translate";
 }[] {
   const lang = getUiLang();
   return [
@@ -56,6 +63,7 @@ function navItems(): {
     { id: "chat", label: t("chat", lang), tone: "accent" },
     { id: "memory", label: t("memory", lang), tone: "success" },
     { id: "workshop", label: t("workshop", lang), tone: "warning" },
+    { id: "translate", label: t("translate", lang), tone: "translate" },
     { id: "settings", label: t("settings", lang), tone: "danger" },
   ];
 }
@@ -99,6 +107,34 @@ function NavIcon({ id }: { id: RootNav }) {
       </svg>
     );
   }
+  if (id === "translate") {
+    return (
+      <svg {...common} className="nav-ico nav-ico-translate">
+        <text
+          x="3.5"
+          y="15.5"
+          fill="currentColor"
+          stroke="none"
+          fontSize="11"
+          fontWeight="700"
+          fontFamily="var(--font-sans)"
+        >
+          文
+        </text>
+        <text
+          x="12.5"
+          y="18"
+          fill="currentColor"
+          stroke="none"
+          fontSize="10"
+          fontWeight="700"
+          fontFamily="var(--font-sans)"
+        >
+          A
+        </text>
+      </svg>
+    );
+  }
   return (
     <svg {...common}>
       <circle cx="12" cy="12" r="3" />
@@ -114,6 +150,9 @@ export function App() {
 
   function navFromHash(hash: string): RootNav {
     if (hash.includes("settings")) return "settings";
+    if (hash.includes("translate") || hash.includes("translator")) {
+      return "translate";
+    }
     if (hash.includes("workshop")) return "workshop";
     if (hash.includes("memory")) return "memory";
     if (hash.includes("chat") || hash.includes("dialog")) return "chat";
@@ -131,6 +170,8 @@ export function App() {
         return "#/memory";
       case "workshop":
         return "#/workshop";
+      case "translate":
+        return "#/translate";
       case "settings":
         return "#/settings";
       default:
@@ -440,8 +481,8 @@ export function App() {
               />
             ) : null}
             {nav === "workshop" ? <WorkshopPage /> : null}
-            {nav === "settings" ? (
-              <SettingsPage
+            {nav === "translate" ? <TranslatePage /> : null}
+            {nav === "settings" ? (              <SettingsPage
                 themeId={themeId}
                 onThemeChange={setThemeId}
                 bgPatternId={bgPatternId}

@@ -109,6 +109,7 @@ async function streamAnthropic(
   userText: string,
   handlers: BrowserChatHandlers,
   signal?: AbortSignal,
+  systemOverride?: string,
 ) {
   const res = await fetch(`${cfg.baseUrl}/v1/messages`, {
     method: "POST",
@@ -122,7 +123,7 @@ async function streamAnthropic(
       model: cfg.model,
       max_tokens: 1024,
       stream: true,
-      system: systemPromptForHistory(history),
+      system: systemOverride ?? systemPromptForHistory(history),
       messages: [
         ...history.slice(-12).map((m) => ({
           role: m.role,
@@ -178,6 +179,7 @@ async function streamGemini(
   userText: string,
   handlers: BrowserChatHandlers,
   signal?: AbortSignal,
+  systemOverride?: string,
 ) {
   const url = `${cfg.baseUrl}/v1beta/models/${encodeURIComponent(cfg.model)}:streamGenerateContent?alt=sse&key=${encodeURIComponent(cfg.apiKey)}`;
   const contents = [
@@ -193,7 +195,11 @@ async function streamGemini(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       systemInstruction: {
-        parts: [{ text: systemPromptForHistory(history) }],
+        parts: [
+          {
+            text: systemOverride ?? systemPromptForHistory(history),
+          },
+        ],
       },
       contents,
     }),
@@ -277,6 +283,62 @@ export async function streamBrowserChat(opts: {
       await streamOpenAiCompatible(
         cfg,
         openAiCompatibleMessages(opts.history, opts.userText),
+        opts.handlers,
+        opts.signal,
+      );
+    }
+  } catch (err) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    opts.handlers.onError(error);
+    throw error;
+  }
+
+  return cfg;
+}
+
+/**
+ * One-shot LLM completion with a custom system prompt (e.g. Переводчик · Через ИИ).
+ * Does not use Mira chat personality / diversity rules.
+ */
+export async function streamBrowserPrompt(opts: {
+  systemPrompt: string;
+  userText: string;
+  handlers: BrowserChatHandlers;
+  signal?: AbortSignal;
+}): Promise<BrowserLlmConfig> {
+  const cfg = resolveBrowserLlmConfig();
+  if (cfg.provider === "mock") {
+    throw new Error(
+      "Нет API-ключа. Настройки → API и модели: выберите grok/openai и сохраните ключ.",
+    );
+  }
+
+  try {
+    if (cfg.provider === "claude") {
+      await streamAnthropic(
+        cfg,
+        [],
+        opts.userText,
+        opts.handlers,
+        opts.signal,
+        opts.systemPrompt,
+      );
+    } else if (cfg.provider === "gemini") {
+      await streamGemini(
+        cfg,
+        [],
+        opts.userText,
+        opts.handlers,
+        opts.signal,
+        opts.systemPrompt,
+      );
+    } else {
+      await streamOpenAiCompatible(
+        cfg,
+        [
+          { role: "system", content: opts.systemPrompt },
+          { role: "user", content: opts.userText },
+        ],
         opts.handlers,
         opts.signal,
       );

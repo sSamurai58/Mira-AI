@@ -160,6 +160,16 @@ contextBridge.exposeInMainWorld("mira", {
   searchMemory: (query: string): Promise<MiraMemoryHit[]> =>
     call("mira:search-memory", query),
   testLlm: (): Promise<{ ok: boolean; detail: string }> => call("mira:test-llm"),
+  translateAi: (payload: {
+    text: string;
+    source: string;
+    target: string;
+  }): Promise<{
+    ok: boolean;
+    text: string;
+    provider?: string;
+    error?: string;
+  }> => call("mira:translate-ai", payload),
   sendChat: (payload: {
     sessionId?: string | null;
     text: string;
