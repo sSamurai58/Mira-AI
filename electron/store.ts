@@ -315,8 +315,62 @@ export function openStore(): DatabaseSync {
   } catch {
     // column already exists
   }
+  ensureUtteranceFts(db);
   ensureMessengerSeeds(db);
   return db;
+}
+
+let utteranceFtsReady = false;
+
+/**
+ * Optional FTS5 index for memory search. Safe: if FTS unavailable, LIKE remains.
+ * Content-sync triggers keep FTS in sync without a destructive migration.
+ */
+function ensureUtteranceFts(store: DatabaseSync): void {
+  try {
+    store.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS utterances_fts USING fts5(
+        content,
+        utterance_id UNINDEXED,
+        session_id UNINDEXED,
+        role UNINDEXED,
+        created_at UNINDEXED,
+        tokenize = 'unicode61'
+      );
+    `);
+    // Backfill once if empty
+    const ftsCount = (
+      store.prepare(`SELECT COUNT(*) AS c FROM utterances_fts`).get() as {
+        c: number;
+      }
+    ).c;
+    const uttCount = (
+      store.prepare(`SELECT COUNT(*) AS c FROM utterances`).get() as {
+        c: number;
+      }
+    ).c;
+    if (ftsCount === 0 && uttCount > 0) {
+      store.exec(`
+        INSERT INTO utterances_fts(content, utterance_id, session_id, role, created_at)
+        SELECT content, id, session_id, role, created_at FROM utterances
+      `);
+    }
+    utteranceFtsReady = true;
+  } catch {
+    utteranceFtsReady = false;
+  }
+}
+
+function indexUtteranceFts(row: UtteranceRow): void {
+  if (!utteranceFtsReady || !db) return;
+  try {
+    db.prepare(
+      `INSERT INTO utterances_fts(content, utterance_id, session_id, role, created_at)
+       VALUES (?, ?, ?, ?, ?)`,
+    ).run(row.content, row.id, row.session_id, row.role, row.created_at);
+  } catch {
+    /* FTS optional */
+  }
 }
 
 function ensureMessengerSeeds(store: DatabaseSync): void {
@@ -484,11 +538,24 @@ export function addUtterance(
        VALUES (?, ?, ?, ?, ?)`,
     )
     .run(row.id, row.session_id, row.role, row.content, row.created_at);
+  indexUtteranceFts(row);
   touchSession(sessionId);
   return row;
 }
 
-/** Simple LIKE search across past utterances (P1). */
+function ftsMatchQuery(raw: string): string {
+  // Escape FTS5 special chars; join tokens with AND for precision.
+  return raw
+    .replace(/["'*^:(){}[\]]/g, " ")
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2)
+    .slice(0, 8)
+    .map((t) => `"${t}"`)
+    .join(" AND ");
+}
+
+/** Memory search: FTS5 when available, else LIKE (P1 + 0.1.11). */
 export function searchMemory(
   query: string,
   opts?: { limit?: number; excludeSessionId?: string },
@@ -497,9 +564,45 @@ export function searchMemory(
   if (!q) return [];
   const store = openStore();
   const limit = opts?.limit ?? 6;
-  const like = `%${q.replace(/[%_]/g, "")}%`;
-
   const owner = getOwnerId();
+
+  if (utteranceFtsReady) {
+    const match = ftsMatchQuery(q);
+    if (match) {
+      try {
+        if (opts?.excludeSessionId) {
+          return store
+            .prepare(
+              `SELECT f.utterance_id, f.session_id, s.title AS session_title,
+                      f.role, f.content, f.created_at
+               FROM utterances_fts f
+               JOIN sessions s ON s.id = f.session_id
+               WHERE s.owner_id = ? AND f.session_id != ?
+                 AND f MATCH ?
+               ORDER BY f.created_at DESC
+               LIMIT ?`,
+            )
+            .all(owner, opts.excludeSessionId, match, limit) as MemoryHit[];
+        }
+        return store
+          .prepare(
+            `SELECT f.utterance_id, f.session_id, s.title AS session_title,
+                    f.role, f.content, f.created_at
+             FROM utterances_fts f
+             JOIN sessions s ON s.id = f.session_id
+             WHERE s.owner_id = ?
+               AND f MATCH ?
+             ORDER BY f.created_at DESC
+             LIMIT ?`,
+          )
+          .all(owner, match, limit) as MemoryHit[];
+      } catch {
+        /* fall through to LIKE */
+      }
+    }
+  }
+
+  const like = `%${q.replace(/[%_]/g, "")}%`;
   if (opts?.excludeSessionId) {
     return store
       .prepare(
@@ -876,6 +979,24 @@ export function deleteLearnedUnitsForItem(libraryItemId: string): void {
   store
     .prepare(`DELETE FROM learned_units WHERE library_item_id = ?`)
     .run(libraryItemId);
+}
+
+export function deleteLearnPlanForItem(libraryItemId: string): void {
+  const store = openStore();
+  store
+    .prepare(`DELETE FROM learn_plans WHERE library_item_id = ?`)
+    .run(libraryItemId);
+}
+
+/** Remove library row + related units/plan. Returns the deleted row (for file cleanup). */
+export function deleteLibraryItem(id: string): LibraryItemRow | null {
+  const store = openStore();
+  const current = getLibraryItem(id);
+  if (!current) return null;
+  deleteLearnedUnitsForItem(id);
+  deleteLearnPlanForItem(id);
+  store.prepare(`DELETE FROM library_items WHERE id = ?`).run(id);
+  return current;
 }
 
 export function addLearnedUnit(input: {

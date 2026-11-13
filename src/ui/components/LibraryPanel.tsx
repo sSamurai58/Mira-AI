@@ -1,5 +1,8 @@
+import { emitActionLog } from "../actionLog";
 import { useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
+import { notifyCoreProgress } from "../coreLevel";
 import {
+  localDeleteLibraryItem,
   localGetLearnPlan,
   localImportLibraryBytes,
   localImportLibraryText,
@@ -9,11 +12,18 @@ import {
   type LocalLearnedUnit,
   type LocalLibraryItem,
 } from "../library/libraryLocal";
+import {
+  displayLearnedContent,
+  learnedKindLabel,
+} from "../library/learnedLabels";
+import { useAppConfirm } from "./AppConfirm";
+import { AutoGrowTextarea } from "./AutoGrowTextarea";
 
 type LibraryItem = MiraLibraryItem | LocalLibraryItem;
 type LearnedUnit = MiraLearnedUnit | LocalLearnedUnit;
 
 export function LibraryPanel() {
+  const confirm = useAppConfirm();
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [units, setUnits] = useState<LearnedUnit[]>([]);
@@ -77,8 +87,15 @@ export function LibraryPanel() {
           })
         : localImportLibraryText({ title: title.trim(), text });
       setNote(`Импортировано: ${item.title} (${item.status})`);
+      emitActionLog({
+        title: "Материал в библиотеку",
+        reason: `${item.title} (${item.status})`,
+        tag: "Обучение",
+        tone: "success",
+      });
       await refresh();
       await selectItem(item.id);
+      notifyCoreProgress();
     } finally {
       setBusy(null);
     }
@@ -90,27 +107,47 @@ export function LibraryPanel() {
     const names: string[] = [];
     try {
       for (const file of Array.from(list)) {
+        let clientText = "";
+        if (
+          file.type === "application/pdf" ||
+          /\.pdf$/i.test(file.name)
+        ) {
+          try {
+            const { extractPdfInBrowser } = await import("../library/pdfClient");
+            const pdf = await extractPdfInBrowser(file);
+            clientText = pdf.text;
+            if (pdf.note) {
+              setNote(`PDF «${file.name}»: ${pdf.note}`);
+            }
+          } catch (err) {
+            setNote(
+              err instanceof Error
+                ? err.message
+                : `PDF «${file.name}»: не удалось прочитать`,
+            );
+          }
+        } else if (
+          file.type.startsWith("text/") ||
+          /\.(md|txt|markdown|json|csv)$/i.test(file.name)
+        ) {
+          clientText = await file.text();
+        }
+
         if (window.mira?.importLibraryBytes) {
           const buf = new Uint8Array(await file.arrayBuffer());
           const item = await window.mira.importLibraryBytes({
             bytes: Array.from(buf),
             fileName: file.name,
             title: file.name.replace(/\.[^.]+$/, ""),
+            extractedText: clientText || undefined,
           });
           names.push(item.title);
           await selectItem(item.id);
         } else {
-          let extracted = "";
-          if (
-            file.type.startsWith("text/") ||
-            /\.(md|txt|markdown|json|csv)$/i.test(file.name)
-          ) {
-            extracted = await file.text();
-          }
           const item = localImportLibraryBytes({
             title: file.name.replace(/\.[^.]+$/, ""),
             fileName: file.name,
-            text: extracted || undefined,
+            text: clientText || undefined,
           });
           names.push(item.title);
           await selectItem(item.id);
@@ -118,6 +155,7 @@ export function LibraryPanel() {
       }
       setNote(`Добавлено в обучение: ${names.join(", ")}`);
       await refresh();
+      if (names.length) notifyCoreProgress();
     } catch (err) {
       setNote(err instanceof Error ? err.message : String(err));
     } finally {
@@ -142,6 +180,7 @@ export function LibraryPanel() {
       }
       await refresh();
       await selectItem(activeId);
+      notifyCoreProgress();
     } catch (err) {
       setNote(err instanceof Error ? err.message : String(err));
     } finally {
@@ -150,7 +189,11 @@ export function LibraryPanel() {
   }
 
   async function proposeSkill() {
-    if (!window.mira || !activeId) {
+    if (!activeId) {
+      setNote("Предложить skill доступно в Electron.");
+      return;
+    }
+    if (!window.mira) {
       setNote("Предложить skill доступно в Electron.");
       return;
     }
@@ -159,9 +202,46 @@ export function LibraryPanel() {
       const res = await window.mira.proposeLibrarySkill(activeId);
       setNote(`${res.ok ? "OK" : "FAIL"} — ${res.detail}`);
       await refresh();
+      if (res.ok) notifyCoreProgress();
     } finally {
       setBusy(null);
     }
+  }
+
+  async function deleteById(id: string) {
+    const item = items.find((i) => i.id === id);
+    const label = item?.title ?? id;
+    const ok = await confirm({
+      title: "Удалить материал",
+      body: `Удалить материал «${label}»?\nВыдержки и план тоже будут удалены. Созданный skill в каталоге останется.`,
+      confirmLabel: "Удалить",
+      tone: "danger",
+    });
+    if (!ok) return;
+    setBusy("delete");
+    try {
+      const res = window.mira?.deleteLibraryItem
+        ? await window.mira.deleteLibraryItem(id)
+        : localDeleteLibraryItem(id);
+      setNote(`${res.ok ? "OK" : "FAIL"} — ${res.detail}`);
+      if (res.ok) {
+        if (activeId === id) {
+          setActiveId(null);
+          setUnits([]);
+          setPlanText("");
+        }
+        await refresh();
+      }
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function deleteActive() {
+    if (!activeId) return;
+    await deleteById(activeId);
   }
 
   function onDrop(e: DragEvent) {
@@ -180,9 +260,9 @@ export function LibraryPanel() {
           <span className="chip">P8</span>
         </div>
         <p className="muted" style={{ margin: 0 }}>
-          Добавьте текст или файлы (md/txt/pdf/аудио…) → «Разобрать» → тезисы и
-          план попадают в память. В Диалоге можно прикрепить файл и отметить «В
-          материалы обучения».
+          Добавьте текст или файлы (md/txt/pdf…). PDF читается через pdf.js; сканы
+          — OCR (рус+eng). Затем «Разобрать» → <em>выдержки</em> (тезисы/фразы).
+          Skill — кнопкой «Предложить skill» → Мастерская → Skills.
           {!electron
             ? " Сейчас browser-demo: материалы в localStorage."
             : ""}
@@ -203,21 +283,45 @@ export function LibraryPanel() {
             </p>
           ) : (
             items.map((item) => (
-              <button
+              <div
                 key={item.id}
-                type="button"
-                className={`btn ${activeId === item.id ? "btn-primary" : ""}`}
-                style={{ textAlign: "left" }}
-                onClick={() => void selectItem(item.id)}
+                className={`library-item-row ${activeId === item.id ? "is-active" : ""}`}
               >
-                <div>{item.title}</div>
-                <div className="mono muted" style={{ fontSize: "0.75rem" }}>
-                  {item.status} · {item.media_type} · v{item.version}
-                  {"skill_id" in item && item.skill_id
-                    ? ` · skill:${item.skill_id}`
-                    : ""}
-                </div>
-              </button>
+                <button
+                  type="button"
+                  className={`btn library-item-select ${activeId === item.id ? "btn-primary" : ""}`}
+                  onClick={() => void selectItem(item.id)}
+                >
+                  <div>{item.title}</div>
+                  <div className="mono muted" style={{ fontSize: "0.75rem" }}>
+                    {item.status} · {item.media_type} · v{item.version}
+                    {"skill_id" in item && item.skill_id
+                      ? ` · skill:${item.skill_id}`
+                      : ""}
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className="btn library-item-delete"
+                  title="Удалить материал"
+                  aria-label={`Удалить «${item.title}»`}
+                  disabled={busy !== null}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void deleteById(item.id);
+                  }}
+                >
+                  <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden>
+                    <path
+                      d="M3.2 3.2l9.6 9.6M12.8 3.2L3.2 12.8"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.7"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </button>
+              </div>
             ))
           )}
           <div className="row">
@@ -236,6 +340,14 @@ export function LibraryPanel() {
               onClick={() => void proposeSkill()}
             >
               Предложить skill
+            </button>
+            <button
+              type="button"
+              className="btn btn-danger"
+              disabled={!activeId || busy !== null}
+              onClick={() => void deleteActive()}
+            >
+              Удалить
             </button>
           </div>
         </div>
@@ -302,10 +414,10 @@ export function LibraryPanel() {
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Название"
             />
-            <textarea
-              rows={8}
+            <AutoGrowTextarea
               value={text}
               onChange={(e) => setText(e.target.value)}
+              minHeight={140}
             />
             <button
               type="submit"
@@ -321,19 +433,40 @@ export function LibraryPanel() {
             <pre className="mono" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
               {planText || "—"}
             </pre>
-            <strong>Выученное</strong>
+            {activeId &&
+            items.find((i) => i.id === activeId && "skill_id" in i && i.skill_id) ? (
+              <p className="muted" style={{ margin: 0 }}>
+                Skill уже создан:{" "}
+                <code className="mono">
+                  {
+                    (
+                      items.find((i) => i.id === activeId) as {
+                        skill_id?: string | null;
+                      }
+                    )?.skill_id
+                  }
+                </code>{" "}
+                — смотрите Мастерская → Skills.
+              </p>
+            ) : null}
+            <strong>Выдержки из материала</strong>
+            <p className="muted" style={{ margin: 0, fontSize: "0.82rem" }}>
+              Тезисы и фразы — конспект для памяти, не каталог skills.
+            </p>
             {units.length === 0 ? (
               <p className="muted" style={{ margin: 0 }}>
                 После разбора появятся тезисы/фразы/стиль.
               </p>
             ) : (
               units.slice(0, 12).map((u) => (
-                <div key={u.id} className="panel">
+                <div key={u.id} className="panel learned-unit-card">
                   <div className="row">
-                    <span className="chip">{u.kind}</span>
+                    <span className="chip">{learnedKindLabel(u.kind)}</span>
                     <span className="muted mono">{u.source_ref}</span>
                   </div>
-                  <div>{u.content}</div>
+                  <div className="learned-unit-body">
+                    {displayLearnedContent(u.content)}
+                  </div>
                 </div>
               ))
             )}
