@@ -14,6 +14,8 @@ type CoreOrbProps = {
   level?: number;
   voiceState?: VoiceState;
   size?: number;
+  /** When false, WebGL pauses (off Home). Default true. */
+  active?: boolean;
 };
 
 function toCoreVoice(state: VoiceState): CoreVoice {
@@ -32,6 +34,7 @@ export function CoreOrb({
   level = 4,
   voiceState = "idle",
   size = 320,
+  active = true,
 }: CoreOrbProps) {
   const lv = normalizeCoreLevel(level);
   const wrapRef = useRef<HTMLDivElement | null>(null);
@@ -102,6 +105,10 @@ export function CoreOrb({
   useEffect(() => {
     handleRef.current?.setVoice(toCoreVoice(voiceState));
   }, [voiceState]);
+
+  useEffect(() => {
+    handleRef.current?.setActive(active);
+  }, [active]);
 
   return (
     <div

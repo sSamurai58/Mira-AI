@@ -175,6 +175,8 @@ export type CoreHandle = {
   /** Trigger a short holographic flash (e.g. on level-up). */
   flash: () => void;
   resize: () => void;
+  /** Pause rAF when off Home / hidden (0.1.11 LOD). */
+  setActive: (active: boolean) => void;
   destroy: () => void;
 };
 
@@ -216,9 +218,12 @@ export function createCoreWebgl(
   let reduced = prefersReducedMotion();
   let raf = 0;
   let running = true;
+  /** When false (off Home tab), throttle/pause drawing (0.1.11). */
+  let pageActive = true;
   let contextLost = false;
   let time = 0;
   let prev = performance.now();
+  let frameSkip = 0;
   let PR = Math.min(window.devicePixelRatio || 1, 2);
   let W = 1;
   let H = 1;
@@ -379,7 +384,22 @@ export function createCoreWebgl(
       raf = 0;
       return;
     }
+    // Off Home / hidden: pause rAF entirely (LOD).
+    if (!pageActive || document.visibilityState === "hidden") {
+      raf = 0;
+      return;
+    }
     raf = requestAnimationFrame(frame);
+
+    // Throttle: drop every other frame when reduced-motion or low DPR budget.
+    const lodThrottle = reduced || PR <= 1;
+    if (lodThrottle) {
+      frameSkip = (frameSkip + 1) % 2;
+      if (frameSkip === 1) {
+        prev = now;
+        return;
+      }
+    }
 
     // Cap dt; also treat huge gaps (tab background / sleep) as a soft resume
     // so we never freeze with dt≈0 or jump with a multi-second step.
@@ -550,9 +570,13 @@ export function createCoreWebgl(
     if (document.visibilityState === "visible") {
       prev = performance.now();
       if (!contextLost) resize();
-      if (running && !raf && !contextLost) {
+      if (running && pageActive && !raf && !contextLost) {
         raf = requestAnimationFrame(frame);
       }
+    } else {
+      // Pause off-tab / minimized to save GPU.
+      cancelAnimationFrame(raf);
+      raf = 0;
     }
   }
 
@@ -579,6 +603,16 @@ export function createCoreWebgl(
     },
     flash() {
       flashAmt = 1;
+    },
+    setActive(active: boolean) {
+      pageActive = active;
+      if (active && running && !raf && !contextLost) {
+        prev = performance.now();
+        raf = requestAnimationFrame(frame);
+      } else if (!active) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      }
     },
     resize,
     destroy() {

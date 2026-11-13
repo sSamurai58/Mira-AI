@@ -22,6 +22,13 @@ import {
   type HandsFreePrefs,
   type WakeSensitivity,
 } from "../voice/handsFree";
+import {
+  getActiveWakeEngine,
+  getWakeEngineId,
+  listWakeEngines,
+  setWakeEngineId,
+  type WakeEngineId,
+} from "../voice/wake/interface";
 import { speakText, stopSpeaking } from "../voice/tts";
 import {
   getActiveTtsEngine,
@@ -107,6 +114,9 @@ export function SettingsPage({
   );
   const [handsFree, setHandsFree] = useState<HandsFreePrefs>(() =>
     getHandsFreePrefs(),
+  );
+  const [wakeEngineId, setWakeEngineIdState] = useState<WakeEngineId>(() =>
+    getWakeEngineId(),
   );
   const [ttsEngine, setTtsEngine] = useState<TtsEngineId>(() =>
     getActiveTtsEngine(),
@@ -287,6 +297,26 @@ export function SettingsPage({
                 }
                 placeholder="мира"
               />
+            </label>
+            <label className="stack">
+              <span className="muted">Движок wake-word</span>
+              <ThemeSelect
+                aria-label="Движок wake-word"
+                value={wakeEngineId}
+                options={listWakeEngines().map((e) => ({
+                  value: e.id,
+                  label: e.label,
+                }))}
+                onChange={(id) => {
+                  const next = setWakeEngineId(
+                    id === "porcupine-stub" ? "porcupine-stub" : "webspeech",
+                  );
+                  setWakeEngineIdState(next);
+                }}
+              />
+              <span className="settings-field-hint">
+                {getActiveWakeEngine().detail}
+              </span>
             </label>
             <label className="stack">
               <span className="muted">Чувствительность wake-word</span>

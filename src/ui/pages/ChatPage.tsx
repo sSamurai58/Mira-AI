@@ -41,6 +41,8 @@ import {
   stripWakePhrase,
   type HandsFreePrefs,
 } from "../voice/handsFree";
+import { acquireMicLevel, releaseMicLevel } from "../voice/micLevel";
+import { getActiveTtsEngine, listTtsEngines } from "../voice/ttsEngines";
 import { speakText, stopSpeaking } from "../voice/tts";
 import type { VoiceInfo } from "../voice/types";
 import type { VoiceState } from "../voiceState";
@@ -100,6 +102,8 @@ export function ChatPage({
   /** Last measured first-token / reply latency (seconds); Home «Ответ» tile. */
   const [replySecs, setReplySecs] = useState(0.4);
   const [replyDisplay, setReplyDisplay] = useState("~0,4 с");
+  const [micLevel, setMicLevel] = useState(0);
+  const [ttsHud, setTtsHud] = useState("TTS…");
   const requestIdRef = useRef<string | null>(null);
   const replyStartRef = useRef<number | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -129,6 +133,77 @@ export function ChatPage({
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [bubbles, busy, interim]);
+
+  // Home TTS engine status (EL key/quota/fallback).
+  useEffect(() => {
+    let cancelled = false;
+    async function refreshTtsHud() {
+      const engine = getActiveTtsEngine();
+      const info = listTtsEngines().find((e) => e.id === engine);
+      if (engine === "elevenlabs" && window.mira?.getElevenLabsStatus) {
+        try {
+          const st = await window.mira.getElevenLabsStatus(false);
+          if (cancelled) return;
+          const quota =
+            st.characterCount != null && st.characterLimit != null
+              ? ` · ${(st.characterLimit - st.characterCount).toLocaleString("ru-RU")} симв.`
+              : "";
+          setTtsHud(
+            st.hasKey
+              ? `EL ${st.connected ? "ok" : "ключ"}${quota}`
+              : "EL нет ключа → fallback",
+          );
+          return;
+        } catch {
+          /* fall through */
+        }
+      }
+      if (!cancelled) {
+        setTtsHud(
+          engine === "neural-pack"
+            ? "Neural pack"
+            : engine === "elevenlabs"
+              ? "EL (нужен Electron)"
+              : info?.label || "Web Speech",
+        );
+      }
+    }
+    void refreshTtsHud();
+    const id = window.setInterval(() => void refreshTtsHud(), 12_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  // Mic level for HUD bars when listening (best-effort).
+  useEffect(() => {
+    if (voiceState !== "listening" && voiceState !== "speaking") {
+      setMicLevel(0);
+      return;
+    }
+    let cancelled = false;
+    let raf = 0;
+    let read: (() => number) | null = null;
+    void (async () => {
+      read = await acquireMicLevel();
+      if (cancelled) {
+        releaseMicLevel();
+        return;
+      }
+      const tick = () => {
+        if (cancelled) return;
+        setMicLevel(read?.() ?? 0);
+        raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+    })();
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+      releaseMicLevel();
+    };
+  }, [voiceState]);
 
   useEffect(() => {
     const sync = () => setHandsFree(getHandsFreePrefs());
@@ -930,7 +1005,12 @@ export function ChatPage({
 
             <div className="core-card-grid">
               <div className="core-col">
-                <CoreOrb level={coreLevel} voiceState={voiceState} size={320} />
+                <CoreOrb
+                  level={coreLevel}
+                  voiceState={voiceState}
+                  size={320}
+                  active={showHome}
+                />
                 <div
                   className="core-level-controls"
                   aria-live="polite"
@@ -978,6 +1058,12 @@ export function ChatPage({
                       {voiceOn ? "on" : "n/a"}
                     </div>
                   </div>
+                  <div className="stat-block is-live" title="Движок TTS">
+                    <span className="stat-label">TTS</span>
+                    <div className="stat-value g2" style={{ fontSize: "0.78rem" }}>
+                      {ttsHud}
+                    </div>
+                  </div>
                 </div>
 
                 <div className="voice-panel is-live">
@@ -992,22 +1078,33 @@ export function ChatPage({
                     )}
                   </div>
                   <div className={waveClass} aria-hidden>
-                    {Array.from({ length: 36 }, (_, i) => (
-                      <span
-                        key={i}
-                        style={{
-                          height: `${28 + ((i * 37) % 72)}%`,
-                          animationDelay: `${(i % 7) * 0.08}s`,
-                        }}
-                      />
-                    ))}
+                    {Array.from({ length: 36 }, (_, i) => {
+                      const base = 18 + ((i * 37) % 55);
+                      const live =
+                        micLevel > 0.02
+                          ? Math.min(
+                              100,
+                              base + micLevel * 90 * (0.55 + ((i * 13) % 10) / 20),
+                            )
+                          : base;
+                      return (
+                        <span
+                          key={i}
+                          style={{
+                            height: `${live}%`,
+                            animationDelay: `${(i % 7) * 0.08}s`,
+                          }}
+                        />
+                      );
+                    })}
                   </div>
                 </div>
 
                 <div className="core-hint-row">
                   <p className="muted" style={{ margin: 0 }}>
-                    Ядро реагирует на голос и ответы. Чтобы писать или говорить
-                    с Мирой — откройте «Диалог».
+                    {voiceState === "speaking"
+                      ? "Говорю — нажмите «Перебить» или Space, чтобы остановить и сразу слушать."
+                      : "Ядро реагирует на голос и ответы. Чтобы писать или говорить с Мирой — откройте «Диалог»."}
                   </p>
                 </div>
               </div>
@@ -1065,10 +1162,13 @@ export function ChatPage({
                   type="button"
                   className="btn btn-danger"
                   onClick={handleBargeIn}
-                  title="Стоп TTS и сразу слушать (Space)"
+                  title="Стоп озвучки и сразу слушать (Space)"
                 >
                   Перебить
                 </button>
+                <span className="chip" title="Barge-in">
+                  Space = перебить → слушаю
+                </span>
                 <button type="button" className="btn" onClick={handleStopSpeak}>
                   Стоп
                 </button>

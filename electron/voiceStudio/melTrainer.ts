@@ -7,10 +7,10 @@ import type { LinkedTrainClip, VoiceModelPack } from "./modelPack";
 import {
   DEFAULT_NEURAL_EPOCHS,
   NEURAL_METHOD,
-  runNeuralMelTrain,
   type NeuralTrainProgress,
   type NeuralTrainResult,
 } from "./neural/train";
+import { runNeuralMelTrainOffThread } from "./neural/trainWorkerHost";
 
 export const DEFAULT_TRAIN_EPOCHS = DEFAULT_NEURAL_EPOCHS;
 export { NEURAL_METHOD };
@@ -186,12 +186,12 @@ export const NEURAL_TTS_CURRICULUM: CurriculumRow[] = [
   {
     concept: "full neural net + CUDA",
     neural: "Tacotron/FastSpeech на GPU",
-    mira: "Полный CPU TS-MLP neural path; CUDA — опциональный детект ускорения",
+    mira: "CPU TS-MLP в бандле (mapped); CUDA kernels не бандлятся — только детект",
     status: "mapped",
-    title: "Полная нейросеть (CPU / GPU)",
-    meaning: "Настоящая нейросеть речи в приложении",
+    title: "Нейросеть на CPU (CUDA не в бандле)",
+    meaning: "Рабочий CPU neural path; GPU kernels — не часть релиза",
     miraPlain:
-      "В Electron работает полный нейро-пайплайн на CPU; если CUDA есть на ПК — это ускорение хоста, ядра CUDA в бандл не входят",
+      "Обучение и синтез идут на CPU внутри Electron. CUDA на ПК лишь отмечается в Doctor — отдельных CUDA-ядер в релизе нет (честно CPU-only curriculum)",
     group: "later",
   },
   {
@@ -247,7 +247,7 @@ export type MelTrainProgress = NeuralTrainProgress;
 /**
  * Run multi-epoch neural mel training over linked clips; update pack priors.
  */
-export function runMelRefinement(
+export async function runMelRefinement(
   pack: VoiceModelPack,
   packDir: string,
   clips: LinkedTrainClip[],
@@ -256,12 +256,18 @@ export function runMelRefinement(
     onProgress?: (ev: MelTrainProgress) => void;
     writeGriffinLimPreview?: boolean;
   },
-): MelTrainResult {
-  const neural: NeuralTrainResult = runNeuralMelTrain(pack, packDir, clips, {
-    epochs: opts?.epochs ?? DEFAULT_TRAIN_EPOCHS,
-    onProgress: opts?.onProgress,
-    writePreviews: opts?.writeGriffinLimPreview !== false,
-  });
+): Promise<MelTrainResult> {
+  // Off main UI thread via worker_threads when possible (0.1.11).
+  const neural: NeuralTrainResult = await runNeuralMelTrainOffThread(
+    {
+      pack,
+      packDir,
+      clips,
+      epochs: opts?.epochs ?? DEFAULT_TRAIN_EPOCHS,
+      writePreviews: opts?.writeGriffinLimPreview !== false,
+    },
+    opts?.onProgress,
+  );
 
   return {
     epochs: neural.epochs,

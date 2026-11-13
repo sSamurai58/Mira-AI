@@ -1391,7 +1391,7 @@ export async function trainVoiceModel(
   );
 
   let melTrain: MelTrainResult | null = null;
-  melTrain = runMelRefinement(pack, packDir, linkedClips, {
+  melTrain = await runMelRefinement(pack, packDir, linkedClips, {
     epochs: DEFAULT_TRAIN_EPOCHS,
     onProgress: (ev) => {
       const pct =

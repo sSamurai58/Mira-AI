@@ -13,7 +13,7 @@
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
 | Дорожная карта | Must + future F* закрыты (partial→done stubs where noted) |
 
-**Сейчас:** **0.1.10 WIP** (не публиковать). Ветка `cursor/release-0-1-10-6838`. База: 0.1.9 / `v0.1.9`.
+**Сейчас:** **0.1.11 WIP** (не публиковать / не тегировать). Ветка `cursor/release-0-1-11-6838` от `v0.1.10`.
 
 
 ## Решения
@@ -22,6 +22,7 @@
 
 | Дата | Решение | Почему |
 |------|---------|--------|
+| 2026-11-13 | **0.1.11 WIP: pack + update HUD toast** | MCP runtime scaffolding; EL stream/IVC/settings/Flash; wake pluggable; EPUB/AV ASR; FTS; WebGL LOD; auto-update floating HUD; no publish |
 | 2026-11-13 | **0.1.10 WIP: живое ядро + Home HUD** | После 0.1.9 Home выглядел «замороженным»: idle wave `animation:none`, медленный orbit, статичные плитки; rAF усилен, idle pulse, latency tick, reduced-motion = slow drift |
 | 2026-11-13 | **0.1.9 WIP: голографическое ядро WebGL2** | Пользовательский single-file HTML (4 слоя, MAX blend, bloom) портирован в `coreWebgl`; Mira L→vis 0…4 (L1≈0.3…L50=4); flash на level-up; reduced-motion |
 | 2026-11-12 | **0.1.8 WIP: ElevenLabs TTS** (voice_id `YjESejviApN7SHrbfnA2`) | Облачный TTS в Electron main (`xi-api-key` из `ELEVENLABS_API_KEY`); stub `edge-stub` → `elevenlabs`; ключ нужен от пользователя — Voice ID ≠ API key |

@@ -481,9 +481,37 @@ export function planCorpusSpeech(
     };
   }
   if (clipCount > 0) {
-    const mode = "hybrid" as const;
+    // 0.1.11: reduce mid-sentence Web Speech when unit coverage is decent —
+    // drop tiny uncovered gaps (≤2 tokens) so we don't flip to system voice mid-phrase.
+    let segs = segments;
+    let wsCount = webspeechCount;
+    if (coverage >= 0.45) {
+      const filtered: CorpusPlanSegment[] = [];
+      for (const seg of segments) {
+        if (seg.kind === "webspeech") {
+          const words = seg.text.trim().split(/\s+/).filter(Boolean);
+          if (words.length <= 2 && seg.text.trim().length <= 18) {
+            wsCount -= 1;
+            continue;
+          }
+        }
+        filtered.push(seg);
+      }
+      if (filtered.some((s) => s.kind === "fragment")) {
+        segs = filtered;
+      }
+    }
+    const mode =
+      wsCount <= 0 && segs.every((s) => s.kind === "fragment")
+        ? ("corpus" as const)
+        : ("hybrid" as const);
     return {
-      ...base,
+      segments: segs,
+      clipCount: segs.filter((s) => s.kind === "fragment").length,
+      webspeechCount: segs.filter((s) => s.kind === "webspeech").length,
+      coverage,
+      coveredTokens: covered,
+      totalTokens: target.length,
       mode,
       status: formatStatus({
         mode,

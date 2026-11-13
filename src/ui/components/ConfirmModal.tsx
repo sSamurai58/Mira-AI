@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 export type SkillProposeForm = {
@@ -49,6 +49,8 @@ export function ConfirmModal({
 }: ConfirmModalProps) {
   const [skillId, setSkillId] = useState(skillPropose?.defaultId ?? "");
   const [skillName, setSkillName] = useState(skillPropose?.defaultName ?? "");
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const previouslyFocused = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!open || !skillPropose) return;
@@ -58,13 +60,52 @@ export function ConfirmModal({
 
   useEffect(() => {
     if (!open) return;
+    previouslyFocused.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    const root = dialogRef.current;
+    const focusables = () =>
+      root
+        ? Array.from(
+            root.querySelectorAll<HTMLElement>(
+              'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+            ),
+          )
+        : [];
+    // Focus first actionable control.
+    requestAnimationFrame(() => {
+      const list = focusables();
+      (list[0] ?? root)?.focus?.();
+    });
+
     function onKey(e: KeyboardEvent) {
-      if (e.key !== "Escape") return;
-      e.preventDefault();
-      onCancel();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onCancel();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const list = focusables();
+      if (list.length < 1) return;
+      const first = list[0]!;
+      const last = list[list.length - 1]!;
+      const active = document.activeElement as HTMLElement | null;
+      if (e.shiftKey) {
+        if (active === first || !root?.contains(active)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (active === last) {
+        e.preventDefault();
+        first.focus();
+      }
     }
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      previouslyFocused.current?.focus?.();
+    };
   }, [open, onCancel]);
 
   const normalizedId = useMemo(() => normalizeSkillId(skillId), [skillId]);
@@ -94,10 +135,12 @@ export function ConfirmModal({
   const modal = (
     <div className="modal-backdrop" role="presentation" onClick={onCancel}>
       <div
+        ref={dialogRef}
         className={`modal ${skillPropose ? "modal-wide" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirm-title"
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
         <h2 id="confirm-title">{title}</h2>

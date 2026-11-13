@@ -169,11 +169,13 @@ export function SettingsIntegrationsSection() {
     <>
       <div className="row">
         <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Интеграции</h2>
-        <StubBadge label="P10" />
+        <StubBadge label="built-in" />
       </div>
       <p className="muted" style={{ margin: 0 }}>
-        Включите нужные каналы, заполните ключи и сохраните.
-        {snap.source === "browser"
+        Встроенные каналы Mira (web, экран, браузер, мессенджеры, Blender) — не
+        путать с разделом <strong>MCP</strong> (стандартные внешние коннекторы).
+        Включите нужное, заполните ключи и сохраните.
+        {snap?.source === "browser"
           ? " Сейчас demo-браузер: значения в localStorage; в Electron — в `.env`."
           : " Значения пишутся в локальный `.env`."}
       </p>

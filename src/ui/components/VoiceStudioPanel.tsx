@@ -536,6 +536,62 @@ export function VoiceStudioPanel(props: {
     }
   }
 
+  /** One-click: re-import existing clip files through current decoder, then full rebuild. */
+  async function reimportAndRebuild() {
+    if (!project || !electron) return;
+    setBusy("train");
+    setNote("Переимпорт клипов + полная пересборка…");
+    try {
+      let n = 0;
+      for (const clip of clips) {
+        const src = clip.file_path;
+        if (!src || !clip.phrase_id) continue;
+        try {
+          await window.mira!.importVoiceClip({
+            projectId: project.id,
+            sourcePath: src,
+            phraseId: clip.phrase_id,
+          });
+          n += 1;
+        } catch {
+          /* skip missing files */
+        }
+      }
+      setNote(`Переимпортировано ${n} клипов · запускаю пересборку…`);
+      await trainModel();
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : String(err));
+      setBusy(null);
+    }
+  }
+
+  async function cloneToElevenLabs() {
+    if (!project || !electron || !window.mira?.cloneElevenLabsVoice) {
+      setNote("Instant Voice Clone доступен в Electron при наличии ELEVENLABS_API_KEY");
+      return;
+    }
+    setBusy("clone");
+    try {
+      const paths = clips
+        .map((c) => c.file_path)
+        .filter((p): p is string => Boolean(p));
+      const res = await window.mira.cloneElevenLabsVoice({
+        name: project.name || "Mira clone",
+        description: `Mira Voice Studio · ${project.id}`,
+        filePaths: paths,
+      });
+      if (res.ok && res.voiceId) {
+        setNote(`${res.detail} · сохраните Voice ID в Настройках ElevenLabs`);
+      } else {
+        setNote(res.detail || "Clone не удался");
+      }
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function uploadBytes(file: File) {
     if (!project) return;
     setBusy("bytes");
@@ -755,6 +811,8 @@ export function VoiceStudioPanel(props: {
     phrases.length > 0
       ? Math.round((linkedAccepted / phrases.length) * 100)
       : 0;
+  const TARGET_CLIPS = 5;
+  const needMoreClips = Math.max(0, TARGET_CLIPS - linkedAccepted);
   const canTrain = phrases.length >= 1 && linkedAccepted >= 3;
   const isTrained =
     Boolean(project?.custom_voice_id) ||
@@ -915,6 +973,18 @@ export function VoiceStudioPanel(props: {
                 ? ` · catalog ${project.custom_voice_id}`
                 : ""}
             </div>
+            {needMoreClips > 0 ? (
+              <p className="muted" style={{ margin: 0 }}>
+                Нужно ещё ≈{needMoreClips} клип
+                {needMoreClips === 1 ? "" : needMoreClips < 5 ? "а" : "ов"}{" "}
+                (цель {TARGET_CLIPS} привязанных) для устойчивого покрытия.
+                Сейчас минимум для сборки — 3.
+              </p>
+            ) : (
+              <p className="muted" style={{ margin: 0 }}>
+                Клипов достаточно для базовой сборки (≥{TARGET_CLIPS} привязанных).
+              </p>
+            )}
             <div className="row" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
               <button
                 type="button"
@@ -945,6 +1015,24 @@ export function VoiceStudioPanel(props: {
                   : project.custom_voice_id
                     ? "Пересобрать голос"
                     : "Собрать голос"}
+              </button>
+              <button
+                type="button"
+                className="btn"
+                disabled={Boolean(busy) || clips.length < 1 || !electron}
+                onClick={() => void reimportAndRebuild()}
+                title="Перегнать существующие клипы через текущий декодер и полную пересборку"
+              >
+                Переимпорт + пересборка
+              </button>
+              <button
+                type="button"
+                className="btn"
+                disabled={Boolean(busy) || clips.length < 1 || !electron}
+                onClick={() => void cloneToElevenLabs()}
+                title="Instant Voice Clone → ElevenLabs (нужен API-ключ)"
+              >
+                {busy === "clone" ? "Клон…" : "Clone → ElevenLabs"}
               </button>
               {busy === "train" && trainProgress ? (
                 <div
