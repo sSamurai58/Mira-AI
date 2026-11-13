@@ -13,7 +13,7 @@
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
 | Дорожная карта | Must + future F* закрыты (partial→done stubs where noted) |
 
-**Сейчас:** **0.1.9 WIP** (не публиковать). Ветка `cursor/release-0-1-9-6838`. База: 0.1.8 / `v0.1.8`.
+**Сейчас:** **0.1.9 опубликован** (`v0.1.9`, Latest). Ветка `cursor/release-0-1-9-6838` @ `f45dd4d`. https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.9
 
 
 ## Решения
@@ -22,9 +22,11 @@
 
 | Дата | Решение | Почему |
 |------|---------|--------|
-| 2026-11-13 | **0.1.9 WIP: голографическое ядро WebGL2** | Пользовательский single-file HTML (4 слоя, MAX blend, bloom) портирован в `coreWebgl`; Mira L→vis 0…4 (L1≈0.3…L50=4); flash на level-up; reduced-motion |
-| 2026-11-12 | **0.1.8 WIP: ElevenLabs TTS** (voice_id `YjESejviApN7SHrbfnA2`) | Облачный TTS в Electron main (`xi-api-key` из `ELEVENLABS_API_KEY`); stub `edge-stub` → `elevenlabs`; ключ нужен от пользователя — Voice ID ≠ API key |
-| 2026-11-12 | **Релиз 0.1.7 опубликован** (`v0.1.7`, Latest) | Neural TTS CPU curriculum; Voice Studio slice/stitch; core XP growth; chat diversity; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.7 |
+| 2026-11-13 | **Релиз 0.1.9 опубликован** (`v0.1.9`, Latest) | Голографическое WebGL2 ядро (4 слоя, MAX blend, bloom); L→vis 0…4; flash; p9 RLHF smoke fix; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.9 |
+| 2026-11-13 | **0.1.9: голографическое ядро WebGL2** | Пользовательский single-file HTML (4 слоя, MAX blend, bloom) портирован в `coreWebgl`; Mira L→vis 0…4 (L1≈0.3…L50=4); flash на level-up; reduced-motion |
+| 2026-11-12 | **Релиз 0.1.8 опубликован** (`v0.1.8`) | ElevenLabs cloud TTS (voice_id `YjESejviApN7SHrbfnA2`); Settings key/model/test; engine `elevenlabs` replaces `edge-stub`; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.8 |
+| 2026-11-12 | **0.1.8: ElevenLabs TTS** (voice_id `YjESejviApN7SHrbfnA2`) | Облачный TTS в Electron main (`xi-api-key` из `ELEVENLABS_API_KEY`); stub `edge-stub` → `elevenlabs`; ключ нужен от пользователя — Voice ID ≠ API key |
+| 2026-11-12 | **Релиз 0.1.7 опубликован** (`v0.1.7`) | Neural TTS CPU curriculum; Voice Studio slice/stitch; core XP growth; chat diversity; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.7 |
 | 2026-11-12 | **0.1.7: Voice Studio neural TTS CPU** (encoder/attention/decoder/Adam/vocoder/RLHF) | Curriculum proxies→real TS-MLP; CUDA kernels not bundled — CPU path + optional CUDA detect; unit-stitch fallback; docs/mira-tts-report-0.1.7.md |
 | 2026-11-12 | **0.1.7: Voice Studio нарезка/сращивание** (+ chat diversity) | 0.1.4 spectral-flux+10ms fade всё ещё резал mid-phoneme / криво склеивал; text-weighted + island boundaries, hysteresis, pad, min duration, OLA+RMS stitch; после обновления — re-import + полная пересборка |
 | 2026-11-12 | **Релиз 0.1.6 опубликован** (`v0.1.6`) | Portal Workshop overlays; plain-language TTS curriculum table; phrase-generation lexical novelty/coverage; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.6 |
