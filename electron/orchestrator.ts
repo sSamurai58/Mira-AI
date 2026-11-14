@@ -9,6 +9,7 @@ import {
 } from "./markdownCatalog";
 import { requestUserConfirm } from "./confirmBridge";
 import {
+  extractHistoryQuery,
   extractOpenUrl,
   formatBrowserBlock,
   getBrowserPolicy,
@@ -693,9 +694,7 @@ export async function sendChatMessage(
         desktopBlock = formatBrowserBlock("open", opened);
       }
     } else if (looksLikeBrowserHistoryIntent(text)) {
-      const q = text
-        .replace(/история браузера|где я (уже )?был|сайты?|browser history/gi, " ")
-        .trim();
+      const q = extractHistoryQuery(text);
       const hits = searchHistory(q || "", 15);
       desktopUsed = "browser-history";
       desktopBlock = formatBrowserBlock("history", hits);

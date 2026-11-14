@@ -733,16 +733,32 @@ export function searchBrowserVisits(
       )
       .all(limit) as BrowserVisitRow[];
   }
-  const like = `%${q.replace(/[%_]/g, "")}%`;
+  // Token OR: «github docs» → url/title match any token (min 2 chars).
+  const tokens = q
+    .toLowerCase()
+    .split(/[\s,/|]+/)
+    .map((t) => t.replace(/[%_]/g, "").trim())
+    .filter((t) => t.length >= 2)
+    .slice(0, 6);
+  const terms = tokens.length ? tokens : [q.replace(/[%_]/g, "")];
+  const clauses = terms
+    .map(() => `(lower(url) LIKE ? OR lower(title) LIKE ?)`)
+    .join(" OR ");
+  const params: string[] = [];
+  for (const t of terms) {
+    const like = `%${t}%`;
+    params.push(like, like);
+  }
+  params.push(String(limit));
   return store
     .prepare(
       `SELECT id, url, title, source, visited_at
        FROM browser_visits
-       WHERE url LIKE ? OR title LIKE ?
+       WHERE ${clauses}
        ORDER BY visited_at DESC
        LIMIT ?`,
     )
-    .all(like, like, limit) as BrowserVisitRow[];
+    .all(...params) as BrowserVisitRow[];
 }
 
 export function listMessengerContacts(
