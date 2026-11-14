@@ -76,30 +76,34 @@ export async function syncImapInbox(limit = 15): Promise<{
       const exists = store.prepare(
         `SELECT id FROM mail_messages WHERE folder = 'inbox' AND subject = ? AND from_addr = ? LIMIT 1`,
       );
-      const uids: number[] = [];
-      for await (const msg of client.fetch(
-        { seen: false, last: limit },
-        { envelope: true, source: false },
-      )) {
-        uids.push(msg.uid);
-        if (uids.length >= limit) break;
-      }
-      // Also take recent regardless of seen
-      for await (const msg of client.fetch(
-        { last: limit },
-        { envelope: true },
-      )) {
-        const from =
-          msg.envelope?.from?.[0]?.address ||
-          msg.envelope?.from?.[0]?.name ||
-          "unknown";
-        const subject = msg.envelope?.subject || "(без темы)";
-        if (exists.get(subject, from)) continue;
-        const date =
-          msg.envelope?.date?.toISOString?.() || new Date().toISOString();
-        insert.run(crypto.randomUUID(), from, subject, "(тело не загружено — заголовок IMAP)", date);
-        imported += 1;
-        if (imported >= limit) break;
+      const mailbox = client.mailbox;
+      const total =
+        mailbox && typeof mailbox === "object" ? mailbox.exists : 0;
+      if (total > 0) {
+        const start = Math.max(1, total - Math.max(1, limit) + 1);
+        // Sequence range of the newest N messages (imapflow has no `last` query).
+        for await (const msg of client.fetch(`${start}:*`, {
+          envelope: true,
+          source: false,
+        })) {
+          const from =
+            msg.envelope?.from?.[0]?.address ||
+            msg.envelope?.from?.[0]?.name ||
+            "unknown";
+          const subject = msg.envelope?.subject || "(без темы)";
+          if (exists.get(subject, from)) continue;
+          const date =
+            msg.envelope?.date?.toISOString?.() || new Date().toISOString();
+          insert.run(
+            crypto.randomUUID(),
+            from,
+            subject,
+            "(тело не загружено — заголовок IMAP)",
+            date,
+          );
+          imported += 1;
+          if (imported >= limit) break;
+        }
       }
     } finally {
       lock.release();

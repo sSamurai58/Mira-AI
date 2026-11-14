@@ -890,9 +890,9 @@ export async function completeOAuthWithCode(
         : `OAuth token получен, но probe: ${probed.detail}`,
     });
     return {
-      ok: probed.live,
+      ok: Boolean(probed.live),
       connectorId,
-      detail: probed.detail,
+      detail: probed.detail ?? "",
     };
   } catch (err) {
     const detail = `OAuth exchange: ${err instanceof Error ? err.message : String(err)}`;
