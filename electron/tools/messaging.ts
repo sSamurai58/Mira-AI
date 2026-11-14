@@ -404,7 +404,10 @@ export async function sendOrReplyMessage(
     };
   }
 
-  if (provider === "whatsapp" || provider === "instagram") {
+  if (
+    (provider === "whatsapp" || provider === "instagram") &&
+    policy.mode === "live"
+  ) {
     const bridge =
       provider === "whatsapp"
         ? process.env.WHATSAPP_BRIDGE_URL?.trim()
@@ -505,6 +508,12 @@ export async function sendOrReplyMessage(
     status: "dry-run",
     externalId: null,
   });
+  const dryHint =
+    provider === "telegram"
+      ? "Dry-run (telegram): сообщение записано локально. Для live задайте TELEGRAM_BOT_TOKEN (+ chat id)."
+      : provider === "whatsapp"
+        ? "Dry-run (whatsapp): сообщение записано локально. Для live задайте MESSAGING_MODE=live (+ WHATSAPP_BRIDGE_URL или wa.me)."
+        : "Dry-run (instagram): сообщение записано локально. Для live задайте MESSAGING_MODE=live (+ INSTAGRAM_BRIDGE_URL).";
   return {
     ok: true,
     provider,
@@ -514,8 +523,7 @@ export async function sendOrReplyMessage(
     body: intent.body,
     mode: "dry-run",
     externalId: null,
-    detail:
-      "Dry-run (telegram): сообщение записано локально. Для live задайте TELEGRAM_BOT_TOKEN (+ chat id).",
+    detail: dryHint,
     message,
   };
 }
