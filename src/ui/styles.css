@@ -3976,7 +3976,39 @@ select:disabled {
 
 /* Workshop → Скиллы / Протоколы (Paths-style) */
 .catalog-panel .catalog-sort {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 0;
+}
+
+.catalog-panel .catalog-sort-caption {
+  font-size: 0.85rem;
+  line-height: 1.2;
+}
+
+.catalog-panel .catalog-sort-controls {
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.catalog-panel .catalog-sort-controls .theme-select {
+  width: auto;
+  flex: 1 1 180px;
+  min-width: 160px;
+  max-width: 260px;
+}
+
+.catalog-panel .catalog-sort-controls .btn {
+  flex: 0 0 auto;
+  align-self: center;
+  /* Match ThemeSelect trigger height so «+ Создать» sits flush with the field. */
+  padding-top: 12px;
+  padding-bottom: 12px;
 }
 
 .catalog-run-log {
