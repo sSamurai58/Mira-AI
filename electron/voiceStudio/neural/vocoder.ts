@@ -69,35 +69,52 @@ export function loadVocoder(data: SerializedVocoder): NeuralVocoder {
 }
 
 /**
+ * Speech-band post-filter: DC block (~80 Hz) + low-pass (~3.4 kHz).
+ * Griffin-Lim residuals are hissy (high ZCR); without this the renderer
+ * speech-likeness gate rejects synth and used to fall back to clip stitching.
+ */
+export function speechBandPostFilter(
+  samples: Float32Array,
+  sampleRate: number,
+): Float32Array {
+  const out = new Float32Array(samples.length);
+  if (!samples.length) return out;
+  const dt = 1 / Math.max(1, sampleRate);
+  const hpRc = 1 / (2 * Math.PI * 80);
+  const lpRc = 1 / (2 * Math.PI * 3400);
+  const hpA = hpRc / (hpRc + dt);
+  const lpA = dt / (lpRc + dt);
+  let hpPrevX = 0;
+  let hpPrevY = 0;
+  let lpY = 0;
+  for (let i = 0; i < samples.length; i++) {
+    const x = samples[i]!;
+    const hpY = hpA * (hpPrevY + x - hpPrevX);
+    hpPrevX = x;
+    hpPrevY = hpY;
+    lpY += lpA * (hpY - lpY);
+    out[i] = lpY;
+  }
+  let peak = 1e-8;
+  for (let i = 0; i < out.length; i++) {
+    const a = Math.abs(out[i]!);
+    if (a > peak) peak = a;
+  }
+  const scale = 0.92 / peak;
+  for (let i = 0; i < out.length; i++) out[i]! *= scale;
+  return out;
+}
+
+/**
  * Improved multi-iteration reconstruction from mel (better than short Griffin-Lim preview).
- * Uses more iterations + spectral envelope smoothing + overlap-add normalization.
+ * Uses more iterations + speech-band post-filter (not a muddy one-pole).
  */
 export function highQualityReconstructFromMel(
   mel: MelSpectrogram,
   iterations = 24,
 ): Float32Array {
-  // Start from Griffin-Lim then mild post-filter.
-  const base = griffinLimFromMel(mel, Math.max(8, iterations));
-  // High-shelf tame + DC remove
-  let mean = 0;
-  for (let i = 0; i < base.length; i++) mean += base[i]!;
-  mean /= Math.max(1, base.length);
-  let prev = 0;
-  for (let i = 0; i < base.length; i++) {
-    const x = base[i]! - mean;
-    // Simple one-pole de-click
-    const y = 0.97 * prev + 0.03 * x;
-    prev = y;
-    base[i] = y;
-  }
-  let peak = 1e-8;
-  for (let i = 0; i < base.length; i++) {
-    const a = Math.abs(base[i]!);
-    if (a > peak) peak = a;
-  }
-  const scale = 0.92 / peak;
-  for (let i = 0; i < base.length; i++) base[i]! *= scale;
-  return base;
+  const base = griffinLimFromMel(mel, Math.max(12, iterations));
+  return speechBandPostFilter(base, mel.sampleRate);
 }
 
 /** Neural frame synthesis: mel → hop waveform samples. */
@@ -164,27 +181,25 @@ export function productionVocode(
   mel: MelSpectrogram,
   opts?: { neuralBlend?: number },
 ): Float32Array {
-  const hq = highQualityReconstructFromMel(mel, 20);
+  // More Griffin-Lim iterations → stabler phase; neural residual is detail only.
+  const hq = highQualityReconstructFromMel(mel, 28);
   if (!voc) return hq;
-  const neural = vocoderSynthesize(voc, mel);
-  const blend = opts?.neuralBlend ?? 0.55;
+  const neural = speechBandPostFilter(
+    vocoderSynthesize(voc, mel),
+    mel.sampleRate,
+  );
+  // Cap neural blend — residual MLP is noisy; HQ carries intelligibility.
+  const blend = Math.min(0.45, opts?.neuralBlend ?? 0.35);
   const n = Math.min(hq.length, neural.length);
-  const out = new Float32Array(Math.max(hq.length, neural.length));
+  const mixed = new Float32Array(Math.max(hq.length, neural.length));
   for (let i = 0; i < n; i++) {
-    out[i] = (1 - blend) * hq[i]! + blend * neural[i]!;
+    mixed[i] = (1 - blend) * hq[i]! + blend * neural[i]!;
   }
-  if (hq.length > n) out.set(hq.subarray(n), n);
+  if (hq.length > n) mixed.set(hq.subarray(n), n);
   else if (neural.length > n) {
-    for (let i = n; i < neural.length; i++) out[i] = neural[i]!;
+    for (let i = n; i < neural.length; i++) mixed[i] = neural[i]!;
   }
-  let peak = 1e-8;
-  for (let i = 0; i < out.length; i++) {
-    const a = Math.abs(out[i]!);
-    if (a > peak) peak = a;
-  }
-  const scale = 0.9 / peak;
-  for (let i = 0; i < out.length; i++) out[i]! *= scale;
-  return out;
+  return speechBandPostFilter(mixed, mel.sampleRate);
 }
 
 export type VocoderTrainResult = {

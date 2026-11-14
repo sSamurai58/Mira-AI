@@ -1,6 +1,7 @@
 /**
  * VoiceEngine facade — one entry for local Mira speech.
- * Backends (neural pack / corpus stitch / Web Speech) stay behind speakText;
+ * Backends (neural pack synth / Web Speech) stay behind speakText;
+ * corpus clip-stitch is retired for playback (opt-in debug only).
  * settings + presets + FX + warmup/stream/cache are the product contract.
  */
 import { getActiveVoiceId, listCatalogVoices } from "./catalog";
@@ -53,7 +54,8 @@ export const VoiceEngine = {
 
   /**
    * Speak with current VoiceSettings (FX applied on local buffers).
-   * Custom studio voices always use on-device neural/corpus — never cloud.
+   * Custom studio voices always GENERATE on-device (neural pack) — never cloud,
+   * never cut/stitched recording clips.
    * Long text is spoken phrase-by-phrase with prefetch.
    */
   speak(
