@@ -96,6 +96,23 @@ function safeSkillId(raw: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+const JUNK_FOLDER_SEGMENTS = new Set([
+  "skill-md",
+  "skill.md",
+  "skills",
+  "data",
+]);
+
+/** Parent path under data/skills — never includes SKILL.md as a folder. */
+export function sanitizeParentFolder(raw: string | undefined | null): string {
+  if (!raw) return "";
+  return raw
+    .split(/[/\\]+/)
+    .map((p) => safeSkillId(p))
+    .filter((p) => Boolean(p) && !JUNK_FOLDER_SEGMENTS.has(p))
+    .join("/");
+}
+
 export function ensureSeededCatalog(
   kind: "skills" | "protocols",
 ): string {
@@ -254,9 +271,8 @@ export function writeCatalogItem(
   if (existing) {
     filePath = existing.filePath;
   } else if (kind === "skills" && item.asFolder !== false) {
-    const parent = (item.parentFolder || "")
-      .split(/[/\\]+/)
-      .map((p) => safeSkillId(p))
+    const parent = sanitizeParentFolder(item.parentFolder)
+      .split("/")
       .filter(Boolean);
     const folder = path.join(dir, ...parent, safeId);
     fs.mkdirSync(folder, { recursive: true });
@@ -338,6 +354,62 @@ export function deleteCatalogItem(
       deletedId: null,
     };
   }
+}
+
+/**
+ * Create an empty catalog folder under data/skills (no SKILL.md yet).
+ * Used so the user can nest folders first, then add a skill or subfolder.
+ */
+export function createSkillCatalogFolder(folderPath: string): {
+  ok: boolean;
+  detail: string;
+  folder: string | null;
+} {
+  const cleaned = sanitizeParentFolder(folderPath);
+  if (!cleaned) {
+    return { ok: false, detail: "Укажите id папки", folder: null };
+  }
+  const dir = ensureSeededCatalog("skills");
+  const target = path.join(dir, ...cleaned.split("/"));
+  try {
+    fs.mkdirSync(target, { recursive: true });
+    return {
+      ok: true,
+      detail: `Папка skills/${cleaned}`,
+      folder: cleaned,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      ok: false,
+      detail: `Не удалось создать папку: ${message.slice(0, 120)}`,
+      folder: null,
+    };
+  }
+}
+
+/** All directories under data/skills (including empty ones without SKILL.md). */
+export function listSkillCatalogFolders(): string[] {
+  const root = ensureSeededCatalog("skills");
+  const out = new Set<string>();
+  function walk(dir: string, rel: string) {
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const ent of entries) {
+      if (ent.name.startsWith(".") || !ent.isDirectory()) continue;
+      const seg = safeSkillId(ent.name);
+      if (!seg || JUNK_FOLDER_SEGMENTS.has(seg)) continue;
+      const nextRel = rel ? `${rel}/${seg}` : seg;
+      out.add(nextRel);
+      walk(path.join(dir, ent.name), nextRel);
+    }
+  }
+  walk(root, "");
+  return [...out].sort((a, b) => a.localeCompare(b, "en"));
 }
 
 function writeAsSkillMd(sourceFile: string, destFolderRel: string): string {
