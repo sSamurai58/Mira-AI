@@ -2277,7 +2277,8 @@ export function warmupCustomVoiceNeural(voiceId: string): {
     return {
       ok: true,
       hasWeights: false,
-      detail: "Веса ещё не собраны — будет склейка клипов",
+      detail:
+        "Веса ещё не собраны — синтез недоступен (системный TTS, без нарезки клипов)",
     };
   }
   const probe = synthesizeCustomVoiceNeural(voiceId, "Мм.", {

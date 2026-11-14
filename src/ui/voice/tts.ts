@@ -447,6 +447,24 @@ async function playFragmentRun(
   await playAudioBuffer(ctx, shaped, isCurrent);
 }
 
+/**
+ * Neural gate: only reject near-silence / clipped garbage.
+ * Do NOT use the strict chat ZCR gate — Griffin-Lim synth is hissier than
+ * mic speech and used to trip the gate → bad corpus clip-stitch fallback.
+ */
+export function audioBufferSoundsLikeNeuralSynth(buf: AudioBuffer): boolean {
+  if (!buf || buf.length < 32) return false;
+  const data = buf.getChannelData(0);
+  const rms = channelRms(data);
+  if (rms < 0.004 || rms > 0.99) return false;
+  let peak = 0;
+  for (let i = 0; i < data.length; i++) {
+    const a = Math.abs(data[i]!);
+    if (a > peak) peak = a;
+  }
+  return peak >= 0.02;
+}
+
 /** Try neural synth for one phrase → shaped AudioBuffer, or null. */
 async function tryNeuralPhraseBuffer(
   voiceId: string,
@@ -468,7 +486,7 @@ async function tryNeuralPhraseBuffer(
     const decodeCache = new Map<string, AudioBuffer>();
     const buf = await decodeClip(ctx, neural.wavPath, decodeCache);
     if (!isCurrent()) return null;
-    if (!audioBufferSoundsLikeSpeech(buf)) return null;
+    if (!audioBufferSoundsLikeNeuralSynth(buf)) return null;
     const shaped = applyVoiceFx(ctx, buf, getVoiceSettings());
     const detail = neural.cached
       ? "Нейро-синтез (кэш)"
@@ -565,6 +583,14 @@ async function speakCorpusPlan(
   }
 }
 
+/**
+ * Custom / Voice Studio voices: GENERATE speech (neural pack), never play
+ * cut/stitched recording fragments. Wrong word-slice alignment used to shred
+ * clips — that path is retired for playback.
+ *
+ * Fallback when weights are missing / synth fails: system Web Speech only.
+ * Opt-in legacy stitch: localStorage mira.tts.allowCorpusStitch = "1".
+ */
 async function speakCustomVoice(
   text: string,
   voiceId: string,
@@ -577,6 +603,10 @@ async function speakCustomVoice(
     return;
   }
 
+  const allowStitch =
+    typeof localStorage !== "undefined" &&
+    localStorage.getItem("mira.tts.allowCorpusStitch") === "1";
+
   const phrases = splitSpeakPhrases(clean);
   let started = false;
   const markStart = () => {
@@ -587,7 +617,8 @@ async function speakCustomVoice(
   };
 
   // Phrase pipeline: synthesize next while playing current (local only).
-  const prefetch = (phrase: string) => tryNeuralPhraseBuffer(voiceId, phrase, isCurrent);
+  const prefetch = (phrase: string) =>
+    tryNeuralPhraseBuffer(voiceId, phrase, isCurrent);
 
   let nextJob =
     phrases.length > 0 ? prefetch(phrases[0]!) : Promise.resolve(null);
@@ -614,42 +645,45 @@ async function speakCustomVoice(
       continue;
     }
 
-    // This phrase has no usable neural audio → corpus / Web Speech for it.
     const phrase = phrases[i]!;
-    const okCorpus = await speakCorpusPlan(
-      phrase,
-      voiceId,
-      {
-        ...handlers,
-        preferPreview: handlers.preferPreview && phrases.length === 1,
-        onStart: markStart,
-        // Swallow per-phrase end so the outer loop owns completion.
-        onEnd: undefined,
-      },
-      isCurrent,
-      markStart,
-    );
-    if (!okCorpus) {
-      await new Promise<void>((resolve) => {
-        speakWebSpeech(
-          phrase,
-          null,
-          {
-            onStart: markStart,
-            onEnd: resolve,
-            onError: () => resolve(),
-            onStatus: handlers.onStatus,
-          },
-          isCurrent,
-        );
-      });
+    // Default: no clip stitching — synthesize failed → Web Speech for this phrase.
+    if (allowStitch) {
+      const okCorpus = await speakCorpusPlan(
+        phrase,
+        voiceId,
+        {
+          ...handlers,
+          preferPreview: handlers.preferPreview && phrases.length === 1,
+          onStart: markStart,
+          onEnd: undefined,
+        },
+        isCurrent,
+        markStart,
+      );
+      if (okCorpus) continue;
+    } else {
+      handlers.onStatus?.(
+        "Нейро-синтез недоступен для фразы — системный TTS (склейка клипов отключена)",
+      );
     }
+    await new Promise<void>((resolve) => {
+      speakWebSpeech(
+        phrase,
+        null,
+        {
+          onStart: markStart,
+          onEnd: resolve,
+          onError: () => resolve(),
+          onStatus: handlers.onStatus,
+        },
+        isCurrent,
+      );
+    });
   }
 
   if (!isCurrent()) return;
   if (!started) {
-    // Nothing played (empty phrases) — try whole-text corpus once.
-    if (neuralFailedAll && !usedNeural) {
+    if (neuralFailedAll && !usedNeural && allowStitch) {
       const ok = await speakCorpusPlan(
         clean,
         voiceId,
@@ -661,6 +695,12 @@ async function speakCustomVoice(
         speakWebSpeech(clean, null, handlers, isCurrent);
         return;
       }
+    } else if (neuralFailedAll && !usedNeural) {
+      handlers.onStatus?.(
+        "Соберите голос (neural-weights) — сейчас запасной системный TTS, без нарезки клипов",
+      );
+      speakWebSpeech(clean, null, handlers, isCurrent);
+      return;
     } else {
       handlers.onStart?.();
     }
@@ -793,8 +833,8 @@ export function speakText(
     activeBufferSource = null;
   }
 
-  // Custom / Voice Studio voices always synthesize on-device (neural pack or
-  // corpus stitch + local FX). Cloud engines must not override the user's voice.
+  // Custom / Voice Studio voices: on-device GENERATION (neural pack + FX).
+  // Never cloud; never cut/stitch recording clips for playback.
   if (isCustomVoiceId(voiceId) && voiceId) {
     void speakCustomVoice(text, voiceId, handlers, isCurrent);
     return;

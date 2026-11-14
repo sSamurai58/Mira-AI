@@ -65,7 +65,7 @@ export function resolveSpeechVoice(voiceId: string | null): SpeechSynthesisVoice
   if (!window.speechSynthesis) return null;
   const voices = window.speechSynthesis.getVoices();
   if (!voiceId) return voices.find((v) => v.default) ?? voices[0] ?? null;
-  // Custom studio voices are spoken via corpus clips in tts.ts — do not
+  // Custom studio voices are synthesized via neural pack in tts.ts — do not
   // silently map them onto a system SpeechSynthesisVoice here.
   if (isCustomVoiceId(voiceId)) {
     return null;
