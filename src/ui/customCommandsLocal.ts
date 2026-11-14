@@ -137,7 +137,7 @@ function dryLine(s: CustomCommandStep, i: number): string {
     case "open_url":
       return `${i + 1}. open_url: Проверка: открыть сайт ${v}`;
     case "launch":
-      return `${i + 1}. launch: Проверка: запустить «${v}»`;
+      return `${i + 1}. launch: Проверка: запустить «${v}» (Пути или файл)`;
     case "open_path":
       return `${i + 1}. open_path: Проверка: путь из Путей «${v}»`;
     case "open_folder":
