@@ -67,6 +67,7 @@
 | 2026-11-11 | PRD #16 — встроенный терминал | Полноценный TTY в Мастерской; не корневой таб |
 | 2026-11-11 | Agent skills: emilkowalski design/animation | В `.cursor/skills/` только design+motion; on-demand |
 | 2026-11-11 | Темы UI: каталог в THEMES.md | Default `deep-sea-neon`; акцент зашит в тему; выбор в Настройки → Внешний вид |
+| 2026-11-14 | Apple themes + Liquid Glass | `apple-light`/`apple-dark`; Настройки → Apple; glass prefs; apple-design skill |
 | 2026-11-11 | Future F1/F2 в PRD | Камеры видеонаблюдения; умная техника/фурнитура — не must |
 | 2026-11-11 | Future F3–F8 в PRD | Календарь/таймеры; почта; файлы; заметки; медиа; i18n — не must |
 | 2026-11-11 | Future F9–F13 в PRD | Wake/barge-in; профили; backup/забыть; режимы confirm; Doctor — не must; до F12 confirm = always |
