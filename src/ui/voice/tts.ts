@@ -5,6 +5,7 @@ import {
   type CorpusPlanSegment,
   type CorpusSpeechPlan,
 } from "./corpusTts";
+import { synthesizeParametricBuffer } from "./parametricSynth";
 import { getActiveTtsEngine } from "./ttsEngines";
 import { applyVoiceFx } from "./voiceFx";
 import { splitSpeakPhrases } from "./voicePhrases";
@@ -38,10 +39,8 @@ const CROSSFADE_MAX_SEC = 0.055;
 
 export function isTtsAvailable(): boolean {
   const engine = getActiveTtsEngine();
-  // edge-stub retired in 0.1.8+
-  // Corpus / neural-pack is selected as ready even without speechSynthesis
-  // (Electron clip playback; headless smoke still reports engine ready).
-  if (engine === "neural-pack") return true;
+  // Parametric + neural-pack work without speechSynthesis (local AudioContext).
+  if (engine === "parametric" || engine === "neural-pack") return true;
   if (engine === "elevenlabs") {
     return Boolean(
       typeof window !== "undefined" && window.mira?.synthesizeElevenLabs,
@@ -663,8 +662,11 @@ async function speakCustomVoice(
       if (okCorpus) continue;
     } else {
       handlers.onStatus?.(
-        "Нейро-синтез недоступен для фразы — системный TTS (склейка клипов отключена)",
+        "Нейро-веса нет — параметрический синтез по настройкам (без записи)",
       );
+      markStart();
+      await speakParametricPhrase(phrase, isCurrent, handlers);
+      continue;
     }
     await new Promise<void>((resolve) => {
       speakWebSpeech(
@@ -692,19 +694,80 @@ async function speakCustomVoice(
         markStart,
       );
       if (!ok) {
-        speakWebSpeech(clean, null, handlers, isCurrent);
+        handlers.onStatus?.(
+          "Склейка не вышла — параметрический синтез по настройкам",
+        );
+        await speakParametricFull(clean, handlers, isCurrent);
         return;
       }
     } else if (neuralFailedAll && !usedNeural) {
       handlers.onStatus?.(
-        "Соберите голос (neural-weights) — сейчас запасной системный TTS, без нарезки клипов",
+        "Параметрический синтез (высота / скорость / энергия) — без записи аудио",
       );
-      speakWebSpeech(clean, null, handlers, isCurrent);
+      await speakParametricFull(clean, handlers, isCurrent);
       return;
     } else {
       handlers.onStart?.();
     }
   }
+  handlers.onEnd?.();
+}
+
+async function speakParametricPhrase(
+  phrase: string,
+  isCurrent: () => boolean,
+  handlers: SpeakHandlers,
+): Promise<void> {
+  if (!isCurrent()) return;
+  try {
+    const ctx = getAudioContext();
+    const buf = synthesizeParametricBuffer(ctx, phrase, getVoiceSettings());
+    // FX already baked into parametric (pitch/speed/energy); light gain pass ok.
+    const shaped = applyVoiceFx(ctx, buf, {
+      ...getVoiceSettings(),
+      // Avoid double pitch/time — parametric already applied them.
+      pitchSemitones: 0,
+      speed: 1,
+      pauseScale: 1,
+    });
+    handlers.onStatus?.("Параметрический синтез");
+    await playAudioBuffer(ctx, shaped, isCurrent);
+  } catch (err) {
+    handlers.onStatus?.(
+      err instanceof Error
+        ? `Параметрический синтез: ${err.message}`
+        : "Параметрический синтез не удался",
+    );
+  }
+}
+
+async function speakParametricFull(
+  text: string,
+  handlers: SpeakHandlers,
+  isCurrent: () => boolean,
+): Promise<void> {
+  const clean = text.trim();
+  if (!clean) {
+    handlers.onEnd?.();
+    return;
+  }
+  const phrases = splitSpeakPhrases(clean);
+  let started = false;
+  for (let i = 0; i < phrases.length; i++) {
+    if (!isCurrent()) return;
+    if (!started) {
+      started = true;
+      handlers.onStart?.();
+    }
+    handlers.onStatus?.(
+      phrases.length > 1
+        ? `Параметрический синтез · фраза ${i + 1}/${phrases.length}`
+        : "Параметрический синтез (настройки, без записи)",
+    );
+    await speakParametricPhrase(phrases[i]!, isCurrent, handlers);
+  }
+  if (!isCurrent()) return;
+  if (!started) handlers.onStart?.();
   handlers.onEnd?.();
 }
 
@@ -833,7 +896,7 @@ export function speakText(
     activeBufferSource = null;
   }
 
-  // Custom / Voice Studio voices: on-device GENERATION (neural pack + FX).
+  // Custom / Voice Studio: neural pack if trained, else parametric settings.
   // Never cloud; never cut/stitch recording clips for playback.
   if (isCustomVoiceId(voiceId) && voiceId) {
     void speakCustomVoice(text, voiceId, handlers, isCurrent);
@@ -845,8 +908,14 @@ export function speakText(
     return;
   }
 
+  // Default local path: synthesize from VoiceSettings only (no mic recordings).
+  if (engine === "parametric" || engine === "neural-pack") {
+    void speakParametricFull(text, handlers, isCurrent);
+    return;
+  }
+
   if (!isTtsAvailable()) {
-    handlers.onError?.("TTS недоступен в этой среде (speechSynthesis).");
+    handlers.onError?.("TTS недоступен в этой среде.");
     return;
   }
   speakWebSpeech(text, voiceId, handlers, isCurrent);

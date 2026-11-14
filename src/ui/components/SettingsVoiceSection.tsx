@@ -120,8 +120,8 @@ export function SettingsVoiceSection() {
             <StubBadge label="F9" />
           </div>
           <p className="muted" style={{ margin: "6px 0 0" }}>
-            Локальный голос Mira: характер, пресеты и hands-free. Студийный
-            голос синтезируется на вашей машине без облачных API.
+            Параметрический синтез по частоте, высоте, скорости и энергии —
+            без записи аудио. Студия (neural pack) — опционально.
           </p>
         </div>
       </div>
@@ -211,18 +211,18 @@ export function SettingsVoiceSection() {
         </Field>
         <div className="integ-grid-2">
           <SliderField
-            label="Скорость"
-            hint="Локальный FX / нейро-длительность"
-            min={VOICE_LIMITS.speed.min}
-            max={VOICE_LIMITS.speed.max}
-            step={0.02}
-            value={voice.speed}
-            display={voice.speed.toFixed(2)}
-            onChange={(v) => patchVoice({ speed: v })}
+            label="Базовая частота (Гц)"
+            hint="F0 параметрического синтеза — без записи"
+            min={VOICE_LIMITS.baseHz.min}
+            max={VOICE_LIMITS.baseHz.max}
+            step={1}
+            value={voice.baseHz}
+            display={`${Math.round(voice.baseHz)} Гц`}
+            onChange={(v) => patchVoice({ baseHz: v })}
           />
           <SliderField
             label="Высота (полутона)"
-            hint="Локальный pitch-shift"
+            hint="Сдвиг относительно базовой частоты"
             min={VOICE_LIMITS.pitchSemitones.min}
             max={VOICE_LIMITS.pitchSemitones.max}
             step={0.1}
@@ -232,6 +232,28 @@ export function SettingsVoiceSection() {
               voice.pitchSemitones.toFixed(1)
             }
             onChange={(v) => patchVoice({ pitchSemitones: v })}
+          />
+        </div>
+        <div className="integ-grid-2">
+          <SliderField
+            label="Скорость"
+            hint="Темп речи"
+            min={VOICE_LIMITS.speed.min}
+            max={VOICE_LIMITS.speed.max}
+            step={0.02}
+            value={voice.speed}
+            display={voice.speed.toFixed(2)}
+            onChange={(v) => patchVoice({ speed: v })}
+          />
+          <SliderField
+            label="Паузы"
+            hint="Шире — спокойнее ритм"
+            min={VOICE_LIMITS.pauseScale.min}
+            max={VOICE_LIMITS.pauseScale.max}
+            step={0.02}
+            value={voice.pauseScale}
+            display={voice.pauseScale.toFixed(2)}
+            onChange={(v) => patchVoice({ pauseScale: v })}
           />
         </div>
         <div className="integ-grid-2">
@@ -246,26 +268,16 @@ export function SettingsVoiceSection() {
             onChange={(v) => patchVoice({ energy: v })}
           />
           <SliderField
-            label="Паузы"
-            hint="Шире — спокойнее ритм"
-            min={VOICE_LIMITS.pauseScale.min}
-            max={VOICE_LIMITS.pauseScale.max}
-            step={0.02}
-            value={voice.pauseScale}
-            display={voice.pauseScale.toFixed(2)}
-            onChange={(v) => patchVoice({ pauseScale: v })}
+            label="Громкость"
+            hint="Выходной gain + soft-limiter"
+            min={VOICE_LIMITS.gain.min}
+            max={VOICE_LIMITS.gain.max}
+            step={0.05}
+            value={voice.gain}
+            display={Math.round(voice.gain * 100) + "%"}
+            onChange={(v) => patchVoice({ gain: v })}
           />
         </div>
-        <SliderField
-          label="Громкость"
-          hint="Выходной gain + soft-limiter"
-          min={VOICE_LIMITS.gain.min}
-          max={VOICE_LIMITS.gain.max}
-          step={0.05}
-          value={voice.gain}
-          display={Math.round(voice.gain * 100) + "%"}
-          onChange={(v) => patchVoice({ gain: v })}
-        />
         <div className="row" style={{ gap: 8 }}>
           <button
             type="button"
