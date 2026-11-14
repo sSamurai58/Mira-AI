@@ -13,7 +13,7 @@
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
 | Дорожная карта | Must + future F* закрыты (partial→done stubs where noted) |
 
-**Сейчас:** **0.1.21** в публикации (`v0.1.21`). Ветка `cursor/release-0-1-21-6838` = 0.1.20 + folder SKILL.md catalogs.
+**Сейчас:** **0.1.21** опубликован (`v0.1.21`). Ветка `cursor/release-0-1-21-6838` = 0.1.20 + folder SKILL.md catalogs.
 
 
 ## Решения
@@ -22,7 +22,7 @@
 
 | Дата | Решение | Почему |
 |------|---------|--------|
-| 2026-11-14 | **Релиз 0.1.21** (`v0.1.21`) | Skills as folder/SKILL.md catalogs + import + GitHub-like Preview/Code MD |
+| 2026-11-14 | **Релиз 0.1.21 опубликован** (`v0.1.21`) | Skills as folder/SKILL.md catalogs + import + GitHub-like Preview/Code MD; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.21 |
 | 2026-11-14 | **Релиз 0.1.20 опубликован** (`v0.1.20`) | Local VoiceEngine (presets/FX/warmup/cache/stream); Windows window/desktop layout in Commands+Protocols; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.20 |
 | 2026-11-14 | **Релиз 0.1.19 опубликован** (`v0.1.19`) | Real Apple Liquid Glass; Apple under Внешний вид; larger Home core; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.19 |
 | 2026-11-14 | **Релиз 0.1.18 опубликован** (`v0.1.18`) | Apple themes + Liquid Glass + SF Pro; catalog drafts; Workshop HUD; launch from Paths; Memory/Create polish; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.18 |
