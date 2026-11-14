@@ -15,6 +15,18 @@ export type MiraChangelogEntry = {
 
 export const MIRA_CHANGELOG: MiraChangelogEntry[] = [
   {
+    version: "0.1.22",
+    date: "14.11.2026",
+    summary:
+      "Студийный голос только синтезируется — без нарезки и склейки клипов.",
+    bullets: [
+      "Playback = нейрогенерация (encoder→decoder→vocoder), не cut/stitch записей",
+      "Speech-band постфильтр: синтез больше не отбрасывается как «шум»",
+      "Нет neural-weights → системный TTS; склейка клипов только по opt-in флагу",
+      "Фикс каши от неверной обрезки слов в unit-selection",
+    ],
+  },
+  {
     version: "0.1.21",
     date: "14.11.2026",
     summary:
