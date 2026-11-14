@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { StubBadge } from "./StubBadge";
 import { Field, SliderField, ToggleRow } from "./SettingsFormBits";
+import { MicTestCard } from "./MicTestCard";
 import { SettingsElevenLabsSection } from "./SettingsElevenLabsSection";
 import { ThemeSelect } from "./ThemeSelect";
 import {
@@ -93,8 +94,7 @@ export function SettingsVoiceSection() {
             <StubBadge label="F9" />
           </div>
           <p className="muted" style={{ margin: "6px 0 0" }}>
-            TTS, hands-free wake-word и чувствительности микрофона. Устройства
-            ввода — системные.
+            TTS, hands-free wake-word, выбор микрофона и живой тест уровня.
           </p>
         </div>
       </div>
@@ -268,6 +268,7 @@ export function SettingsVoiceSection() {
 
       <article className="panel stack notify-card">
         <h3 className="notify-card-title">Чувствительности</h3>
+        <MicTestCard thresholdPct={handsFree.micThreshold} />
         <SliderField
           label="Порог микрофона"
           hint="Ниже — ловит тише; выше — меньше ложных срабатываний"
