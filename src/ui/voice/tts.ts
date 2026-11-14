@@ -6,6 +6,7 @@ import {
   type CorpusSpeechPlan,
 } from "./corpusTts";
 import { getActiveTtsEngine } from "./ttsEngines";
+import { getVoiceAudioPrefs } from "./voiceAudioPrefs";
 
 export type SpeakHandlers = {
   onStart?: () => void;
@@ -111,8 +112,12 @@ function speakWebSpeech(
   } else {
     utter.lang = "ru-RU";
   }
-  utter.rate = engine === "neural-pack" ? 0.98 : 1.02;
-  utter.pitch = engine === "neural-pack" ? 1.02 : 1;
+  const audioPrefs = getVoiceAudioPrefs();
+  const baseRate = engine === "neural-pack" ? 0.98 : 1.02;
+  const basePitch = engine === "neural-pack" ? 1.02 : 1;
+  utter.rate = Math.min(1.4, Math.max(0.7, baseRate * audioPrefs.rate));
+  utter.pitch = Math.min(1.4, Math.max(0.7, basePitch * audioPrefs.pitch));
+  utter.volume = audioPrefs.volume;
   utter.onstart = () => {
     if (!isCurrent()) {
       window.speechSynthesis.cancel();

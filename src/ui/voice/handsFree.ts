@@ -5,6 +5,14 @@ export type HandsFreePrefs = {
   wakePhrase: string;
   bargeIn: boolean;
   sensitivity: WakeSensitivity;
+  /** Short confirm beep when wake matched. */
+  wakeBeep: boolean;
+  /** Ignore new wake hits for this many ms after a match. */
+  cooldownMs: number;
+  /** How long to listen for a command after wake (seconds). */
+  listenTimeoutSec: number;
+  /** Mic level gate 0…100 (UI hint / future VAD). */
+  micThreshold: number;
 };
 
 const KEYS = {
@@ -12,6 +20,10 @@ const KEYS = {
   wakePhrase: "mira.wakePhrase",
   bargeIn: "mira.bargeIn",
   sensitivity: "mira.wakeSensitivity",
+  wakeBeep: "mira.wakeBeep",
+  cooldownMs: "mira.wakeCooldownMs",
+  listenTimeoutSec: "mira.wakeListenTimeoutSec",
+  micThreshold: "mira.wakeMicThreshold",
 } as const;
 
 export const DEFAULT_WAKE_PHRASE = "мира";
@@ -111,6 +123,11 @@ export function stripWakePhrase(
   return stripped;
 }
 
+function clampInt(n: number, min: number, max: number, fallback: number): number {
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(n)));
+}
+
 export function getHandsFreePrefs(): HandsFreePrefs {
   if (typeof localStorage === "undefined") {
     return {
@@ -118,6 +135,10 @@ export function getHandsFreePrefs(): HandsFreePrefs {
       wakePhrase: DEFAULT_WAKE_PHRASE,
       bargeIn: true,
       sensitivity: "normal",
+      wakeBeep: false,
+      cooldownMs: 900,
+      listenTimeoutSec: 12,
+      micThreshold: 12,
     };
   }
   const sens = localStorage.getItem(KEYS.sensitivity);
@@ -130,6 +151,25 @@ export function getHandsFreePrefs(): HandsFreePrefs {
       sens === "strict" || sens === "loose" || sens === "normal"
         ? sens
         : "normal",
+    wakeBeep: localStorage.getItem(KEYS.wakeBeep) === "1",
+    cooldownMs: clampInt(
+      Number(localStorage.getItem(KEYS.cooldownMs) ?? "900"),
+      0,
+      5000,
+      900,
+    ),
+    listenTimeoutSec: clampInt(
+      Number(localStorage.getItem(KEYS.listenTimeoutSec) ?? "12"),
+      3,
+      60,
+      12,
+    ),
+    micThreshold: clampInt(
+      Number(localStorage.getItem(KEYS.micThreshold) ?? "12"),
+      0,
+      100,
+      12,
+    ),
   };
 }
 
@@ -140,10 +180,23 @@ export function setHandsFreePrefs(patch: Partial<HandsFreePrefs>): HandsFreePref
     wakePhrase: (patch.wakePhrase ?? cur.wakePhrase).trim() || DEFAULT_WAKE_PHRASE,
     bargeIn: patch.bargeIn ?? cur.bargeIn,
     sensitivity: patch.sensitivity ?? cur.sensitivity,
+    wakeBeep: patch.wakeBeep ?? cur.wakeBeep,
+    cooldownMs: clampInt(patch.cooldownMs ?? cur.cooldownMs, 0, 5000, 900),
+    listenTimeoutSec: clampInt(
+      patch.listenTimeoutSec ?? cur.listenTimeoutSec,
+      3,
+      60,
+      12,
+    ),
+    micThreshold: clampInt(patch.micThreshold ?? cur.micThreshold, 0, 100, 12),
   };
   localStorage.setItem(KEYS.enabled, next.enabled ? "1" : "0");
   localStorage.setItem(KEYS.wakePhrase, next.wakePhrase);
   localStorage.setItem(KEYS.bargeIn, next.bargeIn ? "1" : "0");
   localStorage.setItem(KEYS.sensitivity, next.sensitivity);
+  localStorage.setItem(KEYS.wakeBeep, next.wakeBeep ? "1" : "0");
+  localStorage.setItem(KEYS.cooldownMs, String(next.cooldownMs));
+  localStorage.setItem(KEYS.listenTimeoutSec, String(next.listenTimeoutSec));
+  localStorage.setItem(KEYS.micThreshold, String(next.micThreshold));
   return next;
 }
