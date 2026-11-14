@@ -7816,6 +7816,73 @@ html[data-theme="apple-light"] body {
   max-width: 220px;
 }
 
+.apple-list-row--glass {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 14px 16px;
+}
+
+.apple-glass-seg {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 3px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--text-muted) 12%, transparent);
+  border: 1px solid var(--apple-hairline, color-mix(in srgb, var(--border) 45%, transparent));
+}
+
+.apple-glass-seg-btn {
+  appearance: none;
+  margin: 0;
+  padding: 8px 6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  cursor: pointer;
+  transition:
+    background 140ms var(--ease-out, ease),
+    color 140ms var(--ease-out, ease),
+    box-shadow 140ms var(--ease-out, ease);
+}
+
+.apple-glass-seg-btn:hover:not(.active) {
+  color: var(--text);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.apple-glass-seg-btn.active {
+  color: var(--text);
+  background: var(--apple-glass-fill, var(--bg-elevated));
+  box-shadow:
+    0 1px 2px color-mix(in srgb, #000 18%, transparent),
+    inset 0 1px 0 var(--apple-glass-highlight, color-mix(in srgb, var(--text) 12%, transparent));
+}
+
+.apple-glass-seg-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 32%, transparent);
+}
+
+html[data-theme-family="apple"] .apple-glass-seg {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  border-color: var(--apple-glass-border, var(--apple-hairline));
+}
+
+html[data-theme-family="apple"] .apple-glass-seg-btn.active {
+  background: var(--apple-glass-fill);
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.16),
+    inset 0 1px 0 var(--apple-glass-highlight);
+}
+
 .apple-list-card .settings-toggle {
   border: 0;
   border-radius: 0;
