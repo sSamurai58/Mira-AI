@@ -13,7 +13,7 @@
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
 | Дорожная карта | Must + future F* закрыты (partial→done stubs where noted) |
 
-**Сейчас:** **0.1.25** в публикации (`v0.1.25`). Ветка `cursor/release-0-1-25-6838` = 0.1.24 + messengers/memory/screen/skills/doctor deepen.
+**Сейчас:** **0.1.25** опубликован (`v0.1.25`). Ветка `cursor/release-0-1-25-6838` = 0.1.24 + messengers/memory/screen/skills/doctor deepen.
 
 
 ## Решения
@@ -22,7 +22,7 @@
 
 | Дата | Решение | Почему |
 |------|---------|--------|
-| 2026-11-14 | **Релиз 0.1.25** (tag `v0.1.25`, assets в полёте) | Messengers WA/IG; screen find; browser history merge; memory forget-topic; Doctor ИТОГ; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.25 |
+| 2026-11-14 | **Релиз 0.1.25 опубликован** (`v0.1.25`) | Messengers WA/IG; screen find; browser history merge; memory forget-topic; Doctor ИТОГ; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.25 |
 | 2026-11-14 | **Релиз 0.1.24 опубликован** (`v0.1.24`) | Update HUD corner; Liquid Glass buttons; skills folder picker; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.24 |
 | 2026-11-14 | **Релиз 0.1.23 опубликован** (`v0.1.23`) | Parametric TTS from settings; extract F0/tempo/energy from audio or mic; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.23 |
 | 2026-11-14 | **Релиз 0.1.22 опубликован** (`v0.1.22`) | Studio voice GENERATE only (no cut/stitch clips); speech-band post-filter; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.22 |
