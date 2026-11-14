@@ -367,6 +367,10 @@ interface MiraBridge {
   }>;
   abortChat: (requestId: string) => Promise<{ ok: boolean }>;
   listSkills: () => Promise<MiraCatalogItem[]>;
+  listSkillFolders?: () => Promise<string[]>;
+  createSkillFolder?: (
+    folderPath: string,
+  ) => Promise<{ ok: boolean; detail: string; folder: string | null }>;
   listProtocols: () => Promise<MiraCatalogItem[]>;
   setSkillEnabled: (
     id: string,

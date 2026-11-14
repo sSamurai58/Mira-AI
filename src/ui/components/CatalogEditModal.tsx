@@ -1,10 +1,17 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
+import {
+  joinSkillFolder,
+  sanitizeParentFolder,
+  sanitizeSkillSegment,
+  skillSavePath,
+} from "../skillPaths";
 import { AutoGrowTextarea } from "./AutoGrowTextarea";
 import {
   composeSkillPreviewMarkdown,
   SafeMarkdown,
 } from "./SafeMarkdown";
+import { ThemeSelect } from "./ThemeSelect";
 
 export type CatalogEditDraft = {
   id: string;
@@ -28,6 +35,8 @@ type Props = {
   idLocked?: boolean;
   /** Show parent folder field (new skills / catalogs). */
   showFolderField?: boolean;
+  /** Existing catalog folders for the picker. */
+  folderOptions?: string[];
   /** Enable GitHub-like Preview / Code tabs for the body. */
   markdownPreview?: boolean;
   confirmLabel?: string;
@@ -35,6 +44,10 @@ type Props = {
   /** Called with the latest form values when the user dismisses without saving. */
   onDismiss?: (draft: CatalogEditDraft) => void;
   onSave: (draft: CatalogEditDraft) => void | Promise<void>;
+  /** Persist a new empty folder under skills/. */
+  onCreateFolder?: (
+    folderPath: string,
+  ) => Promise<{ ok: boolean; detail: string; folder: string | null }>;
 };
 
 /** Modal editor for Workshop skills / protocols — visible overlay, not a silent form fill. */
@@ -44,20 +57,34 @@ export function CatalogEditModal({
   draft,
   idLocked = false,
   showFolderField = false,
+  folderOptions = [],
   markdownPreview = false,
   confirmLabel = "Сохранить",
   onClose,
   onDismiss,
   onSave,
+  onCreateFolder,
 }: Props) {
   const [local, setLocal] = useState<CatalogEditDraft>(draft);
   const [busy, setBusy] = useState(false);
   const [bodyView, setBodyView] = useState<BodyView>("code");
+  const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [newFolderId, setNewFolderId] = useState("");
+  const [folderNote, setFolderNote] = useState("");
+  const [extraFolders, setExtraFolders] = useState<string[]>([]);
 
   useEffect(() => {
     if (open) {
-      setLocal(draft);
+      setLocal({
+        ...draft,
+        parentFolder: sanitizeParentFolder(draft.parentFolder),
+        id: draft.id,
+      });
       setBodyView(markdownPreview ? "preview" : "code");
+      setNewFolderOpen(false);
+      setNewFolderId("");
+      setFolderNote("");
+      setExtraFolders([]);
     }
   }, [open, draft, markdownPreview]);
 
@@ -79,6 +106,18 @@ export function CatalogEditModal({
     local.body,
   ]);
 
+  const folders = useMemo(() => {
+    const set = new Set<string>([
+      ...folderOptions.map((f) => sanitizeParentFolder(f)).filter(Boolean),
+      ...extraFolders,
+    ]);
+    const current = sanitizeParentFolder(local.parentFolder);
+    if (current) set.add(current);
+    return [...set].sort((a, b) => a.localeCompare(b, "en"));
+  }, [folderOptions, extraFolders, local.parentFolder]);
+
+  const pathPreview = skillSavePath(local.parentFolder || "", local.id);
+
   if (!open) return null;
 
   function dismiss() {
@@ -92,8 +131,38 @@ export function CatalogEditModal({
     if (!local.id.trim() || !local.name.trim()) return;
     setBusy(true);
     try {
-      await onSave(local);
+      await onSave({
+        ...local,
+        id: sanitizeSkillSegment(local.id) || local.id.trim(),
+        parentFolder: sanitizeParentFolder(local.parentFolder),
+      });
       onClose();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function addFolder() {
+    const nextPath = joinSkillFolder(local.parentFolder, newFolderId);
+    if (!nextPath) {
+      setFolderNote("Укажите id папки");
+      return;
+    }
+    setBusy(true);
+    try {
+      if (onCreateFolder) {
+        const res = await onCreateFolder(nextPath);
+        setFolderNote(res.detail);
+        if (!res.ok || !res.folder) return;
+        setExtraFolders((prev) => [...prev, res.folder!]);
+        setLocal((prev) => ({ ...prev, parentFolder: res.folder! }));
+      } else {
+        setExtraFolders((prev) => [...prev, nextPath]);
+        setLocal((prev) => ({ ...prev, parentFolder: nextPath }));
+        setFolderNote(`Папка skills/${nextPath}`);
+      }
+      setNewFolderId("");
+      setNewFolderOpen(false);
     } finally {
       setBusy(false);
     }
@@ -140,6 +209,78 @@ export function CatalogEditModal({
           </button>
         </div>
 
+        {showFolderField ? (
+          <div className="skill-folder-box">
+            <div className="skill-folder-box-head">
+              <span className="field-label" style={{ margin: 0 }}>
+                Папка
+              </span>
+              <button
+                type="button"
+                className="btn"
+                disabled={busy || idLocked}
+                onClick={() => {
+                  setNewFolderOpen((v) => !v);
+                  setFolderNote("");
+                }}
+              >
+                Создать папку
+              </button>
+            </div>
+            <ThemeSelect
+              aria-label="Папка каталога"
+              value={sanitizeParentFolder(local.parentFolder)}
+              disabled={busy || idLocked}
+              options={[
+                { value: "", label: "skills/ (корень)" },
+                ...folders.map((f) => ({
+                  value: f,
+                  label: `skills/${f}/`,
+                })),
+              ]}
+              onChange={(v) =>
+                setLocal({ ...local, parentFolder: sanitizeParentFolder(v) })
+              }
+            />
+            {newFolderOpen ? (
+              <div className="skill-folder-create">
+                <label className="field-label" style={{ margin: 0, flex: 1 }}>
+                  Id папки
+                  <input
+                    className="mono"
+                    value={newFolderId}
+                    disabled={busy}
+                    placeholder="например animation"
+                    onChange={(e) => setNewFolderId(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void addFolder();
+                      }
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={busy || !newFolderId.trim()}
+                  onClick={() => void addFolder()}
+                >
+                  Добавить
+                </button>
+              </div>
+            ) : null}
+            {folderNote ? (
+              <p className="muted field-hint" style={{ margin: 0 }}>
+                {folderNote}
+              </p>
+            ) : null}
+            <p className="muted field-hint skill-path-preview">
+              Скилл → <code>{pathPreview}</code>
+            </p>
+          </div>
+        ) : null}
+
         <label className="field-label">
           ID
           <input
@@ -148,6 +289,7 @@ export function CatalogEditModal({
             disabled={idLocked || busy}
             onChange={(e) => setLocal({ ...local, id: e.target.value })}
             required
+            placeholder="например blender-3d"
           />
         </label>
         <label className="field-label">
@@ -159,30 +301,6 @@ export function CatalogEditModal({
             required
           />
         </label>
-        {showFolderField ? (
-          <label className="field-label">
-            Каталог (папка)
-            <input
-              className="mono"
-              value={local.parentFolder ?? ""}
-              disabled={busy || idLocked}
-              onChange={(e) =>
-                setLocal({ ...local, parentFolder: e.target.value })
-              }
-              placeholder="например figma или tools/blender"
-            />
-            <span className="muted field-hint">
-              Скилл сохранится как{" "}
-              <code>
-                skills/
-                {(local.parentFolder || "").trim()
-                  ? `${(local.parentFolder || "").trim()}/`
-                  : ""}
-                {local.id.trim() || "id"}/SKILL.md
-              </code>
-            </span>
-          </label>
-        ) : null}
         <label className="field-label">
           Описание
           <input

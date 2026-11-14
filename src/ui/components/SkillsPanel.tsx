@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { emitActionLog } from "../actionLog";
 import {
+  createLocalSkillFolder,
   deleteLocalSkill,
+  listLocalSkillFolders,
   listLocalSkills,
   saveLocalSkill,
   setLocalSkillEnabled,
@@ -23,6 +26,12 @@ import {
   type CatalogSort,
 } from "../catalogSort";
 import { notifyCoreProgress } from "../coreLevel";
+import {
+  collectSkillFolders,
+  joinSkillFolder,
+  sanitizeParentFolder,
+  sanitizeSkillSegment,
+} from "../skillPaths";
 import { useAppConfirm } from "./AppConfirm";
 import { CatalogDraftsSection } from "./CatalogDraftsSection";
 import {
@@ -36,7 +45,7 @@ type FilterId = "all" | "enabled" | "disabled";
 
 const SORT_KEY = "mira.skills.sort";
 
-const EMPTY_DRAFT = (): CatalogEditDraft => ({
+const EMPTY_DRAFT = (parentFolder = ""): CatalogEditDraft => ({
   id: "custom-skill",
   name: "Новый скилл",
   description: "",
@@ -55,18 +64,22 @@ const EMPTY_DRAFT = (): CatalogEditDraft => ({
     "| 2 | Ответить |",
   ].join("\n"),
   enabled: false,
-  parentFolder: "",
+  parentFolder: sanitizeParentFolder(parentFolder),
 });
 
 function skillPathLabel(item: MiraCatalogItem): string {
-  if (item.layout === "folder" && item.folder) {
-    return `${item.folder}/SKILL.md`;
-  }
+  const folder = sanitizeParentFolder(item.folder);
+  if (item.layout === "folder" && folder) return `${folder}/SKILL.md`;
   if (item.relativePath) {
     const m = item.relativePath.match(/(?:^|\/)skills\/(.+)$/);
-    if (m?.[1]) return m[1];
+    if (m?.[1]) return m[1].replace(/\\/g, "/");
   }
   return `${item.id}.md`;
+}
+
+/** Folder path that contains this skill (skills/<folder>/SKILL.md). */
+function skillContainerFolder(item: MiraCatalogItem): string {
+  return sanitizeParentFolder(item.folder);
 }
 
 function skillDraftSummary(d: CatalogEditDraft): string {
@@ -112,17 +125,29 @@ export function SkillsPanel() {
     draftId?: string;
     baseline?: CatalogEditDraft;
   } | null>(null);
+  const [folders, setFolders] = useState<string[]>([]);
+  const [folderDialog, setFolderDialog] = useState<{
+    parent: string;
+    id: string;
+    busy: boolean;
+    note: string;
+  } | null>(null);
   const [draftsRev, setDraftsRev] = useState(0);
 
   const refresh = useCallback(async () => {
     if (!window.mira) {
       const rows = listLocalSkills();
       setItems(rows);
+      setFolders(listLocalSkillFolders());
       setNote(`Browser-demo · ${rows.length} (localStorage)`);
       return;
     }
     const rows = await window.mira.listSkills();
     setItems(rows);
+    const diskFolders = window.mira.listSkillFolders
+      ? await window.mira.listSkillFolders()
+      : collectSkillFolders(rows);
+    setFolders(diskFolders);
     setNote(`${rows.length} в каталоге`);
   }, []);
 
@@ -189,8 +214,8 @@ export function SkillsPanel() {
     setDraftsRev((n) => n + 1);
   }
 
-  function openCreate() {
-    const baseline = EMPTY_DRAFT();
+  function openCreate(parentFolder = "") {
+    const baseline = EMPTY_DRAFT(parentFolder);
     setEditor({
       mode: "create",
       draft: baseline,
@@ -199,12 +224,43 @@ export function SkillsPanel() {
     });
   }
 
+  function openCreateInside(item: MiraCatalogItem) {
+    openCreate(skillContainerFolder(item));
+  }
+
+  function openFolderDialog(parent = "") {
+    setFolderDialog({
+      parent: sanitizeParentFolder(parent),
+      id: "",
+      busy: false,
+      note: "",
+    });
+  }
+
+  function openFolderInside(item: MiraCatalogItem) {
+    openFolderDialog(skillContainerFolder(item));
+  }
+
+  async function persistFolder(folderPath: string) {
+    const path = sanitizeParentFolder(folderPath);
+    if (!path) {
+      return { ok: false, detail: "Укажите id папки", folder: null as string | null };
+    }
+    if (window.mira?.createSkillFolder) {
+      return window.mira.createSkillFolder(path);
+    }
+    return createLocalSkillFolder(path);
+  }
+
   function resumeDraft(entry: CatalogDraftEntry) {
     const payload = entry.payload as CatalogEditDraft;
     if (!payload || typeof payload !== "object") return;
     setEditor({
       mode: "create",
-      draft: payload,
+      draft: {
+        ...payload,
+        parentFolder: sanitizeParentFolder(payload.parentFolder),
+      },
       draftId: entry.id,
       baseline: EMPTY_DRAFT(),
     });
@@ -212,14 +268,14 @@ export function SkillsPanel() {
 
   async function persist(draftIn: CatalogEditDraft) {
     const payload = {
-      id: draftIn.id.trim(),
+      id: sanitizeSkillSegment(draftIn.id) || draftIn.id.trim(),
       name: draftIn.name.trim(),
       description: draftIn.description.trim(),
       triggers: parseCsv(draftIn.triggers),
       tags: parseCsv(draftIn.tags),
       enabled: draftIn.enabled,
       body: draftIn.body,
-      parentFolder: (draftIn.parentFolder || "").trim(),
+      parentFolder: sanitizeParentFolder(draftIn.parentFolder),
       asFolder: true as const,
     };
     if (!window.mira) {
@@ -299,8 +355,8 @@ export function SkillsPanel() {
             {browserOnly ? <span className="chip">browser-demo</span> : null}
           </div>
           <p className="muted" style={{ margin: "6px 0 0" }}>
-            Скилл = папка с <code>SKILL.md</code> (можно вложенные каталоги).
-            Установленные ≠ активные — matched on-demand или «включи skill …».
+            Сначала папка (id), внутри — ещё папка или скилл (
+            <code>SKILL.md</code>). Установленные ≠ активные.
           </p>
         </div>
         <div className="catalog-sort">
@@ -340,10 +396,17 @@ export function SkillsPanel() {
             </button>
             <button
               type="button"
-              className="btn btn-primary"
-              onClick={openCreate}
+              className="btn"
+              onClick={() => openFolderDialog("")}
             >
-              + Создать
+              + Папка
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => openCreate("")}
+            >
+              + Скилл
             </button>
           </div>
         </div>
@@ -390,7 +453,7 @@ export function SkillsPanel() {
       {visible.length === 0 ? (
         <p className="muted" style={{ margin: 0 }}>
           {items.length === 0
-            ? "Пока пусто — нажмите «Создать»."
+            ? "Пока пусто — «+ Папка» или «+ Скилл»."
             : "Ничего не найдено по запросу."}
         </p>
       ) : (
@@ -472,6 +535,26 @@ export function SkillsPanel() {
                 >
                   Править
                 </button>
+                {item.layout === "folder" ? (
+                  <>
+                    <button
+                      type="button"
+                      className="btn"
+                      title="Создать папку внутри"
+                      onClick={() => openFolderInside(item)}
+                    >
+                      + Папка
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
+                      title="Создать скилл внутри"
+                      onClick={() => openCreateInside(item)}
+                    >
+                      + Скилл
+                    </button>
+                  </>
+                ) : null}
                 <button
                   type="button"
                   className="btn btn-danger paths-delete-btn"
@@ -497,11 +580,12 @@ export function SkillsPanel() {
           title={
             editor.mode === "edit"
               ? `Править skill · ${editor.draft.id}`
-              : "Новый skill (папка / SKILL.md)"
+              : "Новый skill"
           }
           draft={editor.draft}
           idLocked={editor.mode === "edit"}
           showFolderField={editor.mode === "create"}
+          folderOptions={folders}
           markdownPreview
           confirmLabel={editor.mode === "edit" ? "Сохранить" : "Создать"}
           onClose={() => setEditor(null)}
@@ -513,8 +597,146 @@ export function SkillsPanel() {
           onSave={async (next) => {
             await persist(next);
           }}
+          onCreateFolder={async (folderPath) => {
+            const res = await persistFolder(folderPath);
+            if (res.ok && res.folder) {
+              setFolders((prev) =>
+                [...new Set([...prev, res.folder!])].sort((a, b) =>
+                  a.localeCompare(b, "en"),
+                ),
+              );
+            }
+            return res;
+          }}
         />
       ) : null}
+
+      {folderDialog
+        ? createPortal(
+            <div
+              className="modal-backdrop"
+              role="presentation"
+              onClick={() => {
+                if (!folderDialog.busy) setFolderDialog(null);
+              }}
+            >
+              <form
+                className="modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="skill-folder-title"
+                onClick={(e) => e.stopPropagation()}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void (async () => {
+                    setFolderDialog((d) =>
+                      d ? { ...d, busy: true, note: "" } : d,
+                    );
+                    const res = await persistFolder(
+                      joinSkillFolder(folderDialog.parent, folderDialog.id),
+                    );
+                    if (res.ok && res.folder) {
+                      setFolders((prev) =>
+                        [...new Set([...prev, res.folder!])].sort((a, b) =>
+                          a.localeCompare(b, "en"),
+                        ),
+                      );
+                      setNote(res.detail);
+                      setFolderDialog(null);
+                      return;
+                    }
+                    setFolderDialog((d) =>
+                      d
+                        ? {
+                            ...d,
+                            busy: false,
+                            note: res.detail || "Не удалось создать папку",
+                          }
+                        : d,
+                    );
+                  })();
+                }}
+              >
+                <h2 id="skill-folder-title" style={{ margin: 0 }}>
+                  Новая папка
+                </h2>
+                <p className="muted" style={{ margin: 0 }}>
+                  Внутри можно будет добавить ещё папку или скилл (
+                  <code>SKILL.md</code>).
+                </p>
+                <label className="field-label">
+                  Родитель
+                  <ThemeSelect
+                    aria-label="Родительская папка"
+                    value={folderDialog.parent}
+                    disabled={folderDialog.busy}
+                    options={[
+                      { value: "", label: "skills/ (корень)" },
+                      ...folders.map((f) => ({
+                        value: f,
+                        label: `skills/${f}/`,
+                      })),
+                    ]}
+                    onChange={(v) =>
+                      setFolderDialog((d) =>
+                        d
+                          ? { ...d, parent: sanitizeParentFolder(v) }
+                          : d,
+                      )
+                    }
+                  />
+                </label>
+                <label className="field-label">
+                  Id папки
+                  <input
+                    className="mono"
+                    value={folderDialog.id}
+                    disabled={folderDialog.busy}
+                    required
+                    placeholder="например animation"
+                    onChange={(e) =>
+                      setFolderDialog((d) =>
+                        d ? { ...d, id: e.target.value } : d,
+                      )
+                    }
+                  />
+                </label>
+                <p className="muted field-hint" style={{ margin: 0 }}>
+                  Путь →{" "}
+                  <code>
+                    skills/
+                    {joinSkillFolder(folderDialog.parent, folderDialog.id) ||
+                      "…"}
+                    /
+                  </code>
+                </p>
+                {folderDialog.note ? (
+                  <p className="muted" style={{ margin: 0 }}>
+                    {folderDialog.note}
+                  </p>
+                ) : null}
+                <div className="modal-actions">
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={folderDialog.busy}
+                    onClick={() => setFolderDialog(null)}
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={folderDialog.busy || !folderDialog.id.trim()}
+                  >
+                    Создать папку
+                  </button>
+                </div>
+              </form>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

@@ -3248,6 +3248,38 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   font-size: 0.92em;
 }
 
+.skill-folder-box {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm, 10px);
+  border: 1px solid color-mix(in srgb, var(--panel-line) 90%, transparent);
+  background: color-mix(in srgb, var(--bg-elevated) 55%, transparent);
+}
+
+.skill-folder-box-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.skill-folder-create {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.skill-folder-create .field-label {
+  min-width: 160px;
+}
+
+.skill-path-preview code {
+  word-break: break-all;
+}
+
 .catalog-body-field {
   display: grid;
   gap: 8px;

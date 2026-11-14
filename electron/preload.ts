@@ -196,6 +196,11 @@ contextBridge.exposeInMainWorld("mira", {
   }> => call("mira:send-chat", payload),
   abortChat: (requestId: string) => call("mira:abort-chat", requestId),
   listSkills: (): Promise<MiraCatalogItem[]> => call("mira:list-skills"),
+  listSkillFolders: (): Promise<string[]> => call("mira:list-skill-folders"),
+  createSkillFolder: (
+    folderPath: string,
+  ): Promise<{ ok: boolean; detail: string; folder: string | null }> =>
+    call("mira:create-skill-folder", folderPath),
   listProtocols: (): Promise<MiraCatalogItem[]> => call("mira:list-protocols"),
   setSkillEnabled: (id: string, enabled: boolean) =>
     call("mira:set-skill-enabled", id, enabled),

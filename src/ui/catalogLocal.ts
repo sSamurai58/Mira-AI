@@ -1,6 +1,14 @@
 /** Browser-demo catalog when Electron IPC is unavailable. */
 
+import {
+  collectSkillFolders,
+  joinSkillFolder,
+  sanitizeParentFolder,
+  sanitizeSkillSegment,
+} from "./skillPaths";
+
 const SKILLS_KEY = "mira.local.skills";
+const FOLDERS_KEY = "mira.local.skill-folders";
 const PROTOCOLS_KEY = "mira.local.protocols";
 
 type Draft = {
@@ -42,17 +50,7 @@ function upsert(key: string, draft: Draft): MiraCatalogItem {
     .replace(/^-+|-+$/g, "");
   if (!id) throw new Error("id пустой");
   const items = read(key).filter((x) => x.id !== id);
-  const parent = (draft.parentFolder || "")
-    .split(/[/\\]+/)
-    .map((p) =>
-      p
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9_-]+/g, "-")
-        .replace(/^-+|-+$/g, ""),
-    )
-    .filter(Boolean)
-    .join("/");
+  const parent = sanitizeParentFolder(draft.parentFolder);
   const asFolder = draft.asFolder !== false && key === SKILLS_KEY;
   const folder = asFolder ? (parent ? `${parent}/${id}` : id) : "";
   const rel = asFolder
@@ -122,6 +120,50 @@ export function deleteLocalProtocol(id: string): {
 export function listLocalSkills(): MiraCatalogItem[] {
   return read(SKILLS_KEY);
 }
+
+export function listLocalSkillFolders(): string[] {
+  const fromItems = collectSkillFolders(read(SKILLS_KEY));
+  let extra: string[] = [];
+  try {
+    const raw = localStorage.getItem(FOLDERS_KEY);
+    if (raw) {
+      extra = (JSON.parse(raw) as string[])
+        .map((f) => sanitizeParentFolder(f))
+        .filter(Boolean);
+    }
+  } catch {
+    extra = [];
+  }
+  return [...new Set([...fromItems, ...extra])].sort((a, b) =>
+    a.localeCompare(b, "en"),
+  );
+}
+
+export function createLocalSkillFolder(folderPath: string): {
+  ok: boolean;
+  detail: string;
+  folder: string | null;
+} {
+  const cleaned = sanitizeParentFolder(folderPath);
+  if (!cleaned) {
+    return { ok: false, detail: "Укажите id папки", folder: null };
+  }
+  const next = [...listLocalSkillFolders(), cleaned];
+  localStorage.setItem(
+    FOLDERS_KEY,
+    JSON.stringify([...new Set(next)].sort((a, b) => a.localeCompare(b, "en"))),
+  );
+  return { ok: true, detail: `Папка skills/${cleaned}`, folder: cleaned };
+}
+
+export function joinLocalSkillFolder(
+  parent: string | undefined,
+  name: string,
+): string {
+  return joinSkillFolder(parent, name);
+}
+
+export { sanitizeSkillSegment };
 
 export function listLocalProtocols(): MiraCatalogItem[] {
   return read(PROTOCOLS_KEY);
