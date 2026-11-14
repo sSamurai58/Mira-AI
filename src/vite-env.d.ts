@@ -1118,6 +1118,29 @@ interface MiraBridge {
       learnedUnits: number;
     };
   }>;
+  getRuntimePaths: () => Promise<{
+    packaged: boolean;
+    installDir: string | null;
+    resourcesDir: string | null;
+    userData: string;
+    dataDir: string;
+    libraryDir: string;
+    skillsDir: string;
+    protocolsDir: string;
+    seedDir: string;
+    envFile: string;
+    noteRu: string;
+  }>;
+  openRuntimePath: (
+    which:
+      | "userData"
+      | "data"
+      | "library"
+      | "skills"
+      | "seed"
+      | "install"
+      | "env",
+  ) => Promise<{ ok: boolean; detail: string; path: string }>;
   exportBackup: (opts?: {
     includeSecrets?: boolean;
   }) => Promise<{

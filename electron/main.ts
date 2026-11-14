@@ -481,6 +481,12 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
     wireConfirmBridge();
     openStore();
     ensureBootstrapSession();
+    try {
+      const { ensureRuntimeLayout } = require("./runtimePaths") as typeof import("./runtimePaths");
+      ensureRuntimeLayout();
+    } catch (layoutErr) {
+      console.error("[mira] runtime layout", layoutErr);
+    }
     ensureSeededCatalog("skills");
     ensureSeededCatalog("protocols");
   } catch (err) {
@@ -1541,6 +1547,27 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
 
 
   on("mira:get-backup-status", () => getBackupStatus());
+  on("mira:get-runtime-paths", () => {
+    const { getRuntimePaths } = require("./runtimePaths") as typeof import("./runtimePaths");
+    return getRuntimePaths();
+  });
+  on(
+    "mira:open-runtime-path",
+    async (
+      _e,
+      which:
+        | "userData"
+        | "data"
+        | "library"
+        | "skills"
+        | "seed"
+        | "install"
+        | "env",
+    ) => {
+      const { openRuntimePath } = require("./runtimePaths") as typeof import("./runtimePaths");
+      return openRuntimePath(which);
+    },
+  );
 
   on(
     "mira:export-backup",

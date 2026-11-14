@@ -25,6 +25,11 @@ extraResources:
     to: icon.png
   - from: seed
     to: seed
+# Visible next to Mira.exe so install folder is not "only dll trash".
+extraFiles:
+  - from: build/ЧИТАЙ-МЕНЯ.txt
+    to: ЧИТАЙ-МЕНЯ.txt
+
 
 publish:
   provider: github

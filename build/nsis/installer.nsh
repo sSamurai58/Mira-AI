@@ -2,9 +2,9 @@
 ; Keep minimal — electron-builder injects this via `nsis.include`.
 
 !macro customInstall
-  DetailPrint "Mira: установка завершена. Данные приложения — в профиле пользователя."
+  DetailPrint "Mira: exe-папка = движок Chromium. Ваши данные: %APPDATA%\Mira (см. ЧИТАЙ-МЕНЯ.txt)."
 !macroend
 
 !macro customUnInstall
-  DetailPrint "Mira: приложение удалено. Локальные данные (.env / mira/) не удаляются автоматически."
+  DetailPrint "Mira: exe удалён. Данные в %APPDATA%\Mira (.env / library / skills) сохраняются."
 !macroend

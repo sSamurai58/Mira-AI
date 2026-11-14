@@ -52,6 +52,17 @@ export function SettingsDataPrivacySection(props: {
   const [logFile, setLogFile] = useState("");
   const [showHealth, setShowHealth] = useState(false);
   const [showStatusJson, setShowStatusJson] = useState(false);
+  const [paths, setPaths] = useState<{
+    packaged: boolean;
+    installDir: string | null;
+    userData: string;
+    dataDir: string;
+    libraryDir: string;
+    skillsDir: string;
+    seedDir: string;
+    envFile: string;
+    noteRu: string;
+  } | null>(null);
   const live = Boolean(window.mira?.getBackupStatus);
 
   const packageCount = status?.packages?.length ?? 0;
@@ -122,7 +133,33 @@ export function SettingsDataPrivacySection(props: {
   useEffect(() => {
     void refreshStatus();
     void refreshLogs();
+    if (window.mira?.getRuntimePaths) {
+      void window.mira.getRuntimePaths().then(setPaths).catch(() => setPaths(null));
+    }
   }, []);
+
+  async function openPath(
+    which:
+      | "userData"
+      | "data"
+      | "library"
+      | "skills"
+      | "seed"
+      | "install"
+      | "env",
+  ) {
+    if (!window.mira?.openRuntimePath) {
+      setNote("IPC недоступен");
+      return;
+    }
+    setBusy(`open:${which}`);
+    try {
+      const res = await window.mira.openRuntimePath(which);
+      setNote(res.detail);
+    } finally {
+      setBusy(null);
+    }
+  }
 
   return (
     <div className="stack paths-panel settings-polish">
@@ -147,6 +184,66 @@ export function SettingsDataPrivacySection(props: {
           Doctor
         </button>
       </div>
+
+      <article className="panel stack notify-card">
+        <h3 className="notify-card-title">Где лежат данные</h3>
+        <p className="muted" style={{ margin: 0 }}>
+          {paths?.noteRu ||
+            "Папка с Mira.exe — движок (dll/pak). Библиотека и скиллы — в профиле пользователя, не рядом с exe."}
+        </p>
+        {paths ? (
+          <pre
+            className="mono integ-pre"
+            style={{ margin: 0, whiteSpace: "pre-wrap", fontSize: 12 }}
+          >
+            {[
+              paths.installDir ? `Установка (exe): ${paths.installDir}` : null,
+              `Данные: ${paths.userData}`,
+              `Библиотека: ${paths.libraryDir}`,
+              `Скиллы: ${paths.skillsDir}`,
+              `Seed: ${paths.seedDir}`,
+              `.env: ${paths.envFile}`,
+            ]
+              .filter(Boolean)
+              .join("\n")}
+          </pre>
+        ) : null}
+        <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={!live || busy !== null}
+            onClick={() => void openPath("userData")}
+          >
+            Открыть данные
+          </button>
+          <button
+            type="button"
+            className="btn"
+            disabled={!live || busy !== null}
+            onClick={() => void openPath("library")}
+          >
+            Библиотека
+          </button>
+          <button
+            type="button"
+            className="btn"
+            disabled={!live || busy !== null}
+            onClick={() => void openPath("skills")}
+          >
+            Скиллы
+          </button>
+          <button
+            type="button"
+            className="btn"
+            disabled={!live || busy !== null || !paths?.packaged}
+            onClick={() => void openPath("install")}
+            title="Папка с Mira.exe (движок)"
+          >
+            Папка exe
+          </button>
+        </div>
+      </article>
 
       <div className="settings-stat-row">
         <span className="settings-stat-chip">

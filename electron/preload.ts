@@ -469,6 +469,17 @@ contextBridge.exposeInMainWorld("mira", {
     call("mira:read-log-file", fileName, maxLines),
   clearAppLogs: () => call("mira:clear-app-logs"),
   getBackupStatus: () => call("mira:get-backup-status"),
+  getRuntimePaths: () => call("mira:get-runtime-paths"),
+  openRuntimePath: (
+    which:
+      | "userData"
+      | "data"
+      | "library"
+      | "skills"
+      | "seed"
+      | "install"
+      | "env",
+  ) => call("mira:open-runtime-path", which),
   exportBackup: (opts?: { includeSecrets?: boolean }) =>
     call("mira:export-backup", opts),
   importBackup: (packagePath: string) =>
