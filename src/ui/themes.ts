@@ -1,3 +1,9 @@
+import {
+  applyAppleAppearanceToDom,
+  isAppleThemeId,
+  loadAppleAppearance,
+} from "./appleGlass";
+
 export type ThemeId =
   | "deep-sea-neon"
   | "volcanic-ash"
@@ -12,7 +18,9 @@ export type ThemeId =
   | "neon-synth"
   | "void-orchid"
   | "signal-spectrum"
-  | "neon-lux";
+  | "neon-lux"
+  | "apple-light"
+  | "apple-dark";
 
 export type ThemeTokens = {
   bg: string;
@@ -33,6 +41,9 @@ export type ThemeDefinition = {
   id: ThemeId;
   name: string;
   tokens: ThemeTokens;
+  /** Mira neon catalog vs Apple HIG / Liquid Glass. */
+  family?: "mira" | "apple";
+  description?: string;
 };
 
 const baseDanger = {
@@ -272,12 +283,60 @@ export const THEMES: ThemeDefinition[] = [
       terminalFg: "#EFF8FF",
     },
   },
+  {
+    id: "apple-light",
+    name: "Apple Light",
+    family: "apple",
+    description: "iOS светлая · Liquid Glass",
+    tokens: {
+      bg: "#F2F2F7",
+      bgElevated: "#FFFFFF",
+      border: "#C6C6C8",
+      text: "#000000",
+      textMuted: "#8E8E93",
+      accent: "#007AFF",
+      accentFg: "#FFFFFF",
+      danger: "#FF3B30",
+      warning: "#FF9500",
+      success: "#34C759",
+      terminalBg: "#FFFFFF",
+      terminalFg: "#1C1C1E",
+    },
+  },
+  {
+    id: "apple-dark",
+    name: "Apple Dark",
+    family: "apple",
+    description: "iOS тёмная · Liquid Glass",
+    tokens: {
+      bg: "#000000",
+      bgElevated: "#1C1C1E",
+      border: "#38383A",
+      text: "#FFFFFF",
+      textMuted: "#8E8E93",
+      accent: "#0A84FF",
+      accentFg: "#FFFFFF",
+      danger: "#FF453A",
+      warning: "#FF9F0A",
+      success: "#32D74B",
+      terminalBg: "#1C1C1E",
+      terminalFg: "#F2F2F7",
+    },
+  },
 ];
 
 export const DEFAULT_THEME_ID: ThemeId = "deep-sea-neon";
 
 export function getTheme(id: ThemeId): ThemeDefinition {
-  return THEMES.find((t) => t.id === id) ?? THEMES[0];
+  return THEMES.find((t) => t.id === id) ?? THEMES[0]!;
+}
+
+export function miraThemes(): ThemeDefinition[] {
+  return THEMES.filter((t) => (t.family ?? "mira") === "mira");
+}
+
+export function appleThemes(): ThemeDefinition[] {
+  return THEMES.filter((t) => t.family === "apple");
 }
 
 /** Fired on `window` after theme CSS vars (incl. core plasma) are applied. */
@@ -343,6 +402,35 @@ export function applyTheme(id: ThemeId): void {
   root.style.setProperty("--core-glow", core.glow);
   root.dataset.theme = theme.id;
   localStorage.setItem("mira.theme", theme.id);
+
+  if (isAppleThemeId(theme.id)) {
+    root.dataset.themeFamily = "apple";
+    root.style.setProperty(
+      "--font-sans",
+      '-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", system-ui, sans-serif',
+    );
+    root.style.setProperty("--font-display", "inherit");
+    root.style.setProperty("--radius", "12px");
+    root.style.setProperty("--radius-sm", "10px");
+    root.style.colorScheme = theme.id === "apple-light" ? "light" : "dark";
+    applyAppleAppearanceToDom(loadAppleAppearance(), theme.id);
+  } else {
+    root.dataset.themeFamily = "mira";
+    delete root.dataset.appleGlass;
+    delete root.dataset.appleBold;
+    root.style.removeProperty("--font-sans");
+    root.style.removeProperty("--font-display");
+    root.style.removeProperty("--radius");
+    root.style.removeProperty("--radius-sm");
+    root.style.removeProperty("--apple-glass-bg");
+    root.style.removeProperty("--apple-glass-blur");
+    root.style.removeProperty("--apple-glass-saturate");
+    root.style.removeProperty("--apple-glass-border");
+    root.style.removeProperty("--apple-glass-highlight");
+    root.style.removeProperty("--apple-font-weight");
+    root.style.colorScheme = "dark";
+  }
+
   if (typeof window !== "undefined") {
     window.dispatchEvent(
       new CustomEvent(MIRA_THEME_EVENT, { detail: { id: theme.id } }),

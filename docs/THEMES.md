@@ -2,7 +2,7 @@
 
 Расширенный каталог токенов по темам.  
 **Краткий список тем, палитр и акцентов** — обязательно смотреть в [`DESIGN.md`](./DESIGN.md) § «Цветовые темы, палитры и акценты».  
-Выбор UI: **Настройки → Внешний вид**. Референсы: `docs/themes/`.
+Выбор UI: **Настройки → Внешний вид** (Mira) и **Настройки → Apple** (iOS). Референсы: `docs/themes/`.
 
 ## Правила тем
 
@@ -12,6 +12,7 @@
 4. Большинство тем — **dark-first** (продукт тёмный по умолчанию). Где палитра даёт светлый фон — помечено `supports_light`.
 5. Тема по умолчанию: **`deep-sea-neon`** (спокойный navy + золотой акцент, хорошо для диалога и терминала).
 6. Смена темы — мгновенно через CSS variables; без перезагрузки.
+7. Семейство **`apple`** (`apple-light` / `apple-dark`) живёт в **Настройки → Apple**: системный шрифт, iOS-цвета, Liquid Glass (`backdrop-filter`). Не дублировать в сетке «Внешний вид».
 
 ## UI выбора (Настройки → Внешний вид)
 
@@ -48,6 +49,12 @@
 | `void-orchid` | Void Orchid | `#BF40FA` | Hyper magenta на `#040607`; periwinkle `#E3D9FC` — текст/иконки soft | dark |
 | `signal-spectrum` | Signal Spectrum | `#3D5AFE` | Electric cobalt — основной CTA; magenta/amber — secondary/warning | dark |
 | `neon-lux` | Neon Lux | `#BBEF1F` | Neon lime на rich black; `#FF0055` — secondary punch | dark |
+| `apple-light` | Apple Light | `#007AFF` | System Blue (iOS light) | light · Apple |
+| `apple-dark` | Apple Dark | `#0A84FF` | System Blue (iOS dark) | dark · Apple |
+
+## UI выбора (Настройки → Apple)
+
+Светлое / тёмное превью, уровень **Liquid Glass** (`solid` / `regular` / `clear`), опция «Жирный шрифт». Материалы: `--apple-glass-bg/blur/saturate/border/highlight`. Уважает `prefers-reduced-transparency`.
 
 ## Токены по темам
 
@@ -265,13 +272,45 @@
 | Secondary punch | `#FF0055` |
 | Палитра | `#EFF8FF` `#BBEF1F` `#0D0303` `#FF0055` |
 
+### apple-light
+
+| Токен | Hex |
+|-------|-----|
+| `--bg` | `#F2F2F7` |
+| `--bg-elevated` | `#FFFFFF` |
+| `--border` | `#C6C6C8` |
+| `--text` | `#000000` |
+| `--text-muted` | `#8E8E93` |
+| `--accent` | `#007AFF` |
+| `--accent-fg` | `#FFFFFF` |
+| `--danger` | `#FF3B30` |
+| `--warning` | `#FF9500` |
+| `--success` | `#34C759` |
+| Палитра | iOS system light · Liquid Glass |
+
+### apple-dark
+
+| Токен | Hex |
+|-------|-----|
+| `--bg` | `#000000` |
+| `--bg-elevated` | `#1C1C1E` |
+| `--border` | `#38383A` |
+| `--text` | `#FFFFFF` |
+| `--text-muted` | `#8E8E93` |
+| `--accent` | `#0A84FF` |
+| `--accent-fg` | `#FFFFFF` |
+| `--danger` | `#FF453A` |
+| `--warning` | `#FF9F0A` |
+| `--success` | `#32D74B` |
+| Палитра | iOS system dark · Liquid Glass |
+
 ## Добавление новой палитры
 
 1. Положить референс в `docs/themes/`.
 2. Добавить строку в каталог + блок токенов.
 3. Завести id (`kebab-case`).
 4. Выбрать **один** `--accent` с проверкой контраста на `--bg` и на кнопке (`--accent-fg`).
-5. Не добавлять отдельный корневой таб — только карточка в Настройки → Внешний вид.
+5. Mira-палитры — карточка в Настройки → Внешний вид; Apple-семейство — Настройки → Apple.
 
 ---
 

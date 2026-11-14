@@ -158,7 +158,8 @@ Mira
 
 | Раздел | Что внутри |
 |--------|------------|
-| **Внешний вид** | Сетка всех тем из § «Цветовые темы» ниже; default `deep-sea-neon`; акцент = `--accent` выбранной темы |
+| **Внешний вид** | Сетка Mira-тем из § «Цветовые темы» ниже; default `deep-sea-neon`; акцент = `--accent` выбранной темы |
+| **Apple** | `apple-light` / `apple-dark`, Liquid Glass (solid/regular/clear), жирный шрифт; iOS-материалы по apple-design skill |
 | **Общие** | Язык UI (F8); **профиль** активный (F10); **режим подтверждений** F12: `always` / `smart` / `dangerous-list` + редактор списка классов |
 | **Голос и аудио** | Микрофон, вывод, чувствительность; **wake-word / hands-free** и barge-in (F9); ссылка в каталог голосов / Студию → Мастерская |
 | **API и модели** | Провайдеры Claude / Gemini / GPT (#5); ключи через `.env` / безопасный ввод (scoped к профилю при F10); модель по умолчанию; тест соединения |
@@ -229,6 +230,8 @@ Mira
 | `void-orchid` | Void Orchid | `#040607` · `#5B2A62` · `#4928C2` · `#BF40FA` · `#E3D9FC` | **`#BF40FA`** | `#E3D9FC` (text soft) |
 | `signal-spectrum` | Signal Spectrum | `#06070A` · `#3D5AFE` · `#FF2FA3` · `#FF8A1E` · `#AEB6C2` · `#F5F7FF` | **`#3D5AFE`** | `#FF2FA3` / `#FF8A1E` |
 | `neon-lux` | Neon Lux | `#0D0303` · `#EFF8FF` · `#BBEF1F` · `#FF0055` | **`#BBEF1F`** | `#FF0055` |
+| `apple-light` | Apple Light | `#F2F2F7` · `#FFFFFF` · `#8E8E93` · `#007AFF` | **`#007AFF`** | `#34C759` (success) |
+| `apple-dark` | Apple Dark | `#000000` · `#1C1C1E` · `#8E8E93` · `#0A84FF` | **`#0A84FF`** | `#32D74B` (success) |
 
 ### Default-тема развёрнуто: `deep-sea-neon`
 

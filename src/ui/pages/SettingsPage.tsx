@@ -9,12 +9,14 @@ import { SettingsNotificationsSection } from "../components/SettingsNotification
 import { SettingsTerminalSection } from "../components/SettingsTerminalSection";
 import { SettingsUpdatesSection } from "../components/SettingsUpdatesSection";
 import { SettingsVoiceSection } from "../components/SettingsVoiceSection";
+import { SettingsAppleSection } from "../components/SettingsAppleSection";
 import { ThemeSelect } from "../components/ThemeSelect";
 import { BG_PATTERNS, type BgPatternId } from "../backgrounds";
-import { THEMES, type ThemeId } from "../themes";
+import { miraThemes, type ThemeId } from "../themes";
 
 const SECTIONS = [
   { id: "appearance", label: "Внешний вид" },
+  { id: "apple", label: "Apple" },
   { id: "general", label: "Общие" },
   { id: "notifications", label: "Всплывающие уведомления" },
   { id: "voice", label: "Голос и аудио" },
@@ -55,6 +57,7 @@ export function SettingsPage({
     if (hash.includes("data")) return "data";
     if (hash.includes("updates")) return "updates";
     if (hash.includes("general")) return "general";
+    if (hash.includes("apple")) return "apple";
     if (hash.includes("appearance")) return "appearance";
     return "appearance";
   }
@@ -111,7 +114,7 @@ export function SettingsPage({
               </p>
             </header>
             <div className="theme-grid">
-              {THEMES.map((theme) => (
+              {miraThemes().map((theme) => (
                 <button
                   key={theme.id}
                   type="button"
@@ -175,6 +178,13 @@ export function SettingsPage({
               ))}
             </div>
           </div>
+        ) : null}
+
+        {section === "apple" ? (
+          <SettingsAppleSection
+            themeId={themeId}
+            onThemeChange={onThemeChange}
+          />
         ) : null}
 
         {section === "general" ? <GeneralSection /> : null}
