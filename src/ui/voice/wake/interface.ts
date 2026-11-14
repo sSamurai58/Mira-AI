@@ -12,7 +12,7 @@ import {
   type WakeSensitivity,
 } from "../handsFree";
 
-export type WakeEngineId = "webspeech" | "porcupine-stub";
+export type WakeEngineId = "webspeech" | "porcupine-stub" | "local-fuzzy";
 
 export type WakeMatchResult = {
   matched: boolean;
@@ -49,7 +49,9 @@ const KEY_ENGINE = "mira.wakeEngine";
 export function getWakeEngineId(): WakeEngineId {
   if (typeof localStorage === "undefined") return "webspeech";
   const v = localStorage.getItem(KEY_ENGINE);
-  if (v === "porcupine-stub") return "porcupine-stub";
+  if (v === "porcupine-stub" || v === "local-fuzzy" || v === "webspeech") {
+    return v;
+  }
   return "webspeech";
 }
 
@@ -78,42 +80,74 @@ const webSpeechEngine: WakeEngine = {
   },
 };
 
+function porcupineAccessKeyPresent(): boolean {
+  try {
+    if (typeof localStorage !== "undefined") {
+      const k = localStorage.getItem("mira.porcupineAccessKey");
+      if (k?.trim()) return true;
+    }
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
 /** Stub for future Picovoice Porcupine — settings visible, does not break Web Speech. */
 const porcupineStub: WakeEngine = {
   id: "porcupine-stub",
-  label: "Porcupine (скоро)",
+  label: porcupineAccessKeyPresent()
+    ? "Porcupine (ключ есть, SDK позже)"
+    : "Porcupine (нужен Access Key)",
   ready: false,
-  detail:
-    "Заготовка под Picovoice Porcupine. Пока используется Web Speech matcher; выбор не ломает hands-free.",
+  detail: porcupineAccessKeyPresent()
+    ? "Access Key сохранён локально. Нативный SDK Porcupine ещё не подключён — пока Web Speech matcher."
+    : "Нужен Picovoice Access Key (mira.porcupineAccessKey). Пока Web Speech; выбор не ломает hands-free.",
   match(transcript, phrase, sensitivity) {
-    // Fall through to the same phrase matcher so prefs stay consistent.
     const matched = matchWakeWord(transcript, phrase, sensitivity);
     return {
       matched,
       engine: "porcupine-stub",
       transcript,
       confidence: matched ? 0.5 : 0,
-      };
+    };
+  },
+};
+
+/** Offline fuzzy phrase matcher (no continuous listen SDK). */
+const localFuzzyEngine: WakeEngine = {
+  id: "local-fuzzy",
+  label: "Локальный fuzzy",
+  ready: true,
+  detail:
+    "Локальное сопоставление фразы (без облака). Слушание всё ещё через Web Speech API браузера.",
+  match(transcript, phrase, sensitivity) {
+    const matched = matchWakeWord(transcript, phrase, sensitivity);
+    return {
+      matched,
+      engine: "local-fuzzy",
+      transcript,
+      confidence: matched ? 0.9 : 0,
+    };
   },
 };
 
 const ENGINES: Record<WakeEngineId, WakeEngine> = {
   webspeech: webSpeechEngine,
   "porcupine-stub": porcupineStub,
+  "local-fuzzy": localFuzzyEngine,
 };
 
 export function listWakeEngines(): WakeEngine[] {
-  return [webSpeechEngine, porcupineStub];
+  return [webSpeechEngine, localFuzzyEngine, porcupineStub];
 }
 
 export function getActiveWakeEngine(): WakeEngine {
   const id = getWakeEngineId();
-  // Porcupine not ready → keep Web Speech behavior while preserving selection.
   if (id === "porcupine-stub" && !porcupineStub.ready) {
     return {
       ...webSpeechEngine,
       detail:
-        "Выбран Porcupine (скоро) — сейчас работает Web Speech, пока SDK не подключён.",
+        "Выбран Porcupine — сейчас Web Speech (SDK не подключён). Ключ можно сохранить заранее.",
     };
   }
   return ENGINES[id] ?? webSpeechEngine;

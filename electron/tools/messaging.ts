@@ -413,18 +413,40 @@ export async function sendOrReplyMessage(
         ? process.env.WHATSAPP_BRIDGE_URL?.trim()
         : process.env.INSTAGRAM_BRIDGE_URL?.trim();
     if (bridge) {
+      const base = bridge.replace(/\/$/, "");
       try {
-        const res = await fetch(bridge.replace(/\/$/, "") + "/send", {
+        // Optional health — if /health fails we still try /send.
+        try {
+          await fetch(base + "/health", {
+            method: "GET",
+            signal: AbortSignal.timeout(2500),
+          });
+        } catch {
+          /* optional */
+        }
+        const phone =
+          provider === "whatsapp"
+            ? whatsappPhoneDigits(
+                contact.chat_id ||
+                  contact.handle ||
+                  process.env.WHATSAPP_DEFAULT_PHONE ||
+                  "",
+              )
+            : undefined;
+        const res = await fetch(base + "/send", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             provider,
             chatId: contact.chat_id,
+            phone: phone || undefined,
+            handle: contact.handle,
             body: intent.body,
           }),
+          signal: AbortSignal.timeout(15000),
         });
         const detail = res.ok
-          ? `Отправлено через ${provider} bridge`
+          ? `Отправлено через ${provider} bridge${phone ? ` · +${phone}` : ""}`
           : `Bridge HTTP ${res.status}`;
         const message = addMessengerMessage({
           provider,
@@ -442,7 +464,7 @@ export async function sendOrReplyMessage(
           chatId: contact.chat_id,
           body: intent.body,
           mode: "live",
-          externalId: null,
+          externalId: phone || null,
           detail,
           message,
         };

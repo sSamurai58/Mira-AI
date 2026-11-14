@@ -12,10 +12,13 @@ let player = {
   playing: false,
   index: 0,
   title: "—",
+  volume: 80,
 };
 
 export function looksLikeMediaIntent(text: string): boolean {
-  return /(музык|плеер|play|pause|next|предыдущ|что играет|media)/i.test(text);
+  return /(музык|плеер|play|pause|next|предыдущ|что играет|media|громкост|плейлист|трек)/i.test(
+    text,
+  );
 }
 
 function ensureTracks(): MediaTrack[] {
@@ -30,6 +33,7 @@ function ensureTracks(): MediaTrack[] {
     for (const t of [
       { title: "Deep Sea Ambient", artist: "Mira Demo" },
       { title: "Neon Focus", artist: "Mira Demo" },
+      { title: "Quiet Code", artist: "Mira Demo" },
     ]) {
       store
         .prepare(
@@ -55,7 +59,9 @@ export function getMediaStatus() {
     playing: player.playing,
     index: player.index,
     nowPlaying: player.title,
+    volume: player.volume,
     tracks: tracks.length,
+    playlist: tracks.map((t) => `${t.title}${t.artist ? ` — ${t.artist}` : ""}`),
     mode: "local-stub",
   };
 }
@@ -65,6 +71,32 @@ export function handleMediaFromChat(text: string): {
   block: string;
 } {
   const tracks = ensureTracks();
+
+  if (/что играет|now playing|текущ(ий)? трек/i.test(text)) {
+    const st = getMediaStatus();
+    return {
+      used: `media:status:${st.playing ? "play" : "pause"}`,
+      block: `[Медиа] Сейчас: ${st.playing ? "▶" : "⏸"} ${st.nowPlaying} · громкость ${st.volume}% (${st.mode})`,
+    };
+  }
+
+  if (/плейлист|список трек/i.test(text)) {
+    const st = getMediaStatus();
+    return {
+      used: `media:playlist:${st.tracks}`,
+      block: `[Медиа: плейлист]\n${st.playlist.map((t, i) => `${i === st.index ? "→" : "•"} ${t}`).join("\n")}`,
+    };
+  }
+
+  const vol = text.match(/громкост[ьи]\s*(\d{1,3})/i);
+  if (vol) {
+    player.volume = Math.min(100, Math.max(0, Number(vol[1])));
+    return {
+      used: `media:volume:${player.volume}`,
+      block: `[Медиа] Громкость ${player.volume}% (local-stub)`,
+    };
+  }
+
   if (/pause|пауза|стоп музык/i.test(text)) {
     player.playing = false;
   } else if (/next|следующ/i.test(text)) {
@@ -81,6 +113,6 @@ export function handleMediaFromChat(text: string): {
   const st = getMediaStatus();
   return {
     used: `media:${st.playing ? "play" : "pause"}:${st.index}`,
-    block: `[Медиа] ${st.playing ? "▶" : "⏸"} ${st.nowPlaying} (${st.mode})`,
+    block: `[Медиа] ${st.playing ? "▶" : "⏸"} ${st.nowPlaying} · ${st.volume}% (${st.mode})`,
   };
 }

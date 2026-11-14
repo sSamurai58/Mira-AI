@@ -45,9 +45,11 @@ import {
   looksLikeScreenControlIntent,
   looksLikeScreenSeeIntent,
   parseChatHotkey,
+  parseClickByLabel,
   parseClickCoords,
   parseScrollIntent,
   parseTypeText,
+  parseVisionClickCoords,
   pressKeys,
   scrollScreen,
   typeText,
@@ -505,7 +507,9 @@ export async function sendChatMessage(
   });
   try {
     if (looksLikeBlenderIntent(text) && getBlenderPolicy().enabled) {
-      const job = await runDemoScene();
+      const job = await runDemoScene({
+        variant: /сфер|sphere/i.test(text) ? "sphere" : "cube",
+      });
       blenderUsed = `blender:${job.task}:${job.mode}${job.ok ? "" : "-fail"}`;
       blenderBlock = formatBlenderBlock(job);
     } else if (looksLikeLibraryLearnIntent(text)) {
@@ -677,6 +681,7 @@ export async function sendChatMessage(
       const coords = parseClickCoords(text);
       const scroll = parseScrollIntent(text);
       const hotkey = parseChatHotkey(text);
+      const byLabel = parseClickByLabel(text);
       if (typed && !coords) {
         const typedResult = await typeText(typed);
         desktopUsed = typedResult.ok
@@ -689,6 +694,33 @@ export async function sendChatMessage(
           ? `screen-click:${click.mode}`
           : "screen-click-denied";
         desktopBlock = formatScreenBlock("click", click);
+      } else if (byLabel) {
+        const shot = await captureScreen();
+        let visionText = "";
+        try {
+          const vision = await describeScreenshot(
+            shot.path,
+            `Найди на экране элемент «${byLabel}». Ответь ТОЛЬКО JSON одной строкой: {"x":<px>,"y":<px>,"found":true|false} где x,y — центр элемента в пикселях снимка ${shot.width}×${shot.height}. Если не видно — {"found":false,"x":0,"y":0}.`,
+          );
+          visionText = vision.text;
+        } catch (err) {
+          visionText = err instanceof Error ? err.message : String(err);
+        }
+        const estimated = parseVisionClickCoords(
+          visionText,
+          shot.width || 1280,
+          shot.height || 720,
+        );
+        if (!estimated || /"found"\s*:\s*false/i.test(visionText)) {
+          desktopUsed = "screen-click-label:miss";
+          desktopBlock = `[Экран: click-by-label]\nНе нашёл «${byLabel}» для клика.\n[Vision]\n${visionText.slice(0, 500)}`;
+        } else {
+          const click = await clickAt(estimated.x, estimated.y);
+          desktopUsed = click.ok
+            ? `screen-click-label:${click.mode}`
+            : "screen-click-label-denied";
+          desktopBlock = `${formatScreenBlock("click", click)}\nЦель: «${byLabel}»\n[Vision]\n${visionText.slice(0, 400)}`;
+        }
       } else if (scroll) {
         const scrolled = await scrollScreen(scroll);
         desktopUsed = scrolled.ok
@@ -704,7 +736,7 @@ export async function sendChatMessage(
       } else {
         desktopUsed = "screen-control-need-coords";
         desktopBlock =
-          "[Экран: control]\nНужны координаты («кликни 640, 360»), текст («введи текст: …»), scroll («прокрути вниз») или хоткей («нажми ctrl+s»).";
+          "[Экран: control]\nНужны координаты («кликни 640, 360»), клик по названию («кликни по Сохранить»), текст, scroll или хоткей.";
       }
     } else if (
       looksLikeBrowserReopenIntent(text) &&
