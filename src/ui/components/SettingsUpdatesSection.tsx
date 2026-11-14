@@ -282,7 +282,7 @@ export function SettingsUpdatesSection() {
                   </span>
                   {isCurrent ? (
                     <span className="update-history-you" title="Текущая версия">
-                      у вас
+                      текущая
                     </span>
                   ) : null}
                   <span className="update-history-date">{entry.date}</span>
