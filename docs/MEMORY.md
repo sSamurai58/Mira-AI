@@ -13,7 +13,7 @@
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
 | Дорожная карта | Must + future F* закрыты (partial→done stubs where noted) |
 
-**Сейчас:** **0.1.16** опубликован (`v0.1.16`). Ветка `cursor/release-0-1-16-6838` от tip протоколов/settings stack.
+**Сейчас:** **0.1.17** опубликован (`v0.1.17`). Ветка `cursor/release-0-1-17-6838` от tip composer-attach-voids / mic / protocols stack.
 
 
 ## Решения
@@ -22,6 +22,7 @@
 
 | Дата | Решение | Почему |
 |------|---------|--------|
+| 2026-11-14 | **Релиз 0.1.17 опубликован** (`v0.1.17`) | Update HUD always-on-top; mic picker + live spectrum; protocol step types; chat/catalog/composer polish; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.17 |
 | 2026-11-14 | **Релиз 0.1.16 опубликован** (`v0.1.16`) | Протоколы-последовательности; Voice/Terminal/Privacy panels; HUD sounds; chat dates; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.16 |
 | 2026-11-14 | **0.1.15 WIP: Popup notifications** | Settings → Всплывающие уведомления: HUD/OS/трей/DND/тихие часы/категории; OS notify при свёрнутом окне + close-to-tray; no publish |
 | 2026-11-14 | **0.1.15 WIP: API cards + Terminal chrome** | API/модели → paths-grid + реальные логотипы провайдеров; Терминал — вкладки/cwd/статус/тематический xterm; no publish |
@@ -172,6 +173,7 @@
 | 2026-11-11 | Добавлен каталог 14 цветовых тем + референсы в docs/themes/ |
 | 2026-11-14 | Релиз **0.1.15** (`v0.1.15`) — paths-cards Integrations/API/Skills/Protocols, Terminal, notify prefs |
 | 2026-11-14 | Релиз **0.1.16** (`v0.1.16`) — protocol command sequences, settings panels, HUD sounds, chat UX |
+| 2026-11-14 | Релиз **0.1.17** (`v0.1.17`) — update HUD always-on-top, mic picker/spectrum, protocol steps, chat/composer polish |
 
 ---
 
