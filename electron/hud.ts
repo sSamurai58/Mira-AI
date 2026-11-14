@@ -1,13 +1,15 @@
 import path from "node:path";
 import type { BrowserWindow } from "electron";
+import { estimateHudHeight, loadHudPrefs } from "./hudPrefs";
 
 let hudWindow: BrowserWindow | null = null;
 
-
 export function getHudPolicy() {
+  const prefs = loadHudPrefs();
   return {
     enabled: (process.env.HUD_ENABLED ?? "true").trim().toLowerCase() !== "false",
     alwaysOnTop:
+      prefs.alwaysOnTop &&
       (process.env.HUD_ALWAYS_ON_TOP ?? "true").trim().toLowerCase() !== "false",
   };
 }
@@ -23,14 +25,36 @@ export function closeHud(): void {
   hudWindow = null;
 }
 
+export function resizeHudWindow(height?: number): void {
+  if (!hudWindow || hudWindow.isDestroyed()) return;
+  const h = Math.round(height ?? estimateHudHeight());
+  const [w] = hudWindow.getSize();
+  try {
+    hudWindow.setSize(w, Math.min(560, Math.max(118, h)), true);
+  } catch {
+    /* platforms differ */
+  }
+}
+
+export function applyHudAlwaysOnTop(): void {
+  if (!hudWindow || hudWindow.isDestroyed()) return;
+  const policy = getHudPolicy();
+  try {
+    hudWindow.setAlwaysOnTop(policy.alwaysOnTop, "floating");
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function createOrFocusHud(opts?: {
   isDev?: boolean;
 }): Promise<BrowserWindow | null> {
-
   const policy = getHudPolicy();
   if (!policy.enabled) return null;
 
   if (hudWindow && !hudWindow.isDestroyed()) {
+    resizeHudWindow();
+    applyHudAlwaysOnTop();
     hudWindow.show();
     hudWindow.focus();
     return hudWindow;
@@ -42,9 +66,8 @@ export async function createOrFocusHud(opts?: {
 
   const { BrowserWindow, screen } = await import("electron");
   const display = screen.getPrimaryDisplay();
-  // Compact themed card — tall enough to avoid native scroll chrome.
-  const width = 320;
-  const height = 118;
+  const width = 340;
+  const height = estimateHudHeight();
   const x = display.workArea.x + display.workArea.width - width - 24;
   const y = display.workArea.y + 24;
 
@@ -72,7 +95,6 @@ export async function createOrFocusHud(opts?: {
     },
   });
 
-  // Keep the floating chip above normal windows without stealing focus loops.
   try {
     win.setAlwaysOnTop(policy.alwaysOnTop, "floating");
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
@@ -109,4 +131,17 @@ export async function toggleHud(opts?: { isDev?: boolean }): Promise<{
   }
   await createOrFocusHud(opts);
   return { open: isHudOpen() };
+}
+
+/** Open HUD if prefs say so (e.g. after starting a timer). */
+export async function maybeAutoOpenHud(opts?: {
+  isDev?: boolean;
+}): Promise<void> {
+  const prefs = loadHudPrefs();
+  if (!prefs.autoOpenOnTimer) return;
+  if (isHudOpen()) {
+    resizeHudWindow();
+    return;
+  }
+  await createOrFocusHud(opts);
 }

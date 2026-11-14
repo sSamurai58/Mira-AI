@@ -276,6 +276,15 @@ export function openStore(): DatabaseSync {
       status TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS stopwatches (
+      id TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      started_at TEXT,
+      accumulated_ms INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS cameras (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,

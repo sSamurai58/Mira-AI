@@ -174,6 +174,7 @@ import {
   createEvent,
   listEvents,
   listTimers,
+  listUpcomingReminders,
   startTimer,
   tickCalendarNotifications,
 } from "./future/calendar";
@@ -209,7 +210,29 @@ import {
   setActiveProfile,
   upsertProfile,
 } from "./profiles";
-import { getHudPolicy, isHudOpen, toggleHud } from "./hud";
+import {
+  applyHudAlwaysOnTop,
+  getHudPolicy,
+  isHudOpen,
+  maybeAutoOpenHud,
+  resizeHudWindow,
+  toggleHud,
+} from "./hud";
+import {
+  getHudEphemeralMessage,
+  HUD_WIDGET_META,
+  loadHudPrefs,
+  saveHudPrefs,
+  setHudEphemeralMessage,
+  type HudPrefs,
+} from "./hudPrefs";
+import {
+  getActiveStopwatch,
+  listStopwatches,
+  pauseStopwatch,
+  resetStopwatch,
+  startStopwatch,
+} from "./future/stopwatch";
 
 const isDev = process.env.MIRA_DEV === "1";
 const activeAborts = new Map<string, AbortController>();
@@ -1153,6 +1176,11 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
     ) => upsertNote(payload),
   );
   on("mira:list-calendar-events", () => listEvents());
+  on("mira:list-upcoming-reminders", (_e, horizonHours?: number) =>
+    listUpcomingReminders(
+      typeof horizonHours === "number" ? horizonHours : loadHudPrefs().reminderHorizonHours,
+    ),
+  );
   on("mira:list-timers", () => listTimers());
   on(
     "mira:create-calendar-event",
@@ -1168,9 +1196,36 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
   );
   on(
     "mira:start-timer",
-    (_e, label: string, seconds: number) => startTimer(label, seconds),
+    (_e, label: string, seconds: number) => {
+      const row = startTimer(label, seconds);
+      void maybeAutoOpenHud({ isDev });
+      broadcast("mira:hud-tick", { reason: "timer-start" });
+      return row;
+    },
   );
-  on("mira:cancel-timer", (_e, id?: string) => cancelTimer(id));
+  on("mira:cancel-timer", (_e, id?: string) => {
+    const row = cancelTimer(id);
+    broadcast("mira:hud-tick", { reason: "timer-cancel" });
+    return row;
+  });
+  on("mira:list-stopwatches", () => listStopwatches());
+  on("mira:get-active-stopwatch", () => getActiveStopwatch());
+  on("mira:start-stopwatch", (_e, label?: string) => {
+    const row = startStopwatch(label);
+    void maybeAutoOpenHud({ isDev });
+    broadcast("mira:hud-tick", { reason: "stopwatch" });
+    return row;
+  });
+  on("mira:pause-stopwatch", (_e, id?: string) => {
+    const row = pauseStopwatch(id);
+    broadcast("mira:hud-tick", { reason: "stopwatch" });
+    return row;
+  });
+  on("mira:reset-stopwatch", (_e, id?: string) => {
+    const row = resetStopwatch(id);
+    broadcast("mira:hud-tick", { reason: "stopwatch" });
+    return row;
+  });
   on("mira:list-cameras", () => listCameras());
   on(
     "mira:upsert-camera",
@@ -1271,6 +1326,27 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
   on("mira:delete-profile", (_e, id: string) => deleteProfile(id));
   on("mira:get-hud-policy", () => ({ ...getHudPolicy(), open: isHudOpen() }));
   on("mira:toggle-hud", async () => toggleHud({ isDev }));
+  on("mira:get-hud-prefs", () => loadHudPrefs());
+  on("mira:get-hud-widget-meta", () => HUD_WIDGET_META);
+  on("mira:set-hud-prefs", (_e, patch: Partial<HudPrefs>) => {
+    const next = saveHudPrefs(patch ?? {});
+    applyHudAlwaysOnTop();
+    resizeHudWindow();
+    broadcast("mira:hud-prefs", next);
+    broadcast("mira:hud-tick", { reason: "prefs" });
+    return next;
+  });
+  on("mira:resize-hud", (_e, height?: number) => {
+    resizeHudWindow(typeof height === "number" ? height : undefined);
+    return { ok: true };
+  });
+  on("mira:hud-say", (_e, text: string) => {
+    setHudEphemeralMessage(String(text ?? ""));
+    void maybeAutoOpenHud({ isDev });
+    broadcast("mira:hud-tick", { reason: "message" });
+    return { ok: true, text: getHudEphemeralMessage() };
+  });
+  on("mira:get-hud-message", () => ({ text: getHudEphemeralMessage() }));
 
   const windowFromEvent = (e: IpcMainInvokeEvent) =>
     BrowserWindow.fromWebContents(e.sender);
@@ -1495,7 +1571,13 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
   }
 
   calendarTick = setInterval(() => {
-    void tickCalendarNotifications().catch(() => undefined);
+    void tickCalendarNotifications()
+      .then((res) => {
+        if (res.timers > 0 || res.reminders > 0) {
+          broadcast("mira:hud-tick", { reason: "calendar-tick" });
+        }
+      })
+      .catch(() => undefined);
   }, 5_000);
 
   app.on("activate", () => {
