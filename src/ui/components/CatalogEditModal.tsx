@@ -20,6 +20,8 @@ type Props = {
   idLocked?: boolean;
   confirmLabel?: string;
   onClose: () => void;
+  /** Called with the latest form values when the user dismisses without saving. */
+  onDismiss?: (draft: CatalogEditDraft) => void;
   onSave: (draft: CatalogEditDraft) => void | Promise<void>;
 };
 
@@ -31,6 +33,7 @@ export function CatalogEditModal({
   idLocked = false,
   confirmLabel = "Сохранить",
   onClose,
+  onDismiss,
   onSave,
 }: Props) {
   const [local, setLocal] = useState<CatalogEditDraft>(draft);
@@ -41,6 +44,12 @@ export function CatalogEditModal({
   }, [open, draft]);
 
   if (!open) return null;
+
+  function dismiss() {
+    if (busy) return;
+    onDismiss?.(local);
+    onClose();
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -61,7 +70,7 @@ export function CatalogEditModal({
       className="modal-backdrop"
       role="presentation"
       onClick={() => {
-        if (!busy) onClose();
+        dismiss();
       }}
     >
       <form
@@ -81,7 +90,7 @@ export function CatalogEditModal({
             className="btn catalog-edit-close"
             aria-label="Закрыть"
             disabled={busy}
-            onClick={onClose}
+            onClick={dismiss}
           >
             <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden>
               <path
@@ -171,7 +180,7 @@ export function CatalogEditModal({
             type="button"
             className="btn"
             disabled={busy}
-            onClick={onClose}
+            onClick={dismiss}
           >
             Отмена
           </button>

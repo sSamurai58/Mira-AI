@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import { emitActionLog } from "../actionLog";
-import { AppPathIcon, resolveAppPathIconId } from "./AppPathIcon";
-import { useAppConfirm } from "./AppConfirm";
-import { StubBadge } from "./StubBadge";
+import {
+  draftsDiffer,
+  newCatalogDraftId,
+  removeCatalogDraft,
+  upsertCatalogDraft,
+  type CatalogDraftEntry,
+} from "../catalogDrafts";
 import {
   autodiscoverLocalAppPaths,
   deleteLocalAppPath,
@@ -13,6 +17,10 @@ import {
   type AppPathItem,
   type AppPathKind,
 } from "../pathsLocal";
+import { AppPathIcon, resolveAppPathIconId } from "./AppPathIcon";
+import { useAppConfirm } from "./AppConfirm";
+import { CatalogDraftsSection } from "./CatalogDraftsSection";
+import { StubBadge } from "./StubBadge";
 
 type FilterId = "all" | "program" | "folder" | "file";
 
@@ -22,20 +30,31 @@ const KIND_LABEL: Record<AppPathKind, string> = {
   file: "Файл",
 };
 
-const EMPTY_DRAFT = (): {
+type PathEditorDraft = {
   id?: string;
   kind: AppPathKind;
   name: string;
   path: string;
   tags: string[];
   enabled: boolean;
-} => ({
+};
+
+const EMPTY_DRAFT = (): PathEditorDraft => ({
   kind: "program",
   name: "",
   path: "",
   tags: [],
   enabled: true,
 });
+
+function pathDraftSummary(d: PathEditorDraft): string {
+  const bits = [
+    KIND_LABEL[d.kind],
+    d.path.trim() || "путь не задан",
+    d.tags.length ? `${d.tags.length} фраз` : "",
+  ].filter(Boolean);
+  return bits.join(" · ");
+}
 
 function kindIcon(kind: AppPathKind) {
   if (kind === "folder") {
@@ -87,9 +106,10 @@ export function PathsPanel() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<FilterId>("all");
   const [note, setNote] = useState("");
-  const [editor, setEditor] = useState<ReturnType<typeof EMPTY_DRAFT> | null>(
-    null,
-  );
+  const [editor, setEditor] = useState<PathEditorDraft | null>(null);
+  /** Create-only localStorage draft id. */
+  const [createDraftId, setCreateDraftId] = useState<string | null>(null);
+  const [draftsRev, setDraftsRev] = useState(0);
   const [tagDraft, setTagDraft] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -123,8 +143,34 @@ export function PathsPanel() {
     });
   }, [items, filter, query]);
 
+  function stashPathDraft(next: PathEditorDraft, draftId: string) {
+    if (!draftsDiffer(next, EMPTY_DRAFT())) {
+      removeCatalogDraft(draftId);
+      setDraftsRev((n) => n + 1);
+      return;
+    }
+    upsertCatalogDraft({
+      id: draftId,
+      kind: "path",
+      title: next.name.trim() || "Новый путь",
+      summary: pathDraftSummary(next),
+      payload: next,
+    });
+    setDraftsRev((n) => n + 1);
+  }
+
+  function closeEditor(saveDraft: boolean) {
+    if (saveDraft && editor && createDraftId && !editor.id) {
+      stashPathDraft(editor, createDraftId);
+    }
+    setEditor(null);
+    setCreateDraftId(null);
+    setTagDraft("");
+  }
+
   function openCreate() {
     setEditor(EMPTY_DRAFT());
+    setCreateDraftId(newCatalogDraftId());
     setTagDraft("");
   }
 
@@ -137,6 +183,21 @@ export function PathsPanel() {
       tags: [...item.tags],
       enabled: item.enabled,
     });
+    setCreateDraftId(null);
+    setTagDraft("");
+  }
+
+  function resumeDraft(entry: CatalogDraftEntry) {
+    const payload = entry.payload as PathEditorDraft;
+    if (!payload || typeof payload !== "object") return;
+    setEditor({
+      kind: payload.kind ?? "program",
+      name: payload.name ?? "",
+      path: payload.path ?? "",
+      tags: Array.isArray(payload.tags) ? [...payload.tags] : [],
+      enabled: payload.enabled !== false,
+    });
+    setCreateDraftId(entry.id);
     setTagDraft("");
   }
 
@@ -190,7 +251,13 @@ export function PathsPanel() {
         tag: "Пути",
         tone: "success",
       });
+      if (createDraftId) {
+        removeCatalogDraft(createDraftId);
+        setDraftsRev((n) => n + 1);
+      }
       setEditor(null);
+      setCreateDraftId(null);
+      setTagDraft("");
       await refresh();
       setNote("Сохранено");
     } finally {
@@ -293,7 +360,7 @@ export function PathsPanel() {
         className="modal-backdrop"
         role="presentation"
         onClick={() => {
-          if (!busy) setEditor(null);
+          if (!busy) closeEditor(true);
         }}
       >
         <form
@@ -414,7 +481,7 @@ export function PathsPanel() {
               type="button"
               className="btn"
               disabled={busy}
-              onClick={() => setEditor(null)}
+              onClick={() => closeEditor(true)}
             >
               Отмена
             </button>
@@ -592,6 +659,12 @@ export function PathsPanel() {
           })}
         </div>
       )}
+
+      <CatalogDraftsSection
+        kind="path"
+        revision={draftsRev}
+        onResume={resumeDraft}
+      />
 
       {modal}
     </div>

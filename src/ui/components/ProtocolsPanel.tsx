@@ -15,6 +15,13 @@ import {
   setLocalProtocolEnabled,
 } from "../catalogLocal";
 import {
+  draftsDiffer,
+  newCatalogDraftId,
+  removeCatalogDraft,
+  upsertCatalogDraft,
+  type CatalogDraftEntry,
+} from "../catalogDrafts";
+import {
   CATALOG_SORT_OPTIONS,
   loadCatalogSort,
   saveCatalogSort,
@@ -38,6 +45,7 @@ import {
   type ProtocolSeqStep,
 } from "../protocolSequence";
 import { useAppConfirm } from "./AppConfirm";
+import { CatalogDraftsSection } from "./CatalogDraftsSection";
 import { StubBadge } from "./StubBadge";
 import { ThemeSelect } from "./ThemeSelect";
 
@@ -88,6 +96,33 @@ function emptyDraft(): ProtocolDraft {
     notes: "",
     enabled: true,
     idLocked: false,
+  };
+}
+
+function protocolDraftSummary(d: ProtocolDraft): string {
+  const bits = [
+    d.description.trim(),
+    `${d.steps.length} шагов`,
+    d.triggers.length ? `триггеры: ${d.triggers.slice(0, 2).join(", ")}` : "",
+  ].filter(Boolean);
+  return bits.join(" · ");
+}
+
+/** Compare create drafts without volatile step ids. */
+function protocolDraftFingerprint(d: ProtocolDraft): unknown {
+  return {
+    id: d.id,
+    name: d.name,
+    description: d.description,
+    triggers: d.triggers,
+    tags: d.tags,
+    notes: d.notes,
+    enabled: d.enabled,
+    steps: d.steps.map((s) =>
+      s.type === "command"
+        ? { type: "command", commandId: s.commandId }
+        : { type: "action", action: s.action, value: s.value },
+    ),
   };
 }
 
@@ -164,6 +199,8 @@ export function ProtocolsPanel() {
   const [runLog, setRunLog] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [editor, setEditor] = useState<ProtocolDraft | null>(null);
+  const [createDraftId, setCreateDraftId] = useState<string | null>(null);
+  const [draftsRev, setDraftsRev] = useState(0);
   const [triggerDraft, setTriggerDraft] = useState("");
   const [tagDraft, setTagDraft] = useState("");
   const [openStepMenu, setOpenStepMenu] = useState<string | null>(null);
@@ -320,8 +357,40 @@ export function ProtocolsPanel() {
     saveCatalogSort(SORT_KEY, next);
   }
 
+  function stashProtocolDraft(next: ProtocolDraft, draftId: string) {
+    if (
+      !draftsDiffer(
+        protocolDraftFingerprint(next),
+        protocolDraftFingerprint(emptyDraft()),
+      )
+    ) {
+      removeCatalogDraft(draftId);
+      setDraftsRev((n) => n + 1);
+      return;
+    }
+    upsertCatalogDraft({
+      id: draftId,
+      kind: "protocol",
+      title: next.name.trim() || "Новый протокол",
+      summary: protocolDraftSummary(next),
+      payload: next,
+    });
+    setDraftsRev((n) => n + 1);
+  }
+
+  function closeEditor(saveDraft: boolean) {
+    if (saveDraft && editor && createDraftId && !editor.idLocked) {
+      stashProtocolDraft(editor, createDraftId);
+    }
+    setEditor(null);
+    setCreateDraftId(null);
+    setTriggerDraft("");
+    setTagDraft("");
+  }
+
   function openCreate() {
     setEditor(emptyDraft());
+    setCreateDraftId(newCatalogDraftId());
     setTriggerDraft("");
     setTagDraft("");
     setNote("");
@@ -331,6 +400,28 @@ export function ProtocolsPanel() {
 
   function openEdit(item: MiraCatalogItem) {
     setEditor(draftFromItem(item));
+    setCreateDraftId(null);
+    setTriggerDraft("");
+    setTagDraft("");
+    setNote("");
+    void refreshCommands();
+    void refreshPaths();
+  }
+
+  function resumeDraft(entry: CatalogDraftEntry) {
+    const payload = entry.payload as ProtocolDraft;
+    if (!payload || typeof payload !== "object") return;
+    setEditor({
+      ...emptyDraft(),
+      ...payload,
+      idLocked: false,
+      triggers: Array.isArray(payload.triggers) ? [...payload.triggers] : [],
+      tags: Array.isArray(payload.tags) ? [...payload.tags] : [],
+      steps: Array.isArray(payload.steps)
+        ? payload.steps.map((s) => ({ ...s }))
+        : emptyDraft().steps,
+    });
+    setCreateDraftId(entry.id);
     setTriggerDraft("");
     setTagDraft("");
     setNote("");
@@ -518,7 +609,12 @@ export function ProtocolsPanel() {
     setBusy(true);
     try {
       await persistDraft(next);
+      if (createDraftId) {
+        removeCatalogDraft(createDraftId);
+        setDraftsRev((n) => n + 1);
+      }
       setEditor(null);
+      setCreateDraftId(null);
       setTriggerDraft("");
       setTagDraft("");
     } finally {
@@ -650,11 +746,7 @@ export function ProtocolsPanel() {
             className="modal-backdrop"
             role="presentation"
             onClick={() => {
-              if (!busy) {
-                setEditor(null);
-                setTriggerDraft("");
-                setTagDraft("");
-              }
+              if (!busy) closeEditor(true);
             }}
           >
             <form
@@ -676,11 +768,7 @@ export function ProtocolsPanel() {
                   className="btn catalog-edit-close"
                   aria-label="Закрыть"
                   disabled={busy}
-                  onClick={() => {
-                    setEditor(null);
-                    setTriggerDraft("");
-                    setTagDraft("");
-                  }}
+                  onClick={() => closeEditor(true)}
                 >
                   <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden>
                     <path
@@ -1087,11 +1175,7 @@ export function ProtocolsPanel() {
                   type="button"
                   className="btn"
                   disabled={busy}
-                  onClick={() => {
-                    setEditor(null);
-                    setTriggerDraft("");
-                    setTagDraft("");
-                  }}
+                  onClick={() => closeEditor(true)}
                 >
                   Отмена
                 </button>
@@ -1304,6 +1388,12 @@ export function ProtocolsPanel() {
           })}
         </div>
       )}
+
+      <CatalogDraftsSection
+        kind="protocol"
+        revision={draftsRev}
+        onResume={resumeDraft}
+      />
 
       {runLog ? (
         <pre
