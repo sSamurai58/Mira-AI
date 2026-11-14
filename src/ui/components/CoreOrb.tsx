@@ -33,7 +33,7 @@ function toCoreVoice(state: VoiceState): CoreVoice {
 export function CoreOrb({
   level = 4,
   voiceState = "idle",
-  size = 320,
+  size = 440,
   active = true,
 }: CoreOrbProps) {
   const lv = normalizeCoreLevel(level);
