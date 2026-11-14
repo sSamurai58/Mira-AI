@@ -3815,6 +3815,21 @@ select:disabled {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
+/* Workshop → Скиллы / Протоколы (Paths-style) */
+.catalog-panel .catalog-sort {
+  align-items: center;
+}
+
+.catalog-run-log {
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--text-muted) 18%, transparent);
+  background: color-mix(in srgb, var(--bg) 70%, var(--inset));
+  font-size: 0.8rem;
+  max-height: 180px;
+  overflow: auto;
+}
+
 /* Settings → Интеграции: Paths-style cards + edit modal */
 .integ-paths-panel .integ-banner {
   margin-top: 0;
