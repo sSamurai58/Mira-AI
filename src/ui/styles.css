@@ -4001,6 +4001,75 @@ select:disabled {
   padding-top: 4px;
 }
 
+.integ-conn-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--panel-line) 85%, transparent);
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--load-ram) 10%, transparent),
+      color-mix(in srgb, var(--bg) 55%, transparent)
+    );
+}
+
+.integ-conn-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.integ-conn-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-family: var(--font-display);
+  font-weight: 650;
+  color: var(--text);
+}
+
+.integ-conn-hint {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+}
+
+.integ-conn-log {
+  margin: 0;
+  padding: 12px 14px;
+  min-height: 4.5rem;
+  max-height: 11rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 20%, transparent);
+  background: color-mix(in srgb, var(--bg-elevated) 78%, #000);
+  color: color-mix(in srgb, var(--text) 92%, transparent);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.integ-conn-log.is-ok {
+  border-color: color-mix(in srgb, var(--success, #2dd4a8) 45%, transparent);
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--success, #2dd4a8) 12%, transparent);
+}
+
+.integ-conn-log.is-fail {
+  border-color: color-mix(in srgb, var(--danger, #f87171) 50%, transparent);
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--danger, #f87171) 12%, transparent);
+}
+
+.integ-conn-log.is-running {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 /* Settings → API и модели */
 .api-paths-panel .paths-card.is-active-provider {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--panel-line));
