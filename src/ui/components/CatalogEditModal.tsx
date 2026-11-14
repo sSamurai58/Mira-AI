@@ -1,6 +1,10 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { AutoGrowTextarea } from "./AutoGrowTextarea";
+import {
+  composeSkillPreviewMarkdown,
+  SafeMarkdown,
+} from "./SafeMarkdown";
 
 export type CatalogEditDraft = {
   id: string;
@@ -10,7 +14,11 @@ export type CatalogEditDraft = {
   tags: string;
   body: string;
   enabled: boolean;
+  /** Parent catalog folder under data/skills (skills create only). */
+  parentFolder?: string;
 };
+
+type BodyView = "preview" | "code";
 
 type Props = {
   open: boolean;
@@ -18,6 +26,10 @@ type Props = {
   draft: CatalogEditDraft;
   /** When editing an existing item, lock the id field. */
   idLocked?: boolean;
+  /** Show parent folder field (new skills / catalogs). */
+  showFolderField?: boolean;
+  /** Enable GitHub-like Preview / Code tabs for the body. */
+  markdownPreview?: boolean;
   confirmLabel?: string;
   onClose: () => void;
   /** Called with the latest form values when the user dismisses without saving. */
@@ -31,6 +43,8 @@ export function CatalogEditModal({
   title,
   draft,
   idLocked = false,
+  showFolderField = false,
+  markdownPreview = false,
   confirmLabel = "Сохранить",
   onClose,
   onDismiss,
@@ -38,10 +52,32 @@ export function CatalogEditModal({
 }: Props) {
   const [local, setLocal] = useState<CatalogEditDraft>(draft);
   const [busy, setBusy] = useState(false);
+  const [bodyView, setBodyView] = useState<BodyView>("code");
 
   useEffect(() => {
-    if (open) setLocal(draft);
-  }, [open, draft]);
+    if (open) {
+      setLocal(draft);
+      setBodyView(markdownPreview ? "preview" : "code");
+    }
+  }, [open, draft, markdownPreview]);
+
+  const previewMd = useMemo(() => {
+    if (!markdownPreview) return local.body;
+    return composeSkillPreviewMarkdown({
+      name: local.name,
+      description: local.description,
+      triggers: local.triggers,
+      tags: local.tags,
+      body: local.body,
+    });
+  }, [
+    markdownPreview,
+    local.name,
+    local.description,
+    local.triggers,
+    local.tags,
+    local.body,
+  ]);
 
   if (!open) return null;
 
@@ -123,6 +159,30 @@ export function CatalogEditModal({
             required
           />
         </label>
+        {showFolderField ? (
+          <label className="field-label">
+            Каталог (папка)
+            <input
+              className="mono"
+              value={local.parentFolder ?? ""}
+              disabled={busy || idLocked}
+              onChange={(e) =>
+                setLocal({ ...local, parentFolder: e.target.value })
+              }
+              placeholder="например figma или tools/blender"
+            />
+            <span className="muted field-hint">
+              Скилл сохранится как{" "}
+              <code>
+                skills/
+                {(local.parentFolder || "").trim()
+                  ? `${(local.parentFolder || "").trim()}/`
+                  : ""}
+                {local.id.trim() || "id"}/SKILL.md
+              </code>
+            </span>
+          </label>
+        ) : null}
         <label className="field-label">
           Описание
           <input
@@ -151,18 +211,58 @@ export function CatalogEditModal({
             placeholder="custom, library"
           />
         </label>
-        <label className="field-label">
-          Тело
-          <AutoGrowTextarea
-            value={local.body}
-            disabled={busy}
-            minHeight={120}
-            maxHeight={Math.round(
-              typeof window !== "undefined" ? window.innerHeight * 0.55 : 420,
-            )}
-            onChange={(e) => setLocal({ ...local, body: e.target.value })}
-          />
-        </label>
+
+        <div className="field-label catalog-body-field">
+          <div className="catalog-body-head">
+            <span>Тело (Markdown)</span>
+            {markdownPreview ? (
+              <div
+                className="catalog-md-tabs"
+                role="tablist"
+                aria-label="Режим просмотра Markdown"
+              >
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={bodyView === "preview"}
+                  className={`catalog-md-tab ${bodyView === "preview" ? "is-active" : ""}`}
+                  disabled={busy}
+                  onClick={() => setBodyView("preview")}
+                >
+                  Предварительный просмотр
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={bodyView === "code"}
+                  className={`catalog-md-tab ${bodyView === "code" ? "is-active" : ""}`}
+                  disabled={busy}
+                  onClick={() => setBodyView("code")}
+                >
+                  Код
+                </button>
+              </div>
+            ) : null}
+          </div>
+          {markdownPreview && bodyView === "preview" ? (
+            <div className="catalog-md-preview" role="tabpanel">
+              <SafeMarkdown text={previewMd} />
+            </div>
+          ) : (
+            <AutoGrowTextarea
+              value={local.body}
+              disabled={busy}
+              minHeight={120}
+              maxHeight={Math.round(
+                typeof window !== "undefined" ? window.innerHeight * 0.55 : 420,
+              )}
+              onChange={(e) => setLocal({ ...local, body: e.target.value })}
+              spellCheck={false}
+              className="catalog-md-code mono"
+            />
+          )}
+        </div>
+
         <label className="row" style={{ gap: 8 }}>
           <input
             type="checkbox"
