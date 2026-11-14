@@ -1,8 +1,8 @@
 /**
  * VoiceEngine facade — one entry for local Mira speech.
- * Backends (neural pack synth / Web Speech) stay behind speakText;
- * corpus clip-stitch is retired for playback (opt-in debug only).
- * settings + presets + FX + warmup/stream/cache are the product contract.
+ * Default: parametric synth from VoiceSettings (Hz / pitch / speed / energy)
+ * with no recordings. Neural pack is optional after Voice Studio train.
+ * Corpus clip-stitch is retired for playback (opt-in debug only).
  */
 import { getActiveVoiceId, listCatalogVoices } from "./catalog";
 import { speakText, stopSpeaking, type SpeakHandlers } from "./tts";

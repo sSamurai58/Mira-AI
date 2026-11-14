@@ -14,6 +14,8 @@ export type VoiceEmotion =
 export type VoiceSettings = {
   /** Active preset id, or null when sliders were edited manually. */
   presetId: string | null;
+  /** Base fundamental frequency Hz for parametric synth (before semitone shift). */
+  baseHz: number;
   /** Playback / synthesis speed. Soft-limited 0.75…1.35 */
   speed: number;
   /** Pitch shift in semitones. Soft-limited −3.5…3.5 */
@@ -39,6 +41,7 @@ const KEY = "mira.voiceSettings.v1";
 
 /** Soft limits — anti-chipmunk / anti-distortion (doc §15). */
 export const VOICE_LIMITS = {
+  baseHz: { min: 110, max: 280 },
   speed: { min: 0.75, max: 1.35 },
   pitchSemitones: { min: -3.5, max: 3.5 },
   energy: { min: 0.55, max: 1.35 },
@@ -48,6 +51,7 @@ export const VOICE_LIMITS = {
 
 export const DEFAULT_VOICE_SETTINGS: VoiceSettings = {
   presetId: "mira",
+  baseHz: 178,
   speed: 1,
   pitchSemitones: 0,
   energy: 1,
@@ -63,6 +67,7 @@ export const VOICE_PRESETS: VoicePreset[] = [
     title: "Mira",
     description: "Базовый характер помощника",
     settings: {
+      baseHz: 178,
       speed: 1,
       pitchSemitones: 0,
       energy: 1,
@@ -77,6 +82,7 @@ export const VOICE_PRESETS: VoicePreset[] = [
     title: "Спокойный",
     description: "Тише, чуть ниже, шире паузы",
     settings: {
+      baseHz: 165,
       speed: 0.95,
       pitchSemitones: -1,
       energy: 0.85,
@@ -91,6 +97,7 @@ export const VOICE_PRESETS: VoicePreset[] = [
     title: "Тёплый",
     description: "Мягче энергия, чуть ниже тон",
     settings: {
+      baseHz: 170,
       speed: 0.98,
       pitchSemitones: -0.5,
       energy: 0.92,
@@ -105,6 +112,7 @@ export const VOICE_PRESETS: VoicePreset[] = [
     title: "Энергичный",
     description: "Быстрее, выше тон, плотнее",
     settings: {
+      baseHz: 190,
       speed: 1.08,
       pitchSemitones: 0.8,
       energy: 1.12,
@@ -119,6 +127,7 @@ export const VOICE_PRESETS: VoicePreset[] = [
     title: "Мягкий",
     description: "Тише и медленнее",
     settings: {
+      baseHz: 172,
       speed: 0.92,
       pitchSemitones: -0.3,
       energy: 0.78,
@@ -154,6 +163,11 @@ export function clampVoiceSettings(
       typeof raw.presetId === "string" || raw.presetId === null
         ? raw.presetId
         : DEFAULT_VOICE_SETTINGS.presetId,
+    baseHz: clamp(
+      Number(raw.baseHz ?? DEFAULT_VOICE_SETTINGS.baseHz),
+      VOICE_LIMITS.baseHz.min,
+      VOICE_LIMITS.baseHz.max,
+    ),
     speed: clamp(
       Number(raw.speed ?? DEFAULT_VOICE_SETTINGS.speed),
       VOICE_LIMITS.speed.min,
@@ -241,6 +255,7 @@ export function setVoiceSettings(
       patch.presetId !== undefined
         ? patch.presetId
         : patch.speed !== undefined ||
+            patch.baseHz !== undefined ||
             patch.pitchSemitones !== undefined ||
             patch.energy !== undefined ||
             patch.pauseScale !== undefined ||

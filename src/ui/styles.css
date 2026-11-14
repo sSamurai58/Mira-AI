@@ -3415,6 +3415,32 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   text-underline-offset: 2px;
 }
 
+.voice-profile-table {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--panel-line) 80%, transparent);
+  border-radius: calc(var(--radius) - 2px);
+  background: color-mix(in srgb, var(--bg-elevated) 55%, transparent);
+  font-size: 0.86rem;
+}
+
+.voice-profile-row {
+  display: grid;
+  grid-template-columns: minmax(8rem, 38%) 1fr;
+  gap: 8px 12px;
+  align-items: baseline;
+}
+
+.voice-profile-key {
+  color: var(--text-muted);
+}
+
+.voice-profile-val {
+  color: var(--text);
+  word-break: break-word;
+}
+
 .catalog-edit-close {
   flex-shrink: 0;
   width: 32px;

@@ -1,4 +1,8 @@
-export type TtsEngineId = "webspeech" | "neural-pack" | "elevenlabs";
+export type TtsEngineId =
+  | "parametric"
+  | "webspeech"
+  | "neural-pack"
+  | "elevenlabs";
 
 export type TtsEngineInfo = {
   id: TtsEngineId;
@@ -19,14 +23,20 @@ export function getActiveTtsEngine(): TtsEngineId {
     localStorage.setItem(KEY, "elevenlabs");
     return "elevenlabs";
   }
+  // Old default webspeech without explicit choice → parametric (settings-only).
+  if (v === null || v === "") {
+    localStorage.setItem(KEY, "parametric");
+    return "parametric";
+  }
   if (
+    v === "parametric" ||
     v === "neural-pack" ||
     v === "elevenlabs" ||
     v === "webspeech"
   ) {
     return v;
   }
-  // Unset: prefer local neural when a studio voice is the active selection.
+  // Unset/unknown: studio voice → neural-pack; else parametric.
   try {
     const voice = localStorage.getItem("mira.activeVoiceId");
     if (voice && voice.startsWith("mira-studio-")) {
@@ -36,10 +46,13 @@ export function getActiveTtsEngine(): TtsEngineId {
   } catch {
     /* ignore */
   }
-  return "webspeech";
+  localStorage.setItem(KEY, "parametric");
+  return "parametric";
 }
 
-export function setActiveTtsEngine(id: TtsEngineId | "edge-stub"): TtsEngineId {
+export function setActiveTtsEngine(
+  id: TtsEngineId | "edge-stub",
+): TtsEngineId {
   const next: TtsEngineId = id === "edge-stub" ? "elevenlabs" : id;
   localStorage.setItem(KEY, next);
   return next;
@@ -57,6 +70,13 @@ export function listTtsEngines(): TtsEngineInfo[] {
   const elevenReady = hasElevenLabsBridge();
   return [
     {
+      id: "parametric",
+      label: "Параметрический (настройки)",
+      ready: true,
+      detail:
+        "Синтез из настроек (Гц/высота/скорость/энергия). Можно снять профиль с аудио или микрофона",
+    },
+    {
       id: "webspeech",
       label: "Web Speech API",
       ready: webspeechReady,
@@ -66,10 +86,10 @@ export function listTtsEngines(): TtsEngineInfo[] {
     },
     {
       id: "neural-pack",
-      label: "Neural pack (локальный)",
+      label: "Neural pack (Voice Studio)",
       ready: true,
       detail:
-        "На машине: нейро-синтез Voice Studio (encoder→mel→vocoder) или склейка клипов + FX характера; без облачных API",
+        "Локальный нейро-синтез после сборки голоса в студии; иначе параметрический fallback",
     },
     {
       id: "elevenlabs",

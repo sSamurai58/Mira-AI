@@ -11,6 +11,8 @@ import {
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { synthesizeParametricPcm } from "../src/ui/voice/parametricSynth";
+import { analyzeVoiceProfile } from "../src/ui/voice/voiceProfileFromAudio";
 import {
   applyVoicePreset,
   clampVoiceSettings,
@@ -28,6 +30,7 @@ function main() {
   assert.ok(presets.some((p) => p.id === "energetic"));
 
   const wild = clampVoiceSettings({
+    baseHz: 999,
     speed: 99,
     pitchSemitones: -99,
     energy: 0,
@@ -37,6 +40,7 @@ function main() {
     quality: "ultra" as never,
     presetId: null,
   });
+  assert.equal(wild.baseHz, VOICE_LIMITS.baseHz.max);
   assert.equal(wild.speed, VOICE_LIMITS.speed.max);
   assert.equal(wild.pitchSemitones, VOICE_LIMITS.pitchSemitones.min);
   assert.equal(wild.energy, VOICE_LIMITS.energy.min);
@@ -44,6 +48,28 @@ function main() {
   assert.equal(wild.gain, VOICE_LIMITS.gain.max);
   assert.equal(wild.emotion, DEFAULT_VOICE_SETTINGS.emotion);
   assert.equal(wild.quality, DEFAULT_VOICE_SETTINGS.quality);
+
+  // Parametric synth: text → PCM without recordings.
+  const pcm = synthesizeParametricPcm("Привет, я Mira.", {
+    ...DEFAULT_VOICE_SETTINGS,
+    baseHz: 180,
+    pitchSemitones: 1,
+    speed: 1.05,
+  });
+  assert.ok(pcm.samples.length > 1000, "parametric produces samples");
+  assert.ok(pcm.durationMs > 100, "parametric duration");
+  let peak = 0;
+  for (let i = 0; i < pcm.samples.length; i++) {
+    peak = Math.max(peak, Math.abs(pcm.samples[i]!));
+  }
+  assert.ok(peak > 0.05, "parametric not silent");
+
+  // Round-trip: analyze parametric sample → suggested settings stay in range.
+  const analyzed = analyzeVoiceProfile(pcm.samples, pcm.sampleRate);
+  assert.ok(analyzed.suggested.baseHz >= VOICE_LIMITS.baseHz.min);
+  assert.ok(analyzed.suggested.baseHz <= VOICE_LIMITS.baseHz.max);
+  assert.ok(analyzed.rows.length >= 5);
+  assert.ok(analyzed.durationMs > 50);
 
   const calm = applyVoicePreset("calm");
   assert.equal(calm.presetId, "calm");

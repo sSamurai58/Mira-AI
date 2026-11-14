@@ -271,11 +271,13 @@ export function ChatPage({
       }
       if (!cancelled) {
         setTtsHud(
-          engine === "neural-pack"
-            ? "Neural pack"
-            : engine === "elevenlabs"
-              ? "EL (нужен Electron)"
-              : info?.label || "Web Speech",
+          engine === "parametric"
+            ? "Параметрический"
+            : engine === "neural-pack"
+              ? "Neural pack"
+              : engine === "elevenlabs"
+                ? "EL (нужен Electron)"
+                : info?.label || "Web Speech",
         );
       }
     }
