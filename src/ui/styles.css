@@ -4220,7 +4220,10 @@ select:disabled {
   flex-direction: column;
   align-items: stretch;
   gap: 6px;
+  flex: 0 0 auto;
   min-width: 0;
+  /* Keep sort + Create as one unit on the header’s right */
+  max-width: 100%;
 }
 
 .catalog-panel .catalog-sort-caption {
@@ -4229,26 +4232,33 @@ select:disabled {
 }
 
 .catalog-panel .catalog-sort-controls {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) auto;
   align-items: center;
   gap: 8px;
-  min-width: 0;
+  width: max-content;
+  max-width: 100%;
 }
 
 .catalog-panel .catalog-sort-controls .theme-select {
-  width: auto;
-  flex: 1 1 180px;
-  min-width: 160px;
-  max-width: 260px;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
 }
 
 .catalog-panel .catalog-sort-controls .btn {
-  flex: 0 0 auto;
-  align-self: center;
+  justify-self: start;
+  white-space: nowrap;
   /* Match ThemeSelect trigger height so «+ Создать» sits flush with the field. */
   padding-top: 12px;
   padding-bottom: 12px;
+}
+
+@media (max-width: 520px) {
+  .catalog-panel .catalog-sort-controls {
+    grid-template-columns: minmax(0, 1fr) auto;
+    width: 100%;
+  }
 }
 
 .catalog-run-log {
