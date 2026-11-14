@@ -15,6 +15,18 @@ export type MiraChangelogEntry = {
 
 export const MIRA_CHANGELOG: MiraChangelogEntry[] = [
   {
+    version: "0.1.25",
+    date: "14.11.2026",
+    summary:
+      "Глубже мессенджеры, память, экран/браузер, скиллы и Doctor.",
+    bullets: [
+      "WhatsApp wa.me с текстом, Instagram-профиль; «ответь ему» → последний контакт; dry-run для WA/IG",
+      "«Найди на экране …»; история браузера Mira + Chrome вместе",
+      "Память: таймлайн по дням + «Забыть тему»",
+      "Wake «слушаю»; таймеры/напоминания выбранным голосом + toast; Doctor «ИТОГ» по-русски",
+    ],
+  },
+  {
     version: "0.1.24",
     date: "14.11.2026",
     summary:
