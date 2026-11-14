@@ -1,11 +1,14 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
   type DragEvent,
   type FormEvent,
+  type UIEvent,
 } from "react";
 import { emitActionLog } from "../actionLog";
 import { getBrowserLlmLabel, streamBrowserChat } from "../browserLlm";
@@ -18,6 +21,11 @@ import {
 } from "../chat/attachments";
 import { ChatMarkdown } from "../chat/ChatMarkdown";
 import { textForSpeech } from "../chat/codeSpeech";
+import {
+  dayKey,
+  formatChatDateLabel,
+  formatChatTime,
+} from "../chat/timeLabels";
 import { CoreOrb } from "../components/CoreOrb";
 import { HomeRail } from "../components/HomeRail";
 import { HudCorners } from "../components/HudCorners";
@@ -65,11 +73,19 @@ type Bubble = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  /** ISO timestamp for time label + date separators */
+  createdAt: string;
   pending?: boolean;
   /** Shown while waiting for tools / first tokens */
   statusHint?: string;
   attachments?: Array<{ name: string; kind: string }>;
 };
+
+const NEAR_BOTTOM_PX = 96;
+
+function isNearBottom(el: HTMLElement, threshold = NEAR_BOTTOM_PX): boolean {
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= threshold;
+}
 
 export function ChatPage({
   panel = "dialog",
@@ -107,6 +123,10 @@ export function ChatPage({
   const requestIdRef = useRef<string | null>(null);
   const replyStartRef = useRef<number | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const threadRef = useRef<HTMLDivElement | null>(null);
+  /** When true, new bubbles / tokens pin the viewport to the latest message. */
+  const stickToBottomRef = useRef(true);
+  const [showJumpLatest, setShowJumpLatest] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const asrRef = useRef<ReturnType<typeof createAsrSession> | null>(null);
   const wakeRef = useRef<ReturnType<typeof createAsrSession> | null>(null);
@@ -116,6 +136,27 @@ export function ChatPage({
   const busyRef = useRef(busy);
   const handsFreeRef = useRef(handsFree);
   const startCommandListenRef = useRef<() => void>(() => undefined);
+
+  const showDialog = panel === "dialog";
+
+  const scrollThreadToLatest = useCallback((behavior: ScrollBehavior = "auto") => {
+    const el = threadRef.current;
+    if (!el) return;
+    stickToBottomRef.current = true;
+    setShowJumpLatest(false);
+    if (behavior === "smooth") {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      return;
+    }
+    el.scrollTop = el.scrollHeight;
+  }, []);
+
+  const onThreadScroll = useCallback((e: UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    const near = isNearBottom(el);
+    stickToBottomRef.current = near;
+    setShowJumpLatest(!near && el.scrollHeight > el.clientHeight + 24);
+  }, []);
 
   useEffect(() => {
     sessionIdRef.current = sessionId;
@@ -130,9 +171,45 @@ export function ChatPage({
     handsFreeRef.current = handsFree;
   }, [handsFree]);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [bubbles, busy, interim]);
+  // Pin to latest while the user is (or should be) at the bottom.
+  useLayoutEffect(() => {
+    if (!showDialog) return;
+    if (!stickToBottomRef.current) return;
+    const el = threadRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [bubbles, busy, interim, showDialog, sessionId]);
+
+  // Opening the dialog tab always lands on the newest messages.
+  useLayoutEffect(() => {
+    if (!showDialog) return;
+    stickToBottomRef.current = true;
+    setShowJumpLatest(false);
+    const el = threadRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [showDialog, sessionId]);
+
+  const threadItems = useMemo(() => {
+    const items: Array<
+      | { type: "date"; key: string; label: string }
+      | { type: "bubble"; key: string; bubble: Bubble }
+    > = [];
+    let lastDay = "";
+    for (const b of bubbles) {
+      const key = dayKey(b.createdAt);
+      if (key !== lastDay) {
+        lastDay = key;
+        items.push({
+          type: "date",
+          key: `date-${key}`,
+          label: formatChatDateLabel(b.createdAt),
+        });
+      }
+      items.push({ type: "bubble", key: b.id, bubble: b });
+    }
+    return items;
+  }, [bubbles]);
 
   // Home TTS engine status (EL key/quota/fallback).
   useEffect(() => {
@@ -329,18 +406,23 @@ export function ChatPage({
         tag: "Чат",
         tone: "accent",
       });
+      const nowIso = new Date().toISOString();
+      stickToBottomRef.current = true;
+      setShowJumpLatest(false);
       setBubbles((prev) => [
         ...prev,
         {
           id: `local-user-${requestId}`,
           role: "user",
           content: display,
+          createdAt: nowIso,
           attachments: files.map((f) => ({ name: f.name, kind: f.kind })),
         },
         {
           id: `local-assistant-${requestId}`,
           role: "assistant",
           content: "",
+          createdAt: nowIso,
           pending: true,
         },
       ]);
@@ -501,18 +583,23 @@ export function ChatPage({
           ? `📎 ${files.map((f) => f.name).join(", ")}`
           : "");
 
+      const nowIso = new Date().toISOString();
+      stickToBottomRef.current = true;
+      setShowJumpLatest(false);
       setBubbles((prev) => [
         ...prev,
         {
           id: `local-user-${requestId}`,
           role: "user",
           content: display,
+          createdAt: nowIso,
           attachments: files.map((f) => ({ name: f.name, kind: f.kind })),
         },
         {
           id: `local-assistant-${requestId}`,
           role: "assistant",
           content: "",
+          createdAt: nowIso,
           pending: true,
           statusHint: "Собираю данные…",
         },
@@ -557,6 +644,8 @@ export function ChatPage({
         if (busyRef.current || requestIdRef.current) return;
         const pack = await window.mira.getSession(sessionId);
         if (!cancelled && pack) {
+          stickToBottomRef.current = true;
+          setShowJumpLatest(false);
           setBubbles(
             pack.utterances
               .filter((u) => u.role === "user" || u.role === "assistant")
@@ -564,6 +653,7 @@ export function ChatPage({
                 id: u.id,
                 role: u.role as "user" | "assistant",
                 content: u.content,
+                createdAt: u.created_at || new Date().toISOString(),
               })),
           );
         }
@@ -652,10 +742,13 @@ export function ChatPage({
             .map((b, i) => ({ b, i }))
             .reverse()
             .find((x) => x.b.pending && x.b.role === "assistant")?.i;
-          const bubble = {
+          const bubble: Bubble = {
             id: event.utterance.id,
-            role: "assistant" as const,
+            role: "assistant",
             content: event.utterance.content,
+            createdAt:
+              event.utterance.created_at ||
+              (pendingIdx != null ? next[pendingIdx]!.createdAt : new Date().toISOString()),
           };
           if (pendingIdx != null) {
             next[pendingIdx] = bubble;
@@ -743,6 +836,8 @@ export function ChatPage({
     if (!window.mira || busy) return;
     stopSpeaking();
     const session = await window.mira.createSession("Новый диалог");
+    stickToBottomRef.current = true;
+    setShowJumpLatest(false);
     setBubbles([]);
     setMemoryNote(null);
     onSessionChange(session.id);
@@ -968,7 +1063,6 @@ export function ChatPage({
       : "wave is-idle";
 
   const showHome = panel === "home";
-  const showDialog = panel === "dialog";
   const levelPctClamped = Math.min(100, Math.max(0, coreProgressPct));
 
   return (
@@ -1178,38 +1272,82 @@ export function ChatPage({
             ) : null}
           </div>
 
-          <div className="thread hide-scroll">
-            {bubbles.length === 0 ? (
-              <p className="muted" style={{ margin: 0 }}>
-                Скажите «Мира», зажмите микрофон или напишите ниже.
-              </p>
-            ) : (
-              bubbles.map((b) => (
-                <div key={b.id} className={`bubble ${b.role}`}>
-                  {b.attachments?.length ? (
-                    <div className="bubble-attach-list">
-                      {b.attachments.map((a) => (
-                        <span key={a.name} className="attach-chip">
-                          {a.kind === "image" ? "🖼" : "📎"} {a.name}
-                        </span>
-                      ))}
+          <div className="thread-wrap">
+            <div
+              className="thread hide-scroll"
+              ref={threadRef}
+              onScroll={onThreadScroll}
+            >
+              {bubbles.length === 0 ? (
+                <p className="muted" style={{ margin: 0 }}>
+                  Скажите «Мира», зажмите микрофон или напишите ниже.
+                </p>
+              ) : (
+                threadItems.map((item) =>
+                  item.type === "date" ? (
+                    <div key={item.key} className="thread-date" role="separator">
+                      <span>{item.label}</span>
                     </div>
-                  ) : null}
-                  {b.content ? (
-                    b.role === "assistant" ? (
-                      <ChatMarkdown text={b.content} />
-                    ) : (
-                      <div className="bubble-plain">{b.content}</div>
-                    )
-                  ) : b.pending ? (
-                    <span className="bubble-pending">
-                      {b.statusHint || "Думаю…"}
-                    </span>
-                  ) : null}
-                </div>
-              ))
-            )}
-            <div ref={bottomRef} />
+                  ) : (
+                    <div
+                      key={item.key}
+                      className={`bubble ${item.bubble.role}`}
+                    >
+                      {item.bubble.attachments?.length ? (
+                        <div className="bubble-attach-list">
+                          {item.bubble.attachments.map((a) => (
+                            <span key={a.name} className="attach-chip">
+                              {a.kind === "image" ? "🖼" : "📎"} {a.name}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                      {item.bubble.content ? (
+                        item.bubble.role === "assistant" ? (
+                          <ChatMarkdown text={item.bubble.content} />
+                        ) : (
+                          <div className="bubble-plain">
+                            {item.bubble.content}
+                          </div>
+                        )
+                      ) : item.bubble.pending ? (
+                        <span className="bubble-pending">
+                          {item.bubble.statusHint || "Думаю…"}
+                        </span>
+                      ) : null}
+                      {item.bubble.createdAt ? (
+                        <time
+                          className="bubble-time"
+                          dateTime={item.bubble.createdAt}
+                        >
+                          {formatChatTime(item.bubble.createdAt)}
+                        </time>
+                      ) : null}
+                    </div>
+                  ),
+                )
+              )}
+              <div ref={bottomRef} />
+            </div>
+            {showJumpLatest ? (
+              <button
+                type="button"
+                className="thread-jump"
+                aria-label="К новым сообщениям"
+                title="К новым сообщениям"
+                onClick={() => scrollThreadToLatest("smooth")}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+                  <path
+                    d="M6 10l6 6 6-6"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+            ) : null}
           </div>
 
           <div className="hint-chips">
