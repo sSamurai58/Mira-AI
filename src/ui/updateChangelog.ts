@@ -15,6 +15,16 @@ export type MiraChangelogEntry = {
 
 export const MIRA_CHANGELOG: MiraChangelogEntry[] = [
   {
+    version: "0.1.28",
+    date: "14.11.2026",
+    summary: "Пути: реальные иконки программ из exe / .app.",
+    bullets: [
+      "Мастерская → Пути: иконка берётся из самого приложения (Windows exe/lnk, macOS .app)",
+      "Кэш PNG + превью в редакторе пути; запасной вариант — бренд/заглушка",
+      "Релиз по-прежнему Windows + macOS одним тегом",
+    ],
+  },
+  {
     version: "0.1.27",
     date: "14.11.2026",
     summary:

@@ -13,7 +13,7 @@
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
 | Дорожная карта | Must + future F* закрыты (partial→done stubs where noted) |
 
-**Сейчас:** **0.1.27** публикуется (`v0.1.27`) — **Windows + macOS вместе**. Разработка → **`develop`**.
+**Сейчас:** **0.1.28** опубликован (`v0.1.28`) — **Windows + macOS вместе**. Разработка → **`develop`**.
 
 
 ## Решения
@@ -24,7 +24,8 @@
 |------|---------|--------|
 | 2026-11-14 | **Ветки: develop / main** | Разработка на `develop`; в `main` только актуальный релиз; `.exe` не в git — GitHub Releases + `latest.yml`; см. `docs/BRANCHING.md` |
 | 2026-11-14 | **Релиз = Windows + macOS всегда** | Один тег `v*` → оба OS в одном GitHub Release; запрет отдельных OS-only релизов; gate `release-all` |
-| 2026-11-14 | **0.1.27 macOS + must** | Screen darwin; IMAP body; MCP refresh; zsh/Music; PRD notes; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.27 |
+| 2026-11-14 | **Релиз 0.1.28 опубликован** (`v0.1.28`) | Пути: реальные иконки из exe/.app; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.28 |
+| 2026-11-14 | **Релиз 0.1.27 опубликован** (`v0.1.27`) | Screen darwin; IMAP body; MCP refresh; zsh/Music; Win+mac assets; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.27 |
 | 2026-11-14 | **Релиз 0.1.26 опубликован** (`v0.1.26`) | IMAP; click nx/ny; WA Cloud; media OS; ffmpeg cameras; HA/MQTT; MCP OAuth callback; Porcupine hybrid; без macOS; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.26 |
 | 2026-11-14 | **Релиз 0.1.25 опубликован** (`v0.1.25`) | Messengers WA/IG; screen find; browser history merge; memory forget-topic; Doctor ИТОГ; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.25 |
 | 2026-11-14 | **Релиз 0.1.24 опубликован** (`v0.1.24`) | Update HUD corner; Liquid Glass buttons; skills folder picker; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.24 |
