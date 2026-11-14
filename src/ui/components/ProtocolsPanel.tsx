@@ -28,7 +28,10 @@ import {
   sortCatalogItems,
   type CatalogSort,
 } from "../catalogSort";
-import { listLocalCustomCommands } from "../customCommandsLocal";
+import {
+  defaultActionValue,
+  listLocalCustomCommands,
+} from "../customCommandsLocal";
 import { notifyCoreProgress } from "../coreLevel";
 import {
   emptyActionStep,
@@ -45,6 +48,7 @@ import {
   type ProtocolSeqStep,
 } from "../protocolSequence";
 import { useAppConfirm } from "./AppConfirm";
+import { ActionTypeIcon } from "./ActionTypeIcon";
 import { CatalogDraftsSection } from "./CatalogDraftsSection";
 import { StubBadge } from "./StubBadge";
 import { ThemeSelect } from "./ThemeSelect";
@@ -493,19 +497,11 @@ export function ProtocolsPanel() {
             commandId: s.type === "command" ? s.commandId : "",
           };
         }
-        const prevValue = s.type === "action" ? s.value : "";
         return {
           id: s.id,
           type: "action",
           action: kind,
-          value:
-            kind === "pause" && !prevValue
-              ? "1"
-              : kind === "click" && !prevValue
-                ? "100, 200"
-                : PROTOCOL_VALUELESS.includes(kind)
-                  ? ""
-                  : prevValue,
+          value: defaultActionValue(kind),
         };
       }),
     });
@@ -915,8 +911,9 @@ export function ProtocolsPanel() {
                   className="muted"
                   style={{ margin: "0 0 10px", fontSize: "0.85rem" }}
                 >
-                  Кастомные команды из Мастерской или действия напрямую: сайт,
-                  запуск, клавиши, клик, буфер, терминал, сказать, пауза…
+                  Те же действия, что в Кастомных командах: сайт, запуск с
+                  раскладкой окна (лево/право/полный экран), свернуть все,
+                  рабочие столы, клавиши, клик, буфер, терминал, сказать…
                 </p>
 
                 <div className="cc-steps">
@@ -1310,7 +1307,12 @@ export function ProtocolsPanel() {
                       disabled={busy}
                       onClick={() => addStep(kind)}
                     >
-                      + {stepKindLabel(kind)}
+                      {kind === "command" ? (
+                        <span aria-hidden>+</span>
+                      ) : (
+                        <ActionTypeIcon type={kind} />
+                      )}
+                      {stepKindLabel(kind)}
                     </button>
                   ))}
                 </div>

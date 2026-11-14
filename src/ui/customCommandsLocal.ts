@@ -50,6 +50,73 @@ export const ACTION_TYPES: CustomCommandActionType[] = [
   "terminal",
 ];
 
+/** Shared RU labels — used by Commands + Protocols editors. */
+export const ACTION_LABEL: Record<CustomCommandActionType, string> = {
+  open_url: "Открыть в браузере",
+  launch: "Запустить",
+  open_path: "Открыть путь",
+  open_folder: "Открыть папку",
+  keys: "Нажать клавиши",
+  type: "Ввести текст",
+  click: "Клик",
+  clipboard_copy: "Копировать в буфер",
+  clipboard_paste: "Вставить",
+  pause: "Задержка (сек)",
+  say: "Сказать",
+  notify: "Уведомление",
+  hud_say: "Сказать в HUD",
+  window_minimize: "Свернуть окно",
+  window_minimize_all: "Свернуть все",
+  window_close: "Закрыть окно",
+  window_snap: "Раскладка окна",
+  desktop_new: "Новый рабочий стол",
+  desktop_close: "Закрыть рабочий стол",
+  desktop_switch: "Переключить стол",
+  terminal: "Команда терминала",
+};
+
+/** Quick-add pills — identical action set for Commands and Protocols. */
+export const ACTION_QUICK_ADD: CustomCommandActionType[] = [
+  "open_url",
+  "launch",
+  "open_path",
+  "open_folder",
+  "type",
+  "click",
+  "keys",
+  "clipboard_copy",
+  "clipboard_paste",
+  "pause",
+  "say",
+  "notify",
+  "hud_say",
+  "window_minimize",
+  "window_minimize_all",
+  "window_close",
+  "window_snap",
+  "desktop_new",
+  "desktop_close",
+  "desktop_switch",
+  "terminal",
+];
+
+export const ACTION_VALUELESS: CustomCommandActionType[] = [
+  "window_minimize",
+  "window_minimize_all",
+  "window_close",
+  "desktop_new",
+  "desktop_close",
+];
+
+/** Default step value when switching type / quick-adding. */
+export function defaultActionValue(type: CustomCommandActionType): string {
+  if (type === "pause") return "1";
+  if (type === "click") return "100, 200";
+  if (type === "window_snap") return "left";
+  if (type === "desktop_switch") return "next";
+  return "";
+}
+
 export type CustomCommandStep = {
   id: string;
   type: CustomCommandActionType;

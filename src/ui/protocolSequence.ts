@@ -1,7 +1,11 @@
 /** Protocol body as a sequence of custom commands + native actions. */
 
 import {
+  ACTION_LABEL,
+  ACTION_QUICK_ADD,
   ACTION_TYPES,
+  ACTION_VALUELESS,
+  defaultActionValue,
   type CustomCommandActionType,
 } from "./customCommandsLocal";
 
@@ -14,61 +18,16 @@ export type ProtocolSeqStep =
 export const PROTOCOL_ACTION_TYPES: ProtocolActionType[] = [...ACTION_TYPES];
 
 export const PROTOCOL_ACTION_LABEL: Record<ProtocolActionType, string> = {
-  open_url: "Открыть в браузере",
-  launch: "Запустить",
-  open_path: "Открыть путь",
-  open_folder: "Открыть папку",
-  keys: "Нажать клавиши",
-  type: "Ввести текст",
-  click: "Клик",
-  clipboard_copy: "Копировать в буфер",
-  clipboard_paste: "Вставить",
-  pause: "Задержка (сек)",
-  say: "Сказать",
-  notify: "Уведомление",
-  hud_say: "Сказать в HUD",
-  window_minimize: "Свернуть окно",
-  window_minimize_all: "Свернуть все",
-  window_close: "Закрыть окно",
-  window_snap: "Раскладка окна",
-  desktop_new: "Новый рабочий стол",
-  desktop_close: "Закрыть рабочий стол",
-  desktop_switch: "Переключить стол",
-  terminal: "Команда терминала",
+  ...ACTION_LABEL,
 };
 
-/** Quick-add pills in the protocol editor. */
-export const PROTOCOL_QUICK_ADD: Array<
-  "command" | ProtocolActionType
-> = [
+/** Quick-add pills — same actions as Commands, plus «кастомная команда». */
+export const PROTOCOL_QUICK_ADD: Array<"command" | ProtocolActionType> = [
   "command",
-  "open_url",
-  "launch",
-  "open_path",
-  "type",
-  "click",
-  "keys",
-  "clipboard_copy",
-  "clipboard_paste",
-  "pause",
-  "say",
-  "notify",
-  "hud_say",
-  "open_folder",
-  "window_minimize_all",
-  "window_snap",
-  "desktop_new",
-  "desktop_switch",
-  "terminal",
+  ...ACTION_QUICK_ADD,
 ];
 
-export const PROTOCOL_VALUELESS: ProtocolActionType[] = [
-  "window_minimize",
-  "window_minimize_all",
-  "window_close",
-  "desktop_new",
-  "desktop_close",
-];
+export const PROTOCOL_VALUELESS: ProtocolActionType[] = [...ACTION_VALUELESS];
 
 export function newProtocolStepId(): string {
   return `ps-${crypto.randomUUID().slice(0, 8)}`;
@@ -89,16 +48,7 @@ export function emptyActionStep(
     id: newProtocolStepId(),
     type: "action",
     action,
-    value:
-      action === "pause"
-        ? "1"
-        : action === "click"
-          ? "100, 200"
-          : action === "window_snap"
-            ? "left"
-            : action === "desktop_switch"
-              ? "next"
-              : "",
+    value: defaultActionValue(action),
   };
 }
 
