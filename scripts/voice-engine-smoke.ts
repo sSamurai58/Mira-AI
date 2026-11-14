@@ -12,6 +12,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { synthesizeParametricPcm } from "../src/ui/voice/parametricSynth";
+import { analyzeVoiceProfile } from "../src/ui/voice/voiceProfileFromAudio";
 import {
   applyVoicePreset,
   clampVoiceSettings,
@@ -62,6 +63,13 @@ function main() {
     peak = Math.max(peak, Math.abs(pcm.samples[i]!));
   }
   assert.ok(peak > 0.05, "parametric not silent");
+
+  // Round-trip: analyze parametric sample → suggested settings stay in range.
+  const analyzed = analyzeVoiceProfile(pcm.samples, pcm.sampleRate);
+  assert.ok(analyzed.suggested.baseHz >= VOICE_LIMITS.baseHz.min);
+  assert.ok(analyzed.suggested.baseHz <= VOICE_LIMITS.baseHz.max);
+  assert.ok(analyzed.rows.length >= 5);
+  assert.ok(analyzed.durationMs > 50);
 
   const calm = applyVoicePreset("calm");
   assert.equal(calm.presetId, "calm");

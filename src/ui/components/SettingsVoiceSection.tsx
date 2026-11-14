@@ -17,6 +17,7 @@ import {
   type HandsFreePrefs,
   type WakeSensitivity,
 } from "../voice/handsFree";
+import { getMicDeviceId } from "../voice/micDevices";
 import {
   getActiveWakeEngine,
   getWakeEngineId,
@@ -31,6 +32,12 @@ import {
   setActiveTtsEngine,
   type TtsEngineId,
 } from "../voice/ttsEngines";
+import {
+  analyzeVoiceProfile,
+  decodeAudioFileToMono,
+  recordMicMono,
+  type VoiceProfileAnalysis,
+} from "../voice/voiceProfileFromAudio";
 import {
   applyVoicePreset,
   getVoiceSettings,
@@ -64,6 +71,11 @@ export function SettingsVoiceSection() {
     getActiveTtsEngine(),
   );
   const [voice, setVoice] = useState<VoiceSettings>(() => getVoiceSettings());
+  const [profile, setProfile] = useState<VoiceProfileAnalysis | null>(null);
+  const [profileBusy, setProfileBusy] = useState(false);
+  const [profileNote, setProfileNote] = useState("");
+  const [profileName, setProfileName] = useState("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const presets = listVoicePresets();
   const previewTimer = useRef<number | null>(null);
 
@@ -108,6 +120,76 @@ export function SettingsVoiceSection() {
 
   function pickPreset(id: string) {
     setVoice(applyVoicePreset(id));
+    schedulePreview();
+  }
+
+  async function runProfileFromPcm(
+    samples: Float32Array,
+    sampleRate: number,
+    sourceLabel: string,
+  ) {
+    setProfileBusy(true);
+    setProfileNote("Анализ…");
+    try {
+      const result = analyzeVoiceProfile(samples, sampleRate);
+      setProfile(result);
+      setProfileName(sourceLabel);
+      setProfileNote(result.detail);
+    } catch (err) {
+      setProfile(null);
+      setProfileNote(
+        err instanceof Error ? err.message : "Не удалось разобрать аудио",
+      );
+    } finally {
+      setProfileBusy(false);
+    }
+  }
+
+  async function onPickAudioFile(file: File | null) {
+    if (!file) return;
+    setProfileBusy(true);
+    setProfileNote(`Чтение «${file.name}»…`);
+    try {
+      const { samples, sampleRate } = await decodeAudioFileToMono(file);
+      await runProfileFromPcm(samples, sampleRate, file.name);
+    } catch (err) {
+      setProfile(null);
+      setProfileNote(
+        err instanceof Error
+          ? err.message
+          : "Не удалось декодировать файл (нужен wav/mp3/ogg/webm)",
+      );
+      setProfileBusy(false);
+    }
+  }
+
+  async function onListenMic() {
+    setProfileBusy(true);
+    setProfileNote("Слушаю 5 с — говорите естественно…");
+    setProfile(null);
+    try {
+      const { samples, sampleRate } = await recordMicMono(
+        5000,
+        getMicDeviceId() || undefined,
+      );
+      await runProfileFromPcm(samples, sampleRate, "Микрофон · 5 с");
+    } catch (err) {
+      setProfile(null);
+      setProfileNote(
+        err instanceof Error
+          ? err.message
+          : "Микрофон недоступен или запись пустая",
+      );
+      setProfileBusy(false);
+    }
+  }
+
+  function applyAnalyzedProfile() {
+    if (!profile) return;
+    setVoice(setVoiceSettings(profile.suggested));
+    setProfileNote(
+      "Параметры применены. Прослушайте — голос совпадает по частоте, темпу и энергии образца.",
+    );
     schedulePreview();
   }
 
@@ -297,6 +379,80 @@ export function SettingsVoiceSection() {
           </button>
         </div>
       </article>
+
+      {ttsEngine === "parametric" ? (
+        <article className="panel stack notify-card">
+          <h3 className="notify-card-title">
+            Снять характеристики с аудио
+          </h3>
+          <p className="muted" style={{ margin: 0 }}>
+            Загрузите образец или дайте Мире послушать микрофон — получите F0,
+            скорость, паузы и энергию, затем примените их к параметрическому
+            голосу (совпадение по частоте/темпу/энергии; тембр формы синтеза
+            остаётся параметрическим).
+          </p>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="audio/*,.wav,.mp3,.ogg,.m4a,.webm,.flac"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0] ?? null;
+              e.target.value = "";
+              void onPickAudioFile(f);
+            }}
+          />
+          <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="btn"
+              disabled={profileBusy}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              + Аудиофайл
+            </button>
+            <button
+              type="button"
+              className="btn"
+              disabled={profileBusy}
+              onClick={() => void onListenMic()}
+            >
+              {profileBusy ? "Слушаю…" : "Слушать микрофон 5 с"}
+            </button>
+            {profile ? (
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={profileBusy}
+                onClick={applyAnalyzedProfile}
+              >
+                Применить характеристики
+              </button>
+            ) : null}
+          </div>
+          {profileNote ? (
+            <p className="muted" style={{ margin: 0 }}>
+              {profileName ? (
+                <>
+                  <span className="mono">{profileName}</span>
+                  {" · "}
+                </>
+              ) : null}
+              {profileNote}
+            </p>
+          ) : null}
+          {profile ? (
+            <div className="voice-profile-table mono">
+              {profile.rows.map((row) => (
+                <div key={row.key} className="voice-profile-row">
+                  <span className="voice-profile-key">{row.label}</span>
+                  <span className="voice-profile-val">{row.value}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </article>
+      ) : null}
 
       <article className="panel stack notify-card">
         <h3 className="notify-card-title">Hands-free · wake-word</h3>
