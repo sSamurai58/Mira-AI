@@ -1,4 +1,12 @@
-/** TTS playback prefs (Web Speech rate / pitch / volume). */
+/**
+ * Legacy TTS playback prefs — thin bridge onto VoiceSettings.
+ * Prefer `voiceSettings.ts` / VoiceEngine for new code.
+ */
+import {
+  getVoiceSettings,
+  setVoiceSettings,
+  type VoiceSettings,
+} from "./voiceSettings";
 
 export type VoiceAudioPrefs = {
   /** 0.7 … 1.4 */
@@ -9,45 +17,35 @@ export type VoiceAudioPrefs = {
   volume: number;
 };
 
-const KEYS = {
-  rate: "mira.tts.rate",
-  pitch: "mira.tts.pitch",
-  volume: "mira.tts.volume",
-} as const;
-
 export const DEFAULT_VOICE_AUDIO_PREFS: VoiceAudioPrefs = {
   rate: 1,
   pitch: 1,
   volume: 1,
 };
 
-function clamp(n: number, min: number, max: number): number {
-  if (!Number.isFinite(n)) return min;
-  return Math.min(max, Math.max(min, n));
+function settingsToPrefs(s: VoiceSettings): VoiceAudioPrefs {
+  return {
+    rate: s.speed,
+    pitch: Math.pow(2, s.pitchSemitones / 12),
+    volume: s.gain,
+  };
 }
 
 export function getVoiceAudioPrefs(): VoiceAudioPrefs {
-  if (typeof localStorage === "undefined") {
-    return { ...DEFAULT_VOICE_AUDIO_PREFS };
-  }
-  return {
-    rate: clamp(Number(localStorage.getItem(KEYS.rate) ?? "1"), 0.7, 1.4),
-    pitch: clamp(Number(localStorage.getItem(KEYS.pitch) ?? "1"), 0.7, 1.4),
-    volume: clamp(Number(localStorage.getItem(KEYS.volume) ?? "1"), 0, 1),
-  };
+  return settingsToPrefs(getVoiceSettings());
 }
 
 export function setVoiceAudioPrefs(
   patch: Partial<VoiceAudioPrefs>,
 ): VoiceAudioPrefs {
-  const cur = getVoiceAudioPrefs();
-  const next: VoiceAudioPrefs = {
-    rate: clamp(patch.rate ?? cur.rate, 0.7, 1.4),
-    pitch: clamp(patch.pitch ?? cur.pitch, 0.7, 1.4),
-    volume: clamp(patch.volume ?? cur.volume, 0, 1),
-  };
-  localStorage.setItem(KEYS.rate, String(next.rate));
-  localStorage.setItem(KEYS.pitch, String(next.pitch));
-  localStorage.setItem(KEYS.volume, String(next.volume));
-  return next;
+  const cur = getVoiceSettings();
+  const next = setVoiceSettings({
+    speed: patch.rate ?? cur.speed,
+    pitchSemitones:
+      patch.pitch !== undefined
+        ? 12 * Math.log2(Math.max(0.5, patch.pitch))
+        : cur.pitchSemitones,
+    gain: patch.volume ?? cur.gain,
+  });
+  return settingsToPrefs(next);
 }

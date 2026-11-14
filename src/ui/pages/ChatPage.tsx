@@ -364,9 +364,16 @@ export function ChatPage({
           setEngineNote(msg);
         },
         onError: (msg) => {
-          // Soft-fail TTS: keep chat usable in headless / empty-voice envs
-          localStorage.setItem("mira.autoSpeak", "0");
           onVoiceState("idle");
+          // Local studio voice: keep auto-speak on — fall back path already ran.
+          if (isCustomVoiceId(activeVoiceId)) {
+            if (msg && msg !== "synthesis-failed") {
+              onError(`TTS: ${msg}`);
+            }
+            return;
+          }
+          // System/cloud soft-fail: disable so chat stays usable headless.
+          localStorage.setItem("mira.autoSpeak", "0");
           if (msg && msg !== "synthesis-failed") {
             onError(`TTS: ${msg} (автоозвучка выключена)`);
           }

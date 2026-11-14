@@ -6,7 +6,12 @@ import {
   type CorpusSpeechPlan,
 } from "./corpusTts";
 import { getActiveTtsEngine } from "./ttsEngines";
-import { getVoiceAudioPrefs } from "./voiceAudioPrefs";
+import { applyVoiceFx } from "./voiceFx";
+import { splitSpeakPhrases } from "./voicePhrases";
+import {
+  getVoiceSettings,
+  neuralProsodyFromSettings,
+} from "./voiceSettings";
 
 export type SpeakHandlers = {
   onStart?: () => void;
@@ -57,6 +62,15 @@ function getAudioContext(): AudioContext {
     sharedAudioCtx = new Ctx();
   }
   return sharedAudioCtx;
+}
+
+/** Public hook for warmup — creates/resumes shared AudioContext. */
+export function ensureAudioContext(): AudioContext {
+  const ctx = getAudioContext();
+  if (ctx.state === "suspended") {
+    void ctx.resume().catch(() => undefined);
+  }
+  return ctx;
 }
 
 export function stopSpeaking(): void {
@@ -112,12 +126,18 @@ function speakWebSpeech(
   } else {
     utter.lang = "ru-RU";
   }
-  const audioPrefs = getVoiceAudioPrefs();
+  const vs = getVoiceSettings();
   const baseRate = engine === "neural-pack" ? 0.98 : 1.02;
   const basePitch = engine === "neural-pack" ? 1.02 : 1;
-  utter.rate = Math.min(1.4, Math.max(0.7, baseRate * audioPrefs.rate));
-  utter.pitch = Math.min(1.4, Math.max(0.7, basePitch * audioPrefs.pitch));
-  utter.volume = audioPrefs.volume;
+  const pitchRatio = Math.pow(2, vs.pitchSemitones / 12);
+  // pauseScale slows Web Speech slightly (wider pacing).
+  const rateMul = vs.speed / Math.max(0.85, Math.min(1.25, vs.pauseScale));
+  utter.rate = Math.min(1.4, Math.max(0.7, baseRate * rateMul));
+  utter.pitch = Math.min(
+    1.4,
+    Math.max(0.7, basePitch * pitchRatio * (0.92 + 0.08 * vs.energy)),
+  );
+  utter.volume = Math.min(1, Math.max(0, vs.gain * Math.min(1.15, vs.energy)));
   utter.onstart = () => {
     if (!isCurrent()) {
       window.speechSynthesis.cancel();
@@ -423,79 +443,71 @@ async function playFragmentRun(
   }
   if (!isCurrent()) return;
   const stitched = concatenateWithCrossfade(ctx, slices, CROSSFADE_SEC);
-  await playAudioBuffer(ctx, stitched, isCurrent);
+  const shaped = applyVoiceFx(ctx, stitched, getVoiceSettings());
+  await playAudioBuffer(ctx, shaped, isCurrent);
 }
 
-async function speakCustomVoice(
-  text: string,
+/** Try neural synth for one phrase → shaped AudioBuffer, or null. */
+async function tryNeuralPhraseBuffer(
+  voiceId: string,
+  phrase: string,
+  isCurrent: () => boolean,
+): Promise<{ buffer: AudioBuffer; detail: string } | null> {
+  if (!window.mira?.synthesizeCustomVoiceNeural || !window.mira?.readVoicePreview) {
+    return null;
+  }
+  try {
+    const prosody = neuralProsodyFromSettings(getVoiceSettings());
+    const neural = await window.mira.synthesizeCustomVoiceNeural(
+      voiceId,
+      phrase,
+      prosody,
+    );
+    if (!isCurrent() || !neural.ok || !neural.wavPath) return null;
+    const ctx = getAudioContext();
+    const decodeCache = new Map<string, AudioBuffer>();
+    const buf = await decodeClip(ctx, neural.wavPath, decodeCache);
+    if (!isCurrent()) return null;
+    if (!audioBufferSoundsLikeSpeech(buf)) return null;
+    const shaped = applyVoiceFx(ctx, buf, getVoiceSettings());
+    const detail = neural.cached
+      ? "Нейро-синтез (кэш)"
+      : neural.detail || "Нейро-синтез (encoder→decoder→vocoder)";
+    return { buffer: shaped, detail };
+  } catch {
+    return null;
+  }
+}
+
+async function speakCorpusPlan(
+  clean: string,
   voiceId: string,
   handlers: SpeakHandlers,
   isCurrent: () => boolean,
-): Promise<void> {
-  const clean = text.trim();
-  if (!clean) {
-    handlers.onEnd?.();
-    return;
-  }
-
-  // Prefer real neural inference path when weights exist — but reject
-  // vocoder noise (untrained / bad mel) so dialog never gets screech-only.
-  if (window.mira?.readVoicePreview) {
-    try {
-      const neural = await window.mira.synthesizeCustomVoiceNeural(
-        voiceId,
-        clean,
-      );
-      if (!isCurrent()) return;
-      if (neural.ok && neural.wavPath) {
-        const ctx = getAudioContext();
-        const cache = new Map<string, AudioBuffer>();
-        const buf = await decodeClip(ctx, neural.wavPath, cache);
-        if (!isCurrent()) return;
-        if (audioBufferSoundsLikeSpeech(buf)) {
-          handlers.onStatus?.(
-            neural.detail || "Нейро-синтез (encoder→decoder→vocoder)",
-          );
-          handlers.onStart?.();
-          await playAudioBuffer(ctx, buf, isCurrent);
-          if (!isCurrent()) return;
-          handlers.onEnd?.();
-          return;
-        }
-        handlers.onStatus?.(
-          "Нейро-синтез похож на шум — склейка клипов / Web Speech",
-        );
-      }
-    } catch {
-      // Fall through to unit-stitch / Web Speech.
-    }
-  }
-
+  markStart: () => void,
+): Promise<boolean> {
   let plan: CorpusSpeechPlan;
   try {
     const corpus = await loadCustomVoiceCorpus(voiceId);
-    if (!isCurrent()) return;
+    if (!isCurrent()) return true;
     plan = planCorpusSpeech(clean, corpus.units, {
       preferPreview: handlers.preferPreview,
       previewPath: corpus.voice.preview_path,
     });
   } catch (err) {
-    if (!isCurrent()) return;
+    if (!isCurrent()) return true;
     handlers.onStatus?.(
       err instanceof Error
         ? `Студийный голос: ${err.message}`
         : "Студийный голос недоступен",
     );
-    speakWebSpeech(clean, null, handlers, isCurrent);
-    return;
+    return false;
   }
 
   handlers.onStatus?.(plan.status);
 
-  // Pure system fallback (no matching words / no preview preference).
   if (plan.mode === "webspeech-fallback") {
-    speakWebSpeech(clean, null, handlers, isCurrent);
-    return;
+    return false;
   }
 
   const canPlayClips = Boolean(window.mira?.readVoicePreview);
@@ -503,24 +515,14 @@ async function speakCustomVoice(
     handlers.onStatus?.(
       "Browser-demo: клипы студии без файлов — запасной Web Speech",
     );
-    speakWebSpeech(clean, null, handlers, isCurrent);
-    return;
+    return false;
   }
 
-  let started = false;
-  const markStart = () => {
-    if (!started) {
-      started = true;
-      handlers.onStart?.();
-    }
-  };
-
   const cache = new Map<string, AudioBuffer>();
-
   try {
     let i = 0;
     while (i < plan.segments.length) {
-      if (!isCurrent()) return;
+      if (!isCurrent()) return true;
       const seg = plan.segments[i]!;
       if (seg.kind === "fragment") {
         const run: Extract<CorpusPlanSegment, { kind: "fragment" }>[] = [];
@@ -551,18 +553,119 @@ async function speakCustomVoice(
         });
       }
     }
-    if (!isCurrent()) return;
-    if (!started) handlers.onStart?.();
-    handlers.onEnd?.();
+    return true;
   } catch (err) {
-    if (!isCurrent()) return;
+    if (!isCurrent()) return true;
     handlers.onStatus?.(
       err instanceof Error
         ? `Студия: ${err.message}; запасной системный TTS`
         : "Студия: ошибка склейки; запасной системный TTS",
     );
-    speakWebSpeech(clean, null, handlers, isCurrent);
+    return false;
   }
+}
+
+async function speakCustomVoice(
+  text: string,
+  voiceId: string,
+  handlers: SpeakHandlers,
+  isCurrent: () => boolean,
+): Promise<void> {
+  const clean = text.trim();
+  if (!clean) {
+    handlers.onEnd?.();
+    return;
+  }
+
+  const phrases = splitSpeakPhrases(clean);
+  let started = false;
+  const markStart = () => {
+    if (!started) {
+      started = true;
+      handlers.onStart?.();
+    }
+  };
+
+  // Phrase pipeline: synthesize next while playing current (local only).
+  const prefetch = (phrase: string) => tryNeuralPhraseBuffer(voiceId, phrase, isCurrent);
+
+  let nextJob =
+    phrases.length > 0 ? prefetch(phrases[0]!) : Promise.resolve(null);
+  let usedNeural = false;
+  let neuralFailedAll = phrases.length > 0;
+
+  for (let i = 0; i < phrases.length; i++) {
+    if (!isCurrent()) return;
+    const ready = await nextJob;
+    if (i + 1 < phrases.length) {
+      nextJob = prefetch(phrases[i + 1]!);
+    }
+
+    if (ready) {
+      neuralFailedAll = false;
+      usedNeural = true;
+      handlers.onStatus?.(
+        phrases.length > 1
+          ? `${ready.detail} · фраза ${i + 1}/${phrases.length}`
+          : ready.detail,
+      );
+      markStart();
+      await playAudioBuffer(getAudioContext(), ready.buffer, isCurrent);
+      continue;
+    }
+
+    // This phrase has no usable neural audio → corpus / Web Speech for it.
+    const phrase = phrases[i]!;
+    const okCorpus = await speakCorpusPlan(
+      phrase,
+      voiceId,
+      {
+        ...handlers,
+        preferPreview: handlers.preferPreview && phrases.length === 1,
+        onStart: markStart,
+        // Swallow per-phrase end so the outer loop owns completion.
+        onEnd: undefined,
+      },
+      isCurrent,
+      markStart,
+    );
+    if (!okCorpus) {
+      await new Promise<void>((resolve) => {
+        speakWebSpeech(
+          phrase,
+          null,
+          {
+            onStart: markStart,
+            onEnd: resolve,
+            onError: () => resolve(),
+            onStatus: handlers.onStatus,
+          },
+          isCurrent,
+        );
+      });
+    }
+  }
+
+  if (!isCurrent()) return;
+  if (!started) {
+    // Nothing played (empty phrases) — try whole-text corpus once.
+    if (neuralFailedAll && !usedNeural) {
+      const ok = await speakCorpusPlan(
+        clean,
+        voiceId,
+        handlers,
+        isCurrent,
+        markStart,
+      );
+      if (!ok) {
+        speakWebSpeech(clean, null, handlers, isCurrent);
+        return;
+      }
+    } else {
+      handlers.onStart?.();
+    }
+  }
+  handlers.onEnd?.();
 }
 
 /** Reject near-silence / white-noise buffers so we never leave screech as output. */
@@ -690,14 +793,15 @@ export function speakText(
     activeBufferSource = null;
   }
 
-  if (engine === "elevenlabs") {
-    void speakElevenLabs(text, handlers, isCurrent);
+  // Custom / Voice Studio voices always synthesize on-device (neural pack or
+  // corpus stitch + local FX). Cloud engines must not override the user's voice.
+  if (isCustomVoiceId(voiceId) && voiceId) {
+    void speakCustomVoice(text, voiceId, handlers, isCurrent);
     return;
   }
 
-  if (isCustomVoiceId(voiceId) && voiceId) {
-    // Studio / custom trained voice → compositional corpus engine.
-    void speakCustomVoice(text, voiceId, handlers, isCurrent);
+  if (engine === "elevenlabs") {
+    void speakElevenLabs(text, handlers, isCurrent);
     return;
   }
 

@@ -26,6 +26,16 @@ export function getActiveTtsEngine(): TtsEngineId {
   ) {
     return v;
   }
+  // Unset: prefer local neural when a studio voice is the active selection.
+  try {
+    const voice = localStorage.getItem("mira.activeVoiceId");
+    if (voice && voice.startsWith("mira-studio-")) {
+      localStorage.setItem(KEY, "neural-pack");
+      return "neural-pack";
+    }
+  } catch {
+    /* ignore */
+  }
   return "webspeech";
 }
 
@@ -59,7 +69,7 @@ export function listTtsEngines(): TtsEngineInfo[] {
       label: "Neural pack (локальный)",
       ready: true,
       detail:
-        "Студийные голоса: склейка слов/фрагментов из обученных клипов (unit selection); непокрытые токены — запасной Web Speech",
+        "На машине: нейро-синтез Voice Studio (encoder→mel→vocoder) или склейка клипов + FX характера; без облачных API",
     },
     {
       id: "elevenlabs",
