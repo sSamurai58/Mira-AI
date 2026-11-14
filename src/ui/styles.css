@@ -2164,24 +2164,31 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   display: flex;
   align-items: center;
   gap: 0;
+  /* Continuous inner fill so the Файл|input seam never shows voids */
+  background: color-mix(in srgb, var(--bg) 82%, #05080c);
+  background-clip: content-box;
 }
 
-.rainbow-field.has-attach > input {
+.rainbow-field.has-attach > input,
+.rainbow-field.has-attach > textarea {
   flex: 1 1 auto;
   width: auto;
   min-width: 0;
   height: 100%;
   padding-left: 8px;
-  /* Share the glass fill with the attach control */
+  /* Square the side that meets «Файл» — no crescent gaps */
   border-radius: 0 var(--composer-r-inner) var(--composer-r-inner) 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .rainbow-field.has-attach > .attach-btn {
   align-self: stretch;
   height: auto;
+  margin-left: 0;
   border-radius: var(--composer-r-inner) 0 0 var(--composer-r-inner);
-  background: color-mix(in srgb, var(--bg) 82%, #05080c);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 5%, transparent);
+  background: transparent;
+  box-shadow: none;
 }
 
 .attach-btn {
@@ -2193,7 +2200,7 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   justify-content: center;
   gap: 6px;
   height: calc(var(--composer-h, 50px) - 2 * var(--composer-ring, 1.5px));
-  margin-left: 2px;
+  margin-left: 0;
   padding: 0 12px 0 14px;
   border: 0;
   border-radius: var(--composer-r-inner, 999px);
@@ -3277,6 +3284,23 @@ select:disabled {
   border-radius: var(--composer-r-inner);
   background: color-mix(in srgb, var(--bg) 82%, #05080c);
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 5%, transparent);
+}
+
+/* After global rainbow-field chrome: keep attach seam square (fixes voids). */
+.rainbow-field.has-attach > input,
+.rainbow-field.has-attach > textarea,
+.rainbow-field.has-attach > input:hover,
+.rainbow-field.has-attach > textarea:hover,
+.rainbow-field.has-attach > input:focus,
+.rainbow-field.has-attach > textarea:focus {
+  border-radius: 0 var(--composer-r-inner) var(--composer-r-inner) 0;
+  background: transparent;
+  box-shadow: none;
+  padding-left: 8px;
+}
+
+.rainbow-field.has-attach > .attach-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 .field-label {
