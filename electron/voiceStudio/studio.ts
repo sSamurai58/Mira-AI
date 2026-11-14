@@ -2189,10 +2189,18 @@ export function submitVoicePreference(opts: {
   });
 }
 
+export type CustomVoiceNeuralProsody = {
+  speed?: number;
+  pauseScale?: number;
+  energy?: number;
+  quality?: "fast" | "balanced" | "studio";
+};
+
 /** Neural inference: text → encoder → decoder → vocoder WAV. */
 export function synthesizeCustomVoiceNeural(
   voiceId: string,
   text: string,
+  prosody?: CustomVoiceNeuralProsody,
 ): {
   ok: boolean;
   wavPath: string | null;
@@ -2204,7 +2212,7 @@ export function synthesizeCustomVoiceNeural(
   const voice = getCustomVoice(voiceId);
   if (!voice) throw new Error("Голос не найден");
   const packDir = studioRoot(voice.project_id, "model-pack");
-  const result = synthesizeNeuralSpeech(packDir, text);
+  const result = synthesizeNeuralSpeech(packDir, text, { prosody });
   if (!result) {
     return {
       ok: false,

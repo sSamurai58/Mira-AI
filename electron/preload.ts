@@ -332,8 +332,16 @@ contextBridge.exposeInMainWorld("mira", {
     preferred: "a" | "b";
     text?: string;
   }) => call("mira:submit-voice-preference", payload),
-  synthesizeCustomVoiceNeural: (voiceId: string, text: string) =>
-    call("mira:synthesize-custom-voice-neural", voiceId, text),
+  synthesizeCustomVoiceNeural: (
+    voiceId: string,
+    text: string,
+    prosody?: {
+      speed?: number;
+      pauseScale?: number;
+      energy?: number;
+      quality?: "fast" | "balanced" | "studio";
+    },
+  ) => call("mira:synthesize-custom-voice-neural", voiceId, text, prosody),
   getElevenLabsStatus: (probe?: boolean) =>
     call("mira:elevenlabs-status", probe ?? false),
   synthesizeElevenLabs: (payload: {

@@ -840,6 +840,12 @@ interface MiraBridge {
   synthesizeCustomVoiceNeural: (
     voiceId: string,
     text: string,
+    prosody?: {
+      speed?: number;
+      pauseScale?: number;
+      energy?: number;
+      quality?: "fast" | "balanced" | "studio";
+    },
   ) => Promise<{
     ok: boolean;
     wavPath: string | null;

@@ -1013,8 +1013,17 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
   );
   on(
     "mira:synthesize-custom-voice-neural",
-    (_e, voiceId: string, text: string) =>
-      synthesizeCustomVoiceNeural(voiceId, text),
+    (
+      _e,
+      voiceId: string,
+      text: string,
+      prosody?: {
+        speed?: number;
+        pauseScale?: number;
+        energy?: number;
+        quality?: "fast" | "balanced" | "studio";
+      },
+    ) => synthesizeCustomVoiceNeural(voiceId, text, prosody),
   );
   on("mira:elevenlabs-status", (_e, probe?: boolean) =>
     getElevenLabsStatus(Boolean(probe)),

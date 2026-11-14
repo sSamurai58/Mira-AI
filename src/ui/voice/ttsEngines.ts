@@ -59,7 +59,7 @@ export function listTtsEngines(): TtsEngineInfo[] {
       label: "Neural pack (локальный)",
       ready: true,
       detail:
-        "Студийные голоса: склейка слов/фрагментов из обученных клипов (unit selection); непокрытые токены — запасной Web Speech",
+        "На машине: нейро-синтез Voice Studio (encoder→mel→vocoder) или склейка клипов + FX характера; без облачных API",
     },
     {
       id: "elevenlabs",

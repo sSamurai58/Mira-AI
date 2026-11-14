@@ -6,6 +6,7 @@ import { SettingsElevenLabsSection } from "./SettingsElevenLabsSection";
 import { ThemeSelect } from "./ThemeSelect";
 import {
   getActiveVoiceId,
+  isCustomVoiceId,
   listCatalogVoices,
   setActiveVoiceId,
 } from "../voice/catalog";
@@ -31,10 +32,13 @@ import {
   type TtsEngineId,
 } from "../voice/ttsEngines";
 import {
-  getVoiceAudioPrefs,
-  setVoiceAudioPrefs,
-  type VoiceAudioPrefs,
-} from "../voice/voiceAudioPrefs";
+  applyVoicePreset,
+  getVoiceSettings,
+  listVoicePresets,
+  setVoiceSettings,
+  VOICE_LIMITS,
+  type VoiceSettings,
+} from "../voice/voiceSettings";
 import type { VoiceInfo } from "../voice/types";
 
 const SENS_OPTS: Array<{ value: WakeSensitivity; label: string }> = [
@@ -59,9 +63,8 @@ export function SettingsVoiceSection() {
   const [ttsEngine, setTtsEngine] = useState<TtsEngineId>(() =>
     getActiveTtsEngine(),
   );
-  const [audio, setAudio] = useState<VoiceAudioPrefs>(() =>
-    getVoiceAudioPrefs(),
-  );
+  const [voice, setVoice] = useState<VoiceSettings>(() => getVoiceSettings());
+  const presets = listVoicePresets();
 
   useEffect(() => {
     let cancelled = false;
@@ -81,8 +84,12 @@ export function SettingsVoiceSection() {
     setHandsFree(setHandsFreePrefs(patch));
   }
 
-  function patchAudio(patch: Partial<VoiceAudioPrefs>) {
-    setAudio(setVoiceAudioPrefs(patch));
+  function patchVoice(patch: Partial<VoiceSettings>) {
+    setVoice(setVoiceSettings(patch));
+  }
+
+  function pickPreset(id: string) {
+    setVoice(applyVoicePreset(id));
   }
 
   return (
@@ -94,7 +101,8 @@ export function SettingsVoiceSection() {
             <StubBadge label="F9" />
           </div>
           <p className="muted" style={{ margin: "6px 0 0" }}>
-            TTS, hands-free wake-word, выбор микрофона и живой тест уровня.
+            Локальный голос Mira: характер, пресеты и hands-free. Студийный
+            голос синтезируется на вашей машине без облачных API.
           </p>
         </div>
       </div>
@@ -150,41 +158,94 @@ export function SettingsVoiceSection() {
               onChange={(id) => {
                 setActiveVoiceId(id);
                 setActiveVoiceIdState(id);
+                // Studio voices → force local neural-pack engine.
+                if (isCustomVoiceId(id) && ttsEngine === "elevenlabs") {
+                  setTtsEngine(setActiveTtsEngine("neural-pack"));
+                  setEngineDetail(getVoiceEngineStatus().detail);
+                }
               }}
             />
           </Field>
         )}
+        <Field
+          label="Характер"
+          hint="Пресет задаёт скорость, высоту, энергию и паузы"
+        >
+          <ThemeSelect
+            aria-label="Характер голоса"
+            value={voice.presetId ?? "__custom__"}
+            options={[
+              { value: "__custom__", label: "Свои настройки" },
+              ...presets.map((p) => ({
+                value: p.id,
+                label: `${p.title} — ${p.description}`,
+              })),
+            ]}
+            onChange={(id) => {
+              if (id === "__custom__") {
+                patchVoice({ presetId: null });
+                return;
+              }
+              pickPreset(id);
+            }}
+          />
+        </Field>
         <div className="integ-grid-2">
           <SliderField
             label="Скорость"
-            hint="Множитель Web Speech"
-            min={0.7}
-            max={1.4}
+            hint="Локальный FX / нейро-длительность"
+            min={VOICE_LIMITS.speed.min}
+            max={VOICE_LIMITS.speed.max}
             step={0.02}
-            value={audio.rate}
-            display={audio.rate.toFixed(2)}
-            onChange={(v) => patchAudio({ rate: v })}
+            value={voice.speed}
+            display={voice.speed.toFixed(2)}
+            onChange={(v) => patchVoice({ speed: v })}
           />
           <SliderField
-            label="Высота"
-            hint="Pitch Web Speech"
-            min={0.7}
-            max={1.4}
+            label="Высота (полутона)"
+            hint="Локальный pitch-shift"
+            min={VOICE_LIMITS.pitchSemitones.min}
+            max={VOICE_LIMITS.pitchSemitones.max}
+            step={0.1}
+            value={voice.pitchSemitones}
+            display={
+              (voice.pitchSemitones >= 0 ? "+" : "") +
+              voice.pitchSemitones.toFixed(1)
+            }
+            onChange={(v) => patchVoice({ pitchSemitones: v })}
+          />
+        </div>
+        <div className="integ-grid-2">
+          <SliderField
+            label="Энергия"
+            hint="Плотность / громкость тембра"
+            min={VOICE_LIMITS.energy.min}
+            max={VOICE_LIMITS.energy.max}
             step={0.02}
-            value={audio.pitch}
-            display={audio.pitch.toFixed(2)}
-            onChange={(v) => patchAudio({ pitch: v })}
+            value={voice.energy}
+            display={voice.energy.toFixed(2)}
+            onChange={(v) => patchVoice({ energy: v })}
+          />
+          <SliderField
+            label="Паузы"
+            hint="Шире — спокойнее ритм"
+            min={VOICE_LIMITS.pauseScale.min}
+            max={VOICE_LIMITS.pauseScale.max}
+            step={0.02}
+            value={voice.pauseScale}
+            display={voice.pauseScale.toFixed(2)}
+            onChange={(v) => patchVoice({ pauseScale: v })}
           />
         </div>
         <SliderField
           label="Громкость"
-          hint="0 = тихо, 1 = максимум"
-          min={0}
-          max={1}
+          hint="Выходной gain + soft-limiter"
+          min={VOICE_LIMITS.gain.min}
+          max={VOICE_LIMITS.gain.max}
           step={0.05}
-          value={audio.volume}
-          display={Math.round(audio.volume * 100) + "%"}
-          onChange={(v) => patchAudio({ volume: v })}
+          value={voice.gain}
+          display={Math.round(voice.gain * 100) + "%"}
+          onChange={(v) => patchVoice({ gain: v })}
         />
         <div className="row" style={{ gap: 8 }}>
           <button

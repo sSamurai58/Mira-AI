@@ -93,27 +93,65 @@ export type NeuralSynthResult = {
   method: "neural-mel-cpu-v1";
 };
 
+/** Local prosody prior — no cloud; affects duration + sample energy. */
+export type NeuralProsody = {
+  speed?: number;
+  pauseScale?: number;
+  energy?: number;
+  quality?: "fast" | "balanced" | "studio";
+};
+
+function clamp(n: number, min: number, max: number): number {
+  if (!Number.isFinite(n)) return min;
+  return Math.min(max, Math.max(min, n));
+}
+
+function scaleSamplesInPlace(samples: Float32Array, gain: number): void {
+  const g = clamp(gain, 0.4, 1.6);
+  if (Math.abs(g - 1) < 0.02) return;
+  const ceiling = 0.95;
+  let peak = 0;
+  for (let i = 0; i < samples.length; i++) {
+    const v = samples[i]! * g;
+    samples[i] = v;
+    const a = Math.abs(v);
+    if (a > peak) peak = a;
+  }
+  if (peak > ceiling) {
+    const s = ceiling / peak;
+    for (let i = 0; i < samples.length; i++) samples[i]! *= s;
+  }
+}
+
 /**
  * Synthesize speech for `text` using trained neural pack weights.
  */
 export function synthesizeNeuralSpeech(
   packDir: string,
   text: string,
-  opts?: { outName?: string; maxFrames?: number },
+  opts?: { outName?: string; maxFrames?: number; prosody?: NeuralProsody },
 ): NeuralSynthResult | null {
   const clean = text.trim();
   if (!clean) return null;
   const loaded = loadNeuralPack(packDir);
   if (!loaded) return null;
 
+  const speed = clamp(opts?.prosody?.speed ?? 1, 0.75, 1.35);
+  const pauseScale = clamp(opts?.prosody?.pauseScale ?? 1, 0.75, 1.4);
+  const energy = clamp(opts?.prosody?.energy ?? 1, 0.55, 1.35);
+  const quality = opts?.prosody?.quality ?? "balanced";
+  // Slower / more pauses → more mel frames; fast quality caps ceiling.
+  const durationMul = pauseScale / speed;
+  const qualityCap = quality === "fast" ? 160 : quality === "studio" ? 320 : 240;
+  const baseFrames = Math.round(clean.length * 1.8 * durationMul);
+
   const { states } = encodeForward(loaded.encoder, clean);
-  // Rough duration prior from text length
   const maxFrames =
     opts?.maxFrames ??
-    Math.min(240, Math.max(24, Math.round(clean.length * 1.8)));
+    Math.min(qualityCap, Math.max(24, baseFrames));
   const decoded = decodeInfer(loaded.decoder, states, {
     maxFrames,
-    stopThreshold: 0.55,
+    stopThreshold: quality === "fast" ? 0.62 : 0.55,
   });
   const mel = framesToMel(
     decoded.frames,
@@ -121,7 +159,9 @@ export function synthesizeNeuralSpeech(
     loaded.sampleRate,
     loaded.hopLength,
   );
-  const samples = productionVocode(loaded.vocoder, mel, { neuralBlend: 0.65 });
+  const blend = quality === "studio" ? 0.78 : quality === "fast" ? 0.5 : 0.65;
+  const samples = productionVocode(loaded.vocoder, mel, { neuralBlend: blend });
+  scaleSamplesInPlace(samples, energy);
   const outName = opts?.outName ?? `neural-synth-${Date.now().toString(36)}.wav`;
   const outDir = path.join(packDir, "synth");
   fs.mkdirSync(outDir, { recursive: true });

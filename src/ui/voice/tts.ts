@@ -6,7 +6,11 @@ import {
   type CorpusSpeechPlan,
 } from "./corpusTts";
 import { getActiveTtsEngine } from "./ttsEngines";
-import { getVoiceAudioPrefs } from "./voiceAudioPrefs";
+import { applyVoiceFx } from "./voiceFx";
+import {
+  getVoiceSettings,
+  neuralProsodyFromSettings,
+} from "./voiceSettings";
 
 export type SpeakHandlers = {
   onStart?: () => void;
@@ -112,12 +116,18 @@ function speakWebSpeech(
   } else {
     utter.lang = "ru-RU";
   }
-  const audioPrefs = getVoiceAudioPrefs();
+  const vs = getVoiceSettings();
   const baseRate = engine === "neural-pack" ? 0.98 : 1.02;
   const basePitch = engine === "neural-pack" ? 1.02 : 1;
-  utter.rate = Math.min(1.4, Math.max(0.7, baseRate * audioPrefs.rate));
-  utter.pitch = Math.min(1.4, Math.max(0.7, basePitch * audioPrefs.pitch));
-  utter.volume = audioPrefs.volume;
+  const pitchRatio = Math.pow(2, vs.pitchSemitones / 12);
+  // pauseScale slows Web Speech slightly (wider pacing).
+  const rateMul = vs.speed / Math.max(0.85, Math.min(1.25, vs.pauseScale));
+  utter.rate = Math.min(1.4, Math.max(0.7, baseRate * rateMul));
+  utter.pitch = Math.min(
+    1.4,
+    Math.max(0.7, basePitch * pitchRatio * (0.92 + 0.08 * vs.energy)),
+  );
+  utter.volume = Math.min(1, Math.max(0, vs.gain * Math.min(1.15, vs.energy)));
   utter.onstart = () => {
     if (!isCurrent()) {
       window.speechSynthesis.cancel();
@@ -423,7 +433,8 @@ async function playFragmentRun(
   }
   if (!isCurrent()) return;
   const stitched = concatenateWithCrossfade(ctx, slices, CROSSFADE_SEC);
-  await playAudioBuffer(ctx, stitched, isCurrent);
+  const shaped = applyVoiceFx(ctx, stitched, getVoiceSettings());
+  await playAudioBuffer(ctx, shaped, isCurrent);
 }
 
 async function speakCustomVoice(
@@ -440,11 +451,15 @@ async function speakCustomVoice(
 
   // Prefer real neural inference path when weights exist — but reject
   // vocoder noise (untrained / bad mel) so dialog never gets screech-only.
+  // Prosody (speed/pause/energy) goes into the local pack; pitch/gain FX
+  // are applied on the decoded buffer so character knobs always stick.
   if (window.mira?.readVoicePreview) {
     try {
+      const prosody = neuralProsodyFromSettings(getVoiceSettings());
       const neural = await window.mira.synthesizeCustomVoiceNeural(
         voiceId,
         clean,
+        prosody,
       );
       if (!isCurrent()) return;
       if (neural.ok && neural.wavPath) {
@@ -457,7 +472,8 @@ async function speakCustomVoice(
             neural.detail || "Нейро-синтез (encoder→decoder→vocoder)",
           );
           handlers.onStart?.();
-          await playAudioBuffer(ctx, buf, isCurrent);
+          const shaped = applyVoiceFx(ctx, buf, getVoiceSettings());
+          await playAudioBuffer(ctx, shaped, isCurrent);
           if (!isCurrent()) return;
           handlers.onEnd?.();
           return;
@@ -690,14 +706,15 @@ export function speakText(
     activeBufferSource = null;
   }
 
-  if (engine === "elevenlabs") {
-    void speakElevenLabs(text, handlers, isCurrent);
+  // Custom / Voice Studio voices always synthesize on-device (neural pack or
+  // corpus stitch + local FX). Cloud engines must not override the user's voice.
+  if (isCustomVoiceId(voiceId) && voiceId) {
+    void speakCustomVoice(text, voiceId, handlers, isCurrent);
     return;
   }
 
-  if (isCustomVoiceId(voiceId) && voiceId) {
-    // Studio / custom trained voice → compositional corpus engine.
-    void speakCustomVoice(text, voiceId, handlers, isCurrent);
+  if (engine === "elevenlabs") {
+    void speakElevenLabs(text, handlers, isCurrent);
     return;
   }
 
