@@ -411,6 +411,8 @@ export function importSkillPath(
         imported: [],
       };
     }
+    // Preserve tree: blender-3d/SKILL.md + blender-3d/animation/SKILL.md
+    // → data/skills/blender-3d/... (or under opts.catalogName).
     const catalogRoot =
       catalog || safeSkillId(path.basename(src)) || "imported";
     for (const file of skillFiles) {
@@ -418,10 +420,8 @@ export function importSkillPath(
       const parts = [catalogRoot];
       if (relDir && relDir !== ".") {
         parts.push(...relDir.split(path.sep).filter(Boolean));
-      } else {
-        // SKILL.md at import root → nest under basename
-        parts.push(safeSkillId(path.basename(src)) || "skill");
       }
+      // Root SKILL.md → catalogRoot/SKILL.md (no extra leaf folder).
       importedPaths.push(writeAsSkillMd(file, parts.join("/")));
     }
     for (const file of looseTopMd) {
