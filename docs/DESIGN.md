@@ -158,8 +158,7 @@ Mira
 
 | Раздел | Что внутри |
 |--------|------------|
-| **Внешний вид** | Сетка Mira-тем из § «Цветовые темы» ниже; default `deep-sea-neon`; акцент = `--accent` выбранной темы |
-| **Apple** | `apple-light` / `apple-dark`, Liquid Glass (solid/regular/clear), жирный шрифт; iOS-материалы по apple-design skill |
+| **Внешний вид** | Сетка Mira-тем; фон/узор; подраздел **Apple** (`apple-light`/`apple-dark`, Liquid Glass, SF Pro); default `deep-sea-neon` |
 | **Общие** | Язык UI (F8); **профиль** активный (F10); **режим подтверждений** F12: `always` / `smart` / `dangerous-list` + редактор списка классов |
 | **Голос и аудио** | Микрофон, вывод, чувствительность; **wake-word / hands-free** и barge-in (F9); ссылка в каталог голосов / Студию → Мастерская |
 | **API и модели** | Провайдеры Claude / Gemini / GPT (#5); ключи через `.env` / безопасный ввод (scoped к профилю при F10); модель по умолчанию; тест соединения |
