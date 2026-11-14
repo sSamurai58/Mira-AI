@@ -112,6 +112,8 @@ export function PathsPanel() {
   const [draftsRev, setDraftsRev] = useState(0);
   const [tagDraft, setTagDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  /** Live preview while editing a path (OS-extracted). */
+  const [editorIconUrl, setEditorIconUrl] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!window.mira?.listAppPaths) {
@@ -125,6 +127,21 @@ export function PathsPanel() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const p = editor?.path?.trim() ?? "";
+    if (!p || !window.mira?.resolveAppPathIcon) {
+      setEditorIconUrl(null);
+      return;
+    }
+    void window.mira.resolveAppPathIcon(p).then((url) => {
+      if (!cancelled) setEditorIconUrl(url);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [editor?.path]);
 
   const counts = useMemo(() => {
     const program = items.filter((i) => i.kind === "program").length;
@@ -166,6 +183,7 @@ export function PathsPanel() {
     setEditor(null);
     setCreateDraftId(null);
     setTagDraft("");
+    setEditorIconUrl(null);
   }
 
   function openCreate() {
@@ -286,7 +304,7 @@ export function PathsPanel() {
     try {
       if (window.mira?.autodiscoverAppPaths) {
         const res = await window.mira.autodiscoverAppPaths();
-        setItems(res.paths);
+        await refresh();
         setNote(
           `Автообнаружение: просмотрено ${res.scanned}, обновлено ${res.updated}, добавлено ${res.created}`,
         );
@@ -389,6 +407,39 @@ export function PathsPanel() {
               </button>
             ))}
           </div>
+
+          {editorIconUrl || editor.path.trim() ? (
+            <div className="paths-edit-icon-preview" aria-hidden>
+              <span
+                className={`paths-card-icon ${editorIconUrl ? "paths-card-icon--real" : ""}`}
+              >
+                {editorIconUrl ? (
+                  <img
+                    src={editorIconUrl}
+                    alt=""
+                    width={40}
+                    height={40}
+                    className="paths-card-icon-img"
+                    draggable={false}
+                  />
+                ) : (
+                  <AppPathIcon
+                    id={resolveAppPathIconId({
+                      id: editor.id || "",
+                      name: editor.name || editor.path,
+                      kind: editor.kind,
+                    })}
+                    size={40}
+                  />
+                )}
+              </span>
+              <span className="muted" style={{ fontSize: 12 }}>
+                {editorIconUrl
+                  ? "Иконка из файла приложения"
+                  : "Иконка подтянется после выбора существующего пути"}
+              </span>
+            </div>
+          ) : null}
 
           <label className="field-label">
             Путь
@@ -574,6 +625,9 @@ export function PathsPanel() {
           {filtered.map((item) => {
             const iconId = resolveAppPathIconId(item);
             const pathMissing = !item.path.trim();
+            const realIcon = item.iconDataUrl?.startsWith("data:image/")
+              ? item.iconDataUrl
+              : null;
             return (
               <article
                 key={item.id}
@@ -581,10 +635,21 @@ export function PathsPanel() {
               >
                 <div className="paths-card-head">
                   <span
-                    className={`paths-card-icon paths-card-icon--${iconId}`}
+                    className={`paths-card-icon paths-card-icon--${realIcon ? "real" : iconId}`}
                     aria-hidden
                   >
-                    <AppPathIcon id={iconId} size={40} />
+                    {realIcon ? (
+                      <img
+                        src={realIcon}
+                        alt=""
+                        width={40}
+                        height={40}
+                        className="paths-card-icon-img"
+                        draggable={false}
+                      />
+                    ) : (
+                      <AppPathIcon id={iconId} size={40} />
+                    )}
                   </span>
                   <div className="paths-card-title">
                     <div className="paths-card-title-row">

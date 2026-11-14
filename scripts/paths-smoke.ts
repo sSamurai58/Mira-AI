@@ -35,7 +35,7 @@ async function main() {
   const seeded = listAppPaths();
   assert.ok(seeded.length >= 10, `expected seed paths, got ${seeded.length}`);
 
-  const custom = upsertAppPath({
+  const custom = await upsertAppPath({
     kind: "file",
     name: "Отчёт smoke",
     path: tmpDb, // exists as file
@@ -57,7 +57,7 @@ async function main() {
   assert.ok(fromChat.used.startsWith("paths:open:"));
   assert.ok(fromChat.block.includes("Пути"));
 
-  const folder = upsertAppPath({
+  const folder = await upsertAppPath({
     kind: "folder",
     name: "Документы smoke",
     path: os.tmpdir(),
@@ -70,7 +70,7 @@ async function main() {
   assert.ok(listAppPaths().length >= seeded.length);
 
   // Empty path fails gracefully
-  const empty = upsertAppPath({
+  const empty = await upsertAppPath({
     kind: "program",
     name: "Empty Prog",
     path: "",

@@ -14,6 +14,8 @@ export type AppPathItem = {
   enabled: boolean;
   created_at: string;
   updated_at: string;
+  /** OS-extracted icon (data URL) when available from Electron */
+  iconDataUrl?: string | null;
 };
 
 const STORAGE_KEY = "mira.appPaths.v1";

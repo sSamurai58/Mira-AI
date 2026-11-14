@@ -19,6 +19,8 @@ export type AppPathRow = {
   enabled: boolean;
   created_at: string;
   updated_at: string;
+  /** data:image/png;base64,… from OS file icon when path exists */
+  iconDataUrl?: string | null;
 };
 
 type AppPathDbRow = {
@@ -388,6 +390,12 @@ export function listAppPaths(): AppPathRow[] {
   return rows.map(rowFromDb);
 }
 
+/** List paths and attach OS-extracted icons (exe / .app / folder / file). */
+export async function listAppPathsWithIcons(): Promise<AppPathRow[]> {
+  const { attachIconsToAppPaths } = await import("./appPathIcons");
+  return attachIconsToAppPaths(listAppPaths());
+}
+
 export function getAppPath(id: string): AppPathRow | null {
   ensureAppPathsTable();
   const row = openStore()
@@ -399,14 +407,14 @@ export function getAppPath(id: string): AppPathRow | null {
   return row ? rowFromDb(row) : null;
 }
 
-export function upsertAppPath(input: {
+export async function upsertAppPath(input: {
   id?: string;
   kind: AppPathKind;
   name: string;
   path?: string;
   tags?: string[];
   enabled?: boolean;
-}): AppPathRow {
+}): Promise<AppPathRow> {
   ensureAppPathsTable();
   const now = new Date().toISOString();
   const id = (input.id?.trim() || crypto.randomUUID()).slice(0, 80);
@@ -436,7 +444,16 @@ export function upsertAppPath(input: {
       )
       .run(id, kind, name, filePath, JSON.stringify(tags), enabled, now, now);
   }
-  return getAppPath(id)!;
+  const row = getAppPath(id)!;
+  if (row.path) {
+    try {
+      const { resolveAppPathIconDataUrl } = await import("./appPathIcons");
+      row.iconDataUrl = await resolveAppPathIconDataUrl(row.path);
+    } catch {
+      row.iconDataUrl = null;
+    }
+  }
+  return row;
 }
 
 export function deleteAppPath(id: string): { ok: boolean } {
@@ -515,7 +532,7 @@ export function autodiscoverAppPaths(): {
     scanned: KNOWN_APPS.length,
     updated,
     created,
-    paths: listAppPaths(),
+    paths: listAppPaths(), // icons attached by IPC listAppPathsWithIcons on refresh
   };
 }
 

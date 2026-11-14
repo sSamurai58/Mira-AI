@@ -1276,8 +1276,12 @@ interface MiraBridge {
       enabled: boolean;
       created_at: string;
       updated_at: string;
+      iconDataUrl?: string | null;
     }>
   >;
+  resolveAppPathIcon?: (
+    filePath: string,
+  ) => Promise<string | null>;
   upsertAppPath: (payload: {
     id?: string;
     kind: "program" | "folder" | "file";
@@ -1294,6 +1298,7 @@ interface MiraBridge {
     enabled: boolean;
     created_at: string;
     updated_at: string;
+    iconDataUrl?: string | null;
   }>;
   deleteAppPath: (id: string) => Promise<{ ok: boolean }>;
   setAppPathEnabled: (

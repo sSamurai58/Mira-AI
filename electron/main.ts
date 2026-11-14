@@ -193,7 +193,7 @@ import { searchFiles } from "./future/files";
 import {
   autodiscoverAppPaths,
   deleteAppPath,
-  listAppPaths,
+  listAppPathsWithIcons,
   openAppPathById,
   pickAppPathDialog,
   setAppPathEnabled,
@@ -1328,7 +1328,12 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
   on("mira:get-media-status", () => getMediaStatus());
   on("mira:search-files", (_e, query?: string) => searchFiles(query ?? "", 30));
 
-  on("mira:list-app-paths", () => listAppPaths());
+  on("mira:list-app-paths", () => listAppPathsWithIcons());
+  on("mira:resolve-app-path-icon", (_e, filePath: string) =>
+    import("./future/appPathIcons").then((m) =>
+      m.resolveAppPathIconDataUrl(String(filePath ?? "")),
+    ),
+  );
   on(
     "mira:upsert-app-path",
     (

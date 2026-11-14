@@ -66,7 +66,7 @@ async function main() {
   const before = listCustomCommands().length;
 
   const { upsertAppPath } = await import("../electron/future/appPaths");
-  const pathRow = upsertAppPath({
+  const pathRow = await upsertAppPath({
     kind: "file",
     name: "Файл для paths smoke",
     path: tmpDb,

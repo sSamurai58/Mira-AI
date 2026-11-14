@@ -6602,6 +6602,21 @@ body.mira-update-hud-root #root {
   height: 40px;
 }
 
+.paths-card-icon--real {
+  background: color-mix(in srgb, var(--bg-elevated, #1a1a22) 80%, transparent);
+}
+
+.paths-card-icon-img {
+  object-fit: contain;
+  border-radius: 10px;
+}
+
+.paths-edit-icon-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .paths-card-title {
   min-width: 0;
   flex: 1;

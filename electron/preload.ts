@@ -537,6 +537,8 @@ contextBridge.exposeInMainWorld("mira", {
   getMediaStatus: () => call("mira:get-media-status"),
   searchFiles: (query?: string) => call("mira:search-files", query),
   listAppPaths: () => call("mira:list-app-paths"),
+  resolveAppPathIcon: (filePath: string) =>
+    call("mira:resolve-app-path-icon", filePath),
   upsertAppPath: (payload: {
     id?: string;
     kind: "program" | "folder" | "file";
