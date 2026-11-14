@@ -59,6 +59,12 @@ const DEFAULTS: Record<string, string> = {
   BLENDER_PATH: "",
   BLENDER_MODE: "dry-run",
   BLENDER_CONFIRM: "true",
+  TERMINAL_ENABLED: "true",
+  TERMINAL_CONFIRM_DANGEROUS: "true",
+  TERMINAL_SHELL: "",
+  TERMINAL_CWD: "",
+  TERMINAL_FONT_SIZE: "14",
+  TERMINAL_SCROLLBACK: "2000",
 };
 
 export type SettingsEnvSnapshot = {
