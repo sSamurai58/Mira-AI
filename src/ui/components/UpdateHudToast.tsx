@@ -306,12 +306,23 @@ export function UpdateHudToast({
             ? "Обновление: нет связи"
             : "Обновления";
 
+  const detail = (status.detail || "").trim();
+  const ver = (status.availableVersion || "").trim();
+  const detailRepeatsTitle =
+    !detail ||
+    detail === title ||
+    (ver.length > 0 &&
+      (detail === `Доступна версия ${ver}` ||
+        detail === `Доступна ${ver}` ||
+        detail === `Версия ${ver}`));
+
+  const posClass = `mira-update-hud--pos-${prefs.position || "br"}`;
   const toast = (
     <div
       className={`mira-update-hud mira-update-hud--${kind}${
         overlayWindow
-          ? " mira-update-hud--overlay"
-          : ` mira-update-hud--pos-${prefs.position}`
+          ? ` mira-update-hud--overlay ${posClass}`
+          : ` ${posClass}`
       }`}
       role="status"
       aria-live="polite"
@@ -320,7 +331,9 @@ export function UpdateHudToast({
       <div className="mira-update-hud-body">
         <div className="mira-update-hud-kicker">MIRA · UPDATE</div>
         <div className="mira-update-hud-title">{title}</div>
-        <p className="mira-update-hud-detail">{status.detail}</p>
+        {!detailRepeatsTitle ? (
+          <p className="mira-update-hud-detail">{detail}</p>
+        ) : null}
         {status.progress != null && kind === "downloading" ? (
           <div className="mira-update-hud-progress" aria-hidden>
             <div
