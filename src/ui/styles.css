@@ -5498,6 +5498,87 @@ body.mira-update-hud-root #root {
   gap: 1rem;
 }
 
+/* Settings → Voice: mic picker + live spectrum test */
+.mic-test-card {
+  gap: 10px;
+}
+
+.mic-device-select {
+  flex: 1 1 220px;
+  min-width: 180px;
+  max-width: 420px;
+  width: auto;
+}
+
+.mic-level-track {
+  position: relative;
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--panel-line) 85%, transparent);
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+}
+
+.mic-level-track.is-live {
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.mic-level-track.is-hot {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.mic-level-fill {
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent) 55%, transparent),
+    var(--accent)
+  );
+  transition: width 60ms linear;
+}
+
+.mic-level-threshold {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  margin-left: -1px;
+  background: color-mix(in srgb, var(--text) 75%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--bg) 40%, transparent);
+  pointer-events: none;
+}
+
+.mic-spectrum {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 56px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--panel-line) 80%, transparent);
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  opacity: 0.55;
+}
+
+.mic-spectrum.is-live {
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.mic-spectrum-bar {
+  flex: 1 1 0;
+  min-width: 3px;
+  border-radius: 3px 3px 1px 1px;
+  background: linear-gradient(
+    180deg,
+    var(--accent),
+    color-mix(in srgb, var(--accent) 35%, transparent)
+  );
+  transition: height 50ms linear;
+}
+
 .settings-status-bar {
   margin: 0;
   padding: 10px 14px;

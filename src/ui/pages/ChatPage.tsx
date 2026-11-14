@@ -49,6 +49,7 @@ import {
   stripWakePhrase,
   type HandsFreePrefs,
 } from "../voice/handsFree";
+import { getMicDeviceId } from "../voice/micDevices";
 import { acquireMicLevel, releaseMicLevel } from "../voice/micLevel";
 import { getActiveTtsEngine, listTtsEngines } from "../voice/ttsEngines";
 import { speakText, stopSpeaking } from "../voice/tts";
@@ -298,7 +299,7 @@ export function ChatPage({
     let raf = 0;
     let read: (() => number) | null = null;
     void (async () => {
-      read = await acquireMicLevel();
+      read = await acquireMicLevel(getMicDeviceId() || undefined);
       if (cancelled) {
         releaseMicLevel();
         return;
