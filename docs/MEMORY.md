@@ -13,7 +13,7 @@
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
 | Дорожная карта | Must + future F* закрыты (partial→done stubs where noted) |
 
-**Сейчас:** **0.1.23** в публикации (`v0.1.23`). Ветка `cursor/release-0-1-23-6838` = 0.1.22 + parametric TTS + voice profile from audio.
+**Сейчас:** **0.1.23** опубликован (`v0.1.23`). Ветка `cursor/release-0-1-23-6838` = 0.1.22 + parametric TTS + voice profile from audio.
 
 
 ## Решения
@@ -22,7 +22,7 @@
 
 | Дата | Решение | Почему |
 |------|---------|--------|
-| 2026-11-14 | **Релиз 0.1.23** (`v0.1.23`) | Parametric TTS from settings; extract F0/tempo/energy from audio or mic |
+| 2026-11-14 | **Релиз 0.1.23 опубликован** (`v0.1.23`) | Parametric TTS from settings; extract F0/tempo/energy from audio or mic; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.23 |
 | 2026-11-14 | **Релиз 0.1.22 опубликован** (`v0.1.22`) | Studio voice GENERATE only (no cut/stitch clips); speech-band post-filter; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.22 |
 | 2026-11-14 | **Релиз 0.1.21 опубликован** (`v0.1.21`) | Skills as folder/SKILL.md catalogs + import + GitHub-like Preview/Code MD; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.21 |
 | 2026-11-14 | **Релиз 0.1.20 опубликован** (`v0.1.20`) | Local VoiceEngine (presets/FX/warmup/cache/stream); Windows window/desktop layout in Commands+Protocols; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.20 |
