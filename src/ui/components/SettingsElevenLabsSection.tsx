@@ -53,10 +53,13 @@ type StatusSnap = {
 type SettingsElevenLabsSectionProps = {
   /** Compact variant for embedding under Voice without repeating howto. */
   compact?: boolean;
+  /** Skip IntegCard chrome — for Paths-style API modals. */
+  plain?: boolean;
 };
 
 export function SettingsElevenLabsSection({
   compact = false,
+  plain = false,
 }: SettingsElevenLabsSectionProps) {
   const [snap, setSnap] = useState<SettingsEnvSnapshot | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
@@ -241,83 +244,44 @@ export function SettingsElevenLabsSection({
     models.find((m) => m.id === (draft.ELEVENLABS_MODEL_ID || ""))?.detail ||
     "";
 
-  return (
-    <IntegCard
-      kicker="ElevenLabs"
-      title="Облачный TTS"
-      purpose={
-        compact
-          ? "Нейронная озвучка ответов Миры через ElevenLabs. Ключ хранится только в .env / Electron main."
-          : "Красивый облачный neural TTS для чата и голоса. Voice ID уже задан; нужен только API-ключ из кабинета ElevenLabs."
-      }
-      howto={
-        compact ? (
-          <ol>
-            <li>
-              Ключ:{" "}
-              <a
-                href="https://elevenlabs.io/app/settings/api-keys"
-                target="_blank"
-                rel="noreferrer"
-              >
-                elevenlabs.io → API Keys
-              </a>
-            </li>
-            <li>Сохраните ключ → выберите движок «ElevenLabs» выше</li>
-            <li>Проверьте «Проговорить тест»</li>
-          </ol>
-        ) : (
-          <ol>
-            <li>
-              Создайте ключ на{" "}
-              <a
-                href="https://elevenlabs.io/app/settings/api-keys"
-                target="_blank"
-                rel="noreferrer"
-              >
-                elevenlabs.io
-              </a>{" "}
-              (Profile → API Key)
-            </li>
-            <li>Вставьте ниже и нажмите «Сохранить ключ»</li>
-            <li>
-              В «Голос и аудио» выберите движок <strong>ElevenLabs</strong>
-            </li>
-            <li>Voice ID по умолчанию уже ваш — меняйте только при необходимости</li>
-          </ol>
-        )
-      }
-      footer={
-        <SaveRow
-          label="Сохранить"
-          saving={savingKey === "eleven"}
-          note={note}
-          onSave={() => void handleSave()}
-          deleteLabel="Удалить ключ"
-          canDelete={hasKey}
-          deleting={savingKey === "del-eleven"}
-          onDelete={() => void handleDeleteKey()}
+  const howto = compact ? (
+    <ol>
+      <li>
+        Ключ:{" "}
+        <a
+          href="https://elevenlabs.io/app/settings/api-keys"
+          target="_blank"
+          rel="noreferrer"
         >
-          <button
-            type="button"
-            className="btn"
-            disabled={probing}
-            onClick={() => void refreshStatus(true)}
-          >
-            {probing ? "Проверка…" : "Проверить связь"}
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={testing}
-            onClick={() => void handleTestSpeak()}
-          >
-            {testing ? "Говорю…" : "Проговорить тест"}
-          </button>
-          {testMsg ? <span className="chip">{testMsg}</span> : null}
-        </SaveRow>
-      }
-    >
+          elevenlabs.io → API Keys
+        </a>
+      </li>
+      <li>Сохраните ключ → выберите движок «ElevenLabs» выше</li>
+      <li>Проверьте «Проговорить тест»</li>
+    </ol>
+  ) : (
+    <ol>
+      <li>
+        Создайте ключ на{" "}
+        <a
+          href="https://elevenlabs.io/app/settings/api-keys"
+          target="_blank"
+          rel="noreferrer"
+        >
+          elevenlabs.io
+        </a>{" "}
+        (Profile → API Key)
+      </li>
+      <li>Вставьте ниже и нажмите «Сохранить ключ»</li>
+      <li>
+        В «Голос и аудио» выберите движок <strong>ElevenLabs</strong>
+      </li>
+      <li>Voice ID по умолчанию уже ваш — меняйте только при необходимости</li>
+    </ol>
+  );
+
+  const fields = (
+    <>
       <div className="settings-field-row" style={{ marginBottom: 4 }}>
         <span className="muted" style={{ fontSize: "0.85rem" }}>
           {status?.detail || "Статус ElevenLabs…"}
@@ -360,7 +324,10 @@ export function SettingsElevenLabsSection({
       </div>
 
       {voices.length > 0 ? (
-        <Field label="Голоса аккаунта" hint="Список из ElevenLabs API · выберите или оставьте пресет">
+        <Field
+          label="Голоса аккаунта"
+          hint="Список из ElevenLabs API · выберите или оставьте пресет"
+        >
           <ThemeSelect
             aria-label="Голос ElevenLabs из аккаунта"
             value={draft.ELEVENLABS_VOICE_ID || DEFAULT_ELEVENLABS_VOICE_ID}
@@ -416,6 +383,68 @@ export function SettingsElevenLabsSection({
           />
         </Field>
       </div>
+    </>
+  );
+
+  const footer = (
+    <SaveRow
+      label="Сохранить"
+      saving={savingKey === "eleven"}
+      note={note}
+      onSave={() => void handleSave()}
+      deleteLabel="Удалить ключ"
+      canDelete={hasKey}
+      deleting={savingKey === "del-eleven"}
+      onDelete={() => void handleDeleteKey()}
+    >
+      <button
+        type="button"
+        className="btn"
+        disabled={probing}
+        onClick={() => void refreshStatus(true)}
+      >
+        {probing ? "Проверка…" : "Проверить связь"}
+      </button>
+      <button
+        type="button"
+        className="btn btn-primary"
+        disabled={testing}
+        onClick={() => void handleTestSpeak()}
+      >
+        {testing ? "Говорю…" : "Проговорить тест"}
+      </button>
+      {testMsg ? <span className="chip">{testMsg}</span> : null}
+    </SaveRow>
+  );
+
+  if (plain) {
+    return (
+      <div className="stack integ-fields" style={{ gap: 12 }}>
+        <div className="integ-help">
+          <div className="integ-help-block">
+            <span className="integ-help-label">Как настроить</span>
+            <div className="integ-howto">{howto}</div>
+          </div>
+        </div>
+        {fields}
+        <div className="integ-footer">{footer}</div>
+      </div>
+    );
+  }
+
+  return (
+    <IntegCard
+      kicker="ElevenLabs"
+      title="Облачный TTS"
+      purpose={
+        compact
+          ? "Нейронная озвучка ответов Миры через ElevenLabs. Ключ хранится только в .env / Electron main."
+          : "Красивый облачный neural TTS для чата и голоса. Voice ID уже задан; нужен только API-ключ из кабинета ElevenLabs."
+      }
+      howto={howto}
+      footer={footer}
+    >
+      {fields}
     </IntegCard>
   );
 }

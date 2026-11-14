@@ -3852,6 +3852,249 @@ select:disabled {
   padding-top: 4px;
 }
 
+/* Settings → API и модели */
+.api-paths-panel .paths-card.is-active-provider {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--panel-line));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* Workshop → Терминал */
+.terminal-shell {
+  gap: 1rem;
+  min-height: 0;
+  flex: 1;
+}
+
+.terminal-shell-header {
+  align-items: flex-start;
+}
+
+.terminal-new-btn {
+  flex: 0 0 auto;
+}
+
+.terminal-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  min-height: min(68vh, 720px);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--accent) 8%, transparent),
+      transparent 28%
+    ),
+    color-mix(in srgb, var(--bg-elevated) 92%, var(--bg));
+  border-color: color-mix(in srgb, var(--panel-line) 90%, transparent);
+}
+
+.terminal-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--panel-line) 80%, transparent);
+  background: color-mix(in srgb, var(--bg) 35%, transparent);
+}
+
+.terminal-tabs-empty {
+  font-size: 0.85rem;
+  padding: 6px 2px;
+}
+
+.terminal-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 22%, transparent);
+  background: color-mix(in srgb, var(--bg-elevated) 45%, transparent);
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  cursor: pointer;
+  transition:
+    border-color 140ms var(--ease-out),
+    background 140ms var(--ease-out),
+    color 140ms var(--ease-out),
+    transform 140ms var(--ease-out);
+}
+
+.terminal-tab:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--text);
+}
+
+.terminal-tab.is-active {
+  border-color: color-mix(in srgb, var(--accent) 65%, transparent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--text);
+}
+
+.terminal-tab.is-dead {
+  opacity: 0.72;
+}
+
+.terminal-tab-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text-muted) 45%, transparent);
+  flex: 0 0 auto;
+}
+
+.terminal-tab-dot.is-on {
+  background: var(--success, #2dd4a8);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--success, #2dd4a8) 55%, transparent);
+}
+
+.terminal-tab-label {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-tab-exit {
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.terminal-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--panel-line) 70%, transparent);
+}
+
+.terminal-cwd-field {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex: 1 1 220px;
+  min-width: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--text-muted) 22%, transparent);
+  background: color-mix(in srgb, var(--bg) 70%, var(--inset));
+  overflow: hidden;
+}
+
+.terminal-cwd-prefix {
+  flex: 0 0 auto;
+  padding: 0 10px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--accent) 80%, var(--text-muted));
+  border-right: 1px solid color-mix(in srgb, var(--text-muted) 18%, transparent);
+}
+
+.terminal-cwd {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  padding: 9px 12px;
+}
+
+.terminal-toolbar-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.terminal-tool-btn {
+  min-width: 64px;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.terminal-screen {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 360px;
+  display: flex;
+  flex-direction: column;
+  background: var(--terminal-bg, #061018);
+}
+
+.terminal-host {
+  flex: 1 1 auto;
+  min-height: 360px;
+  padding: 10px 12px 8px;
+}
+
+.terminal-host .xterm {
+  height: 100%;
+}
+
+.terminal-host .xterm-viewport {
+  border-radius: 0;
+}
+
+.terminal-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--terminal-bg, #061018) 72%, transparent);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+
+.terminal-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px 10px;
+  border-top: 1px solid color-mix(in srgb, var(--panel-line) 70%, transparent);
+  background: color-mix(in srgb, var(--bg) 40%, transparent);
+  font-size: 0.8rem;
+}
+
+.terminal-alive-pill {
+  flex: 0 0 auto;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--text-muted) 28%, transparent);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.terminal-alive-pill.is-on {
+  border-color: color-mix(in srgb, var(--success, #2dd4a8) 55%, transparent);
+  color: var(--success, #2dd4a8);
+  background: color-mix(in srgb, var(--success, #2dd4a8) 12%, transparent);
+}
+
+@media (max-width: 720px) {
+  .terminal-stage {
+    min-height: 520px;
+  }
+
+  .terminal-host,
+  .terminal-screen {
+    min-height: 280px;
+  }
+}
+
 .settings-field {
   display: flex;
   flex-direction: column;

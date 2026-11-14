@@ -22,6 +22,7 @@
 
 | Дата | Решение | Почему |
 |------|---------|--------|
+| 2026-11-14 | **0.1.15 WIP: API cards + Terminal chrome** | API/модели → paths-grid + реальные логотипы провайдеров; Терминал — вкладки/cwd/статус/тематический xterm; no publish |
 | 2026-11-14 | **0.1.15 WIP: Skills/Protocols = Paths cards** | Скиллы и Протоколы: header «+ Создать», сортировка, поиск, фильтр вкл/выкл, grid-карточки, CatalogEditModal; Protocols получили edit/delete; no publish |
 | 2026-11-14 | **0.1.15 WIP: Integrations = Paths cards** | Длинные IntegCard-формы → сетка `paths-grid` + portal-модалка «Настроить»; фильтры/поиск/toggle; brand-иконки; no publish |
 | 2026-11-13 | **0.1.14 WIP: changelog preview 5** | Длинный список в Settings → Обновления; по умолчанию `slice(0, 5)`, «Показать больше» / «Свернуть»; бейдж «у вас» сохранён; no publish |

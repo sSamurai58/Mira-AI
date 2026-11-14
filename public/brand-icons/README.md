@@ -117,3 +117,17 @@ Decorative UI only; trademarks belong to their owners.
   https://cdn.jsdelivr.net/npm/simple-icons@13/icons/pocket.svg
 - `windows.svg` — Iconify logos — Windows / Explorer (→ white)
   https://api.iconify.design/logos/microsoft-windows.svg
+- `openai.svg` — Simple Icons MIT — OpenAI
+  https://cdn.jsdelivr.net/npm/simple-icons@13/icons/openai.svg
+- `anthropic.svg` — Simple Icons MIT — Anthropic
+  https://cdn.jsdelivr.net/npm/simple-icons@13/icons/anthropic.svg
+- `gemini.svg` — Iconify logos — Google Gemini (multicolor)
+  https://api.iconify.design/logos/google-gemini.svg
+- `google.svg` — Iconify logos — Google
+  https://api.iconify.design/logos/google-icon.svg
+- `xai.svg` — Iconify simple-icons — X / xAI (→ white)
+  https://api.iconify.design/simple-icons/x.svg
+- `xai.png` — Google favicon — x.ai
+  https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://x.ai/&size=128
+- `elevenlabs.svg` — Simple Icons MIT — ElevenLabs
+  https://cdn.jsdelivr.net/npm/simple-icons@13/icons/elevenlabs.svg

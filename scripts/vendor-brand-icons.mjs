@@ -78,6 +78,15 @@ const ASSETS = [
   { file: "raindrop.png", url: "https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://raindrop.io/&size=128", note: "Google favicon — Raindrop.io" },
   { file: "pocket.svg", url: "https://cdn.jsdelivr.net/npm/simple-icons@13/icons/pocket.svg", note: "Simple Icons MIT — Pocket", whiteFill: true },
   { file: "windows.svg", url: "https://api.iconify.design/logos/microsoft-windows.svg", note: "Iconify logos — Windows / Explorer (→ white)", whiteFill: true },
+
+  // LLM / API providers
+  { file: "openai.svg", url: "https://cdn.jsdelivr.net/npm/simple-icons@13/icons/openai.svg", note: "Simple Icons MIT — OpenAI", whiteFill: true },
+  { file: "anthropic.svg", url: "https://cdn.jsdelivr.net/npm/simple-icons@13/icons/anthropic.svg", note: "Simple Icons MIT — Anthropic", whiteFill: true },
+  { file: "gemini.svg", url: "https://api.iconify.design/logos/google-gemini.svg", note: "Iconify logos — Google Gemini (multicolor)" },
+  { file: "google.svg", url: "https://api.iconify.design/logos/google-icon.svg", note: "Iconify logos — Google" },
+  { file: "xai.svg", url: "https://api.iconify.design/simple-icons/x.svg", note: "Iconify simple-icons — X / xAI (→ white)", whiteFill: true },
+  { file: "xai.png", url: "https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://x.ai/&size=128", note: "Google favicon — x.ai" },
+  { file: "elevenlabs.svg", url: "https://cdn.jsdelivr.net/npm/simple-icons@13/icons/elevenlabs.svg", note: "Simple Icons MIT — ElevenLabs", whiteFill: true },
 ];
 
 function forceWhiteFill(svg) {

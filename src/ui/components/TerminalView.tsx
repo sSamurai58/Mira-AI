@@ -2,6 +2,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { useEffect, useRef, useState } from "react";
+import { StubBadge } from "./StubBadge";
 
 type TermSession = {
   id: string;
@@ -22,6 +23,7 @@ export function TerminalView() {
   const [cwdInput, setCwdInput] = useState("");
   const [note, setNote] = useState("");
   const [prefsText, setPrefsText] = useState("");
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     activeIdRef.current = activeId;
@@ -29,23 +31,39 @@ export function TerminalView() {
 
   useEffect(() => {
     if (!hostRef.current || termRef.current) return;
+    const root = getComputedStyle(document.documentElement);
     const term = new Terminal({
       cursorBlink: true,
       fontFamily: "var(--font-mono)",
       fontSize: Number(localStorage.getItem("mira.terminalFontSize") || "14"),
       theme: {
-        background: getComputedStyle(document.documentElement)
-          .getPropertyValue("--terminal-bg")
-          .trim() || "#000814",
-        foreground: getComputedStyle(document.documentElement)
-          .getPropertyValue("--terminal-fg")
-          .trim() || "#f8fafc",
-        cursor: getComputedStyle(document.documentElement)
-          .getPropertyValue("--accent")
-          .trim() || "#ffc300",
+        background:
+          root.getPropertyValue("--terminal-bg").trim() || "#061018",
+        foreground:
+          root.getPropertyValue("--terminal-fg").trim() || "#e8f1f8",
+        cursor: root.getPropertyValue("--accent").trim() || "#38bdf8",
+        selectionBackground: "rgba(56, 189, 248, 0.28)",
+        black: "#0b1620",
+        brightBlack: "#64748b",
+        blue: "#38bdf8",
+        brightBlue: "#7dd3fc",
+        cyan: "#22d3ee",
+        brightCyan: "#67e8f9",
+        green: "#34d399",
+        brightGreen: "#6ee7b7",
+        red: "#f87171",
+        brightRed: "#fca5a5",
+        yellow: "#fbbf24",
+        brightYellow: "#fde68a",
+        magenta: "#c084fc",
+        brightMagenta: "#d8b4fe",
+        white: "#e2e8f0",
+        brightWhite: "#f8fafc",
       },
       convertEol: true,
-      scrollback: Number(localStorage.getItem("mira.terminalScrollback") || "2000"),
+      scrollback: Number(
+        localStorage.getItem("mira.terminalScrollback") || "2000",
+      ),
     });
     const fit = new FitAddon();
     term.loadAddon(fit);
@@ -97,7 +115,7 @@ export function TerminalView() {
       const prefs = await window.mira!.getTerminalPrefs();
       if (cancelled) return;
       setPrefsText(
-        `shell=${prefs.shell} · font=${prefs.fontSize} · cwd=${prefs.defaultCwd}`,
+        `${prefs.shell} · ${prefs.fontSize}px · ${prefs.defaultCwd}`,
       );
       setCwdInput(prefs.defaultCwd);
       const existing = await window.mira!.listTerminalSessions();
@@ -142,19 +160,24 @@ export function TerminalView() {
       termRef.current.cols,
       termRef.current.rows,
     );
-    setNote(`Сессия ${id.slice(0, 8)} · ${info?.backend ?? "?"}`);
+    setNote(`${info?.title ?? id.slice(0, 8)} · ${info?.backend ?? "?"}`);
   }
 
   async function newSession() {
     if (!window.mira || !termRef.current) return;
-    const session = await window.mira.createTerminalSession({
-      title: `Shell ${sessions.length + 1}`,
-      cwd: cwdInput || undefined,
-      cols: termRef.current.cols,
-      rows: termRef.current.rows,
-    });
-    await attachSession(session.id, true);
-    await refreshSessions();
+    setBusy(true);
+    try {
+      const session = await window.mira.createTerminalSession({
+        title: `Shell ${sessions.length + 1}`,
+        cwd: cwdInput || undefined,
+        cols: termRef.current.cols,
+        rows: termRef.current.rows,
+      });
+      await attachSession(session.id, true);
+      await refreshSessions();
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function clearActive() {
@@ -165,8 +188,13 @@ export function TerminalView() {
 
   async function killActive() {
     if (!window.mira || !activeId) return;
-    await window.mira.killTerminal(activeId);
-    await refreshSessions();
+    setBusy(true);
+    try {
+      await window.mira.killTerminal(activeId);
+      await refreshSessions();
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function applyCwd() {
@@ -180,50 +208,145 @@ export function TerminalView() {
     }
   }
 
+  const active = sessions.find((s) => s.id === activeId) ?? null;
+  const browserOnly = typeof window !== "undefined" && !window.mira;
+
   return (
-    <div className="panel stack terminal-panel">
-      <div className="row">
-        <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Терминал</h2>
-        <span className="chip">P7 #16</span>
-      </div>
-      <p className="muted" style={{ margin: 0 }}>
-        Встроенный PTY в Мастерской. {prefsText}
-      </p>
-      <div className="terminal-tabs">
-        {sessions.map((s) => (
-          <button
-            key={s.id}
-            type="button"
-            className={`btn ${activeId === s.id ? "btn-primary" : ""}`}
-            onClick={() => void attachSession(s.id, true)}
-          >
-            {s.title}
-            {s.alive ? "" : " (exit)"}
-          </button>
-        ))}
-        <button type="button" className="btn" onClick={() => void newSession()}>
-          + сессия
+    <div className="stack terminal-shell">
+      <div className="row terminal-shell-header" style={{ flexWrap: "wrap", gap: 12 }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div className="row" style={{ gap: 10, alignItems: "baseline" }}>
+            <h2 style={{ margin: 0, fontSize: "1.25rem" }}>Терминал</h2>
+            <span className="muted">
+              {sessions.filter((s) => s.alive).length} живых
+            </span>
+            <StubBadge label="P7 #16" />
+            {browserOnly ? <span className="chip">Electron only</span> : null}
+          </div>
+          <p className="muted" style={{ margin: "6px 0 0" }}>
+            Встроенный PTY в Мастерской
+            {prefsText ? ` · ${prefsText}` : ""}.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="btn btn-primary terminal-new-btn"
+          disabled={busy || browserOnly}
+          onClick={() => void newSession()}
+        >
+          + Сессия
         </button>
       </div>
-      <div className="row terminal-toolbar">
-        <input
-          className="terminal-cwd"
-          value={cwdInput}
-          onChange={(e) => setCwdInput(e.target.value)}
-          placeholder="cwd"
-        />
-        <button type="button" className="btn" onClick={() => void applyCwd()}>
-          cd
-        </button>
-        <button type="button" className="btn" onClick={() => void clearActive()}>
-          clear
-        </button>
-        <button type="button" className="btn" onClick={() => void killActive()}>
-          kill
-        </button>
+
+      <div className="terminal-stage panel">
+        <div className="terminal-tabs" role="tablist" aria-label="Сессии">
+          {sessions.length === 0 ? (
+            <span className="muted terminal-tabs-empty">Нет сессий</span>
+          ) : (
+            sessions.map((s, idx) => (
+              <button
+                key={s.id}
+                type="button"
+                role="tab"
+                aria-selected={activeId === s.id}
+                className={`terminal-tab ${activeId === s.id ? "is-active" : ""} ${s.alive ? "is-alive" : "is-dead"}`}
+                onClick={() => void attachSession(s.id, true)}
+              >
+                <span
+                  className={`terminal-tab-dot ${s.alive ? "is-on" : ""}`}
+                  aria-hidden
+                />
+                <span className="terminal-tab-label">
+                  {s.title || `Shell ${idx + 1}`}
+                </span>
+                {!s.alive ? (
+                  <span className="terminal-tab-exit">exit</span>
+                ) : null}
+              </button>
+            ))
+          )}
+        </div>
+
+        <div className="terminal-toolbar">
+          <label className="terminal-cwd-field">
+            <span className="terminal-cwd-prefix" aria-hidden>
+              cwd
+            </span>
+            <input
+              className="terminal-cwd"
+              value={cwdInput}
+              onChange={(e) => setCwdInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void applyCwd();
+                }
+              }}
+              placeholder="/path/to/workdir"
+              spellCheck={false}
+              disabled={browserOnly || !activeId}
+              aria-label="Рабочая директория"
+            />
+          </label>
+          <div className="terminal-toolbar-actions">
+            <button
+              type="button"
+              className="btn terminal-tool-btn"
+              disabled={browserOnly || !activeId}
+              onClick={() => void applyCwd()}
+              title="Сменить каталог"
+            >
+              cd
+            </button>
+            <button
+              type="button"
+              className="btn terminal-tool-btn"
+              disabled={browserOnly || !activeId}
+              onClick={() => void clearActive()}
+              title="Очистить экран"
+            >
+              clear
+            </button>
+            <button
+              type="button"
+              className="btn btn-danger terminal-tool-btn"
+              disabled={busy || browserOnly || !activeId}
+              onClick={() => void killActive()}
+              title="Завершить сессию"
+            >
+              kill
+            </button>
+          </div>
+        </div>
+
+        <div className="terminal-screen">
+          <div className="terminal-host" ref={hostRef} />
+          {browserOnly ? (
+            <div className="terminal-overlay" role="status">
+              <strong>Только Electron</strong>
+              <p className="muted" style={{ margin: "6px 0 0" }}>
+                Запустите `npm run dev:electron`, чтобы открыть живой PTY.
+              </p>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="terminal-status">
+          <span className="mono muted">
+            {note ||
+              (active
+                ? `${active.title} · ${active.backend}`
+                : "Ожидание сессии…")}
+          </span>
+          {active ? (
+            <span
+              className={`terminal-alive-pill ${active.alive ? "is-on" : ""}`}
+            >
+              {active.alive ? "alive" : "exited"}
+            </span>
+          ) : null}
+        </div>
       </div>
-      <div className="terminal-host" ref={hostRef} />
-      {note ? <p className="muted mono" style={{ margin: 0 }}>{note}</p> : null}
     </div>
   );
 }

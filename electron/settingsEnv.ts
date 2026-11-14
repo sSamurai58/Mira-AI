@@ -19,6 +19,7 @@ function enqueueEnvWrite<T>(fn: () => T): Promise<T> {
 export const SETTINGS_ENV_KEYS = [
   "LLM_PROVIDER",
   "LLM_MODEL",
+  "OFFLINE_MODEL_PATH",
   "OPENAI_API_KEY",
   "OPENAI_BASE_URL",
   "ANTHROPIC_API_KEY",
