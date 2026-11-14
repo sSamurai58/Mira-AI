@@ -11,7 +11,6 @@ import {
 } from "../appleGlass";
 import { appleThemes, type ThemeId } from "../themes";
 import { StubBadge } from "./StubBadge";
-import { ThemeSelect } from "./ThemeSelect";
 import { ToggleRow } from "./SettingsFormBits";
 
 type SettingsAppleSectionProps = {
@@ -122,21 +121,31 @@ export function SettingsAppleSection({
 
       <section className="apple-grouped" aria-label="Liquid Glass">
         <div className="apple-list-card">
-          <div className="apple-list-row apple-list-row--select">
-            <span className="apple-list-label">Liquid Glass</span>
-            <ThemeSelect
-              aria-label="Уровень Liquid Glass"
-              value={prefs.glass}
-              options={GLASS_OPTIONS.map((g) => ({
-                value: g,
-                label: APPLE_GLASS_LABEL[g],
-              }))}
-              onChange={(v) => {
-                if (v === "solid" || v === "regular" || v === "clear") {
-                  setGlass(v);
-                }
-              }}
-            />
+          <div className="apple-list-row apple-list-row--glass">
+            <span className="apple-list-label" id="apple-glass-label">
+              Liquid Glass
+            </span>
+            <div
+              className="apple-glass-seg"
+              role="radiogroup"
+              aria-labelledby="apple-glass-label"
+            >
+              {GLASS_OPTIONS.map((g) => {
+                const selected = prefs.glass === g;
+                return (
+                  <button
+                    key={g}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    className={`apple-glass-seg-btn ${selected ? "active" : ""}`}
+                    onClick={() => setGlass(g)}
+                  >
+                    {APPLE_GLASS_LABEL[g]}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
         <p className="apple-footer-hint">
