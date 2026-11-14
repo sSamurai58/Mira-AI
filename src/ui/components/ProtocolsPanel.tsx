@@ -44,7 +44,12 @@ import { ThemeSelect } from "./ThemeSelect";
 type FilterId = "all" | "enabled" | "disabled";
 
 type CommandOption = { id: string; name: string; enabled: boolean };
-type AppPathOption = { id: string; name: string; path: string };
+type AppPathOption = {
+  id: string;
+  name: string;
+  path: string;
+  kind: "program" | "folder" | "file";
+};
 
 type ProtocolDraft = {
   id: string;
@@ -190,7 +195,12 @@ export function ProtocolsPanel() {
       setAppPaths(
         rows
           .filter((r) => r.enabled)
-          .map((r) => ({ id: r.id, name: r.name, path: r.path })),
+          .map((r) => ({
+            id: r.id,
+            name: r.name,
+            path: r.path,
+            kind: r.kind,
+          })),
       );
     } catch {
       setAppPaths([]);
@@ -241,8 +251,26 @@ export function ProtocolsPanel() {
 
   const pathSelectOptions = useMemo(
     () => [
-      { value: "", label: "Выберите путь…" },
-      ...appPaths.map((p) => ({ value: p.id, label: p.name })),
+      { value: "", label: "Из библиотеки Путей…" },
+      ...appPaths.map((p) => ({
+        value: p.id,
+        label: p.path ? `${p.name} · ${p.path}` : p.name,
+      })),
+    ],
+    [appPaths],
+  );
+
+  const launchPathOptions = pathSelectOptions;
+
+  const folderPathOptions = useMemo(
+    () => [
+      { value: "", label: "Папка из Путей…" },
+      ...appPaths
+        .filter((p) => p.kind === "folder" || !p.kind)
+        .map((p) => ({
+          value: p.id,
+          label: p.path ? `${p.name} · ${p.path}` : p.name,
+        })),
     ],
     [appPaths],
   );
@@ -904,29 +932,71 @@ export function ProtocolsPanel() {
                               className="row"
                               style={{ gap: 8, flex: 1, minWidth: 0 }}
                             >
+                              {appPaths.length > 0 ? (
+                                <ThemeSelect
+                                  className="cc-path-select"
+                                  aria-label={
+                                    step.action === "open_folder"
+                                      ? "Папка из Путей"
+                                      : "Приложение из Путей"
+                                  }
+                                  value={
+                                    appPaths.some((p) => p.id === step.value)
+                                      ? step.value
+                                      : ""
+                                  }
+                                  options={
+                                    step.action === "open_folder"
+                                      ? folderPathOptions
+                                      : launchPathOptions
+                                  }
+                                  disabled={busy}
+                                  onChange={(id) =>
+                                    updateStep(step.id, { value: id })
+                                  }
+                                />
+                              ) : null}
                               <input
                                 style={{ flex: 1, minWidth: 0 }}
-                                value={step.value}
-                                disabled={busy}
+                                value={
+                                  appPaths.some((p) => p.id === step.value)
+                                    ? appPaths.find((p) => p.id === step.value)
+                                        ?.path || step.value
+                                    : step.value
+                                }
+                                disabled={
+                                  busy ||
+                                  appPaths.some((p) => p.id === step.value)
+                                }
                                 placeholder={stepPlaceholder(step.action)}
                                 onChange={(e) =>
                                   updateStep(step.id, {
                                     value: e.target.value,
                                   })
                                 }
+                                title={
+                                  appPaths.some((p) => p.id === step.value)
+                                    ? "Выбрано из библиотеки Путей"
+                                    : undefined
+                                }
                               />
                               <button
                                 type="button"
                                 className="btn"
                                 disabled={busy}
-                                onClick={() =>
+                                onClick={() => {
+                                  if (
+                                    appPaths.some((p) => p.id === step.value)
+                                  ) {
+                                    updateStep(step.id, { value: "" });
+                                  }
                                   void browseLaunch(
                                     step.id,
                                     step.action === "open_folder"
                                       ? "folder"
                                       : "program",
-                                  )
-                                }
+                                  );
+                                }}
                               >
                                 Выбрать
                               </button>

@@ -224,11 +224,11 @@ export function stepPlaceholder(action: ProtocolActionType): string {
     case "open_url":
       return "https://example.com";
     case "launch":
-      return "Путь к программе, файлу или папке";
+      return "Из Путей или путь к программе/файлу/папке";
     case "open_path":
       return "id или имя из Путей";
     case "open_folder":
-      return "Путь к папке";
+      return "Из Путей или путь к папке";
     case "keys":
       return "ctrl+shift+s";
     case "type":

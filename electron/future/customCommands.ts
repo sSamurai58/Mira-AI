@@ -438,14 +438,17 @@ async function openFolderInExplorer(
   target: string,
   opts: { dryRun: boolean },
 ): Promise<{ ok: boolean; detail: string }> {
-  const path = target.trim();
-  if (!path) return { ok: false, detail: "Папка не задана" };
+  const raw = target.trim();
+  if (!raw) return { ok: false, detail: "Папка не задана" };
+  const fromLibrary = resolveAppPathRef(raw);
+  const path = fromLibrary?.path?.trim() || raw;
+  const label = fromLibrary ? `«${fromLibrary.name}» (${path})` : `«${path}»`;
   if (opts.dryRun) {
     const exists = fs.existsSync(path);
     return {
       ok: exists,
       detail: exists
-        ? `Проверка: открыть папку «${path}»`
+        ? `Проверка: открыть папку ${label}`
         : `Папка не найдена: ${path}`,
     };
   }
@@ -526,6 +529,22 @@ async function runStep(
     const target = step.value.trim();
     if (!target) {
       return { ...base, ok: false, detail: "Путь не задан" };
+    }
+    // Prefer library «Пути» (id or name) so commands don't hardcode duplicates.
+    const fromLibrary = resolveAppPathRef(target);
+    if (fromLibrary) {
+      if (opts.dryRun) {
+        const exists = fs.existsSync(fromLibrary.path);
+        return {
+          ...base,
+          ok: exists,
+          detail: exists
+            ? `Проверка: запустить «${fromLibrary.name}» (${fromLibrary.path})`
+            : `Путь не найден: ${fromLibrary.path}`,
+        };
+      }
+      const res = await openAppPathById(fromLibrary.id);
+      return { ...base, ok: res.ok, detail: res.detail };
     }
     if (opts.dryRun) {
       const exists = fs.existsSync(target);

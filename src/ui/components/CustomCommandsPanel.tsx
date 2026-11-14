@@ -62,7 +62,12 @@ const VALUELESS_TYPES: CustomCommandActionType[] = [
   "window_close",
 ];
 
-type AppPathOption = { id: string; name: string; path: string };
+type AppPathOption = {
+  id: string;
+  name: string;
+  path: string;
+  kind: "program" | "folder" | "file";
+};
 
 type Draft = {
   id?: string;
@@ -105,11 +110,11 @@ function stepPlaceholder(type: CustomCommandActionType): string {
     case "open_url":
       return "https://example.com";
     case "launch":
-      return "Путь к программе, файлу или папке";
+      return "Из Путей или путь к программе/файлу/папке";
     case "open_path":
       return "id или имя из Путей";
     case "open_folder":
-      return "Путь к папке";
+      return "Из Путей или путь к папке";
     case "keys":
       return "ctrl+shift+s";
     case "type":
@@ -345,7 +350,12 @@ export function CustomCommandsPanel() {
       setAppPaths(
         rows
           .filter((r) => r.enabled)
-          .map((r) => ({ id: r.id, name: r.name, path: r.path })),
+          .map((r) => ({
+            id: r.id,
+            name: r.name,
+            path: r.path,
+            kind: r.kind,
+          })),
       );
     } catch {
       setAppPaths([]);
@@ -373,11 +383,35 @@ export function CustomCommandsPanel() {
 
   const pathSelectOptions = useMemo(
     () => [
-      { value: "", label: "Выберите путь…" },
+      { value: "", label: "Из библиотеки Путей…" },
       ...appPaths.map((p) => ({
         value: p.id,
-        label: `${p.name}`,
+        label: p.path ? `${p.name} · ${p.path}` : p.name,
       })),
+    ],
+    [appPaths],
+  );
+
+  const launchPathOptions = useMemo(
+    () => [
+      { value: "", label: "Из библиотеки Путей…" },
+      ...appPaths.map((p) => ({
+        value: p.id,
+        label: p.path ? `${p.name} · ${p.path}` : p.name,
+      })),
+    ],
+    [appPaths],
+  );
+
+  const folderPathOptions = useMemo(
+    () => [
+      { value: "", label: "Папка из Путей…" },
+      ...appPaths
+        .filter((p) => p.kind === "folder" || !p.kind)
+        .map((p) => ({
+          value: p.id,
+          label: p.path ? `${p.name} · ${p.path}` : p.name,
+        })),
     ],
     [appPaths],
   );
@@ -645,25 +679,54 @@ export function CustomCommandsPanel() {
     }
 
     if (step.type === "launch" || step.type === "open_folder") {
+      const fromLibrary = appPaths.some((p) => p.id === step.value);
+      const options =
+        step.type === "open_folder" ? folderPathOptions : launchPathOptions;
       return (
         <div className="row" style={{ gap: 8, flex: 1, minWidth: 0 }}>
+          {appPaths.length > 0 ? (
+            <ThemeSelect
+              className="cc-path-select"
+              aria-label={
+                step.type === "open_folder"
+                  ? "Папка из Путей"
+                  : "Приложение из Путей"
+              }
+              value={fromLibrary ? step.value : ""}
+              options={options}
+              disabled={busy}
+              onChange={(id) => updateStep(step.id, { value: id })}
+            />
+          ) : null}
           <input
             style={{ flex: 1, minWidth: 0 }}
-            value={step.value}
-            disabled={busy}
+            value={
+              fromLibrary
+                ? appPaths.find((p) => p.id === step.value)?.path || step.value
+                : step.value
+            }
+            disabled={busy || fromLibrary}
             placeholder={stepPlaceholder(step.type)}
             onChange={(e) => updateStep(step.id, { value: e.target.value })}
+            title={
+              fromLibrary
+                ? "Выбрано из библиотеки Путей — смените в списке слева или очистите выбор"
+                : undefined
+            }
           />
           <button
             type="button"
             className="btn"
             disabled={busy}
-            onClick={() =>
+            onClick={() => {
+              if (fromLibrary) {
+                updateStep(step.id, { value: "" });
+              }
               void browseLaunch(
                 step.id,
                 step.type === "open_folder" ? "folder" : "program",
-              )
-            }
+              );
+            }}
           >
             Выбрать
           </button>
