@@ -666,6 +666,22 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
     return { ok: false };
   });
 
+  on(
+    "mira:forget-memory-topic",
+    (_e, topic: string) => {
+      const { forgetMemoryByTopic } = require("./store") as typeof import("./store");
+      const res = forgetMemoryByTopic(String(topic ?? ""));
+      return {
+        ok: res.deletedUtterances > 0 || res.deletedSessions > 0,
+        detail:
+          res.deletedUtterances || res.deletedSessions
+            ? `Забыл тему «${res.topic}»: реплик ${res.deletedUtterances}, пустых сессий ${res.deletedSessions}`
+            : `По теме «${res.topic}» ничего не нашёл`,
+        ...res,
+      };
+    },
+    { privileged: true },
+  );
   on("mira:list-skills", () => loadMarkdownCatalog("skills"));
   on("mira:list-skill-folders", () => listSkillCatalogFolders());
   on(

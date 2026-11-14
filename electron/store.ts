@@ -650,6 +650,51 @@ export function searchMemory(
     .all(owner, like, limit) as MemoryHit[];
 }
 
+/**
+ * Delete utterances (and empty sessions) matching a topic query.
+ * Used by «Забыть тему …» in Memory.
+ */
+export function forgetMemoryByTopic(topic: string): {
+  deletedUtterances: number;
+  deletedSessions: number;
+  topic: string;
+} {
+  const q = topic.trim();
+  if (!q) {
+    return { deletedUtterances: 0, deletedSessions: 0, topic: "" };
+  }
+  const hits = searchMemory(q, { limit: 200 });
+  const store = openStore();
+  const owner = getOwnerId();
+  const utteranceIds = [...new Set(hits.map((h) => h.utterance_id))];
+  const sessionIds = [...new Set(hits.map((h) => h.session_id))];
+  let deletedUtterances = 0;
+  for (const id of utteranceIds) {
+    const r = store
+      .prepare(
+        `DELETE FROM utterances WHERE id = ? AND session_id IN
+          (SELECT id FROM sessions WHERE owner_id = ?)`,
+      )
+      .run(id, owner);
+    deletedUtterances += Number(r.changes);
+  }
+  let deletedSessions = 0;
+  for (const sid of sessionIds) {
+    const left = store
+      .prepare(
+        `SELECT COUNT(*) AS c FROM utterances WHERE session_id = ?`,
+      )
+      .get(sid) as { c: number };
+    if (left.c === 0) {
+      const r = store
+        .prepare(`DELETE FROM sessions WHERE id = ? AND owner_id = ?`)
+        .run(sid, owner);
+      deletedSessions += Number(r.changes);
+    }
+  }
+  return { deletedUtterances, deletedSessions, topic: q };
+}
+
 export function addBrowserVisit(
   url: string,
   source = "mira-open",
@@ -688,16 +733,32 @@ export function searchBrowserVisits(
       )
       .all(limit) as BrowserVisitRow[];
   }
-  const like = `%${q.replace(/[%_]/g, "")}%`;
+  // Token OR: «github docs» → url/title match any token (min 2 chars).
+  const tokens = q
+    .toLowerCase()
+    .split(/[\s,/|]+/)
+    .map((t) => t.replace(/[%_]/g, "").trim())
+    .filter((t) => t.length >= 2)
+    .slice(0, 6);
+  const terms = tokens.length ? tokens : [q.replace(/[%_]/g, "")];
+  const clauses = terms
+    .map(() => `(lower(url) LIKE ? OR lower(title) LIKE ?)`)
+    .join(" OR ");
+  const params: string[] = [];
+  for (const t of terms) {
+    const like = `%${t}%`;
+    params.push(like, like);
+  }
+  params.push(String(limit));
   return store
     .prepare(
       `SELECT id, url, title, source, visited_at
        FROM browser_visits
-       WHERE url LIKE ? OR title LIKE ?
+       WHERE ${clauses}
        ORDER BY visited_at DESC
        LIMIT ?`,
     )
-    .all(like, like, limit) as BrowserVisitRow[];
+    .all(...params) as BrowserVisitRow[];
 }
 
 export function listMessengerContacts(

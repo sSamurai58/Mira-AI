@@ -184,10 +184,26 @@ export async function tickCalendarNotifications(): Promise<{
   let timers = 0;
   for (const t of dueTimers) {
     markTimerDone(t.id);
-    const shown = await showDesktopNotification(
-      "Mira · таймер",
-      `«${t.label}» завершён (${t.seconds}с)`,
-    );
+    const title = "Mira · таймер";
+    const body = `«${t.label}» завершён (${t.seconds}с)`;
+    const shown = await showDesktopNotification(title, body);
+    try {
+      if (typeof process.versions.electron === "string") {
+        const { BrowserWindow } = await import("electron");
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) {
+            win.webContents.send("mira:calendar-toast", {
+              kind: "timer",
+              title,
+              body,
+              id: t.id,
+            });
+          }
+        }
+      }
+    } catch {
+      /* headless */
+    }
     appendAppLog({
       level: "info",
       category: "calendar",
@@ -205,10 +221,26 @@ export async function tickCalendarNotifications(): Promise<{
     .all(now, new Date(Date.now() - 60_000).toISOString()) as CalendarEventRow[];
   let reminders = 0;
   for (const ev of dueEvents) {
-    const shown = await showDesktopNotification(
-      "Mira · напоминание",
-      `${ev.title} · ${ev.starts_at}`,
-    );
+    const title = "Mira · напоминание";
+    const body = `${ev.title} · ${ev.starts_at}`;
+    const shown = await showDesktopNotification(title, body);
+    try {
+      if (typeof process.versions.electron === "string") {
+        const { BrowserWindow } = await import("electron");
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) {
+            win.webContents.send("mira:calendar-toast", {
+              kind: "reminder",
+              title,
+              body,
+              id: ev.id,
+            });
+          }
+        }
+      }
+    } catch {
+      /* headless */
+    }
     appendAppLog({
       level: "info",
       category: "calendar",

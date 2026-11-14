@@ -163,6 +163,15 @@ contextBridge.exposeInMainWorld("mira", {
     call("mira:get-session", sessionId),
   searchMemory: (query: string): Promise<MiraMemoryHit[]> =>
     call("mira:search-memory", query),
+  forgetMemoryTopic: (
+    topic: string,
+  ): Promise<{
+    ok: boolean;
+    detail: string;
+    deletedUtterances: number;
+    deletedSessions: number;
+    topic: string;
+  }> => call("mira:forget-memory-topic", topic),
   testLlm: (): Promise<{ ok: boolean; detail: string }> => call("mira:test-llm"),
   translateAi: (payload: {
     text: string;
@@ -726,5 +735,20 @@ contextBridge.exposeInMainWorld("mira", {
       handler(prefs);
     ipcRenderer.on("mira:notify-prefs", listener);
     return () => ipcRenderer.removeListener("mira:notify-prefs", listener);
+  },
+  onCalendarToast: (
+    handler: (payload: {
+      kind: string;
+      title: string;
+      body: string;
+      id: string;
+    }) => void,
+  ) => {
+    const listener = (
+      _event: IpcRendererEvent,
+      payload: { kind: string; title: string; body: string; id: string },
+    ) => handler(payload);
+    ipcRenderer.on("mira:calendar-toast", listener);
+    return () => ipcRenderer.removeListener("mira:calendar-toast", listener);
   },
 });

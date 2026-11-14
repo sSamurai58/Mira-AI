@@ -334,6 +334,13 @@ interface MiraBridge {
     sessionId: string,
   ) => Promise<{ session: MiraSession; utterances: MiraUtterance[] } | null>;
   searchMemory: (query: string) => Promise<MiraMemoryHit[]>;
+  forgetMemoryTopic?: (topic: string) => Promise<{
+    ok: boolean;
+    detail: string;
+    deletedUtterances: number;
+    deletedSessions: number;
+    topic: string;
+  }>;
   testLlm: () => Promise<{ ok: boolean; detail: string }>;
   translateAi: (payload: {
     text: string;
@@ -672,6 +679,14 @@ interface MiraBridge {
   }) => Promise<{ ok: boolean; detail: string }>;
   onNotifyPrefs: (
     handler: (prefs: Record<string, unknown>) => void,
+  ) => () => void;
+  onCalendarToast?: (
+    handler: (payload: {
+      kind: string;
+      title: string;
+      body: string;
+      id: string;
+    }) => void,
   ) => () => void;
   listLibraryItems: () => Promise<MiraLibraryItem[]>;
   getLibraryItem: (id: string) => Promise<MiraLibraryItem | null>;

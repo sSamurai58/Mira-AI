@@ -205,6 +205,10 @@ export function App() {
   const [doctorOpen, setDoctorOpen] = useState(false);
   const [doctorText, setDoctorText] = useState("Doctor…");
   const [healthText, setHealthText] = useState("Проверка store…");
+  const [calendarToast, setCalendarToast] = useState<{
+    title: string;
+    body: string;
+  } | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [coreLevel, setCoreLevel] = useState(() => loadCoreLevel());
   const [coreXp, setCoreXp] = useState(0);
@@ -242,6 +246,25 @@ export function App() {
   useEffect(() => {
     if (errorMessage) logAppError(errorMessage);
   }, [errorMessage]);
+
+  useEffect(() => {
+    const unsub = window.mira?.onCalendarToast?.((payload) => {
+      setCalendarToast({ title: payload.title, body: payload.body });
+      window.setTimeout(() => setCalendarToast(null), 8000);
+      // Speak timer/reminder with the same active Mira voice when autoSpeak on.
+      try {
+        const auto = localStorage.getItem("mira.autoSpeak") !== "0";
+        if (auto) {
+          void import("./voice/voiceEngine").then(({ speakWithActiveVoice }) => {
+            speakWithActiveVoice(`${payload.title}. ${payload.body}`);
+          });
+        }
+      } catch {
+        /* ignore */
+      }
+    });
+    return () => unsub?.();
+  }, []);
 
   useEffect(() => {
     function onHash() {
@@ -546,9 +569,9 @@ export function App() {
       <ErrorBoundary fallbackTitle="Doctor сбойнул">
         <ConfirmModal
           open={doctorOpen}
-          title="Doctor"
+          title="Проверка Mira"
           body={doctorBody}
-          confirmLabel="Закрыть"
+          confirmLabel="Понятно"
           onCancel={() => setDoctorOpen(false)}
           onConfirm={() => setDoctorOpen(false)}
         />
@@ -557,6 +580,13 @@ export function App() {
       {/* Electron: toast lives in always-on-top #/update-hud window. */}
       {typeof window !== "undefined" && !window.mira ? (
         <UpdateHudToast />
+      ) : null}
+
+      {calendarToast ? (
+        <div className="calendar-toast-banner" role="status" aria-live="polite">
+          <strong>{calendarToast.title}</strong>
+          <p>{calendarToast.body}</p>
+        </div>
       ) : null}
     </div>
     </AppConfirmProvider>

@@ -208,7 +208,7 @@ export function SettingsDataPrivacySection(props: {
                 .finally(() => setBusy(null));
             }}
           >
-            Export backup
+            Сделать backup
           </button>
           <button
             type="button"
@@ -228,7 +228,7 @@ export function SettingsDataPrivacySection(props: {
                 .finally(() => setBusy(null));
             }}
           >
-            Import backup
+            Восстановить из backup
           </button>
           <button
             type="button"

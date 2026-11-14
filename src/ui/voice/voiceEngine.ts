@@ -86,4 +86,12 @@ export const VoiceEngine = {
   },
 };
 
+/** Speak with whatever voice is selected in the catalog (one voice everywhere). */
+export function speakWithActiveVoice(
+  text: string,
+  handlers: SpeakHandlers = {},
+): void {
+  VoiceEngine.speak(text, undefined, handlers);
+}
+
 export type { VoiceSettings, VoicePreset, SpeakHandlers };

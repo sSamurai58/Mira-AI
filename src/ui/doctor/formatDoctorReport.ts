@@ -71,14 +71,64 @@ export function mergeDoctorReport(
   };
 }
 
+function plainArea(area: string): string {
+  switch (area) {
+    case "mic":
+      return "Микрофон";
+    case "api":
+      return "Интернет-модели";
+    case "voice":
+      return "Голос";
+    case "screen":
+      return "Экран";
+    case "db":
+      return "Память/база";
+    case "blender":
+      return "Blender";
+    case "tools":
+      return "Инструменты";
+    case "catalog":
+      return "Каталоги";
+    case "logs":
+      return "Логи";
+    default:
+      return area;
+  }
+}
+
 export function formatDoctorView(report: DoctorReportView): string {
-  const lines = [
-    `Doctor (${report.phase}) · ${report.summary}`,
-    `at ${report.generatedAt}`,
-    "",
-  ];
+  const broken = report.findings.filter((f) => !f.ok);
+  const warn = report.findings.filter(
+    (f) => f.ok && (f.fix || f.detail.toLowerCase().includes("не задан")),
+  );
+  const lines: string[] = [];
+
+  if (broken.length === 0) {
+    lines.push("ИТОГ: всё основное в порядке.");
+  } else {
+    lines.push(
+      `ИТОГ: сломано ${broken.length} — ${broken.map((f) => plainArea(f.area)).join(", ")}.`,
+    );
+    lines.push("");
+    lines.push("Что починить:");
+    for (const f of broken) {
+      lines.push(`• ${plainArea(f.area)} — ${f.title}`);
+      lines.push(`  ${f.fix || f.detail}`);
+    }
+  }
+
+  if (warn.length > 0 && broken.length === 0) {
+    lines.push("");
+    lines.push("Можно улучшить (не критично):");
+    for (const f of warn.slice(0, 6)) {
+      lines.push(`• ${f.title}: ${f.fix || f.detail}`);
+    }
+  }
+
+  lines.push("");
+  lines.push(`Подробности (${report.findings.length} проверок):`);
   for (const f of report.findings) {
-    lines.push(`${f.ok ? "✓" : "✗"} [${f.area}] ${f.title}`);
+    lines.push(`${f.ok ? "✓" : "✗"} ${plainArea(f.area)} · ${f.title}`);
     lines.push(`  ${f.detail}`);
     if (f.fix) lines.push(`  → ${f.fix}`);
   }

@@ -9,6 +9,7 @@ import {
 } from "./markdownCatalog";
 import { requestUserConfirm } from "./confirmBridge";
 import {
+  extractHistoryQuery,
   extractOpenUrl,
   formatBrowserBlock,
   getBrowserPolicy,
@@ -35,6 +36,7 @@ import {
 } from "./tools/messaging";
 import {
   captureScreen,
+  parseFindOnScreenQuery,
   clickAt,
   formatScreenBlock,
   getScreenPolicy,
@@ -613,6 +615,7 @@ export async function sendChatMessage(
       addonBlock = res.block;
     } else if (looksLikeScreenSeeIntent(text) && getScreenPolicy().enabled) {
       const shot = await captureScreen();
+      const findQuery = parseFindOnScreenQuery(text);
       let visionNote: string | null = null;
       // Attach PNG to multimodal chat path when the model supports vision.
       try {
@@ -621,9 +624,12 @@ export async function sendChatMessage(
           const b64 = fs.readFileSync(shot.path).toString("base64");
           if (b64.length > 32) {
             images.push({ mimeType: "image/png", dataBase64: b64 });
-            visionNote =
-              "(снимок экрана передан модели как изображение — опиши по пикселям)";
-            desktopUsed = "screen-capture:multimodal";
+            visionNote = findQuery
+              ? `(снимок экрана передан модели) Найди на экране: «${findQuery}». Скажи, есть ли это, где примерно (верх/низ/лево/право), и что рядом.`
+              : "(снимок экрана передан модели как изображение — опиши по пикселям)";
+            desktopUsed = findQuery
+              ? "screen-find:multimodal"
+              : "screen-capture:multimodal";
           }
         }
       } catch {
@@ -631,21 +637,30 @@ export async function sendChatMessage(
       }
       // Also run dedicated vision describe for providers / when image attach fails.
       try {
-        const vision = await describeScreenshot(shot.path);
+        const vision = await describeScreenshot(
+          shot.path,
+          findQuery
+            ? `Найди на экране: «${findQuery}». Ответь коротко: видно ли, где (край/центр), что рядом.`
+            : undefined,
+        );
         if (vision.mode === "vision" || !visionNote) {
           visionNote = vision.text;
         } else if (vision.text) {
           visionNote = `${visionNote}\n${vision.text}`;
         }
         if (!desktopUsed?.includes("multimodal")) {
-          desktopUsed = `screen-capture:${vision.mode}`;
+          desktopUsed = findQuery
+            ? `screen-find:${vision.mode}`
+            : `screen-capture:${vision.mode}`;
         }
       } catch (err) {
         if (!visionNote) {
           visionNote =
             err instanceof Error ? err.message : "vision unavailable";
         }
-        if (!desktopUsed) desktopUsed = "screen-capture";
+        if (!desktopUsed) {
+          desktopUsed = findQuery ? "screen-find" : "screen-capture";
+        }
       }
       desktopBlock = formatScreenBlock("capture", shot, visionNote);
     } else if (
@@ -679,9 +694,7 @@ export async function sendChatMessage(
         desktopBlock = formatBrowserBlock("open", opened);
       }
     } else if (looksLikeBrowserHistoryIntent(text)) {
-      const q = text
-        .replace(/история браузера|где я (уже )?был|сайты?|browser history/gi, " ")
-        .trim();
+      const q = extractHistoryQuery(text);
       const hits = searchHistory(q || "", 15);
       desktopUsed = "browser-history";
       desktopBlock = formatBrowserBlock("history", hits);

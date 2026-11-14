@@ -282,7 +282,7 @@ export function looksLikeBrowserOpenIntent(text: string): boolean {
 }
 
 export function looksLikeBrowserHistoryIntent(text: string): boolean {
-  return /(история браузера|где я (уже )?был|сайты? на которых я|browser history|посещал)/i.test(
+  return /(история браузера|где я (уже )?был|сайты? на которых я|browser history|посещал|открой историю|найди в истории|какой сайт я открывал)/i.test(
     text,
   );
 }
@@ -341,6 +341,16 @@ export function readChromiumHistory(limit = 20): BrowserVisitRow[] {
     path.join(os.homedir(), ".config", "chromium", "Default", "History"),
     path.join(
       os.homedir(),
+      "AppData",
+      "Local",
+      "Google",
+      "Chrome",
+      "User Data",
+      "Default",
+      "History",
+    ),
+    path.join(
+      os.homedir(),
       "Library",
       "Application Support",
       "Google",
@@ -350,13 +360,9 @@ export function readChromiumHistory(limit = 20): BrowserVisitRow[] {
     ),
   ];
 
-  // Prefer Mira's own visit log for reliability in P5
-  const local = searchBrowserVisits("", limit);
-  if (local.length) return local;
-
   const systemHistory =
-    (process.env.BROWSER_SYSTEM_HISTORY ?? "false").trim().toLowerCase() ===
-    "true";
+    (process.env.BROWSER_SYSTEM_HISTORY ?? "true").trim().toLowerCase() !==
+    "false";
   if (!systemHistory) return [];
 
   for (const histPath of candidates) {
@@ -379,13 +385,20 @@ export function readChromiumHistory(limit = 20): BrowserVisitRow[] {
         )
         .all(limit) as Array<{ url: string; title: string; last_visit_time: number }>;
       db.close();
-      fs.unlinkSync(tmp);
+      try {
+        fs.unlinkSync(tmp);
+      } catch {
+        /* ignore */
+      }
       return rows.map((r, i) => ({
         id: `chrome-${i}`,
         url: r.url,
         title: r.title || r.url,
         source: "chromium",
-        visited_at: new Date(Date.now() - i * 1000).toISOString(),
+        // Chrome stores WebKit epoch µs; approximate to ISO for display.
+        visited_at: new Date(
+          Math.max(0, r.last_visit_time / 1000 - 11_644_473_600_000),
+        ).toISOString(),
       }));
     } catch {
       // try next
@@ -394,20 +407,43 @@ export function readChromiumHistory(limit = 20): BrowserVisitRow[] {
   return [];
 }
 
+function matchesHistoryQuery(row: BrowserVisitRow, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const hay = `${row.url} ${row.title}`.toLowerCase();
+  const tokens = q.split(/[\s,/|]+/).filter((t) => t.length >= 2);
+  if (!tokens.length) return hay.includes(q);
+  return tokens.some((t) => hay.includes(t));
+}
+
+/** Merge Mira visit log + Chromium history (dedupe by URL). */
 export function searchHistory(query: string, limit = 20): BrowserVisitRow[] {
   const q = query.trim();
   const miraHits = searchBrowserVisits(q, limit);
-  if (miraHits.length) return miraHits;
-  const chrome = readChromiumHistory(50);
-  if (!q) return chrome.slice(0, limit);
-  const lower = q.toLowerCase();
-  return chrome
-    .filter(
-      (v) =>
-        v.url.toLowerCase().includes(lower) ||
-        v.title.toLowerCase().includes(lower),
+  const chrome = readChromiumHistory(Math.max(50, limit * 2)).filter((v) =>
+    matchesHistoryQuery(v, q),
+  );
+  const seen = new Set<string>();
+  const merged: BrowserVisitRow[] = [];
+  for (const row of [...miraHits, ...chrome]) {
+    const key = row.url.replace(/\/$/, "").toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(row);
+    if (merged.length >= limit) break;
+  }
+  return merged;
+}
+
+/** Keep domain/site words; drop filler phrases from history intents. */
+export function extractHistoryQuery(text: string): string {
+  return text
+    .replace(
+      /история браузера|browser history|открой историю|найди в истории|где я (уже )?был|сайты? на которых я (уже )?был|какой сайт я открывал|посещал|покажи историю/gi,
+      " ",
     )
-    .slice(0, limit);
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export function formatBrowserBlock(

@@ -197,6 +197,18 @@ export function MemoryPage({ onOpenSession }: MemoryPageProps) {
   }, [learned, query, segment]);
 
   const activeSession = sessions.find((s) => s.id === activeId) ?? null;
+
+  /** Sessions grouped by calendar day for a simple timeline. */
+  const sessionTimeline = useMemo(() => {
+    const groups: Array<{ label: string; items: Session[] }> = [];
+    for (const s of filteredSessions) {
+      const label = formatChatDateLabel(s.updated_at);
+      const last = groups[groups.length - 1];
+      if (last && last.label === label) last.items.push(s);
+      else groups.push({ label, items: [s] });
+    }
+    return groups;
+  }, [filteredSessions]);
   const previewUtterances = utterances.filter((u) => u.role !== "system");
 
   const searchPlaceholder =
@@ -268,6 +280,35 @@ export function MemoryPage({ onOpenSession }: MemoryPageProps) {
           >
             {searching ? "…" : "Найти"}
           </button>
+          {segment === "talks" ? (
+            <button
+              type="button"
+              className="btn btn-danger"
+              disabled={busy || !window.mira || !query.trim()}
+              title="Удалить из памяти всё, что нашлось по этому запросу"
+              onClick={() => {
+                const topic = query.trim();
+                if (!topic || !window.mira?.forgetMemoryTopic) return;
+                setBusy(true);
+                void window.mira
+                  .forgetMemoryTopic(topic)
+                  .then(async (res) => {
+                    setStatus(res.detail);
+                    setHits([]);
+                    await refreshAll();
+                    if (activeId) await openSession(activeId);
+                  })
+                  .catch((err) =>
+                    setStatus(
+                      err instanceof Error ? err.message : String(err),
+                    ),
+                  )
+                  .finally(() => setBusy(false));
+              }}
+            >
+              Забыть тему
+            </button>
+          ) : null}
         </form>
         <div className="paths-filters" role="tablist" aria-label="Раздел памяти">
           {(
@@ -358,18 +399,23 @@ export function MemoryPage({ onOpenSession }: MemoryPageProps) {
                 </div>
               ) : (
                 <div className="memory-session-list">
-                  {filteredSessions.map((s) => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      className={`list-item memory-session-item ${activeId === s.id ? "is-selected" : ""}`}
-                      onClick={() => void openSession(s.id)}
-                    >
-                      <span className="memory-session-title">{s.title}</span>
-                      <span className="mono muted memory-session-meta">
-                        {formatWhen(s.updated_at)}
-                      </span>
-                    </button>
+                  {sessionTimeline.map((group) => (
+                    <div key={group.label} className="memory-day-group">
+                      <div className="memory-day-label muted">{group.label}</div>
+                      {group.items.map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          className={`list-item memory-session-item ${activeId === s.id ? "is-selected" : ""}`}
+                          onClick={() => void openSession(s.id)}
+                        >
+                          <span className="memory-session-title">{s.title}</span>
+                          <span className="mono muted memory-session-meta">
+                            {formatChatTime(s.updated_at) || formatWhen(s.updated_at)}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
                   ))}
                 </div>
               )}
