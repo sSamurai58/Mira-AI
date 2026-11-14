@@ -20,8 +20,10 @@ import {
 import { getMicDeviceId } from "../voice/micDevices";
 import {
   getActiveWakeEngine,
+  getPorcupineAccessKey,
   getWakeEngineId,
   listWakeEngines,
+  setPorcupineAccessKey,
   setWakeEngineId,
   type WakeEngineId,
 } from "../voice/wake/interface";
@@ -66,6 +68,9 @@ export function SettingsVoiceSection() {
   );
   const [wakeEngineId, setWakeEngineIdState] = useState<WakeEngineId>(() =>
     getWakeEngineId(),
+  );
+  const [porcupineKey, setPorcupineKey] = useState(() =>
+    getPorcupineAccessKey(),
   );
   const [ttsEngine, setTtsEngine] = useState<TtsEngineId>(() =>
     getActiveTtsEngine(),
@@ -495,13 +500,33 @@ export function SettingsVoiceSection() {
               }))}
               onChange={(id) => {
                 const next = setWakeEngineId(
-                  id === "porcupine-stub" ? "porcupine-stub" : "webspeech",
+                  id === "porcupine-stub"
+                    ? "porcupine-stub"
+                    : id === "local-fuzzy"
+                      ? "local-fuzzy"
+                      : "webspeech",
                 );
                 setWakeEngineIdState(next);
               }}
             />
           </Field>
         </div>
+        <Field
+          label="Porcupine Access Key"
+          hint="Picovoice · хранится локально (mira.porcupineAccessKey)"
+        >
+          <input
+            type="password"
+            autoComplete="off"
+            value={porcupineKey}
+            onChange={(e) => {
+              const v = e.target.value;
+              setPorcupineKey(v);
+              setPorcupineAccessKey(v);
+            }}
+            placeholder="AccessKey…"
+          />
+        </Field>
         <Field label="Чувствительность совпадения" hint="Как строго искать фразу">
           <ThemeSelect
             aria-label="Чувствительность wake-word"

@@ -7,9 +7,25 @@
 
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import fs from "node:fs";
+import http from "node:http";
 import path from "node:path";
 import { shell } from "electron";
 import { dataRoot } from "../appPaths";
+
+/** Local loopback OAuth redirect (no cloud dependency). */
+export const MCP_OAUTH_CALLBACK_PORT = 18765;
+export const MCP_OAUTH_REDIRECT_URI = `http://127.0.0.1:${MCP_OAUTH_CALLBACK_PORT}/oauth/callback`;
+
+type PendingOAuth = {
+  connectorId: string;
+  clientId: string;
+  clientSecret?: string;
+  tokenUrl?: string;
+  startedAt: number;
+};
+
+const pendingOAuth = new Map<string, PendingOAuth>();
+let oauthServer: http.Server | null = null;
 
 export type McpConnectionState =
   | "disconnected"
@@ -241,9 +257,27 @@ export async function connectMcp(
         fields.CLIENT_ID?.trim() ||
         fields.clientId?.trim() ||
         "";
+      const clientSecret =
+        fields.client_secret?.trim() ||
+        fields.CLIENT_SECRET?.trim() ||
+        fields.clientSecret?.trim() ||
+        "";
+      const tokenUrl =
+        fields.token_url?.trim() ||
+        fields.TOKEN_URL?.trim() ||
+        defaultTokenUrl(id);
+      await ensureOAuthCallbackServer();
+      pendingOAuth.set(id, {
+        connectorId: id,
+        clientId,
+        clientSecret: clientSecret || undefined,
+        tokenUrl: tokenUrl || undefined,
+        startedAt: Date.now(),
+      });
+      const sep = start.includes("?") ? "&" : "?";
       const oauthUrl = clientId.includes("client_id=")
-        ? start
-        : `${start}${start.includes("?") ? "&" : "?"}client_id=${encodeURIComponent(clientId)}&response_type=code`;
+        ? `${start}${sep}redirect_uri=${encodeURIComponent(MCP_OAUTH_REDIRECT_URI)}&response_type=code`
+        : `${start}${sep}client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(MCP_OAUTH_REDIRECT_URI)}&response_type=code`;
       try {
         await shell.openExternal(oauthUrl);
       } catch (err) {
@@ -256,8 +290,7 @@ export async function connectMcp(
       }
       return setStatus(id, {
         state: "needs-auth",
-        detail:
-          "Открыл окно OAuth в браузере. Вставьте полученный token/code в поля и нажмите «Подключить» снова. Пока handshake не пройден — это не «подключено».",
+        detail: `Открыл OAuth. Callback: ${MCP_OAUTH_REDIRECT_URI} — после согласия code подхватится автоматически (или вставьте token вручную). Пока не «подключено».`,
         transport: "oauth-browser",
         live: false,
       });
@@ -679,4 +712,210 @@ async function probeTierAWithToken(
       live: false,
     };
   }
+}
+
+function defaultTokenUrl(connectorId: string): string | undefined {
+  if (connectorId === "github") {
+    return "https://github.com/login/oauth/access_token";
+  }
+  if (connectorId === "slack") {
+    return "https://slack.com/api/oauth.v2.access";
+  }
+  if (connectorId === "google-calendar" || connectorId === "gmail") {
+    return "https://oauth2.googleapis.com/token";
+  }
+  if (connectorId === "microsoft-todo") {
+    return "https://login.microsoftonline.com/common/oauth2/v2.0/token";
+  }
+  if (connectorId === "todoist") {
+    return "https://todoist.com/oauth/access_token";
+  }
+  if (connectorId === "linear") {
+    return "https://api.linear.app/oauth/token";
+  }
+  return undefined;
+}
+
+async function ensureOAuthCallbackServer(): Promise<void> {
+  if (oauthServer) return;
+  oauthServer = http.createServer(async (req, res) => {
+    try {
+      const u = new URL(req.url || "/", `http://127.0.0.1:${MCP_OAUTH_CALLBACK_PORT}`);
+      if (u.pathname !== "/oauth/callback") {
+        res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+        res.end("Not found");
+        return;
+      }
+      const code = u.searchParams.get("code") || "";
+      const state = u.searchParams.get("state") || "";
+      const err = u.searchParams.get("error") || "";
+      if (err) {
+        res.writeHead(400, { "content-type": "text/html; charset=utf-8" });
+        res.end(`<html><body><h1>OAuth error</h1><p>${err}</p><p>Можно закрыть окно.</p></body></html>`);
+        return;
+      }
+      if (!code) {
+        res.writeHead(400, { "content-type": "text/html; charset=utf-8" });
+        res.end("<html><body><h1>Нет code</h1></body></html>");
+        return;
+      }
+      const result = await completeOAuthWithCode(code, state || undefined);
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end(
+        `<html><body><h1>Mira OAuth</h1><p>${result.detail}</p><p>Вернитесь в Mira.</p></body></html>`,
+      );
+    } catch (e) {
+      res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+      res.end(e instanceof Error ? e.message : String(e));
+    }
+  });
+  await new Promise<void>((resolve, reject) => {
+    oauthServer!.once("error", reject);
+    oauthServer!.listen(MCP_OAUTH_CALLBACK_PORT, "127.0.0.1", () => resolve());
+  }).catch(() => {
+    // Port busy — keep going; user can paste code manually.
+    oauthServer = null;
+  });
+}
+
+/**
+ * Exchange authorization code (from loopback callback or manual paste).
+ * Stores access_token into pending connector fields via status detail — UI re-connects with token.
+ */
+export async function completeOAuthWithCode(
+  code: string,
+  preferredConnectorId?: string,
+): Promise<{ ok: boolean; connectorId: string | null; detail: string }> {
+  const trimmed = code.trim();
+  if (!trimmed) {
+    return { ok: false, connectorId: null, detail: "Пустой code" };
+  }
+
+  let pending: PendingOAuth | undefined;
+  let connectorId = preferredConnectorId?.trim() || "";
+  if (connectorId && pendingOAuth.has(connectorId)) {
+    pending = pendingOAuth.get(connectorId);
+  } else {
+    // Most recent pending
+    let newest: PendingOAuth | undefined;
+    for (const p of pendingOAuth.values()) {
+      if (!newest || p.startedAt > newest.startedAt) newest = p;
+    }
+    pending = newest;
+    connectorId = pending?.connectorId || connectorId;
+  }
+
+  if (!pending || !connectorId) {
+    // Still record the code so UI can paste it as token/code field.
+    const id = connectorId || "oauth";
+    setStatus(id, {
+      state: "needs-auth",
+      detail: `Получен OAuth code (${trimmed.slice(0, 8)}…). Вставьте как token или задайте client_secret + token_url и повторите.`,
+      transport: "oauth-browser",
+      live: false,
+    });
+    return {
+      ok: false,
+      connectorId: id,
+      detail: "Нет pending OAuth сессии — code сохранён в статусе",
+    };
+  }
+
+  if (!pending.tokenUrl || !pending.clientId) {
+    setStatus(connectorId, {
+      state: "needs-auth",
+      detail: `Code получен (${trimmed.slice(0, 8)}…). Нет token_url/client_id для обмена — вставьте access token вручную.`,
+      transport: "oauth-browser",
+      live: false,
+    });
+    return {
+      ok: false,
+      connectorId,
+      detail: "Code принят, обмен не выполнен (нет token_url)",
+    };
+  }
+
+  try {
+    const body = new URLSearchParams({
+      grant_type: "authorization_code",
+      code: trimmed,
+      redirect_uri: MCP_OAUTH_REDIRECT_URI,
+      client_id: pending.clientId,
+    });
+    if (pending.clientSecret) body.set("client_secret", pending.clientSecret);
+
+    const res = await fetch(pending.tokenUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body,
+      signal: AbortSignal.timeout(15000),
+    });
+    const json = (await res.json().catch(() => ({}))) as {
+      access_token?: string;
+      token?: string;
+      error?: string;
+      error_description?: string;
+      ok?: boolean;
+      authed_user?: { access_token?: string };
+    };
+    const token =
+      json.access_token ||
+      json.token ||
+      json.authed_user?.access_token ||
+      "";
+    if (!res.ok || !token) {
+      const detail = `OAuth token exchange ${res.status}: ${json.error_description || json.error || "no access_token"}`;
+      setStatus(connectorId, {
+        state: "error",
+        detail: detail.slice(0, 240),
+        transport: "oauth-browser",
+        live: false,
+      });
+      return { ok: false, connectorId, detail };
+    }
+
+    pendingOAuth.delete(connectorId);
+    // Probe with the fresh token (honest connected only if probe ok).
+    const probed = await probeTierAWithToken(connectorId, {
+      token,
+      access_token: token,
+    });
+    setStatus(connectorId, {
+      ...probed,
+      detail: probed.live
+        ? `OAuth callback OK · ${probed.detail}`
+        : `OAuth token получен, но probe: ${probed.detail}`,
+    });
+    return {
+      ok: probed.live,
+      connectorId,
+      detail: probed.detail,
+    };
+  } catch (err) {
+    const detail = `OAuth exchange: ${err instanceof Error ? err.message : String(err)}`;
+    setStatus(connectorId, {
+      state: "error",
+      detail: detail.slice(0, 240),
+      transport: "oauth-browser",
+      live: false,
+    });
+    return { ok: false, connectorId, detail };
+  }
+}
+
+export function getOAuthCallbackInfo(): {
+  port: number;
+  redirectUri: string;
+  listening: boolean;
+  pending: string[];
+} {
+  return {
+    port: MCP_OAUTH_CALLBACK_PORT,
+    redirectUri: MCP_OAUTH_REDIRECT_URI,
+    listening: Boolean(oauthServer),
+    pending: Array.from(pendingOAuth.keys()),
+  };
 }

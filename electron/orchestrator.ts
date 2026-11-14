@@ -612,7 +612,7 @@ export async function sendChatMessage(
       addonUsed = res.used;
       addonBlock = res.block;
     } else if (looksLikeMediaIntent(text)) {
-      const res = handleMediaFromChat(text);
+      const res = await handleMediaFromChat(text);
       addonUsed = res.used;
       addonBlock = res.block;
     } else if (looksLikeCameraIntent(text)) {
@@ -696,21 +696,52 @@ export async function sendChatMessage(
         desktopBlock = formatScreenBlock("click", click);
       } else if (byLabel) {
         const shot = await captureScreen();
+        let screenW = shot.width || 1280;
+        let screenH = shot.height || 720;
+        try {
+          if (typeof process.versions.electron === "string") {
+            const { screen: electronScreen } = await import("electron");
+            const bounds = electronScreen.getPrimaryDisplay().bounds;
+            screenW = bounds.width;
+            screenH = bounds.height;
+          }
+        } catch {
+          /* keep shot size */
+        }
         let visionText = "";
         try {
           const vision = await describeScreenshot(
             shot.path,
-            `Найди на экране элемент «${byLabel}». Ответь ТОЛЬКО JSON одной строкой: {"x":<px>,"y":<px>,"found":true|false} где x,y — центр элемента в пикселях снимка ${shot.width}×${shot.height}. Если не видно — {"found":false,"x":0,"y":0}.`,
+            `Найди UI-элемент «${byLabel}» на скриншоте. Ответь ТОЛЬКО одной JSON-строкой без markdown: {"nx":0.0-1.0,"ny":0.0-1.0,"found":true|false,"label":"..."}. nx,ny — нормализованный центр (0=лево/верх, 1=право/низ) относительно всего экрана. Если не видно: {"found":false,"nx":0,"ny":0}.`,
           );
           visionText = vision.text;
         } catch (err) {
           visionText = err instanceof Error ? err.message : String(err);
         }
-        const estimated = parseVisionClickCoords(
-          visionText,
-          shot.width || 1280,
-          shot.height || 720,
+        const norm = visionText.match(
+          /"nx"\s*:\s*([\d.]+)[\s\S]*?"ny"\s*:\s*([\d.]+)/i,
         );
+        let estimated = parseVisionClickCoords(
+          visionText,
+          shot.width || screenW,
+          shot.height || screenH,
+        );
+        if (norm) {
+          const nx = Number(norm[1]);
+          const ny = Number(norm[2]);
+          if (nx >= 0 && nx <= 1 && ny >= 0 && ny <= 1) {
+            estimated = {
+              x: Math.round(nx * screenW),
+              y: Math.round(ny * screenH),
+            };
+          }
+        } else if (estimated && shot.width > 0 && shot.height > 0) {
+          // Scale thumbnail pixels → real display
+          estimated = {
+            x: Math.round((estimated.x / shot.width) * screenW),
+            y: Math.round((estimated.y / shot.height) * screenH),
+          };
+        }
         if (!estimated || /"found"\s*:\s*false/i.test(visionText)) {
           desktopUsed = "screen-click-label:miss";
           desktopBlock = `[Экран: click-by-label]\nНе нашёл «${byLabel}» для клика.\n[Vision]\n${visionText.slice(0, 500)}`;
@@ -719,7 +750,7 @@ export async function sendChatMessage(
           desktopUsed = click.ok
             ? `screen-click-label:${click.mode}`
             : "screen-click-label-denied";
-          desktopBlock = `${formatScreenBlock("click", click)}\nЦель: «${byLabel}»\n[Vision]\n${visionText.slice(0, 400)}`;
+          desktopBlock = `${formatScreenBlock("click", click)}\nЦель: «${byLabel}» @${estimated.x},${estimated.y} (display ${screenW}×${screenH})\n[Vision]\n${visionText.slice(0, 400)}`;
         }
       } else if (scroll) {
         const scrolled = await scrollScreen(scroll);

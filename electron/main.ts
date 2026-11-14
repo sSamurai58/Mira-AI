@@ -142,9 +142,11 @@ import {
   synthesizeElevenLabs,
 } from "./tts/elevenlabs";
 import {
+  completeOAuthWithCode,
   connectMcp,
   disconnectMcp,
   getMcpRuntimeStatus,
+  getOAuthCallbackInfo,
   listMcpRuntimeStatuses,
 } from "./mcp/runtime";
 import {
@@ -1156,6 +1158,13 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
   );
   on("mira:mcp-disconnect", (_e, connectorId: string) =>
     disconnectMcp(connectorId),
+  );
+  on("mira:mcp-oauth-callback-info", () => getOAuthCallbackInfo());
+  on(
+    "mira:mcp-oauth-complete",
+    (_e, payload: { code: string; connectorId?: string }) =>
+      completeOAuthWithCode(payload?.code ?? "", payload?.connectorId),
+    { privileged: true },
   );
   on(
     "mira:generate-voice-phrases",

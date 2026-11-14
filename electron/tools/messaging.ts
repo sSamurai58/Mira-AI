@@ -219,6 +219,78 @@ function whatsappPhoneDigits(raw: string): string {
 }
 
 /**
+ * Meta WhatsApp Cloud API (Graph). Needs WHATSAPP_CLOUD_TOKEN + WHATSAPP_PHONE_NUMBER_ID.
+ * `to` must be digits with country code (no +).
+ */
+async function sendWhatsAppCloudApi(
+  toDigits: string,
+  body: string,
+): Promise<{ ok: boolean; externalId: string | null; detail: string }> {
+  const token = (process.env.WHATSAPP_CLOUD_TOKEN ?? "").trim();
+  const phoneNumberId = (process.env.WHATSAPP_PHONE_NUMBER_ID ?? "").trim();
+  if (!token || !phoneNumberId) {
+    return {
+      ok: false,
+      externalId: null,
+      detail: "Cloud API: задайте WHATSAPP_CLOUD_TOKEN и WHATSAPP_PHONE_NUMBER_ID",
+    };
+  }
+  if (!toDigits || toDigits.length < 8) {
+    return {
+      ok: false,
+      externalId: null,
+      detail: "Cloud API: нужен телефон получателя (цифры с кодом страны)",
+    };
+  }
+  const url = `https://graph.facebook.com/v21.0/${encodeURIComponent(phoneNumberId)}/messages`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to: toDigits,
+        type: "text",
+        text: { body, preview_url: false },
+      }),
+      signal: AbortSignal.timeout(20000),
+    });
+    const json = (await res.json().catch(() => ({}))) as {
+      messages?: Array<{ id?: string }>;
+      error?: { message?: string };
+    };
+    if (!res.ok) {
+      return {
+        ok: false,
+        externalId: null,
+        detail: `Cloud API HTTP ${res.status}: ${json.error?.message || "fail"}`.slice(
+          0,
+          220,
+        ),
+      };
+    }
+    const mid = json.messages?.[0]?.id ?? null;
+    return {
+      ok: true,
+      externalId: mid,
+      detail: `Отправлено через WhatsApp Cloud API${mid ? ` · ${mid}` : ""}`,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      externalId: null,
+      detail: `Cloud API error: ${err instanceof Error ? err.message : String(err)}`.slice(
+        0,
+        220,
+      ),
+    };
+  }
+}
+
+/**
  * Open WhatsApp (desktop/web) with a prefilled message — no Meta Cloud API key.
  * Uses chat_id / handle as phone, or WHATSAPP_DEFAULT_PHONE.
  */
@@ -408,6 +480,42 @@ export async function sendOrReplyMessage(
     (provider === "whatsapp" || provider === "instagram") &&
     policy.mode === "live"
   ) {
+    // WhatsApp Cloud API first when token + phone-number-id are set.
+    if (provider === "whatsapp") {
+      const phone = whatsappPhoneDigits(
+        contact.chat_id ||
+          contact.handle ||
+          process.env.WHATSAPP_DEFAULT_PHONE ||
+          "",
+      );
+      const cloudToken = (process.env.WHATSAPP_CLOUD_TOKEN ?? "").trim();
+      const cloudPhoneId = (process.env.WHATSAPP_PHONE_NUMBER_ID ?? "").trim();
+      if (cloudToken && cloudPhoneId) {
+        const live = await sendWhatsAppCloudApi(phone, intent.body);
+        const message = addMessengerMessage({
+          provider: "whatsapp",
+          contactId: contact.id,
+          chatId: contact.chat_id,
+          direction: "out",
+          body: intent.body,
+          status: live.ok ? "sent" : "error",
+          externalId: live.externalId,
+        });
+        return {
+          ok: live.ok,
+          provider: "whatsapp",
+          action: intent.action,
+          contact,
+          chatId: contact.chat_id,
+          body: intent.body,
+          mode: "live",
+          externalId: live.externalId,
+          detail: live.detail,
+          message,
+        };
+      }
+    }
+
     const bridge =
       provider === "whatsapp"
         ? process.env.WHATSAPP_BRIDGE_URL?.trim()
@@ -534,7 +642,7 @@ export async function sendOrReplyMessage(
     provider === "telegram"
       ? "Dry-run (telegram): сообщение записано локально. Для live задайте TELEGRAM_BOT_TOKEN (+ chat id)."
       : provider === "whatsapp"
-        ? "Dry-run (whatsapp): сообщение записано локально. Для live задайте MESSAGING_MODE=live (+ WHATSAPP_BRIDGE_URL или wa.me)."
+        ? "Dry-run (whatsapp): сообщение записано локально. Для live: MESSAGING_MODE=live + Cloud API / bridge / wa.me."
         : "Dry-run (instagram): сообщение записано локально. Для live задайте MESSAGING_MODE=live (+ INSTAGRAM_BRIDGE_URL).";
   return {
     ok: true,

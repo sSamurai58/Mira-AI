@@ -1002,6 +1002,20 @@ interface MiraBridge {
     lastCheckedAt: string;
     live: boolean;
   }>;
+  mcpOAuthCallbackInfo?: () => Promise<{
+    port: number;
+    redirectUri: string;
+    listening: boolean;
+    pending: string[];
+  }>;
+  mcpOAuthComplete?: (payload: {
+    code: string;
+    connectorId?: string;
+  }) => Promise<{
+    ok: boolean;
+    connectorId: string | null;
+    detail: string;
+  }>;
   onVoiceTrainProgress?: (
     handler: (payload: {
       projectId: string;

@@ -1,6 +1,6 @@
 {
   "name": "mira-ai",
-  "version": "0.1.25",
+  "version": "0.1.26",
   "private": true,
   "description": "Mira — local voice AI assistant",
   "author": "Mira",
@@ -56,6 +56,7 @@
     "@xterm/xterm": "^6.0.0",
     "dotenv": "^18.0.10",
     "electron-updater": "^6.8.11",
+    "imapflow": "^1.7.8",
     "node-pty": "^1.1.0",
     "nodemailer": "^6.10.1",
     "pdfjs-dist": "^4.10.38",

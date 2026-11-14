@@ -97,6 +97,9 @@ const INTEG_META: IntegMeta[] = [
       "MAIL_SMTP_USER",
       "MAIL_SMTP_PASS",
       "MAIL_IMAP_HOST",
+      "MAIL_IMAP_PORT",
+      "MAIL_IMAP_USER",
+      "MAIL_IMAP_PASS",
     ],
   },
   {
@@ -104,7 +107,7 @@ const INTEG_META: IntegMeta[] = [
     name: "Мессенджеры",
     kind: "Telegram · WA · IG",
     summary: "Отправка сообщений от имени Mira",
-    tags: ["MESSAGING_ENABLED", "Telegram", "bridge"],
+    tags: ["MESSAGING_ENABLED", "Telegram", "bridge", "Cloud API"],
     enabledKey: "MESSAGING_ENABLED",
     saveKeys: [
       "MESSAGING_ENABLED",
@@ -114,6 +117,9 @@ const INTEG_META: IntegMeta[] = [
       "TELEGRAM_BOT_TOKEN",
       "TELEGRAM_DEFAULT_CHAT_ID",
       "WHATSAPP_BRIDGE_URL",
+      "WHATSAPP_CLOUD_TOKEN",
+      "WHATSAPP_PHONE_NUMBER_ID",
+      "WHATSAPP_DEFAULT_PHONE",
       "INSTAGRAM_BRIDGE_URL",
     ],
   },
@@ -747,11 +753,11 @@ export function SettingsIntegrationsSection() {
       return (
         <>
           <PurposeBlock
-            purpose="Локальный inbox + черновики. Live SMTP — очередь по хосту; полный transport позже."
+            purpose="Локальный inbox + черновики. Live: SMTP отправка и IMAP синк входящих."
             howto={
               <ol>
                 <li>Включите MAIL_ENABLED.</li>
-                <li>MAIL_MODE=dry-run — безопасно; live — очередь на SMTP host.</li>
+                <li>MAIL_MODE=dry-run — безопасно; live — SMTP + IMAP sync.</li>
                 <li>
                   В Диалоге: «прочитай входящие», «найди в почте встреча», «напиши
                   письмо кому a@b.ru тема …».
@@ -777,7 +783,7 @@ export function SettingsIntegrationsSection() {
                 onChange={(v) => setField("MAIL_MODE", v)}
                 options={[
                   { value: "dry-run", label: "dry-run (безопасно)" },
-                  { value: "live", label: "live (SMTP queue)" },
+                  { value: "live", label: "live (SMTP + IMAP)" },
                 ]}
               />
             </Field>
@@ -823,6 +829,27 @@ export function SettingsIntegrationsSection() {
                 placeholder="imap.example.com"
               />
             </Field>
+            <Field label="IMAP port" hint="MAIL_IMAP_PORT">
+              <input
+                value={draft.MAIL_IMAP_PORT ?? "993"}
+                onChange={(e) => setField("MAIL_IMAP_PORT", e.target.value)}
+                placeholder="993"
+              />
+            </Field>
+            <Field label="IMAP user" hint="MAIL_IMAP_USER">
+              <input
+                value={draft.MAIL_IMAP_USER ?? ""}
+                onChange={(e) => setField("MAIL_IMAP_USER", e.target.value)}
+                placeholder="user@example.com"
+              />
+            </Field>
+            <SecretField
+              label="IMAP password"
+              hint="MAIL_IMAP_PASS"
+              value={draft.MAIL_IMAP_PASS ?? ""}
+              onChange={(v) => setField("MAIL_IMAP_PASS", v)}
+              secretSet={Boolean(snap?.secretsSet?.MAIL_IMAP_PASS)}
+            />
           </div>
         </>
       );
@@ -927,6 +954,36 @@ export function SettingsIntegrationsSection() {
                     setField("INSTAGRAM_BRIDGE_URL", e.target.value)
                   }
                   placeholder="http://127.0.0.1:8788"
+                />
+              </Field>
+            </div>
+            <SecretField
+              label="WhatsApp Cloud token"
+              hint="WHATSAPP_CLOUD_TOKEN"
+              value={draft.WHATSAPP_CLOUD_TOKEN ?? ""}
+              onChange={(v) => setField("WHATSAPP_CLOUD_TOKEN", v)}
+              secretSet={Boolean(snap?.secretsSet?.WHATSAPP_CLOUD_TOKEN)}
+            />
+            <div className="integ-grid-2">
+              <Field
+                label="WhatsApp Phone Number ID"
+                hint="WHATSAPP_PHONE_NUMBER_ID"
+              >
+                <input
+                  value={draft.WHATSAPP_PHONE_NUMBER_ID ?? ""}
+                  onChange={(e) =>
+                    setField("WHATSAPP_PHONE_NUMBER_ID", e.target.value)
+                  }
+                  placeholder="Meta Cloud phone-number-id"
+                />
+              </Field>
+              <Field label="WhatsApp default phone" hint="WHATSAPP_DEFAULT_PHONE">
+                <input
+                  value={draft.WHATSAPP_DEFAULT_PHONE ?? ""}
+                  onChange={(e) =>
+                    setField("WHATSAPP_DEFAULT_PHONE", e.target.value)
+                  }
+                  placeholder="79001234567"
                 />
               </Field>
             </div>

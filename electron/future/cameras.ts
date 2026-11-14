@@ -1,7 +1,11 @@
+import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { promisify } from "node:util";
 import { requestUserConfirm } from "../confirmBridge";
 import { openStore } from "../store";
+
+const execFileAsync = promisify(execFile);
 
 export type CameraRow = {
   id: string;
@@ -78,16 +82,74 @@ export function upsertCamera(input: {
     .get(id) as CameraRow;
 }
 
+async function grabViaFfmpeg(
+  url: string,
+  outPng: string,
+): Promise<{ ok: boolean; detail: string }> {
+  try {
+    await execFileAsync(
+      "ffmpeg",
+      [
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-rtsp_transport",
+        "tcp",
+        "-i",
+        url,
+        "-frames:v",
+        "1",
+        "-q:v",
+        "2",
+        outPng,
+      ],
+      { timeout: 12000 },
+    );
+    if (fs.existsSync(outPng) && fs.statSync(outPng).size > 32) {
+      return { ok: true, detail: `ffmpeg frame · ${fs.statSync(outPng).size} bytes` };
+    }
+    return { ok: false, detail: "ffmpeg: пустой кадр" };
+  } catch (err) {
+    return {
+      ok: false,
+      detail: `ffmpeg: ${err instanceof Error ? err.message.slice(0, 100) : "fail"}`,
+    };
+  }
+}
+
 export async function handleCameraFromChat(text: string): Promise<{
   used: string;
   block: string;
 }> {
   const cams = listCameras();
-  const cam = cams[0];
+  const cam =
+    cams.find((c) => text.toLowerCase().includes(c.name.toLowerCase())) ||
+    cams[0];
   if (/ptz|поворот|зум|zoom/i.test(text)) {
+    const url = cam?.url?.trim() || "";
+    if (/^https?:\/\//i.test(url) && /ptz|cgi|control/i.test(url + text)) {
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "ptz", text }),
+          signal: AbortSignal.timeout(5000),
+        });
+        return {
+          used: res.ok ? "camera:ptz:http" : "camera:ptz:http-fail",
+          block: `[Камеры] PTZ HTTP ${res.status} для «${cam?.name}»`,
+        };
+      } catch (err) {
+        return {
+          used: "camera:ptz:http-error",
+          block: `[Камеры] PTZ fail: ${err instanceof Error ? err.message : String(err)}`,
+        };
+      }
+    }
     return {
       used: "camera:ptz:dry-run",
-      block: `[Камеры] PTZ dry-run для «${cam?.name ?? "n/a"}» (live протокол позже)`,
+      block: `[Камеры] PTZ dry-run для «${cam?.name ?? "n/a"}» (нужен HTTP PTZ endpoint в url)`,
     };
   }
   if (/запись|record/i.test(text)) {
@@ -95,7 +157,7 @@ export async function handleCameraFromChat(text: string): Promise<{
       actionClass: "camera",
       risk: "high",
       title: "Запись с камеры",
-      body: `Сохранить stub-запись с «${cam?.name}» в mira/library?`,
+      body: `Сохранить кадр/stub с «${cam?.name}» в mira/library?`,
       confirmLabel: "Записать",
     });
     if (!ok) {
@@ -113,7 +175,23 @@ export async function handleCameraFromChat(text: string): Promise<{
     "base64",
   );
   const url = cam?.url?.trim() || "";
-  if (/^https?:\/\//i.test(url)) {
+
+  if (/^rtsp:\/\//i.test(url)) {
+    const ff = await grabViaFfmpeg(url, png);
+    if (ff.ok) {
+      note = ff.detail;
+      fs.writeFileSync(
+        meta,
+        `Mira camera snapshot\ncamera=${cam?.name}\nurl=${url}\npng=${png}\nat=${new Date().toISOString()}\nnote=${note}\n`,
+        "utf8",
+      );
+      return {
+        used: "camera:snapshot:ffmpeg",
+        block: `[Камеры] Снимок (ffmpeg): ${png} (${note})`,
+      };
+    }
+    note = `${ff.detail} — placeholder`;
+  } else if (/^https?:\/\//i.test(url)) {
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
       if (res.ok) {
@@ -131,6 +209,7 @@ export async function handleCameraFromChat(text: string): Promise<{
       note = `HTTP fail: ${err instanceof Error ? err.message : String(err)} — placeholder`;
     }
   }
+
   fs.writeFileSync(png, pngBytes);
   fs.writeFileSync(
     meta,
@@ -144,4 +223,3 @@ export async function handleCameraFromChat(text: string): Promise<{
     block: `[Камеры] Снимок сохранён: ${png} (${note})`,
   };
 }
-

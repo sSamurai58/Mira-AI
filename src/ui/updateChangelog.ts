@@ -15,6 +15,19 @@ export type MiraChangelogEntry = {
 
 export const MIRA_CHANGELOG: MiraChangelogEntry[] = [
   {
+    version: "0.1.26",
+    date: "14.11.2026",
+    summary:
+      "IMAP, клик по названию, WA Cloud, медиа OS, камеры ffmpeg, MCP OAuth callback.",
+    bullets: [
+      "Почта: IMAP sync (imapflow) + поля IMAP в настройках",
+      "Клик по названию: nx/ny → координаты экрана",
+      "WhatsApp Cloud API; медиа через playerctl / Windows media keys",
+      "Камеры: ffmpeg RTSP кадр; IoT: Home Assistant / MQTT bridge",
+      "MCP OAuth loopback callback :18765; Porcupine hybrid + Access Key в Voice",
+    ],
+  },
+  {
     version: "0.1.25",
     date: "14.11.2026",
     summary:

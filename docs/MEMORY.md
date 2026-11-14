@@ -13,7 +13,7 @@
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
 | Дорожная карта | Must + future F* закрыты (partial→done stubs where noted) |
 
-**Сейчас:** **0.1.25** опубликован (`v0.1.25`). Разработка → ветка **`develop`**; **`main`** = только релизная версия для установки (installers в GitHub Releases).
+**Сейчас:** **0.1.26** (релизный batch: IMAP / WA Cloud / media OS / cameras ffmpeg / MCP OAuth callback). Публикация = merge в **`main`** + tag `v0.1.26`. Разработка → **`develop`**.
 
 
 ## Решения
@@ -23,6 +23,7 @@
 | Дата | Решение | Почему |
 |------|---------|--------|
 | 2026-11-14 | **Ветки: develop / main** | Разработка на `develop`; в `main` только актуальный релиз; `.exe` не в git — GitHub Releases + `latest.yml`; см. `docs/BRANCHING.md` |
+| 2026-11-14 | **0.1.26 deepen batch** | IMAP sync; click-by-label nx/ny; WA Cloud API; playerctl/media-keys; ffmpeg RTSP; HA/MQTT IoT; MCP OAuth :18765; Porcupine hybrid; без macOS |
 | 2026-11-14 | **Релиз 0.1.25 опубликован** (`v0.1.25`) | Messengers WA/IG; screen find; browser history merge; memory forget-topic; Doctor ИТОГ; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.25 |
 | 2026-11-14 | **Релиз 0.1.24 опубликован** (`v0.1.24`) | Update HUD corner; Liquid Glass buttons; skills folder picker; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.24 |
 | 2026-11-14 | **Релиз 0.1.23 опубликован** (`v0.1.23`) | Parametric TTS from settings; extract F0/tempo/energy from audio or mic; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.23 |

@@ -25,7 +25,101 @@ export function getMailPolicy() {
     account: (process.env.MAIL_ACCOUNT ?? "").trim() || null,
     smtpHost: (process.env.MAIL_SMTP_HOST ?? "").trim() || null,
     imapHost: (process.env.MAIL_IMAP_HOST ?? "").trim() || null,
+    imapPort: Number(process.env.MAIL_IMAP_PORT ?? "993") || 993,
+    imapUser:
+      (process.env.MAIL_IMAP_USER ?? "").trim() ||
+      (process.env.MAIL_ACCOUNT ?? "").trim() ||
+      null,
+    imapPass: (process.env.MAIL_IMAP_PASS ?? "").trim() || null,
   };
+}
+
+/** Pull recent INBOX messages via IMAP into local store (live mode). */
+export async function syncImapInbox(limit = 15): Promise<{
+  ok: boolean;
+  imported: number;
+  detail: string;
+}> {
+  const policy = getMailPolicy();
+  if (policy.mode !== "live" || !policy.imapHost) {
+    return {
+      ok: false,
+      imported: 0,
+      detail: "IMAP sync нужен MAIL_MODE=live и MAIL_IMAP_HOST",
+    };
+  }
+  if (!policy.imapUser || !policy.imapPass) {
+    return {
+      ok: false,
+      imported: 0,
+      detail: "Задайте MAIL_IMAP_USER / MAIL_IMAP_PASS (или MAIL_ACCOUNT + MAIL_IMAP_PASS)",
+    };
+  }
+  try {
+    const { ImapFlow } = await import("imapflow");
+    const client = new ImapFlow({
+      host: policy.imapHost,
+      port: policy.imapPort,
+      secure: policy.imapPort === 993,
+      auth: { user: policy.imapUser, pass: policy.imapPass },
+      logger: false,
+    });
+    await client.connect();
+    const lock = await client.getMailboxLock("INBOX");
+    let imported = 0;
+    try {
+      const store = openStore();
+      const insert = store.prepare(
+        `INSERT INTO mail_messages (id, folder, from_addr, subject, body, status, created_at)
+         VALUES (?, 'inbox', ?, ?, ?, 'unread', ?)`,
+      );
+      const exists = store.prepare(
+        `SELECT id FROM mail_messages WHERE folder = 'inbox' AND subject = ? AND from_addr = ? LIMIT 1`,
+      );
+      const uids: number[] = [];
+      for await (const msg of client.fetch(
+        { seen: false, last: limit },
+        { envelope: true, source: false },
+      )) {
+        uids.push(msg.uid);
+        if (uids.length >= limit) break;
+      }
+      // Also take recent regardless of seen
+      for await (const msg of client.fetch(
+        { last: limit },
+        { envelope: true },
+      )) {
+        const from =
+          msg.envelope?.from?.[0]?.address ||
+          msg.envelope?.from?.[0]?.name ||
+          "unknown";
+        const subject = msg.envelope?.subject || "(без темы)";
+        if (exists.get(subject, from)) continue;
+        const date =
+          msg.envelope?.date?.toISOString?.() || new Date().toISOString();
+        insert.run(crypto.randomUUID(), from, subject, "(тело не загружено — заголовок IMAP)", date);
+        imported += 1;
+        if (imported >= limit) break;
+      }
+    } finally {
+      lock.release();
+      await client.logout().catch(() => undefined);
+    }
+    return {
+      ok: true,
+      imported,
+      detail: `IMAP OK · ${policy.imapHost} · импорт ${imported}`,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      imported: 0,
+      detail: `IMAP error: ${err instanceof Error ? err.message : String(err)}`.slice(
+        0,
+        220,
+      ),
+    };
+  }
 }
 
 export function seedDemoInbox(): void {
@@ -45,7 +139,7 @@ export function seedDemoInbox(): void {
     crypto.randomUUID(),
     "demo@example.com",
     "Демо письмо Mira",
-    "Это локальный stub inbox (F4). Live SMTP/IMAP — позже; пока черновики и поиск локально.",
+    "Это локальный stub inbox (F4). Live: SMTP отправка + IMAP sync (MAIL_MODE=live).",
     now,
   );
   insert.run(
@@ -255,11 +349,16 @@ export async function handleMailFromChat(text: string): Promise<{
     };
   }
 
-  if (/прочитай|inbox|входящ|покажи письма/i.test(text)) {
+  if (/прочитай|inbox|входящ|покажи письма|синхрон/i.test(text)) {
+    let syncNote = "";
+    if (policy.mode === "live" && policy.imapHost) {
+      const sync = await syncImapInbox(12);
+      syncNote = `\n[${sync.detail}]`;
+    }
     const rows = listMail("inbox", 8);
     return {
       used: `mail:inbox:${rows.length}`,
-      block: `[Почта: входящие${policy.account ? ` · ${policy.account}` : ""}]\n${rows
+      block: `[Почта: входящие${policy.account ? ` · ${policy.account}` : ""}]${syncNote}\n${rows
         .map((m) => `• ${m.from_addr}: ${m.subject}`)
         .join("\n")}`,
     };

@@ -64,9 +64,9 @@ async function main() {
   assert.ok(mailDraft.used.startsWith("mail:draft:"));
 
   // F7 media
-  const media = handleMediaFromChat("Включи музыку");
+  const media = await handleMediaFromChat("Включи музыку");
   assert.ok(media.used.startsWith("media:"));
-  const nowPlaying = handleMediaFromChat("Что играет?");
+  const nowPlaying = await handleMediaFromChat("Что играет?");
   assert.ok(nowPlaying.used.startsWith("media:status:"));
 
   // F1 cameras

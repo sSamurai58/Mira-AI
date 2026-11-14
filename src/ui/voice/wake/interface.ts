@@ -1,7 +1,7 @@
 /**
- * Pluggable wake-word interface (0.1.11).
- * Web Speech remains the default engine; Porcupine (or others) can plug in later
- * without breaking hands-free prefs / barge-in.
+ * Pluggable wake-word interface (0.1.11+).
+ * Web Speech remains the default; Porcupine uses Access Key + hybrid local
+ * matcher until / when Picovoice WASM SDK is bundled.
  */
 
 import {
@@ -45,6 +45,7 @@ export type WakeEngine = {
 };
 
 const KEY_ENGINE = "mira.wakeEngine";
+const KEY_PORCUPINE = "mira.porcupineAccessKey";
 
 export function getWakeEngineId(): WakeEngineId {
   if (typeof localStorage === "undefined") return "webspeech";
@@ -60,6 +61,65 @@ export function setWakeEngineId(id: WakeEngineId): WakeEngineId {
     localStorage.setItem(KEY_ENGINE, id);
   }
   return id;
+}
+
+export function getPorcupineAccessKey(): string {
+  try {
+    if (typeof localStorage !== "undefined") {
+      return localStorage.getItem(KEY_PORCUPINE)?.trim() || "";
+    }
+  } catch {
+    /* ignore */
+  }
+  return "";
+}
+
+export function setPorcupineAccessKey(key: string): string {
+  const v = key.trim();
+  try {
+    if (typeof localStorage !== "undefined") {
+      if (v) localStorage.setItem(KEY_PORCUPINE, v);
+      else localStorage.removeItem(KEY_PORCUPINE);
+    }
+  } catch {
+    /* ignore */
+  }
+  return v;
+}
+
+function porcupineAccessKeyPresent(): boolean {
+  return Boolean(getPorcupineAccessKey());
+}
+
+/** Tighter fuzzy when Porcupine key is present (hybrid until WASM). */
+function porcupineHybridMatch(
+  transcript: string,
+  phrase: string,
+  sensitivity: WakeSensitivity,
+): WakeMatchResult {
+  const base = matchWakeWord(transcript, phrase, sensitivity);
+  if (!base) {
+    return {
+      matched: false,
+      engine: "porcupine-stub",
+      transcript,
+      confidence: 0,
+    };
+  }
+  // Prefer exact / prefix hits for higher confidence.
+  const t = transcript.toLowerCase().replace(/ё/g, "е");
+  const p = phrase.toLowerCase().replace(/ё/g, "е").trim();
+  const exact =
+    t === p ||
+    t.startsWith(`${p} `) ||
+    t.includes(` ${p} `) ||
+    t.endsWith(` ${p}`);
+  return {
+    matched: true,
+    engine: "porcupine-stub",
+    transcript,
+    confidence: exact ? 0.92 : 0.72,
+  };
 }
 
 const webSpeechEngine: WakeEngine = {
@@ -80,29 +140,24 @@ const webSpeechEngine: WakeEngine = {
   },
 };
 
-function porcupineAccessKeyPresent(): boolean {
-  try {
-    if (typeof localStorage !== "undefined") {
-      const k = localStorage.getItem("mira.porcupineAccessKey");
-      if (k?.trim()) return true;
-    }
-  } catch {
-    /* ignore */
-  }
-  return false;
-}
-
-/** Stub for future Picovoice Porcupine — settings visible, does not break Web Speech. */
+/**
+ * Porcupine path: Access Key unlocks hybrid local matcher + settings.
+ * Native @picovoice/porcupine-web can be plugged into `start` later without
+ * changing HandsFree prefs / barge-in.
+ */
 const porcupineStub: WakeEngine = {
   id: "porcupine-stub",
   label: porcupineAccessKeyPresent()
-    ? "Porcupine (ключ есть, SDK позже)"
+    ? "Porcupine (hybrid · ключ есть)"
     : "Porcupine (нужен Access Key)",
-  ready: false,
+  ready: porcupineAccessKeyPresent(),
   detail: porcupineAccessKeyPresent()
-    ? "Access Key сохранён локально. Нативный SDK Porcupine ещё не подключён — пока Web Speech matcher."
+    ? "Access Key сохранён. Hybrid: Web Speech + усиленный matcher. WASM SDK Porcupine подключается отдельно."
     : "Нужен Picovoice Access Key (mira.porcupineAccessKey). Пока Web Speech; выбор не ломает hands-free.",
   match(transcript, phrase, sensitivity) {
+    if (porcupineAccessKeyPresent()) {
+      return porcupineHybridMatch(transcript, phrase, sensitivity);
+    }
     const matched = matchWakeWord(transcript, phrase, sensitivity);
     return {
       matched,
@@ -138,17 +193,34 @@ const ENGINES: Record<WakeEngineId, WakeEngine> = {
 };
 
 export function listWakeEngines(): WakeEngine[] {
-  return [webSpeechEngine, localFuzzyEngine, porcupineStub];
+  // Rebuild porcupine label/ready from current key each call.
+  return [
+    webSpeechEngine,
+    localFuzzyEngine,
+    {
+      ...porcupineStub,
+      label: porcupineAccessKeyPresent()
+        ? "Porcupine (hybrid · ключ есть)"
+        : "Porcupine (нужен Access Key)",
+      ready: porcupineAccessKeyPresent(),
+      detail: porcupineAccessKeyPresent()
+        ? "Access Key сохранён. Hybrid: Web Speech + усиленный matcher. WASM SDK Porcupine подключается отдельно."
+        : "Нужен Picovoice Access Key (mira.porcupineAccessKey). Пока Web Speech; выбор не ломает hands-free.",
+    },
+  ];
 }
 
 export function getActiveWakeEngine(): WakeEngine {
   const id = getWakeEngineId();
-  if (id === "porcupine-stub" && !porcupineStub.ready) {
+  if (id === "porcupine-stub" && !porcupineAccessKeyPresent()) {
     return {
       ...webSpeechEngine,
       detail:
-        "Выбран Porcupine — сейчас Web Speech (SDK не подключён). Ключ можно сохранить заранее.",
+        "Выбран Porcupine — сейчас Web Speech (нет Access Key). Сохраните ключ в настройках голоса.",
     };
+  }
+  if (id === "porcupine-stub") {
+    return listWakeEngines().find((e) => e.id === "porcupine-stub")!;
   }
   return ENGINES[id] ?? webSpeechEngine;
 }
