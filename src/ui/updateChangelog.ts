@@ -15,6 +15,18 @@ export type MiraChangelogEntry = {
 
 export const MIRA_CHANGELOG: MiraChangelogEntry[] = [
   {
+    version: "0.1.24",
+    date: "14.11.2026",
+    summary:
+      "Update HUD в углу Mira; Liquid Glass кнопками; удобные папки скиллов.",
+    bullets: [
+      "Тост обновления якорится к углу окна Mira (не середина чата) и следует за move/resize",
+      "Liquid Glass: сегмент Плотнее / Обычный / Более прозрачный вместо dropdown",
+      "Скиллы: «+ Папка» / «+ Скилл», выбор каталога, id — без SKILL.md в середине пути",
+      "Вложенные «+ Папка» / «+ Скилл» на карточке; пустые каталоги на диске",
+    ],
+  },
+  {
     version: "0.1.23",
     date: "14.11.2026",
     summary:
