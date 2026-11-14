@@ -13,7 +13,7 @@
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
 | Дорожная карта | Must + future F* закрыты (partial→done stubs where noted) |
 
-**Сейчас:** **0.1.15 WIP** (не публиковать / не тегировать). Ветка `cursor/release-0-1-15-6838` от `v0.1.14`. Интеграции — карточки как в Путях.
+**Сейчас:** **0.1.16** опубликован (`v0.1.16`). Ветка `cursor/release-0-1-16-6838` от tip протоколов/settings stack.
 
 
 ## Решения
@@ -22,6 +22,7 @@
 
 | Дата | Решение | Почему |
 |------|---------|--------|
+| 2026-11-14 | **Релиз 0.1.16 опубликован** (`v0.1.16`) | Протоколы-последовательности; Voice/Terminal/Privacy panels; HUD sounds; chat dates; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.16 |
 | 2026-11-14 | **0.1.15 WIP: Popup notifications** | Settings → Всплывающие уведомления: HUD/OS/трей/DND/тихие часы/категории; OS notify при свёрнутом окне + close-to-tray; no publish |
 | 2026-11-14 | **0.1.15 WIP: API cards + Terminal chrome** | API/модели → paths-grid + реальные логотипы провайдеров; Терминал — вкладки/cwd/статус/тематический xterm; no publish |
 | 2026-11-14 | **0.1.15 WIP: Skills/Protocols = Paths cards** | Скиллы и Протоколы: header «+ Создать», сортировка, поиск, фильтр вкл/выкл, grid-карточки, CatalogEditModal; Protocols получили edit/delete; no publish |
@@ -169,6 +170,8 @@
 | 2026-11-11 | DESIGN: информационная архитектура, карта настроек |
 | 2026-11-11 | Подключены agent skills Emil Kowalski (design/animation) |
 | 2026-11-11 | Добавлен каталог 14 цветовых тем + референсы в docs/themes/ |
+| 2026-11-14 | Релиз **0.1.15** (`v0.1.15`) — paths-cards Integrations/API/Skills/Protocols, Terminal, notify prefs |
+| 2026-11-14 | Релиз **0.1.16** (`v0.1.16`) — protocol command sequences, settings panels, HUD sounds, chat UX |
 
 ---
 
