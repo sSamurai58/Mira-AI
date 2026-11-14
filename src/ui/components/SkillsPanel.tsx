@@ -42,9 +42,32 @@ const EMPTY_DRAFT = (): CatalogEditDraft => ({
   description: "",
   triggers: "помоги, skill тест",
   tags: "custom, workshop",
-  body: "1. Уточни задачу.\n2. Дай короткий ответ по шагам.\n3. Предложи следующий шаг.",
+  body: [
+    "# Новый скилл",
+    "",
+    "1. Уточни задачу.",
+    "2. Дай короткий ответ по шагам.",
+    "3. Предложи следующий шаг.",
+    "",
+    "| Шаг | Действие |",
+    "| --- | --- |",
+    "| 1 | Уточнить |",
+    "| 2 | Ответить |",
+  ].join("\n"),
   enabled: false,
+  parentFolder: "",
 });
+
+function skillPathLabel(item: MiraCatalogItem): string {
+  if (item.layout === "folder" && item.folder) {
+    return `${item.folder}/SKILL.md`;
+  }
+  if (item.relativePath) {
+    const m = item.relativePath.match(/(?:^|\/)skills\/(.+)$/);
+    if (m?.[1]) return m[1];
+  }
+  return `${item.id}.md`;
+}
 
 function skillDraftSummary(d: CatalogEditDraft): string {
   const bits = [
@@ -196,6 +219,8 @@ export function SkillsPanel() {
       tags: parseCsv(draftIn.tags),
       enabled: draftIn.enabled,
       body: draftIn.body,
+      parentFolder: (draftIn.parentFolder || "").trim(),
+      asFolder: true as const,
     };
     if (!window.mira) {
       saveLocalSkill(payload);
@@ -218,9 +243,10 @@ export function SkillsPanel() {
   }
 
   async function removeItem(item: MiraCatalogItem) {
+    const pathHint = skillPathLabel(item);
     const ok = await confirm({
       title: "Удалить skill",
-      body: `Удалить skill «${item.name}» (${item.id})?\nФайл будет удалён из каталога.`,
+      body: `Удалить skill «${item.name}» (${item.id})?\nБудет удалён ${item.layout === "folder" ? "каталог" : "файл"}: ${pathHint}`,
       confirmLabel: "Удалить",
       tone: "danger",
     });
@@ -230,6 +256,29 @@ export function SkillsPanel() {
       : deleteLocalSkill(item.id);
     setNote(`${res.ok ? "OK" : "FAIL"} — ${res.detail}`);
     if (res.ok) await refresh();
+  }
+
+  async function importFromDisk(kind: "file" | "folder") {
+    if (!window.mira?.pickAppPath || !window.mira.importSkill) {
+      setNote(
+        "Импорт доступен только в Electron — выберите .md или папку со SKILL.md",
+      );
+      return;
+    }
+    const picked = await window.mira.pickAppPath(kind);
+    if (picked.canceled || !picked.path) return;
+    const res = await window.mira.importSkill(picked.path);
+    setNote(`${res.ok ? "OK" : "FAIL"} — ${res.detail}`);
+    if (res.ok) {
+      await refresh();
+      notifyCoreProgress();
+      emitActionLog({
+        title: "Skill импортирован",
+        reason: res.detail,
+        tag: "Мастерская",
+        tone: "success",
+      });
+    }
   }
 
   const countLabel =
@@ -250,8 +299,8 @@ export function SkillsPanel() {
             {browserOnly ? <span className="chip">browser-demo</span> : null}
           </div>
           <p className="muted" style={{ margin: "6px 0 0" }}>
-            Установленные ≠ активные. В контекст — matched on-demand или «включи
-            skill …».
+            Скилл = папка с <code>SKILL.md</code> (можно вложенные каталоги).
+            Установленные ≠ активные — matched on-demand или «включи skill …».
           </p>
         </div>
         <div className="catalog-sort">
@@ -263,6 +312,32 @@ export function SkillsPanel() {
               options={CATALOG_SORT_OPTIONS}
               onChange={(v) => changeSort(v as CatalogSort)}
             />
+            <button
+              type="button"
+              className="btn"
+              disabled={browserOnly}
+              title={
+                browserOnly
+                  ? "Импорт только в Electron"
+                  : "Импортировать .md / SKILL.md"
+              }
+              onClick={() => void importFromDisk("file")}
+            >
+              Импорт файла
+            </button>
+            <button
+              type="button"
+              className="btn"
+              disabled={browserOnly}
+              title={
+                browserOnly
+                  ? "Импорт только в Electron"
+                  : "Импортировать папку-каталог со SKILL.md"
+              }
+              onClick={() => void importFromDisk("folder")}
+            >
+              Импорт папки
+            </button>
             <button
               type="button"
               className="btn btn-primary"
@@ -338,7 +413,9 @@ export function SkillsPanel() {
                       aria-hidden
                     />
                   </div>
-                  <div className="paths-card-kind">Skill · {item.id}</div>
+                  <div className="paths-card-kind" title={skillPathLabel(item)}>
+                    Skill · {skillPathLabel(item)}
+                  </div>
                 </div>
                 <label className="paths-card-enable" title="Установлен">
                   <input
@@ -420,10 +497,12 @@ export function SkillsPanel() {
           title={
             editor.mode === "edit"
               ? `Править skill · ${editor.draft.id}`
-              : "Новый skill"
+              : "Новый skill (папка / SKILL.md)"
           }
           draft={editor.draft}
           idLocked={editor.mode === "edit"}
+          showFolderField={editor.mode === "create"}
+          markdownPreview
           confirmLabel={editor.mode === "edit" ? "Сохранить" : "Создать"}
           onClose={() => setEditor(null)}
           onDismiss={(next) => {

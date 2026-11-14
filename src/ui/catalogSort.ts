@@ -65,7 +65,16 @@ export function itemToCatalogDraft(item: MiraCatalogItem): {
   tags: string;
   body: string;
   enabled: boolean;
+  parentFolder?: string;
 } {
+  const folder = (item.folder ?? "").trim();
+  // folder is relative path including the skill leaf dir for layout=folder
+  const parent =
+    item.layout === "folder" && folder.includes("/")
+      ? folder.split("/").slice(0, -1).join("/")
+      : item.layout === "folder"
+        ? ""
+        : undefined;
   return {
     id: item.id,
     name: item.name,
@@ -74,6 +83,7 @@ export function itemToCatalogDraft(item: MiraCatalogItem): {
     tags: (item.tags ?? []).join(", "),
     body: item.body,
     enabled: item.enabled,
+    parentFolder: parent,
   };
 }
 

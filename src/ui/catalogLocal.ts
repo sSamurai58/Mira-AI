@@ -11,6 +11,8 @@ type Draft = {
   tags?: string[];
   enabled: boolean;
   body: string;
+  parentFolder?: string;
+  asFolder?: boolean;
 };
 
 function read(key: string): MiraCatalogItem[] {
@@ -40,6 +42,22 @@ function upsert(key: string, draft: Draft): MiraCatalogItem {
     .replace(/^-+|-+$/g, "");
   if (!id) throw new Error("id пустой");
   const items = read(key).filter((x) => x.id !== id);
+  const parent = (draft.parentFolder || "")
+    .split(/[/\\]+/)
+    .map((p) =>
+      p
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]+/g, "-")
+        .replace(/^-+|-+$/g, ""),
+    )
+    .filter(Boolean)
+    .join("/");
+  const asFolder = draft.asFolder !== false && key === SKILLS_KEY;
+  const folder = asFolder ? (parent ? `${parent}/${id}` : id) : "";
+  const rel = asFolder
+    ? `local/${key}/${folder}/SKILL.md`
+    : `local/${key}/${id}.md`;
   const row: MiraCatalogItem = {
     id,
     name: draft.name.trim() || id,
@@ -48,9 +66,11 @@ function upsert(key: string, draft: Draft): MiraCatalogItem {
     tags: (draft.tags ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean),
     enabled: draft.enabled,
     body: draft.body,
-    filePath: `local://${key}/${id}.md`,
-    relativePath: `local/${key}/${id}.md`,
+    filePath: `local://${rel}`,
+    relativePath: rel,
     updatedAt: new Date().toISOString(),
+    layout: asFolder ? "folder" : "file",
+    folder,
   };
   items.unshift(row);
   write(key, items);

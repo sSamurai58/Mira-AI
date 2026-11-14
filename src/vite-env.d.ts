@@ -81,6 +81,10 @@ type MiraCatalogItem = {
   filePath: string;
   relativePath: string;
   updatedAt?: string;
+  /** How the skill is stored on disk. */
+  layout?: "file" | "folder";
+  /** Parent path under data/skills for folder skills (includes leaf). */
+  folder?: string;
 };
 
 type MiraConfirmSkillPropose = {
@@ -389,6 +393,8 @@ interface MiraBridge {
     tags?: string[];
     enabled: boolean;
     body: string;
+    parentFolder?: string;
+    asFolder?: boolean;
   }) => Promise<MiraCatalogItem>;
   deleteSkill: (
     id: string,
@@ -396,6 +402,14 @@ interface MiraBridge {
   deleteProtocol: (
     id: string,
   ) => Promise<{ ok: boolean; detail: string; deletedId: string | null }>;
+  importSkill: (
+    sourcePath: string,
+    opts?: { catalogName?: string },
+  ) => Promise<{
+    ok: boolean;
+    detail: string;
+    imported: MiraCatalogItem[];
+  }>;
   runProtocolSequence: (
     id: string,
     opts?: { dryRun?: boolean },

@@ -51,10 +51,14 @@ export type MiraCatalogItem = {
   name: string;
   description: string;
   triggers: string[];
+  tags?: string[];
   enabled: boolean;
   body: string;
   filePath: string;
   relativePath: string;
+  updatedAt?: string;
+  layout?: "file" | "folder";
+  folder?: string;
 };
 
 export type MiraConfirmSkillPropose = {
@@ -214,9 +218,19 @@ contextBridge.exposeInMainWorld("mira", {
     tags?: string[];
     enabled: boolean;
     body: string;
+    parentFolder?: string;
+    asFolder?: boolean;
   }) => call("mira:save-skill", item),
   deleteSkill: (id: string) => call("mira:delete-skill", id),
   deleteProtocol: (id: string) => call("mira:delete-protocol", id),
+  importSkill: (
+    sourcePath: string,
+    opts?: { catalogName?: string },
+  ): Promise<{
+    ok: boolean;
+    detail: string;
+    imported: MiraCatalogItem[];
+  }> => call("mira:import-skill", sourcePath, opts),
   runProtocolSequence: (id: string, opts?: { dryRun?: boolean }) =>
     call("mira:run-protocol-sequence", id, opts),
   getWebPolicy: () => call("mira:get-web-policy"),
