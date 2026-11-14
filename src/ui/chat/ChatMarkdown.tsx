@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from "react";
+import { CodeBlock } from "./CodeBlock";
 
 type Piece =
   | { kind: "text"; value: string }
@@ -6,6 +7,55 @@ type Piece =
   | { kind: "italic"; value: string }
   | { kind: "underline"; value: string }
   | { kind: "code"; value: string };
+
+type Segment =
+  | { kind: "md"; text: string }
+  | { kind: "code"; lang: string; code: string };
+
+/** Split fenced ```lang ... ``` blocks from surrounding markdown. */
+function splitFences(text: string): Segment[] {
+  const segments: Segment[] = [];
+  const re = /```([^\n`]*)\r?\n?([\s\S]*?)```/g;
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    if (m.index > last) {
+      segments.push({ kind: "md", text: text.slice(last, m.index) });
+    }
+    segments.push({
+      kind: "code",
+      lang: (m[1] ?? "").trim(),
+      code: m[2] ?? "",
+    });
+    last = m.index + m[0].length;
+  }
+  if (last >= text.length) {
+    return segments.length ? segments : [{ kind: "md", text }];
+  }
+
+  const rest = text.slice(last);
+  const openIdx = rest.indexOf("```");
+  if (openIdx === -1) {
+    segments.push({ kind: "md", text: rest });
+    return segments;
+  }
+  // Streaming / unclosed fence — show as code block while it grows
+  if (openIdx > 0) {
+    segments.push({ kind: "md", text: rest.slice(0, openIdx) });
+  }
+  const after = rest.slice(openIdx + 3);
+  const nl = after.indexOf("\n");
+  if (nl === -1) {
+    segments.push({ kind: "code", lang: after.trim(), code: "" });
+  } else {
+    segments.push({
+      kind: "code",
+      lang: after.slice(0, nl).trim(),
+      code: after.slice(nl + 1),
+    });
+  }
+  return segments;
+}
 
 /** Split one line into styled pieces (no nested markdown). */
 function tokenizeInline(text: string): Piece[] {
@@ -36,21 +86,23 @@ function renderPieces(pieces: Piece[], keyPrefix: string): ReactNode[] {
     if (p.kind === "bold") return <strong key={key}>{p.value}</strong>;
     if (p.kind === "italic") return <em key={key}>{p.value}</em>;
     if (p.kind === "underline") return <u key={key}>{p.value}</u>;
-    if (p.kind === "code") return <code key={key}>{p.value}</code>;
+    if (p.kind === "code") {
+      return (
+        <code key={key} className="bubble-inline-code">
+          {p.value}
+        </code>
+      );
+    }
     return <Fragment key={key}>{p.value}</Fragment>;
   });
 }
 
-/**
- * Safe chat markdown subset: **bold**, *italic*, __underline__, `code`,
- * newlines and simple bullet lists. No HTML.
- */
-export function ChatMarkdown({ text }: { text: string }) {
-  if (!text) return null;
+function renderMarkdownChunk(text: string, keyBase: number): ReactNode[] {
+  if (!text) return [];
   const lines = text.replace(/\r\n/g, "\n").split("\n");
   const blocks: ReactNode[] = [];
   let listBuf: string[] = [];
-  let key = 0;
+  let key = keyBase;
 
   const flushList = () => {
     if (!listBuf.length) return;
@@ -86,6 +138,33 @@ export function ChatMarkdown({ text }: { text: string }) {
     );
   }
   flushList();
+  return blocks;
+}
+
+/**
+ * Safe chat markdown: fences with language + copy, **bold**, *italic*,
+ * __underline__, `code`, newlines and simple bullet lists. No HTML.
+ */
+export function ChatMarkdown({ text }: { text: string }) {
+  if (!text) return null;
+  const segments = splitFences(text.replace(/\r\n/g, "\n"));
+  const blocks: ReactNode[] = [];
+  let key = 0;
+
+  for (const seg of segments) {
+    if (seg.kind === "code") {
+      blocks.push(
+        <CodeBlock
+          key={`code-${key++}`}
+          code={seg.code}
+          langHint={seg.lang}
+        />,
+      );
+      continue;
+    }
+    blocks.push(...renderMarkdownChunk(seg.text, key));
+    key += 1000;
+  }
 
   return <div className="bubble-md">{blocks}</div>;
 }

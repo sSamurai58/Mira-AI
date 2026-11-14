@@ -69,6 +69,38 @@ export function ToggleRow(props: {
   );
 }
 
+export function SliderField(props: {
+  label: string;
+  hint?: string;
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  display?: string;
+  onChange: (next: number) => void;
+}) {
+  return (
+    <div className="settings-field settings-slider-field">
+      <div className="settings-field-row">
+        <span className="settings-field-label">{props.label}</span>
+        <span className="mono muted settings-slider-value">
+          {props.display ?? String(props.value)}
+        </span>
+      </div>
+      <input
+        type="range"
+        min={props.min}
+        max={props.max}
+        step={props.step ?? 1}
+        value={props.value}
+        aria-label={props.label}
+        onChange={(e) => props.onChange(Number(e.target.value))}
+      />
+      {props.hint ? <span className="settings-field-hint">{props.hint}</span> : null}
+    </div>
+  );
+}
+
 export function SecretField(props: {
   label: string;
   hint?: string;

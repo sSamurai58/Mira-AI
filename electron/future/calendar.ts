@@ -43,6 +43,26 @@ export function listTimers(limit = 20): TimerRow[] {
     .all(limit) as TimerRow[];
 }
 
+/** Upcoming events with remind_at or starts_at within the next `horizonHours`. */
+export function listUpcomingReminders(
+  horizonHours = 24,
+  limit = 8,
+): CalendarEventRow[] {
+  const now = Date.now();
+  const until = new Date(now + Math.max(1, horizonHours) * 3600_000).toISOString();
+  const nowIso = new Date(now).toISOString();
+  return openStore()
+    .prepare(
+      `SELECT id, title, starts_at, ends_at, remind_at, created_at
+       FROM calendar_events
+       WHERE (remind_at IS NOT NULL AND remind_at >= ? AND remind_at <= ?)
+          OR (starts_at >= ? AND starts_at <= ?)
+       ORDER BY COALESCE(remind_at, starts_at) ASC
+       LIMIT ?`,
+    )
+    .all(nowIso, until, nowIso, until, limit) as CalendarEventRow[];
+}
+
 export function createEvent(input: {
   title: string;
   startsAt: string;
@@ -133,11 +153,15 @@ async function showDesktopNotification(
 ): Promise<boolean> {
   try {
     if (typeof process.versions.electron === "string") {
-      const { Notification } = await import("electron");
-      if (Notification.isSupported()) {
-        new Notification({ title, body }).show();
-        return true;
-      }
+      const { showOsNotification } = await import("../osNotify");
+      // Calendar reminders should surface even if Mira is focused.
+      const res = showOsNotification({
+        title,
+        body,
+        category: "calendar",
+        force: true,
+      });
+      return res.ok;
     }
   } catch {
     // headless

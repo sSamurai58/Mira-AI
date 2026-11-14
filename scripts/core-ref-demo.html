@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <title>Mira Core — reference match demo</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #000; display: grid; place-items: center; overflow: hidden; }
+      .wrap { width: min(92vmin, 720px); aspect-ratio: 1; position: relative; }
+      canvas { width: 100%; height: 100%; display: block; background: transparent; position: relative; z-index: 1; }
+      .glow {
+        pointer-events: none; position: absolute; inset: -14%; border-radius: 50%; z-index: 0;
+        background:
+          radial-gradient(circle at 50% 48%, rgba(255, 154, 60, 0.34), transparent 38%),
+          radial-gradient(circle at 50% 46%, transparent 28%, rgba(58, 240, 224, 0.22) 48%, transparent 68%);
+        filter: blur(30px); opacity: 0.78;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap" id="wrap">
+      <div class="glow" aria-hidden="true"></div>
+      <canvas id="c"></canvas>
+    </div>
+    <script type="module">
+      import { createCoreWebgl } from "../src/ui/core/coreWebgl.ts";
+      const canvas = document.getElementById("c");
+      const wrap = document.getElementById("wrap");
+      const handle = createCoreWebgl(canvas, {
+        level: 4,
+        voice: "idle",
+        palette: {
+          cool: [0.18, 0.92, 0.88],
+          warm: [1.0, 0.55, 0.18],
+          glow: [1.0, 0.96, 0.72],
+        },
+      });
+      if (!handle) {
+        document.body.innerHTML = "<p style='color:#fff;font:16px sans-serif'>WebGL2 unavailable</p>";
+      } else {
+        new ResizeObserver(() => handle.resize()).observe(wrap);
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          document.documentElement.dataset.ready = "1";
+        }));
+      }
+    </script>
+  </body>
+</html>

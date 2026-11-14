@@ -1,0 +1,207 @@
+/**
+ * San Francisco (SF UI Text / Display) — Apple themes only.
+ * Loaded via @font-face; applied when data-theme-family="apple".
+ * Optical sizing: Text for UI/body, Display for large titles.
+ */
+
+/* ── SF Pro Text (UI / small sizes) ── */
+
+@font-face {
+  font-family: "SF Pro Text";
+  src: url("/fonts/sf/sf-ui-text-light.ttf") format("truetype");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "SF Pro Text";
+  src: url("/fonts/sf/sf-ui-text-light-italic.ttf") format("truetype");
+  font-weight: 300;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "SF Pro Text";
+  src: url("/fonts/sf/sf-ui-text-regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "SF Pro Text";
+  src: url("/fonts/sf/sf-ui-text-italic.ttf") format("truetype");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "SF Pro Text";
+  src: url("/fonts/sf/sf-ui-text-medium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "SF Pro Text";
+  src: url("/fonts/sf/sf-ui-text-medium-italic.ttf") format("truetype");
+  font-weight: 500;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "SF Pro Text";
+  src: url("/fonts/sf/sf-ui-text-semibold.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "SF Pro Text";
+  src: url("/fonts/sf/sf-ui-text-semibold-italic.ttf") format("truetype");
+  font-weight: 600;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "SF Pro Text";
+  src: url("/fonts/sf/sf-ui-text-bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "SF Pro Text";
+  src: url("/fonts/sf/sf-ui-text-bold-italic.ttf") format("truetype");
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "SF Pro Text";
+  src: url("/fonts/sf/sf-ui-text-heavy.ttf") format("truetype");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "SF Pro Text";
+  src: url("/fonts/sf/sf-ui-text-heavy-italic.ttf") format("truetype");
+  font-weight: 800;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* ── SF Pro Display (large titles) ── */
+
+@font-face {
+  font-family: "SF Pro Display";
+  src: url("/fonts/sf/sf-ui-display-ultralight.ttf") format("truetype");
+  font-weight: 100;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "SF Pro Display";
+  src: url("/fonts/sf/sf-ui-display-thin.ttf") format("truetype");
+  font-weight: 200;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "SF Pro Display";
+  src: url("/fonts/sf/sf-ui-display-light.ttf") format("truetype");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "SF Pro Display";
+  src: url("/fonts/sf/sf-ui-display-regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "SF Pro Display";
+  src: url("/fonts/sf/sf-ui-display-medium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "SF Pro Display";
+  src: url("/fonts/sf/sf-ui-display-semibold.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "SF Pro Display";
+  src: url("/fonts/sf/sf-ui-display-bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "SF Pro Display";
+  src: url("/fonts/sf/sf-ui-display-heavy.ttf") format("truetype");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "SF Pro Display";
+  src: url("/fonts/sf/sf-ui-display-black.ttf") format("truetype");
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Apply only under Apple themes — Mira keeps Manrope/Syne from :root */
+
+html[data-theme-family="apple"] {
+  --font-sans: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    system-ui, sans-serif;
+  --font-display: "SF Pro Display", "SF Pro Text", -apple-system,
+    BlinkMacSystemFont, system-ui, sans-serif;
+  font-optical-sizing: auto;
+}
+
+html[data-theme-family="apple"] body {
+  font-family: var(--font-sans);
+  letter-spacing: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html[data-theme-family="apple"] h1,
+html[data-theme-family="apple"] h2,
+html[data-theme-family="apple"] .font-display,
+html[data-theme-family="apple"] .paths-header h2,
+html[data-theme-family="apple"] .cc-header h2,
+html[data-theme-family="apple"] .appearance-block-head h2,
+html[data-theme-family="apple"] .catalog-edit-modal h2,
+html[data-theme-family="apple"] #catalog-edit-title,
+html[data-theme-family="apple"] #protocol-edit-title {
+  font-family: var(--font-display);
+  letter-spacing: -0.015em;
+}

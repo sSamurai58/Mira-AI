@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 export type SkillProposeForm = {
   defaultId: string;
@@ -13,6 +14,14 @@ type ConfirmModalProps = {
   title: string;
   body: string;
   confirmLabel?: string;
+  cancelLabel?: string;
+  /** Primary vs destructive confirm button. */
+  tone?: "primary" | "danger";
+  /**
+   * Bridge/integration confirms show the always-on policy hint.
+   * Local UI confirms (Voice Studio, Library, …) keep the panel clean.
+   */
+  bridgeHint?: boolean;
   skillPropose?: SkillProposeForm | null;
   onConfirm: (fields?: { skillId?: string; skillName?: string }) => void;
   onCancel: () => void;
@@ -31,12 +40,17 @@ export function ConfirmModal({
   title,
   body,
   confirmLabel = "Подтвердить",
+  cancelLabel = "Отмена",
+  tone = "primary",
+  bridgeHint = false,
   skillPropose = null,
   onConfirm,
   onCancel,
 }: ConfirmModalProps) {
   const [skillId, setSkillId] = useState(skillPropose?.defaultId ?? "");
   const [skillName, setSkillName] = useState(skillPropose?.defaultName ?? "");
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const previouslyFocused = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!open || !skillPropose) return;
@@ -44,11 +58,66 @@ export function ConfirmModal({
     setSkillName(skillPropose.defaultName);
   }, [open, skillPropose]);
 
+  useEffect(() => {
+    if (!open) return;
+    previouslyFocused.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    const root = dialogRef.current;
+    const focusables = () =>
+      root
+        ? Array.from(
+            root.querySelectorAll<HTMLElement>(
+              'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+            ),
+          )
+        : [];
+    // Focus first actionable control.
+    requestAnimationFrame(() => {
+      const list = focusables();
+      (list[0] ?? root)?.focus?.();
+    });
+
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onCancel();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const list = focusables();
+      if (list.length < 1) return;
+      const first = list[0]!;
+      const last = list[list.length - 1]!;
+      const active = document.activeElement as HTMLElement | null;
+      if (e.shiftKey) {
+        if (active === first || !root?.contains(active)) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      previouslyFocused.current?.focus?.();
+    };
+  }, [open, onCancel]);
+
   const normalizedId = useMemo(() => normalizeSkillId(skillId), [skillId]);
-  const existing = useMemo(
-    () => new Set((skillPropose?.existingIds ?? []).map((id) => id.toLowerCase())),
-    [skillPropose],
-  );
+  const existing = useMemo(() => {
+    const raw = skillPropose?.existingIds;
+    const ids = Array.isArray(raw) ? raw : [];
+    return new Set(
+      ids
+        .filter((id): id is string => typeof id === "string")
+        .map((id) => id.toLowerCase()),
+    );
+  }, [skillPropose]);
   const duplicate =
     Boolean(skillPropose) &&
     Boolean(normalizedId) &&
@@ -58,13 +127,20 @@ export function ConfirmModal({
 
   if (!open) return null;
 
-  return (
+  const confirmClass =
+    tone === "danger" ? "btn btn-danger" : "btn btn-primary";
+
+  // Portal to <body> so frameless TitleBar / atmosphere stacking never covers
+  // integration confirms or Workshop trigger dialogs.
+  const modal = (
     <div className="modal-backdrop" role="presentation" onClick={onCancel}>
       <div
+        ref={dialogRef}
         className={`modal ${skillPropose ? "modal-wide" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirm-title"
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
         <h2 id="confirm-title">{title}</h2>
@@ -119,14 +195,16 @@ export function ConfirmModal({
           </div>
         ) : null}
 
-        <p className="mono muted">Режим confirm: always (до F12)</p>
+        {bridgeHint ? (
+          <p className="mono muted">Режим confirm: always (до F12)</p>
+        ) : null}
         <div className="modal-actions">
           <button type="button" className="btn" onClick={onCancel}>
-            Отмена
+            {cancelLabel}
           </button>
           <button
             type="button"
-            className="btn btn-primary"
+            className={confirmClass}
             disabled={!canSubmit}
             onClick={() => {
               if (!canSubmit) return;
@@ -146,4 +224,7 @@ export function ConfirmModal({
       </div>
     </div>
   );
+
+  if (typeof document === "undefined") return modal;
+  return createPortal(modal, document.body);
 }

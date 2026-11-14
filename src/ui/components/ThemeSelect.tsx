@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
 } from "react";
 
 export type ThemeSelectOption = {
@@ -61,11 +62,34 @@ export function ThemeSelect({
     setOpen(false);
   }
 
+  /** Parent `<label>` re-clicks the trigger after option/trigger clicks — block that. */
+  function stopLabelRetarget(e: ReactMouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  function onTriggerClick(e: ReactMouseEvent<HTMLButtonElement>) {
+    stopLabelRetarget(e);
+    if (disabled) return;
+    setOpen((v) => !v);
+  }
+
+  function onOptionClick(
+    e: ReactMouseEvent<HTMLButtonElement>,
+    next: string,
+  ) {
+    stopLabelRetarget(e);
+    pick(next);
+  }
+
   function onTriggerKey(e: KeyboardEvent<HTMLButtonElement>) {
     if (disabled) return;
     if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       setOpen(true);
+    } else if (e.key === "Escape" && open) {
+      e.preventDefault();
+      setOpen(false);
     }
   }
 
@@ -83,7 +107,7 @@ export function ThemeSelect({
         aria-controls={listId}
         aria-label={ariaLabel}
         disabled={disabled}
-        onClick={() => setOpen((v) => !v)}
+        onClick={onTriggerClick}
         onKeyDown={onTriggerKey}
       >
         <span className={`theme-select-label ${selected ? "" : "is-placeholder"}`}>
@@ -112,7 +136,7 @@ export function ThemeSelect({
                   aria-selected={active}
                   className={`theme-select-option ${active ? "is-active" : ""}`}
                   disabled={opt.disabled}
-                  onClick={() => pick(opt.value)}
+                  onClick={(e) => onOptionClick(e, opt.value)}
                 >
                   {opt.label}
                 </button>

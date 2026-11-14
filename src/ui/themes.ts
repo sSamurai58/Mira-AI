@@ -1,3 +1,9 @@
+import {
+  applyAppleAppearanceToDom,
+  isAppleThemeId,
+  loadAppleAppearance,
+} from "./appleGlass";
+
 export type ThemeId =
   | "deep-sea-neon"
   | "volcanic-ash"
@@ -12,7 +18,9 @@ export type ThemeId =
   | "neon-synth"
   | "void-orchid"
   | "signal-spectrum"
-  | "neon-lux";
+  | "neon-lux"
+  | "apple-light"
+  | "apple-dark";
 
 export type ThemeTokens = {
   bg: string;
@@ -33,6 +41,9 @@ export type ThemeDefinition = {
   id: ThemeId;
   name: string;
   tokens: ThemeTokens;
+  /** Mira neon catalog vs Apple HIG / Liquid Glass. */
+  family?: "mira" | "apple";
+  description?: string;
 };
 
 const baseDanger = {
@@ -272,12 +283,91 @@ export const THEMES: ThemeDefinition[] = [
       terminalFg: "#EFF8FF",
     },
   },
+  {
+    id: "apple-light",
+    name: "Apple Light",
+    family: "apple",
+    description: "iOS светлая · Liquid Glass",
+    tokens: {
+      bg: "#F2F2F7",
+      bgElevated: "#FFFFFF",
+      border: "#C6C6C8",
+      text: "#000000",
+      textMuted: "#8E8E93",
+      accent: "#007AFF",
+      accentFg: "#FFFFFF",
+      danger: "#FF3B30",
+      warning: "#FF9500",
+      success: "#34C759",
+      terminalBg: "#FFFFFF",
+      terminalFg: "#1C1C1E",
+    },
+  },
+  {
+    id: "apple-dark",
+    name: "Apple Dark",
+    family: "apple",
+    description: "iOS тёмная · Liquid Glass",
+    tokens: {
+      bg: "#000000",
+      bgElevated: "#1C1C1E",
+      border: "#38383A",
+      text: "#FFFFFF",
+      textMuted: "#8E8E93",
+      accent: "#0A84FF",
+      accentFg: "#FFFFFF",
+      danger: "#FF453A",
+      warning: "#FF9F0A",
+      success: "#32D74B",
+      terminalBg: "#1C1C1E",
+      terminalFg: "#F2F2F7",
+    },
+  },
 ];
 
 export const DEFAULT_THEME_ID: ThemeId = "deep-sea-neon";
 
 export function getTheme(id: ThemeId): ThemeDefinition {
-  return THEMES.find((t) => t.id === id) ?? THEMES[0];
+  return THEMES.find((t) => t.id === id) ?? THEMES[0]!;
+}
+
+export function miraThemes(): ThemeDefinition[] {
+  return THEMES.filter((t) => (t.family ?? "mira") === "mira");
+}
+
+export function appleThemes(): ThemeDefinition[] {
+  return THEMES.filter((t) => t.family === "apple");
+}
+
+/** Fired on `window` after theme CSS vars (incl. core plasma) are applied. */
+export const MIRA_THEME_EVENT = "mira:theme";
+
+/** Core plasma band colors derived from theme tokens (hex). */
+export type CoreThemePalette = {
+  cool: string;
+  warm: string;
+  glow: string;
+};
+
+/**
+ * Map Mira theme tokens → plasma bands.
+ * cool = mid filaments (--accent ↔ --success, slight --border)
+ * warm = inner/outer filaments (--warning ↔ --accent)
+ * glow = nucleus (lifted warm↔cool toward white, tinted by --accent)
+ */
+export function corePaletteFromTokens(tokens: ThemeTokens): CoreThemePalette {
+  const coolBase =
+    mixHex(tokens.accent, tokens.success, 0.35) ?? tokens.accent;
+  const cool =
+    liftHex(mixHex(coolBase, tokens.border, 0.12) ?? coolBase, 0.12) ??
+    coolBase;
+  const warm =
+    liftHex(mixHex(tokens.warning, tokens.accent, 0.25) ?? tokens.warning, 0.08) ??
+    tokens.warning;
+  const glowMix = mixHex(warm, cool, 0.35) ?? tokens.accent;
+  const glowTint = mixHex(glowMix, tokens.accent, 0.2) ?? glowMix;
+  const glow = liftHex(glowTint, 0.55) ?? glowTint;
+  return { cool, warm, glow };
 }
 
 export function applyTheme(id: ThemeId): void {
@@ -305,8 +395,51 @@ export function applyTheme(id: ThemeId): void {
     "--panel-line",
     `color-mix(in srgb, ${tokens.accent} 26%, transparent)`,
   );
+  // Core plasma layers — live uniforms read these via getComputedStyle
+  const core = corePaletteFromTokens(tokens);
+  root.style.setProperty("--core-cool", core.cool);
+  root.style.setProperty("--core-warm", core.warm);
+  root.style.setProperty("--core-glow", core.glow);
   root.dataset.theme = theme.id;
   localStorage.setItem("mira.theme", theme.id);
+
+  if (isAppleThemeId(theme.id)) {
+    root.dataset.themeFamily = "apple";
+    /* Bundled SF Pro Text/Display from public/fonts/sf (see sfFonts.css) */
+    root.style.setProperty(
+      "--font-sans",
+      '"SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
+    );
+    root.style.setProperty(
+      "--font-display",
+      '"SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, system-ui, sans-serif',
+    );
+    root.style.setProperty("--radius", "12px");
+    root.style.setProperty("--radius-sm", "10px");
+    root.style.colorScheme = theme.id === "apple-light" ? "light" : "dark";
+    applyAppleAppearanceToDom(loadAppleAppearance(), theme.id);
+  } else {
+    root.dataset.themeFamily = "mira";
+    delete root.dataset.appleGlass;
+    delete root.dataset.appleBold;
+    root.style.removeProperty("--font-sans");
+    root.style.removeProperty("--font-display");
+    root.style.removeProperty("--radius");
+    root.style.removeProperty("--radius-sm");
+    root.style.removeProperty("--apple-glass-bg");
+    root.style.removeProperty("--apple-glass-blur");
+    root.style.removeProperty("--apple-glass-saturate");
+    root.style.removeProperty("--apple-glass-border");
+    root.style.removeProperty("--apple-glass-highlight");
+    root.style.removeProperty("--apple-font-weight");
+    root.style.colorScheme = "dark";
+  }
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent(MIRA_THEME_EVENT, { detail: { id: theme.id } }),
+    );
+  }
 }
 
 function mixHex(a: string, b: string, t: number): string | null {
@@ -316,6 +449,16 @@ function mixHex(a: string, b: string, t: number): string | null {
   const m = (x: number, y: number) => Math.round(x + (y - x) * t);
   const to = (n: number) => n.toString(16).padStart(2, "0");
   return `#${to(m(pa[0], pb[0]))}${to(m(pa[1], pb[1]))}${to(m(pa[2], pb[2]))}`;
+}
+
+/** Lift RGB toward white by `amount` (0…1). */
+function liftHex(hex: string, amount: number): string | null {
+  const p = parseHex(hex);
+  if (!p) return null;
+  const lift = (c: number) =>
+    Math.min(255, Math.round(c * (1 - amount) + 255 * amount));
+  const to = (n: number) => n.toString(16).padStart(2, "0");
+  return `#${to(lift(p[0]))}${to(lift(p[1]))}${to(lift(p[2]))}`;
 }
 
 function parseHex(hex: string): [number, number, number] | null {

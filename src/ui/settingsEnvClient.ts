@@ -7,6 +7,7 @@ export const SETTINGS_SECRET_KEYS = new Set([
   "ANTHROPIC_API_KEY",
   "GEMINI_API_KEY",
   "XAI_API_KEY",
+  "ELEVENLABS_API_KEY",
   "TELEGRAM_BOT_TOKEN",
 ]);
 
@@ -29,6 +30,13 @@ const DEFAULTS: Record<string, string> = {
   ANTHROPIC_API_KEY: "",
   GEMINI_API_KEY: "",
   XAI_API_KEY: "",
+  ELEVENLABS_API_KEY: "",
+  ELEVENLABS_VOICE_ID: "YjESejviApN7SHrbfnA2",
+  ELEVENLABS_MODEL_ID: "eleven_multilingual_v2",
+  ELEVENLABS_STABILITY: "0.45",
+  ELEVENLABS_SIMILARITY: "0.75",
+  ELEVENLABS_STYLE: "0.35",
+  ELEVENLABS_SPEAKER_BOOST: "true",
   VISION_ENABLED: "false",
   WEB_ENABLED: "true",
   WEB_ALLOWLIST: "duckduckgo.com,api.duckduckgo.com",
@@ -51,6 +59,12 @@ const DEFAULTS: Record<string, string> = {
   BLENDER_PATH: "",
   BLENDER_MODE: "dry-run",
   BLENDER_CONFIRM: "true",
+  TERMINAL_ENABLED: "true",
+  TERMINAL_CONFIRM_DANGEROUS: "true",
+  TERMINAL_SHELL: "",
+  TERMINAL_CWD: "",
+  TERMINAL_FONT_SIZE: "14",
+  TERMINAL_SCROLLBACK: "2000",
 };
 
 export type SettingsEnvSnapshot = {
@@ -192,6 +206,14 @@ export async function loadSettingsEnv(): Promise<SettingsEnvSnapshot> {
   };
 }
 
+function normalizeSecretsSet(
+  raw: Record<string, boolean> | null | undefined,
+  values: Record<string, string>,
+): Record<string, boolean> {
+  if (raw && typeof raw === "object") return raw;
+  return secretsFrom(values);
+}
+
 export async function saveSettingsEnv(
   patch: Record<string, string>,
   opts?: { clearSecrets?: boolean },
@@ -200,12 +222,13 @@ export async function saveSettingsEnv(
     if (window.mira?.setSettingsEnv) {
       try {
         const res = await window.mira.setSettingsEnv(patch);
+        const values = { ...DEFAULTS, ...(res?.values ?? {}) };
         return {
-          ok: res.ok,
-          detail: res.detail,
+          ok: Boolean(res?.ok),
+          detail: res?.detail ?? (res?.ok ? "Сохранено" : "Ошибка сохранения"),
           snap: {
-            values: { ...DEFAULTS, ...res.values },
-            secretsSet: res.secretsSet,
+            values,
+            secretsSet: normalizeSecretsSet(res?.secretsSet, values),
             source: "electron" as const,
           },
         };

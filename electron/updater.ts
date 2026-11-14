@@ -54,7 +54,51 @@ function setStatus(patch: Partial<UpdateStatus>): UpdateStatus {
     ...patch,
   };
   broadcast?.("mira:update-event", status);
+  void maybeOsUpdateNotify(status);
+  void syncFloatingUpdateHud(status);
   return status;
+}
+
+async function syncFloatingUpdateHud(snap: UpdateStatus): Promise<void> {
+  try {
+    const { syncUpdateHud } = await import("./updateHud");
+    await syncUpdateHud(snap);
+  } catch {
+    /* optional — window may be unavailable in tests */
+  }
+}
+
+async function maybeOsUpdateNotify(snap: UpdateStatus): Promise<void> {
+  try {
+    const { showOsNotification } = await import("./osNotify");
+    const channel = snap.channel;
+    if (
+      channel !== "available" &&
+      channel !== "downloaded" &&
+      channel !== "error"
+    ) {
+      return;
+    }
+    const title =
+      channel === "available"
+        ? `Mira ${snap.availableVersion || ""}`.trim()
+        : channel === "downloaded"
+          ? "Обновление готово"
+          : "Ошибка обновления";
+    const body =
+      channel === "available"
+        ? `Доступна новая версия${snap.availableVersion ? ` ${snap.availableVersion}` : ""}. Скачайте из HUD Mira.`
+        : channel === "downloaded"
+          ? "Обновление скачано. Установите из HUD или перезапустите Mira."
+          : snap.detail || "Не удалось проверить обновления";
+    showOsNotification({
+      title,
+      body,
+      category: channel === "error" ? "errors" : "updates",
+    });
+  } catch {
+    /* optional */
+  }
 }
 
 export function getUpdateStatus(): UpdateStatus {
@@ -120,6 +164,92 @@ export function humanizeUpdateError(raw: unknown): string {
     : "Не удалось проверить обновления. Откройте GitHub Releases вручную.";
 }
 
+let autoCheckTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingAutoReason: "renderer-ready" | "focus" | "boot-fallback" | null =
+  null;
+let checkInFlight: Promise<UpdateStatus> | null = null;
+let lastAutoCheckAt = 0;
+let rendererReadyScheduled = false;
+
+/** Min gap between automatic (non-manual) checks — avoids spam on focus. */
+const AUTO_CHECK_COOLDOWN_MS = 5 * 60_000;
+/** Delay after renderer is ready so UpdateHudToast can subscribe first. */
+const AFTER_RENDERER_READY_MS = 1200;
+
+const AUTO_REASON_PRIORITY: Record<
+  "renderer-ready" | "focus" | "boot-fallback",
+  number
+> = {
+  "boot-fallback": 1,
+  focus: 2,
+  "renderer-ready": 3,
+};
+
+/**
+ * Packaged auto-check. Prefer calling after the BrowserWindow has finished
+ * loading — a blind boot timer races the renderer IPC listener and drops
+ * `mira:update-event` (Electron does not queue sends for late subscribers).
+ */
+export function scheduleAutoUpdateCheck(
+  reason: "renderer-ready" | "focus" | "boot-fallback" = "renderer-ready",
+): void {
+  if (!app.isPackaged) return;
+
+  // Don't let focus/boot-fallback cancel a pending renderer-ready check.
+  if (
+    autoCheckTimer &&
+    pendingAutoReason &&
+    AUTO_REASON_PRIORITY[reason] < AUTO_REASON_PRIORITY[pendingAutoReason]
+  ) {
+    if (reason === "focus") {
+      broadcast?.("mira:update-event", getUpdateStatus());
+    }
+    return;
+  }
+
+  if (autoCheckTimer) clearTimeout(autoCheckTimer);
+  pendingAutoReason = reason;
+
+  const delay =
+    reason === "renderer-ready"
+      ? AFTER_RENDERER_READY_MS
+      : reason === "focus"
+        ? 400
+        : 4_000;
+
+  autoCheckTimer = setTimeout(() => {
+    autoCheckTimer = null;
+    pendingAutoReason = null;
+    const now = Date.now();
+    // Focus/boot-fallback: respect cooldown. First renderer-ready always runs.
+    if (
+      reason !== "renderer-ready" &&
+      lastAutoCheckAt > 0 &&
+      now - lastAutoCheckAt < AUTO_CHECK_COOLDOWN_MS
+    ) {
+      // Still push current status so a pending update re-surfaces in the HUD.
+      broadcast?.("mira:update-event", getUpdateStatus());
+      return;
+    }
+    // Only one "first paint" renderer-ready check per process.
+    if (reason === "renderer-ready" && rendererReadyScheduled) {
+      broadcast?.("mira:update-event", getUpdateStatus());
+      return;
+    }
+    if (reason === "renderer-ready") rendererReadyScheduled = true;
+    lastAutoCheckAt = now;
+    void checkForUpdates().catch(() => undefined);
+  }, delay);
+}
+
+/** Re-send latest status (e.g. after renderer mounts / window focused). */
+export function pushUpdateStatus(): UpdateStatus {
+  const snap = getUpdateStatus();
+  broadcast?.("mira:update-event", snap);
+  void syncFloatingUpdateHud(snap);
+  return snap;
+}
+
 export function initUpdater(send: Broadcast): void {
   broadcast = send;
   status.currentVersion = app.getVersion();
@@ -130,7 +260,20 @@ export function initUpdater(send: Broadcast): void {
   wired = true;
 
   autoUpdater.autoDownload = false;
+  // After download: install silently on quit (/S). No NSIS wizard.
   autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.autoRunAppAfterInstall = true;
+  // Keep provider path coherent with electron-builder publish.github
+  // (latest.yml / latest-linux.yml on GitHub Releases for current versioning).
+  try {
+    autoUpdater.setFeedURL({
+      provider: "github",
+      owner: "sSamurai58",
+      repo: "Mira-AI",
+    });
+  } catch {
+    /* electron-updater reads app-update.yml from packaged resources */
+  }
   // Public GitHub Releases; set GH_TOKEN in env for private repos / higher rate limits
   if (process.env.GH_TOKEN || process.env.GITHUB_TOKEN) {
     autoUpdater.requestHeaders = {
@@ -185,7 +328,7 @@ export function initUpdater(send: Broadcast): void {
       channel: "downloaded",
       availableVersion: info.version,
       progress: 100,
-      detail: `Версия ${info.version} скачана. Можно перезапустить.`,
+      detail: `Версия ${info.version} скачана. Установится тихо при перезапуске — без окна установщика.`,
       canDownload: false,
       canInstall: true,
     });
@@ -200,6 +343,11 @@ export function initUpdater(send: Broadcast): void {
       progress: null,
     });
   });
+
+  // Fallback only: real auto-check is scheduled from BrowserWindow
+  // did-finish-load (see scheduleAutoUpdateCheck in main). This covers the
+  // rare case where the window never reports load.
+  scheduleAutoUpdateCheck("boot-fallback");
 }
 
 export async function checkForUpdates(): Promise<UpdateStatus> {
@@ -214,33 +362,41 @@ export async function checkForUpdates(): Promise<UpdateStatus> {
     });
   }
 
-  try {
-    setStatus({
-      channel: "checking",
-      detail: "Проверка GitHub Releases…",
-      progress: null,
-      canDownload: false,
-      canInstall: false,
-    });
-    const result = await autoUpdater.checkForUpdates();
-    if (!result) {
+  if (checkInFlight) return checkInFlight;
+
+  checkInFlight = (async () => {
+    try {
+      setStatus({
+        channel: "checking",
+        detail: "Проверка GitHub Releases…",
+        progress: null,
+        canDownload: false,
+        canInstall: false,
+      });
+      const result = await autoUpdater.checkForUpdates();
+      if (!result) {
+        return setStatus({
+          channel: "error",
+          detail: humanizeUpdateError(
+            "empty checkForUpdates — часто нет latest.yml для Windows в релизе",
+          ),
+        });
+      }
+      // Status events above will refine channel; return latest snapshot
+      return getUpdateStatus();
+    } catch (err) {
       return setStatus({
         channel: "error",
-        detail: humanizeUpdateError(
-          "empty checkForUpdates — часто нет latest.yml для Windows в релизе",
-        ),
+        detail: humanizeUpdateError(err),
+        canDownload: false,
+        canInstall: false,
       });
+    } finally {
+      checkInFlight = null;
     }
-    // Status events above will refine channel; return latest snapshot
-    return getUpdateStatus();
-  } catch (err) {
-    return setStatus({
-      channel: "error",
-      detail: humanizeUpdateError(err),
-      canDownload: false,
-      canInstall: false,
-    });
-  }
+  })();
+
+  return checkInFlight;
 }
 
 export async function downloadUpdate(): Promise<UpdateStatus> {
@@ -286,9 +442,9 @@ export function quitAndInstall(): { ok: boolean; detail: string } {
       detail: "Нет скачанного обновления. Сначала скачайте.",
     };
   }
-  // isSilent=false, isForceRunAfter=true
-  setTimeout(() => autoUpdater.quitAndInstall(false, true), 250);
-  return { ok: true, detail: "Перезапуск для установки…" };
+  // isSilent=true → NSIS /S (no wizard); isForceRunAfter=true → relaunch Mira
+  setTimeout(() => autoUpdater.quitAndInstall(true, true), 250);
+  return { ok: true, detail: "Тихая установка и перезапуск…" };
 }
 
 export async function openReleasesPage(): Promise<{ ok: boolean; detail: string }> {

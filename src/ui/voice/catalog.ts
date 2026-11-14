@@ -1,3 +1,4 @@
+import { setActiveTtsEngine } from "./ttsEngines";
 import type { VoiceInfo } from "./types";
 
 const STORAGE_KEY = "mira.activeVoiceId";
@@ -38,6 +39,11 @@ export function getActiveVoiceId(voices: VoiceInfo[]): string | null {
 
 export function setActiveVoiceId(id: string): void {
   localStorage.setItem(STORAGE_KEY, id);
+  // Selecting a studio voice should drive the corpus / neural-pack engine,
+  // not leave the user on plain Web Speech while the catalog says «студия».
+  if (isCustomVoiceId(id)) {
+    setActiveTtsEngine("neural-pack");
+  }
 }
 
 export function clearActiveVoiceId(matchId?: string | null): void {
@@ -59,16 +65,10 @@ export function resolveSpeechVoice(voiceId: string | null): SpeechSynthesisVoice
   if (!window.speechSynthesis) return null;
   const voices = window.speechSynthesis.getVoices();
   if (!voiceId) return voices.find((v) => v.default) ?? voices[0] ?? null;
-  // Custom studio voices: synthesis falls back to a local RU/system voice
-  // until a neural TTS engine is wired (P9 corpus pack stub).
+  // Custom studio voices are spoken via corpus clips in tts.ts — do not
+  // silently map them onto a system SpeechSynthesisVoice here.
   if (isCustomVoiceId(voiceId)) {
-    return (
-      voices.find((v) => v.lang.toLowerCase().startsWith("ru") && /neural|premium|enhanced/i.test(v.name)) ||
-      voices.find((v) => v.lang.toLowerCase().startsWith("ru")) ||
-      voices.find((v) => v.default) ||
-      voices[0] ||
-      null
-    );
+    return null;
   }
   const [uri, lang] = voiceId.split("::");
   return (

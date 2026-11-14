@@ -105,6 +105,27 @@ export function localListLearnedUnits(libraryItemId?: string): LocalLearnedUnit[
   return units.filter((u) => u.library_item_id === libraryItemId);
 }
 
+export function localDeleteLibraryItem(id: string): {
+  ok: boolean;
+  detail: string;
+  deletedId: string | null;
+} {
+  const store = read();
+  const item = store.items.find((i) => i.id === id);
+  if (!item) {
+    return { ok: false, detail: "Материал не найден", deletedId: null };
+  }
+  store.items = store.items.filter((i) => i.id !== id);
+  store.units = store.units.filter((u) => u.library_item_id !== id);
+  delete store.plans[id];
+  write(store);
+  return {
+    ok: true,
+    detail: `Удалено «${item.title}»`,
+    deletedId: item.id,
+  };
+}
+
 export function localGetLearnPlan(libraryItemId: string): string[] {
   return read().plans[libraryItemId] ?? [];
 }
@@ -119,49 +140,70 @@ export function localProcessLibraryItem(id: string): {
   if (idx < 0) throw new Error("Материал не найден");
   const item = store.items[idx];
   const text = item.extracted_text || "";
-  const lines = text
-    .split(/\n+/)
-    .map((l) => l.trim())
-    .filter(Boolean);
-  const theses = lines
-    .filter((l) => l.length > 40)
-    .slice(0, 5)
-    .map((l) => l.slice(0, 220));
-  const phrases = lines
-    .filter((l) => l.length > 12 && l.length < 120)
-    .slice(0, 6);
   const stamp = now();
   store.units = store.units.filter((u) => u.library_item_id !== id);
   const units: LocalLearnedUnit[] = [];
-  for (const [i, t] of theses.entries()) {
-    units.push({
-      id: crypto.randomUUID(),
-      library_item_id: id,
-      kind: "thesis",
-      content: t,
-      source_ref: `§${i + 1}`,
-      created_at: stamp,
-    });
-  }
-  for (const [i, p] of phrases.entries()) {
-    units.push({
-      id: crypto.randomUUID(),
-      library_item_id: id,
-      kind: "phrase",
-      content: p,
-      source_ref: `фр.${i + 1}`,
-      created_at: stamp,
-    });
-  }
-  if (!units.length) {
+
+  const letters = (text.match(/[A-Za-zА-Яа-яЁё]/g) ?? []).length;
+  const words = text.match(/[A-Za-zА-Яа-яЁё]{3,}/g) ?? [];
+  const readable =
+    text.trim().length >= 24 &&
+    letters / Math.max(1, text.replace(/\s+/g, " ").trim().length) >= 0.4 &&
+    words.join("").length / Math.max(1, text.replace(/\s+/g, " ").trim().length) >=
+      0.32;
+
+  if (!readable) {
     units.push({
       id: crypto.randomUUID(),
       library_item_id: id,
       kind: "note",
-      content: "Мало текста для разбора — добавьте более длинный материал.",
+      content:
+        "Нет читаемого текста для разбора. Выдержки ≠ skills. Добавьте .md/.txt или вставьте текст вручную.",
       source_ref: "qa",
       created_at: stamp,
     });
+  } else {
+    const lines = text
+      .split(/\n+/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+    const theses = lines
+      .filter((l) => l.length > 40)
+      .slice(0, 5)
+      .map((l) => l.slice(0, 220));
+    const phrases = lines
+      .filter((l) => l.length > 12 && l.length < 120)
+      .slice(0, 6);
+    for (const [i, t] of theses.entries()) {
+      units.push({
+        id: crypto.randomUUID(),
+        library_item_id: id,
+        kind: "thesis",
+        content: t,
+        source_ref: `§${i + 1}`,
+        created_at: stamp,
+      });
+    }
+    for (const [i, p] of phrases.entries()) {
+      units.push({
+        id: crypto.randomUUID(),
+        library_item_id: id,
+        kind: "phrase",
+        content: p,
+        source_ref: `фр.${i + 1}`,
+        created_at: stamp,
+      });
+    }
+    if (!units.length) {
+      units.push({
+        id: crypto.randomUUID(),
+        library_item_id: id,
+        kind: "note",
+        content: "Мало текста для разбора — добавьте более длинный материал.",
+        source_ref: "qa",
+        created_at: stamp,
+      });
+    }
   }
   const plan = [
     "Прочитать материал целиком",
