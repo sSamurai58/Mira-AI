@@ -66,6 +66,8 @@ async function main() {
       `@cmd ${cmd.id}`,
       "@say протокол готов",
       "@pause 0.01",
+      "@act open_url https://example.com",
+      "@act notify Smoke|Protocol act",
       "",
     ].join("\n"),
   });
@@ -74,16 +76,21 @@ async function main() {
   assert.ok(loaded);
   const parsed = parseProtocolSequence(loaded!.body);
   assert.equal(parsed.isSequence, true);
-  assert.equal(parsed.steps.length, 3);
+  assert.equal(parsed.steps.length, 5);
   assert.ok(parsed.steps[0]!.type === "command");
   if (parsed.steps[0]!.type === "command") {
     assert.equal(parsed.steps[0].commandId, cmd.id);
+  }
+  assert.ok(parsed.steps[3]!.type === "action");
+  if (parsed.steps[3]!.type === "action") {
+    assert.equal(parsed.steps[3].action, "open_url");
   }
 
   const dry = await runProtocolSequence(protoId, { dryRun: true });
   assert.equal(dry.mode, "sequence");
   assert.equal(dry.ok, true);
   assert.ok(dry.detail.includes("команда"));
+  assert.ok(dry.detail.includes("open_url"));
 
   const live = await runProtocolSequence(protoId, { dryRun: false });
   assert.equal(live.mode, "sequence");
