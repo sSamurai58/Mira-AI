@@ -147,6 +147,10 @@ export function App() {
   const isHud =
     typeof window !== "undefined" &&
     (window.location.hash === "#/hud" || window.location.hash === "#hud");
+  const isUpdateHud =
+    typeof window !== "undefined" &&
+    (window.location.hash === "#/update-hud" ||
+      window.location.hash === "#update-hud");
 
   function navFromHash(hash: string): RootNav {
     if (hash.includes("settings")) return "settings";
@@ -383,6 +387,9 @@ export function App() {
   if (isHud) {
     return <HudPage />;
   }
+  if (isUpdateHud) {
+    return <UpdateHudToast overlayWindow />;
+  }
 
   const levelPct = coreLevelRingPct(coreLevel, coreXp);
 
@@ -540,7 +547,10 @@ export function App() {
         />
       </ErrorBoundary>
 
-      <UpdateHudToast />
+      {/* Electron: toast lives in always-on-top #/update-hud window. */}
+      {typeof window !== "undefined" && !window.mira ? (
+        <UpdateHudToast />
+      ) : null}
     </div>
     </AppConfirmProvider>
   );

@@ -5374,6 +5374,22 @@ body.mira-hud-root *::-webkit-scrollbar {
 }
 
 /* ——— Update HUD toast (0.1.11) ——— */
+html.mira-update-hud-root,
+body.mira-update-hud-root {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: transparent !important;
+  width: 100%;
+  height: 100%;
+}
+
+body.mira-update-hud-root #root {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+}
+
 .mira-update-hud {
   position: fixed;
   right: 1.1rem;
@@ -5382,6 +5398,18 @@ body.mira-hud-root *::-webkit-scrollbar {
   width: min(360px, calc(100vw - 1.6rem));
   pointer-events: auto;
   animation: mira-update-hud-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Always-on-top BrowserWindow (#/update-hud) — fills the floating surface. */
+.mira-update-hud--overlay {
+  position: absolute;
+  inset: 8px;
+  width: auto;
+  right: auto;
+  bottom: auto;
+  left: auto;
+  top: auto;
+  z-index: 1;
 }
 
 .mira-update-hud--pos-br {

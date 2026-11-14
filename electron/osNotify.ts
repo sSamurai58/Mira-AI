@@ -25,8 +25,9 @@ function appIcon(): Electron.NativeImage | undefined {
 }
 
 function mainWindow(): BrowserWindow | null {
-  const all = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed());
-  return all[0] ?? null;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { getMainBrowserWindow } = require("./windowRoles") as typeof import("./windowRoles");
+  return getMainBrowserWindow();
 }
 
 /** True when user likely cannot see in-app HUD toast. */

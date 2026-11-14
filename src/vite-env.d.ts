@@ -610,6 +610,8 @@ interface MiraBridge {
   quitAndInstall: () => Promise<{ ok: boolean; detail: string }>;
   openReleasesPage: () => Promise<{ ok: boolean; detail: string }>;
   onUpdateEvent: (handler: (status: MiraUpdateStatus) => void) => () => void;
+  /** Hide the always-on-top update HUD window (session dismiss). */
+  dismissUpdateHud?: (key?: string | null) => Promise<{ ok: boolean }>;
   getNotifyPrefs: () => Promise<Record<string, unknown>>;
   setNotifyPrefs: (
     patch: Record<string, unknown>,

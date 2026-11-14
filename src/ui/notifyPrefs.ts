@@ -18,7 +18,7 @@ export type NotifyCustomSound = {
 };
 
 export type NotifyPrefs = {
-  /** In-app HUD toasts (UpdateHudToast and future). */
+  /** HUD toasts (always-on-top update window + future). */
   hudEnabled: boolean;
   /** Native OS notifications. */
   osEnabled: boolean;
