@@ -2776,6 +2776,8 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   display: grid;
   grid-template-columns: minmax(220px, 320px) 1fr;
   gap: var(--gap);
+  align-items: stretch;
+  min-height: min(58vh, 640px);
 }
 
 .memory-hit {
@@ -2783,6 +2785,211 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   text-align: left;
   width: 100%;
   color: inherit;
+}
+
+/* Memory hub — Paths-aligned shell */
+.memory-hub {
+  gap: 1rem;
+}
+
+.memory-hub-stats .memory-stat {
+  appearance: none;
+  font: inherit;
+  cursor: pointer;
+  transition:
+    border-color 160ms var(--ease-out),
+    background 160ms var(--ease-out),
+    color 160ms var(--ease-out);
+}
+
+.memory-hub-stats .memory-stat:hover,
+.memory-hub-stats .memory-stat.is-active {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--text);
+}
+
+.memory-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.memory-search .paths-search {
+  flex: 1 1 auto;
+}
+
+.memory-section-head {
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.memory-preview-sub {
+  margin-top: 2px;
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memory-sessions-panel,
+.memory-preview-panel {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--accent) 6%, transparent),
+      transparent 40%
+    ),
+    color-mix(in srgb, var(--bg-elevated) 88%, var(--bg));
+}
+
+.memory-session-list,
+.memory-preview-scroll {
+  overflow: auto;
+  min-height: 0;
+  flex: 1;
+  padding-right: 2px;
+}
+
+.memory-session-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.memory-session-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+.memory-session-meta {
+  font-size: 0.75rem;
+}
+
+.memory-empty {
+  display: grid;
+  place-items: center;
+  gap: 10px;
+  padding: 28px 18px;
+  text-align: center;
+  border-radius: var(--radius-sm);
+  border: 1px dashed color-mix(in srgb, var(--text-muted) 28%, transparent);
+  background: color-mix(in srgb, var(--bg) 35%, transparent);
+}
+
+.memory-empty--preview {
+  flex: 1;
+  min-height: 180px;
+}
+
+.memory-empty-glyph {
+  font-size: 1.6rem;
+  color: color-mix(in srgb, var(--accent) 70%, var(--text-muted));
+  opacity: 0.85;
+}
+
+.memory-tile {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  flex: 0 0 auto;
+  font-size: 1.05rem;
+  color: var(--text);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, #fff 10%, transparent),
+    0 6px 16px color-mix(in srgb, #000 35%, transparent);
+}
+
+.memory-tile--talk {
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--accent) 55%, #001d3d),
+    color-mix(in srgb, var(--bg-elevated) 70%, #000)
+  );
+}
+
+.memory-tile--note {
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--success, #2dd4a8) 45%, #001d3d),
+    color-mix(in srgb, var(--bg-elevated) 70%, #000)
+  );
+}
+
+.memory-tile--learned {
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--border, var(--accent)) 50%, #001d3d),
+    color-mix(in srgb, var(--bg-elevated) 70%, #000)
+  );
+}
+
+.memory-card-snippet {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--text) 88%, var(--text-muted));
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.memory-hit-card {
+  appearance: none;
+  font: inherit;
+}
+
+.memory-note-composer {
+  gap: 10px;
+}
+
+.memory-note-composer textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.memory-bubble-meta {
+  font-size: 0.72rem;
+  margin-bottom: 4px;
+  opacity: 0.85;
+}
+
+.memory-learned-hint {
+  font-size: 0.85rem;
+}
+
+.memory-preview-scroll .bubble {
+  animation: memory-bubble-in 220ms var(--ease-out) both;
+}
+
+@keyframes memory-bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .memory-preview-scroll .bubble {
+    animation: none;
+  }
 }
 
 .list-item {
@@ -3839,6 +4046,15 @@ select:disabled {
 
   .memory-split {
     grid-template-columns: 1fr;
+    min-height: 0;
+  }
+
+  .memory-sessions-panel {
+    max-height: 42vh;
+  }
+
+  .memory-preview-panel {
+    min-height: 280px;
   }
 }
 
