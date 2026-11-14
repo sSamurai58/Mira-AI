@@ -1138,7 +1138,7 @@ export function ChatPage({
                 <CoreOrb
                   level={coreLevel}
                   voiceState={voiceState}
-                  size={320}
+                  size={440}
                   active={showHome}
                 />
                 <div

@@ -1016,22 +1016,22 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   height: auto;
   flex: 0 0 auto;
   width: 100%;
-  max-width: 420px;
+  max-width: 560px;
   gap: 12px;
 }
 
 .core-orb {
   position: relative;
   aspect-ratio: 1;
-  width: clamp(110px, 16vw, 150px);
-  max-width: 150px;
+  width: clamp(140px, 20vw, 200px);
+  max-width: 200px;
   overflow: visible;
   isolation: isolate;
 }
 
 .home-grid.is-home-tab .core-orb {
-  width: min(100%, clamp(200px, 32vh, 340px));
-  max-width: min(100%, 360px);
+  width: min(100%, clamp(280px, 46vh, 480px));
+  max-width: min(100%, 520px);
   flex: 0 0 auto;
   margin-inline: auto;
 }
@@ -1557,7 +1557,7 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   }
 
   .home-grid.is-home-tab .core-orb {
-    width: min(100%, clamp(180px, 38vw, 280px));
+    width: min(100%, clamp(240px, 52vw, 380px));
   }
 }
 
