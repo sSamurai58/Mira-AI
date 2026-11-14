@@ -6,6 +6,7 @@ import { SettingsElevenLabsSection } from "../components/SettingsElevenLabsSecti
 import { ToggleRow } from "../components/SettingsFormBits";
 import { SettingsIntegrationsSection } from "../components/SettingsIntegrationsSection";
 import { SettingsMcpSection } from "../components/SettingsMcpSection";
+import { SettingsNotificationsSection } from "../components/SettingsNotificationsSection";
 import { SettingsUpdatesSection } from "../components/SettingsUpdatesSection";
 import { ThemeSelect } from "../components/ThemeSelect";
 import { BG_PATTERNS, type BgPatternId } from "../backgrounds";
@@ -42,6 +43,7 @@ import type { VoiceInfo } from "../voice/types";
 const SECTIONS = [
   { id: "appearance", label: "Внешний вид" },
   { id: "general", label: "Общие" },
+  { id: "notifications", label: "Всплывающие уведомления" },
   { id: "voice", label: "Голос и аудио" },
   { id: "api", label: "API и модели" },
   { id: "integrations", label: "Интеграции" },
@@ -74,6 +76,7 @@ export function SettingsPage({
     if (hash.includes("mcp")) return "mcp";
     if (hash.includes("integrations")) return "integrations";
     if (hash.includes("api")) return "api";
+    if (hash.includes("notifications")) return "notifications";
     if (hash.includes("voice")) return "voice";
     if (hash.includes("terminal")) return "terminal";
     if (hash.includes("data")) return "data";
@@ -381,6 +384,9 @@ export function SettingsPage({
               Hands-free слушает wake-фразу в `idle`. Устройства ввода — системные.
             </p>
           </>
+        ) : null}
+        {section === "notifications" ? (
+          <SettingsNotificationsSection />
         ) : null}
         {section === "api" ? <SettingsApiSection /> : null}
         {section === "integrations" ? (

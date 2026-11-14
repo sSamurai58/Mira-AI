@@ -1,11 +1,20 @@
 /**
  * Floating HUD-style update notification (Mira aesthetic).
  * Shown when packaged auto-check finds an update / download / error.
- * Not OS-native only — matches Core / HUD chrome.
+ * Respects Settings → Всплывающие уведомления.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import {
+  categoryAllowed,
+  loadNotifyPrefs,
+  normalizeNotifyPrefs,
+  NOTIFY_PREFS_EVENT,
+  playNotifySound,
+  saveNotifyPrefsLocal,
+  type NotifyPrefs,
+} from "../notifyPrefs";
 
 export type UpdateHudToastProps = {
   /** Optional force-visible status for demos / tests. */
@@ -36,9 +45,42 @@ export function UpdateHudToast({ demoStatus = null }: UpdateHudToastProps) {
   const [status, setStatus] = useState<MiraUpdateStatus | null>(demoStatus);
   const [dismissed, setDismissed] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [prefs, setPrefs] = useState<NotifyPrefs>(() => loadNotifyPrefs());
   /** Session hide for a specific available/downloaded version — don't spam. */
   const dismissedVersionRef = useRef<string | null>(null);
   const lastChannelRef = useRef<string | null>(null);
+  const soundedForRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      if (window.mira?.getNotifyPrefs) {
+        try {
+          const remote = await window.mira.getNotifyPrefs();
+          if (cancelled) return;
+          const next = saveNotifyPrefsLocal(normalizeNotifyPrefs(remote));
+          setPrefs(next);
+        } catch {
+          if (!cancelled) setPrefs(loadNotifyPrefs());
+        }
+      }
+    })();
+    function onLocal(e: Event) {
+      const detail = (e as CustomEvent<NotifyPrefs>).detail;
+      if (detail) setPrefs(normalizeNotifyPrefs(detail));
+      else setPrefs(loadNotifyPrefs());
+    }
+    window.addEventListener(NOTIFY_PREFS_EVENT, onLocal);
+    const unsub = window.mira?.onNotifyPrefs?.((next) => {
+      const normalized = saveNotifyPrefsLocal(normalizeNotifyPrefs(next));
+      setPrefs(normalized);
+    });
+    return () => {
+      cancelled = true;
+      window.removeEventListener(NOTIFY_PREFS_EVENT, onLocal);
+      unsub?.();
+    };
+  }, []);
 
   const applyStatus = useCallback((next: MiraUpdateStatus) => {
     setStatus(next);
@@ -47,9 +89,6 @@ export function UpdateHudToast({ demoStatus = null }: UpdateHudToastProps) {
     if (!isActionable(next.channel)) return;
 
     const ver = next.availableVersion || next.channel;
-    // Re-show when channel advances (available → downloading → downloaded)
-    // or when a different version appears. Respect «Скрыть» for the same
-    // available version within the session.
     if (
       next.channel === "available" &&
       dismissedVersionRef.current &&
@@ -59,14 +98,11 @@ export function UpdateHudToast({ demoStatus = null }: UpdateHudToastProps) {
       return;
     }
     if (next.channel === "downloading" || next.channel === "downloaded") {
-      // User started / finished download — always surface.
       dismissedVersionRef.current = null;
       setDismissed(false);
       return;
     }
     if (next.channel === "error") {
-      // Don't fight a deliberate hide of "available", but show fresh errors
-      // after a check the user didn't dismiss as error.
       if (dismissedVersionRef.current === `error:${ver}`) {
         setDismissed(true);
         return;
@@ -91,14 +127,14 @@ export function UpdateHudToast({ demoStatus = null }: UpdateHudToastProps) {
     return () => unsub?.();
   }, [applyStatus]);
 
-  // Auto-check on startup (packaged). Dev stays silent unless demoStatus.
-  // Also re-sync when the window becomes visible again (pending update).
   useEffect(() => {
     if (demoStatus) return;
     if (!window.mira?.checkForUpdates || !window.mira?.getUpdateStatus) return;
     let cancelled = false;
 
-    async function waitWhileChecking(maxMs: number): Promise<MiraUpdateStatus | null> {
+    async function waitWhileChecking(
+      maxMs: number,
+    ): Promise<MiraUpdateStatus | null> {
       const started = Date.now();
       while (!cancelled && Date.now() - started < maxMs) {
         const st = await window.mira!.getUpdateStatus!();
@@ -123,7 +159,6 @@ export function UpdateHudToast({ demoStatus = null }: UpdateHudToastProps) {
 
         if (!st.packaged) return;
 
-        // Already have something to show — no need to hit the network again.
         if (
           st.channel === "available" ||
           st.channel === "downloaded" ||
@@ -132,8 +167,6 @@ export function UpdateHudToast({ demoStatus = null }: UpdateHudToastProps) {
           return;
         }
 
-        // Main may already be checking (did-finish-load schedule). Wait it out
-        // instead of bailing on !canCheck (that used to drop the auto toast).
         if (st.channel === "checking" || !st.canCheck) {
           const settled = await waitWhileChecking(45_000);
           if (cancelled || !settled) return;
@@ -143,7 +176,6 @@ export function UpdateHudToast({ demoStatus = null }: UpdateHudToastProps) {
 
         if (!opts.forceCheck) return;
 
-        // Brief delay so Home HUD paints first.
         await new Promise((r) => setTimeout(r, 900));
         if (cancelled) return;
         const next = await window.mira!.checkForUpdates!();
@@ -208,10 +240,37 @@ export function UpdateHudToast({ demoStatus = null }: UpdateHudToastProps) {
     setDismissed(true);
   }, [status]);
 
+  // Auto-dismiss by duration prefs (sticky when 0).
+  useEffect(() => {
+    if (!status || dismissed) return;
+    if (!prefs.hudEnabled) return;
+    if (prefs.durationSec <= 0) return;
+    if (status.channel === "downloading") return;
+    const t = window.setTimeout(() => {
+      hide();
+    }, prefs.durationSec * 1000);
+    return () => window.clearTimeout(t);
+  }, [status, dismissed, prefs.hudEnabled, prefs.durationSec, hide]);
+
+  // Sound once per actionable channel+version.
+  useEffect(() => {
+    if (!status || dismissed) return;
+    if (!prefs.hudEnabled) return;
+    if (!isActionable(status.channel)) return;
+    const key = `${status.channel}:${status.availableVersion || ""}`;
+    if (soundedForRef.current === key) return;
+    soundedForRef.current = key;
+    playNotifySound(prefs);
+  }, [status, dismissed, prefs]);
+
   if (!status || dismissed) return null;
+  if (!prefs.hudEnabled) return null;
+  const cat =
+    status.channel === "error" ? ("errors" as const) : ("updates" as const);
+  if (!categoryAllowed(prefs, cat)) return null;
+
   const kind = kindFromChannel(status.channel);
   if (!kind) return null;
-  // Don't toast "checking" forever or not-available.
   if (kind === "info" && status.channel === "checking") return null;
 
   const title =
@@ -227,7 +286,7 @@ export function UpdateHudToast({ demoStatus = null }: UpdateHudToastProps) {
 
   const toast = (
     <div
-      className={`mira-update-hud mira-update-hud--${kind}`}
+      className={`mira-update-hud mira-update-hud--${kind} mira-update-hud--pos-${prefs.position}`}
       role="status"
       aria-live="polite"
     >
@@ -240,7 +299,9 @@ export function UpdateHudToast({ demoStatus = null }: UpdateHudToastProps) {
           <div className="mira-update-hud-progress" aria-hidden>
             <div
               className="mira-update-hud-progress-bar"
-              style={{ width: `${Math.max(0, Math.min(100, status.progress))}%` }}
+              style={{
+                width: `${Math.max(0, Math.min(100, status.progress))}%`,
+              }}
             />
           </div>
         ) : null}

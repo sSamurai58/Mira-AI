@@ -406,11 +406,15 @@ async function showNotify(
   }
   try {
     if (isElectronRuntime()) {
-      const { Notification } = await import("electron");
-      if (Notification.isSupported()) {
-        new Notification({ title: t, body: b }).show();
-        return { ok: true, detail: `Уведомление: ${t}` };
-      }
+      const { showOsNotification } = await import("../osNotify");
+      const res = showOsNotification({
+        title: t,
+        body: b,
+        category: "commands",
+        force: true,
+      });
+      if (res.ok) return { ok: true, detail: `Уведомление: ${t}` };
+      return { ok: true, detail: `${res.detail}: ${t}` };
     }
   } catch {
     /* headless */

@@ -600,6 +600,17 @@ interface MiraBridge {
   quitAndInstall: () => Promise<{ ok: boolean; detail: string }>;
   openReleasesPage: () => Promise<{ ok: boolean; detail: string }>;
   onUpdateEvent: (handler: (status: MiraUpdateStatus) => void) => () => void;
+  getNotifyPrefs: () => Promise<Record<string, unknown>>;
+  setNotifyPrefs: (
+    patch: Record<string, unknown>,
+  ) => Promise<Record<string, unknown>>;
+  testOsNotification: (payload?: {
+    title?: string;
+    body?: string;
+  }) => Promise<{ ok: boolean; detail: string }>;
+  onNotifyPrefs: (
+    handler: (prefs: Record<string, unknown>) => void,
+  ) => () => void;
   listLibraryItems: () => Promise<MiraLibraryItem[]>;
   getLibraryItem: (id: string) => Promise<MiraLibraryItem | null>;
   getLibrarySnapshot: () => Promise<{

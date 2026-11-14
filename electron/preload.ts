@@ -645,4 +645,15 @@ contextBridge.exposeInMainWorld("mira", {
     ipcRenderer.on("mira:update-event", listener);
     return () => ipcRenderer.removeListener("mira:update-event", listener);
   },
+  getNotifyPrefs: () => call("mira:get-notify-prefs"),
+  setNotifyPrefs: (patch: Record<string, unknown>) =>
+    call("mira:set-notify-prefs", patch),
+  testOsNotification: (payload?: { title?: string; body?: string }) =>
+    call("mira:test-os-notification", payload ?? {}),
+  onNotifyPrefs: (handler: (prefs: Record<string, unknown>) => void) => {
+    const listener = (_event: IpcRendererEvent, prefs: Record<string, unknown>) =>
+      handler(prefs);
+    ipcRenderer.on("mira:notify-prefs", listener);
+    return () => ipcRenderer.removeListener("mira:notify-prefs", listener);
+  },
 });

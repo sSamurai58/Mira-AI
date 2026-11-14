@@ -54,7 +54,41 @@ function setStatus(patch: Partial<UpdateStatus>): UpdateStatus {
     ...patch,
   };
   broadcast?.("mira:update-event", status);
+  void maybeOsUpdateNotify(status);
   return status;
+}
+
+async function maybeOsUpdateNotify(snap: UpdateStatus): Promise<void> {
+  try {
+    const { showOsNotification } = await import("./osNotify");
+    const channel = snap.channel;
+    if (
+      channel !== "available" &&
+      channel !== "downloaded" &&
+      channel !== "error"
+    ) {
+      return;
+    }
+    const title =
+      channel === "available"
+        ? `Mira ${snap.availableVersion || ""}`.trim()
+        : channel === "downloaded"
+          ? "Обновление готово"
+          : "Ошибка обновления";
+    const body =
+      channel === "available"
+        ? `Доступна новая версия${snap.availableVersion ? ` ${snap.availableVersion}` : ""}. Откройте Mira, чтобы скачать.`
+        : channel === "downloaded"
+          ? "Обновление скачано. Нажмите, чтобы открыть и установить."
+          : snap.detail || "Не удалось проверить обновления";
+    showOsNotification({
+      title,
+      body,
+      category: channel === "error" ? "errors" : "updates",
+    });
+  } catch {
+    /* optional */
+  }
 }
 
 export function getUpdateStatus(): UpdateStatus {

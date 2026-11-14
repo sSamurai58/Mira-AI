@@ -76,6 +76,20 @@ import {
   scheduleAutoUpdateCheck,
 } from "./updater";
 import {
+  applyLoginItem,
+  destroyTray,
+  handleWindowClose,
+  isAllowQuit,
+  setAllowQuit,
+  syncTrayFromPrefs,
+} from "./tray";
+import {
+  loadNotifyPrefs,
+  saveNotifyPrefs,
+  type NotifyPrefs,
+} from "./notifyPrefs";
+import { showOsNotification } from "./osNotify";
+import {
   closeStore,
   createSession,
   ensureBootstrapSession,
@@ -300,16 +314,34 @@ function createWindow(): BrowserWindow {
   });
 
   win.once("ready-to-show", () => {
+    const prefs = loadNotifyPrefs();
+    if (prefs.launchMinimized && (prefs.closeToTray || prefs.trayEnabled)) {
+      syncTrayFromPrefs();
+      // Stay hidden — tray restores on click.
+      return;
+    }
     win.show();
     win.focus();
   });
   // Fallback if ready-to-show never fires (some GPU drivers)
   setTimeout(() => {
     if (!win.isDestroyed() && !win.isVisible()) {
+      const prefs = loadNotifyPrefs();
+      if (prefs.launchMinimized && (prefs.closeToTray || prefs.trayEnabled)) {
+        syncTrayFromPrefs();
+        return;
+      }
       win.show();
       win.focus();
     }
   }, 2500);
+
+  win.on("close", (e) => {
+    if (isAllowQuit()) return;
+    if (!handleWindowClose(win)) {
+      e.preventDefault();
+    }
+  });
 
   // Auto-update HUD: check only after the renderer can receive IPC events.
   // A boot-time timer in initUpdater used to fire while loadFile was still
@@ -411,6 +443,14 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
     initUpdater(broadcast);
   } catch (err) {
     console.error("[mira] updater init failed", err);
+  }
+
+  try {
+    const prefs = loadNotifyPrefs();
+    syncTrayFromPrefs();
+    applyLoginItem(prefs.startWithOs);
+  } catch (err) {
+    console.error("[mira] notify/tray init failed", err);
   }
 
   try {
@@ -1240,9 +1280,36 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
     return { ok: true, fullscreen };
   });
   on("mira:window-close", (e) => {
-    windowFromEvent(e)?.close();
+    const win = windowFromEvent(e);
+    if (!win) return { ok: false };
+    // Same path as chrome X — may hide to tray.
+    win.close();
     return { ok: true };
   });
+
+  on("mira:get-notify-prefs", () => loadNotifyPrefs());
+  on(
+    "mira:set-notify-prefs",
+    (_e, patch: Partial<NotifyPrefs>) => {
+      const next = saveNotifyPrefs(patch ?? {});
+      syncTrayFromPrefs();
+      applyLoginItem(next.startWithOs);
+      broadcast("mira:notify-prefs", next);
+      return next;
+    },
+  );
+  on(
+    "mira:test-os-notification",
+    (_e, payload?: { title?: string; body?: string }) =>
+      showOsNotification({
+        title: payload?.title || "Mira",
+        body:
+          payload?.body ||
+          "Тест всплывающего уведомления — даже если окно свёрнуто.",
+        category: "actions",
+        force: true,
+      }),
+  );
   on("mira:window-get-state", (e) => {
     const win = windowFromEvent(e);
     if (!win) {
@@ -1376,12 +1443,23 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
+  // Close-to-tray keeps a hidden window or no windows + tray — don't quit.
+  const prefs = loadNotifyPrefs();
+  if (prefs.closeToTray && !isAllowQuit()) {
+    syncTrayFromPrefs();
+    return;
+  }
   if (calendarTick) {
     clearInterval(calendarTick);
     calendarTick = null;
   }
   disposeAllTerminals();
   closeStore();
+  destroyTray();
   if (process.platform !== "darwin") app.quit();
+});
+
+app.on("before-quit", () => {
+  setAllowQuit(true);
 });
 

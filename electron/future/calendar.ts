@@ -133,11 +133,15 @@ async function showDesktopNotification(
 ): Promise<boolean> {
   try {
     if (typeof process.versions.electron === "string") {
-      const { Notification } = await import("electron");
-      if (Notification.isSupported()) {
-        new Notification({ title, body }).show();
-        return true;
-      }
+      const { showOsNotification } = await import("../osNotify");
+      // Calendar reminders should surface even if Mira is focused.
+      const res = showOsNotification({
+        title,
+        body,
+        category: "calendar",
+        force: true,
+      });
+      return res.ok;
     }
   } catch {
     // headless
