@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAppConfirm } from "../components/AppConfirm";
 import { CustomCommandsPanel } from "../components/CustomCommandsPanel";
+import { HudWorkshopPanel } from "../components/HudWorkshopPanel";
 import { LibraryPanel } from "../components/LibraryPanel";
 import { NotesFilesPanel } from "../components/NotesFilesPanel";
 import { PathsPanel } from "../components/PathsPanel";
@@ -29,6 +30,7 @@ const SEGMENTS = [
   { id: "protocols", label: "Протоколы", phase: "P3" },
   { id: "paths", label: "Пути", phase: "P12" },
   { id: "commands", label: "Кастомные команды", phase: "P12" },
+  { id: "hud", label: "HUD", phase: "F3" },
   { id: "voices", label: "Голоса", phase: "P9" },
   { id: "library", label: "Обучение", phase: "P8" },
   { id: "notes", label: "Заметки/файлы", phase: "F2/F5" },
@@ -225,6 +227,7 @@ export function WorkshopPage() {
 
         {segment === "paths" ? <PathsPanel /> : null}
         {segment === "commands" ? <CustomCommandsPanel /> : null}
+        {segment === "hud" ? <HudWorkshopPanel /> : null}
         {segment === "terminal" ? <TerminalView /> : null}
         {segment === "library" ? <LibraryPanel /> : null}
         {segment === "notes" ? <NotesFilesPanel /> : null}

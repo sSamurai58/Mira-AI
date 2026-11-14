@@ -1151,6 +1151,12 @@ interface MiraBridge {
   }>;
   listCalendarEvents: () => Promise<unknown[]>;
   listTimers: () => Promise<unknown[]>;
+  listUpcomingReminders: (horizonHours?: number) => Promise<unknown[]>;
+  listStopwatches: () => Promise<unknown[]>;
+  getActiveStopwatch: () => Promise<unknown | null>;
+  startStopwatch: (label?: string) => Promise<unknown>;
+  pauseStopwatch: (id?: string) => Promise<unknown | null>;
+  resetStopwatch: (id?: string) => Promise<unknown | null>;
   createCalendarEvent: (payload: {
     title: string;
     startsAt: string;
@@ -1387,6 +1393,22 @@ interface MiraBridge {
     open: boolean;
   }>;
   toggleHud: () => Promise<{ open: boolean }>;
+  getHudPrefs: () => Promise<Record<string, unknown>>;
+  getHudWidgetMeta: () => Promise<
+    Array<{ id: string; label: string; hint: string }>
+  >;
+  setHudPrefs: (
+    patch: Record<string, unknown>,
+  ) => Promise<Record<string, unknown>>;
+  resizeHud: (height?: number) => Promise<{ ok: boolean }>;
+  hudSay: (text: string) => Promise<{ ok: boolean; text: string | null }>;
+  getHudMessage: () => Promise<{ text: string | null }>;
+  onHudPrefs: (
+    handler: (prefs: Record<string, unknown>) => void,
+  ) => () => void;
+  onHudTick: (
+    handler: (payload: { reason?: string }) => void,
+  ) => () => void;
   windowMinimize: () => Promise<{ ok: boolean }>;
   windowMaximizeToggle: () => Promise<{
     ok: boolean;

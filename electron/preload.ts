@@ -453,6 +453,8 @@ contextBridge.exposeInMainWorld("mira", {
     sessionId?: string | null;
   }) => call("mira:upsert-note", payload),
   listCalendarEvents: () => call("mira:list-calendar-events"),
+  listUpcomingReminders: (horizonHours?: number) =>
+    call("mira:list-upcoming-reminders", horizonHours),
   listTimers: () => call("mira:list-timers"),
   createCalendarEvent: (payload: {
     title: string;
@@ -463,6 +465,11 @@ contextBridge.exposeInMainWorld("mira", {
   startTimer: (label: string, seconds: number) =>
     call("mira:start-timer", label, seconds),
   cancelTimer: (id?: string) => call("mira:cancel-timer", id),
+  listStopwatches: () => call("mira:list-stopwatches"),
+  getActiveStopwatch: () => call("mira:get-active-stopwatch"),
+  startStopwatch: (label?: string) => call("mira:start-stopwatch", label),
+  pauseStopwatch: (id?: string) => call("mira:pause-stopwatch", id),
+  resetStopwatch: (id?: string) => call("mira:reset-stopwatch", id),
   listCameras: () => call("mira:list-cameras"),
   upsertCamera: (payload: {
     id?: string;
@@ -525,6 +532,27 @@ contextBridge.exposeInMainWorld("mira", {
   deleteProfile: (id: string) => call("mira:delete-profile", id),
   getHudPolicy: () => call("mira:get-hud-policy"),
   toggleHud: () => call("mira:toggle-hud"),
+  getHudPrefs: () => call("mira:get-hud-prefs"),
+  getHudWidgetMeta: () => call("mira:get-hud-widget-meta"),
+  setHudPrefs: (patch: Record<string, unknown>) =>
+    call("mira:set-hud-prefs", patch),
+  resizeHud: (height?: number) => call("mira:resize-hud", height),
+  hudSay: (text: string) => call("mira:hud-say", text),
+  getHudMessage: () => call("mira:get-hud-message"),
+  onHudPrefs: (handler: (prefs: Record<string, unknown>) => void) => {
+    const listener = (_event: IpcRendererEvent, prefs: Record<string, unknown>) =>
+      handler(prefs);
+    ipcRenderer.on("mira:hud-prefs", listener);
+    return () => ipcRenderer.removeListener("mira:hud-prefs", listener);
+  },
+  onHudTick: (handler: (payload: { reason?: string }) => void) => {
+    const listener = (
+      _event: IpcRendererEvent,
+      payload: { reason?: string },
+    ) => handler(payload ?? {});
+    ipcRenderer.on("mira:hud-tick", listener);
+    return () => ipcRenderer.removeListener("mira:hud-tick", listener);
+  },
   windowMinimize: () => call("mira:window-minimize"),
   windowMaximizeToggle: (): Promise<{
     ok: boolean;

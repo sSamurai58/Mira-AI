@@ -662,7 +662,9 @@ async function runStep(
       return { ...base, ok: true, detail: `Проверка: HUD «${text}»` };
     }
     try {
+      const { setHudEphemeralMessage } = await import("../hudPrefs");
       const { createOrFocusHud } = await import("../hud");
+      setHudEphemeralMessage(text);
       await createOrFocusHud();
     } catch {
       /* optional */
