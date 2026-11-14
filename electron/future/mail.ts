@@ -118,11 +118,48 @@ export async function draftOrSendMail(input: {
   let detail = `Письмо ${status} → ${input.to}`;
 
   if (input.send && policy.mode === "live" && policy.smtpHost) {
-    // Live SMTP without extra deps: record intent + host; full nodemailer later.
-    status = "sent-queued";
-    detail = `SMTP queue → ${policy.smtpHost} · to=${input.to}${
-      policy.account ? ` · from=${policy.account}` : ""
-    } (transport later)`;
+    try {
+      const nodemailer = await import("nodemailer");
+      const port = Number(process.env.MAIL_SMTP_PORT ?? "587");
+      const user =
+        (process.env.MAIL_SMTP_USER ?? "").trim() ||
+        policy.account ||
+        undefined;
+      const pass = (process.env.MAIL_SMTP_PASS ?? "").trim() || undefined;
+      const transporter = nodemailer.createTransport({
+        host: policy.smtpHost,
+        port,
+        secure: port === 465,
+        auth: user && pass ? { user, pass } : undefined,
+      });
+      const info = await transporter.sendMail({
+        from: policy.account || user || "mira@localhost",
+        to: input.to,
+        subject: input.subject,
+        text: input.body,
+      });
+      status = "sent";
+      detail = `SMTP OK → ${policy.smtpHost} · to=${input.to} · id=${info.messageId || "?"}`;
+    } catch (err) {
+      status = "error";
+      const msg = err instanceof Error ? err.message : String(err);
+      detail = `SMTP error (${policy.smtpHost}): ${msg.slice(0, 180)}`;
+      openStore()
+        .prepare(
+          `INSERT INTO mail_messages (id, folder, from_addr, subject, body, status, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          id,
+          "sent",
+          input.to,
+          input.subject,
+          input.body,
+          status,
+          new Date().toISOString(),
+        );
+      return { ok: false, id, detail };
+    }
   } else if (input.send && policy.mode === "live" && !policy.smtpHost) {
     status = "sent-stub";
     detail = `Live без MAIL_SMTP_HOST — stub sent → ${input.to}`;

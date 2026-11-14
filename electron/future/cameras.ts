@@ -107,20 +107,41 @@ export async function handleCameraFromChat(text: string): Promise<{
   const stamp = Date.now();
   const meta = path.join(dir, `camera-snap-${stamp}.txt`);
   const png = path.join(dir, `camera-snap-${stamp}.png`);
-  // Minimal valid 1×1 PNG placeholder until RTSP grab is wired.
-  const pngBytes = Buffer.from(
+  let note = "RTSP grab stub — PNG placeholder";
+  let pngBytes = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
     "base64",
   );
+  const url = cam?.url?.trim() || "";
+  if (/^https?:\/\//i.test(url)) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      if (res.ok) {
+        const buf = Buffer.from(await res.arrayBuffer());
+        if (buf.length > 32) {
+          pngBytes = buf;
+          note = `HTTP snapshot ${res.status} · ${buf.length} bytes`;
+        } else {
+          note = `HTTP ${res.status} слишком короткий ответ — placeholder`;
+        }
+      } else {
+        note = `HTTP ${res.status} — placeholder`;
+      }
+    } catch (err) {
+      note = `HTTP fail: ${err instanceof Error ? err.message : String(err)} — placeholder`;
+    }
+  }
   fs.writeFileSync(png, pngBytes);
   fs.writeFileSync(
     meta,
-    `Mira camera snapshot\ncamera=${cam?.name}\nurl=${cam?.url}\npng=${png}\nat=${new Date().toISOString()}\nnote=RTSP grab stub — PNG placeholder\n`,
+    `Mira camera snapshot\ncamera=${cam?.name}\nurl=${url}\npng=${png}\nat=${new Date().toISOString()}\nnote=${note}\n`,
     "utf8",
   );
   return {
-    used: "camera:snapshot:ok",
-    block: `[Камеры] Снимок сохранён: ${png} (+ meta ${path.basename(meta)})`,
+    used: note.startsWith("HTTP snapshot")
+      ? "camera:snapshot:http"
+      : "camera:snapshot:ok",
+    block: `[Камеры] Снимок сохранён: ${png} (${note})`,
   };
 }
 

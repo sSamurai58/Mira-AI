@@ -31,14 +31,17 @@ async function main() {
   setConfirmPolicyEnv({ mode: "smart" });
   assert.equal(getConfirmPolicy().mode, "smart");
   assert.equal(shouldRequestConfirm("browser", "low"), false);
+  assert.equal(shouldRequestConfirm("browser", "high"), false); // not on dangerous list
   assert.equal(shouldRequestConfirm("messaging", "high"), true);
   setConfirmPolicyEnv({ mode: "always" });
   assert.equal(shouldRequestConfirm("browser", "low"), true);
 
   // F6 notes
-  const n = handleNotesFromChat("Заметка: купить молоко");
+  const n = handleNotesFromChat("Заметка: купить молоко #покупки");
   assert.ok(n.used.startsWith("notes:"));
   assert.ok(listNotes().length >= 1);
+  const nDel = handleNotesFromChat("Удали заметку молоко");
+  assert.ok(nDel.used.startsWith("notes:delete:"));
 
   // F3 calendar/timer
   const t = handleCalendarFromChat("Поставь таймер на 2 минуты");
@@ -63,6 +66,8 @@ async function main() {
   // F7 media
   const media = handleMediaFromChat("Включи музыку");
   assert.ok(media.used.startsWith("media:"));
+  const nowPlaying = handleMediaFromChat("Что играет?");
+  assert.ok(nowPlaying.used.startsWith("media:status:"));
 
   // F1 cameras
   const cam = await handleCameraFromChat("Сделай снимок с камеры");

@@ -20,9 +20,11 @@ import {
   looksLikeScreenControlIntent,
   looksLikeScreenSeeIntent,
   parseChatHotkey,
+  parseClickByLabel,
   parseClickCoords,
   parseScrollIntent,
   parseTypeText,
+  parseVisionClickCoords,
 } from "../electron/tools/screen";
 
 loadConfig(true);
@@ -42,6 +44,11 @@ assert.deepEqual(parseClickCoords("кликни 120, 240"), { x: 120, y: 240 });
 assert.equal(parseTypeText("введи текст: hello Mira"), "hello Mira");
 assert.equal(parseChatHotkey("нажми ctrl+s"), "ctrl+s");
 assert.equal(parseScrollIntent("прокрути вниз")?.direction, "down");
+assert.equal(parseClickByLabel("кликни по Сохранить"), "Сохранить");
+assert.deepEqual(
+  parseVisionClickCoords('{"x":100,"y":200,"found":true}', 1280, 720),
+  { x: 100, y: 200 },
+);
 assert.equal(looksLikeBrowserOpenIntent("открой сайт example.com"), true);
 assert.equal(extractOpenUrl("открой https://example.com/path"), "https://example.com/path");
 assert.equal(looksLikeBrowserHistoryIntent("где я уже был в браузере"), true);

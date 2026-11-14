@@ -93,6 +93,9 @@ const INTEG_META: IntegMeta[] = [
       "MAIL_MODE",
       "MAIL_ACCOUNT",
       "MAIL_SMTP_HOST",
+      "MAIL_SMTP_PORT",
+      "MAIL_SMTP_USER",
+      "MAIL_SMTP_PASS",
       "MAIL_IMAP_HOST",
     ],
   },
@@ -792,6 +795,27 @@ export function SettingsIntegrationsSection() {
                 placeholder="smtp.example.com"
               />
             </Field>
+            <Field label="SMTP port" hint="MAIL_SMTP_PORT">
+              <input
+                value={draft.MAIL_SMTP_PORT ?? "587"}
+                onChange={(e) => setField("MAIL_SMTP_PORT", e.target.value)}
+                placeholder="587"
+              />
+            </Field>
+            <Field label="SMTP user" hint="MAIL_SMTP_USER">
+              <input
+                value={draft.MAIL_SMTP_USER ?? ""}
+                onChange={(e) => setField("MAIL_SMTP_USER", e.target.value)}
+                placeholder="user@example.com"
+              />
+            </Field>
+            <SecretField
+              label="SMTP password"
+              hint="MAIL_SMTP_PASS"
+              value={draft.MAIL_SMTP_PASS ?? ""}
+              onChange={(v) => setField("MAIL_SMTP_PASS", v)}
+              secretSet={Boolean(snap?.secretsSet?.MAIL_SMTP_PASS)}
+            />
             <Field label="IMAP host" hint="MAIL_IMAP_HOST">
               <input
                 value={draft.MAIL_IMAP_HOST ?? ""}

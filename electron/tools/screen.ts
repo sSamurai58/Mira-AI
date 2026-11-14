@@ -92,6 +92,50 @@ export function parseFindOnScreenQuery(text: string): string | null {
   return q || null;
 }
 
+/**
+ * «кликни по Сохранить» / «нажми на кнопку Отмена» — label click without coords.
+ * Returns null when numeric coords are present (use parseClickCoords instead).
+ */
+export function parseClickByLabel(text: string): string | null {
+  if (parseClickCoords(text)) return null;
+  const m = text.match(
+    /(?:кликни|нажми|click)\s+(?:по|на|on)\s+(?:кнопк[уе]\s+|элемент\s+|кнопку\s+)?[«"']?(.+?)[»"']?\s*$/i,
+  );
+  const label = m?.[1]?.trim().replace(/[«»"']/g, "");
+  if (!label || parseChatHotkey(`нажми ${label}`)) return null;
+  if (/^(вверх|вниз|влево|вправо|up|down|left|right)$/i.test(label)) return null;
+  return label || null;
+}
+
+/** Extract `{x,y}` from vision JSON reply (best-effort). */
+export function parseVisionClickCoords(
+  visionText: string,
+  width: number,
+  height: number,
+): { x: number; y: number } | null {
+  const json = visionText.match(
+    /\{[^{}]*"x"\s*:\s*([\d.]+)[^{}]*"y"\s*:\s*([\d.]+)[^{}]*\}/i,
+  );
+  if (json) {
+    let x = Number(json[1]);
+    let y = Number(json[2]);
+    if (x >= 0 && x <= 1 && y >= 0 && y <= 1) {
+      x *= width;
+      y *= height;
+    }
+    if (Number.isFinite(x) && Number.isFinite(y) && x >= 0 && y >= 0) {
+      return { x: Math.round(x), y: Math.round(y) };
+    }
+  }
+  const pair = visionText.match(
+    /(?:coord(?:inate)?s?|клик|click)\s*[:=]?\s*\(?\s*(\d{1,5})\s*[,; ]\s*(\d{1,5})\s*\)?/i,
+  );
+  if (pair) {
+    return { x: Number(pair[1]), y: Number(pair[2]) };
+  }
+  return null;
+}
+
 export function looksLikeScreenControlIntent(text: string): boolean {
   return /(кликни|нажми|click|введи текст|type\s+|напечатай|прокрут|скролл|scroll)/i.test(
     text,

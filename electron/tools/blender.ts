@@ -90,24 +90,37 @@ export function isBlenderSkill(item: { id: string; triggers: string[] }): boolea
   return item.triggers.some((t) => /blender|bpy|сцена 3d|3d scene/i.test(t));
 }
 
-function demoSceneScript(outputBlend: string): string {
+function demoSceneScript(
+  outputBlend: string,
+  variant: "cube" | "sphere" = "cube",
+): string {
   const out = outputBlend.replace(/\\/g, "/");
+  const mesh =
+    variant === "sphere"
+      ? `bpy.ops.mesh.primitive_uv_sphere_add(radius=1.2, location=(0, 0, 1.2))
+obj = bpy.context.active_object
+obj.name = "MiraSphere"`
+      : `bpy.ops.mesh.primitive_cube_add(size=2, location=(0, 0, 1))
+obj = bpy.context.active_object
+obj.name = "MiraCube"`;
+  const color =
+    variant === "sphere"
+      ? "(0.95, 0.45, 0.2, 1.0)"
+      : "(0.15, 0.55, 0.95, 1.0)";
   return `import bpy
 import math
 
-# Mira P10 demo: clear default scene, add cube + sun + camera
+# Mira P10 demo (${variant}): clear default scene, add mesh + sun + camera
 bpy.ops.object.select_all(action='SELECT')
 bpy.ops.object.delete(use_global=False)
 
-bpy.ops.mesh.primitive_cube_add(size=2, location=(0, 0, 1))
-cube = bpy.context.active_object
-cube.name = "MiraCube"
-mat = bpy.data.materials.new(name="MiraCubeMat")
+${mesh}
+mat = bpy.data.materials.new(name="MiraMat")
 mat.use_nodes = True
 bsdf = mat.node_tree.nodes.get("Principled BSDF")
 if bsdf:
-    bsdf.inputs["Base Color"].default_value = (0.15, 0.55, 0.95, 1.0)
-cube.data.materials.append(mat)
+    bsdf.inputs["Base Color"].default_value = ${color}
+obj.data.materials.append(mat)
 
 bpy.ops.object.light_add(type='SUN', location=(5, -2, 8))
 sun = bpy.context.active_object
@@ -120,7 +133,7 @@ cam.name = "MiraCamera"
 bpy.context.scene.camera = cam
 
 bpy.ops.wm.save_as_mainfile(filepath=r"${out}")
-print("MIRA_BLENDER_OK cube+sun+camera")
+print("MIRA_BLENDER_OK ${variant}+sun+camera")
 `;
 }
 
@@ -155,20 +168,27 @@ function runProcess(
 
 export async function runDemoScene(opts?: {
   forceDry?: boolean;
+  variant?: "cube" | "sphere";
 }): Promise<BlenderJobResult> {
   const policy = getBlenderPolicy();
+  const variant = opts?.variant ?? "cube";
   const stamp = Date.now();
   const jobDir = blenderRoot("jobs", String(stamp));
-  const scriptPath = path.join(jobDir, "demo_cube_light.py");
-  const outputBlend = path.join(policy.outputDir, `mira-demo-${stamp}.blend`);
+  const task = variant === "sphere" ? "demo-sphere-light" : "demo-cube-light";
+  const scriptPath = path.join(jobDir, `${task}.py`);
+  const outputBlend = path.join(
+    policy.outputDir,
+    `mira-demo-${variant}-${stamp}.blend`,
+  );
   const logPath = path.join(jobDir, "run.log");
-  const script = demoSceneScript(outputBlend);
+  const script = demoSceneScript(outputBlend, variant);
   fs.writeFileSync(scriptPath, script, "utf8");
   fs.writeFileSync(
     path.join(jobDir, "manifest.json"),
     JSON.stringify(
       {
-        task: "demo-cube-light",
+        task,
+        variant,
         scriptPath,
         outputBlend,
         createdAt: new Date().toISOString(),
@@ -188,7 +208,7 @@ export async function runDemoScene(opts?: {
     return {
       ok: true,
       mode: "dry-run",
-      task: "demo-cube-light",
+      task,
       binaryPath: policy.binaryPath,
       scriptPath,
       outputBlend: null,
@@ -203,14 +223,14 @@ export async function runDemoScene(opts?: {
       actionClass: "blender",
       risk: "low",
       title: "Запуск Blender",
-      body: `Mira выполнит bpy-скрипт демо-сцены (куб + свет + камера) через:\n${policy.binaryPath}\n\nРезультат: ${outputBlend}`,
+      body: `Mira выполнит bpy-скрипт демо-сцены (${variant} + свет + камера) через:\n${policy.binaryPath}\n\nРезультат: ${outputBlend}`,
       confirmLabel: "Запустить",
     });
     if (!ok) {
       return {
         ok: false,
         mode: "denied",
-        task: "demo-cube-light",
+        task,
         binaryPath: policy.binaryPath,
         scriptPath,
         outputBlend: null,
@@ -242,7 +262,7 @@ export async function runDemoScene(opts?: {
   return {
     ok,
     mode: "live",
-    task: "demo-cube-light",
+    task,
     binaryPath: bin,
     scriptPath,
     outputBlend: fs.existsSync(outputBlend) ? outputBlend : null,

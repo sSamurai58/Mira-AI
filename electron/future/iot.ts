@@ -67,12 +67,33 @@ export async function setIotState(
     confirmLabel: "Выполнить",
   });
   if (!ok) return { ok: false, detail: "Отклонено", device };
+
+  let transport = "db";
+  if (/^https?:\/\//i.test(device.address)) {
+    try {
+      const res = await fetch(device.address, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          device: device.name,
+          kind: device.kind,
+          state,
+          id: device.id,
+        }),
+        signal: AbortSignal.timeout(6000),
+      });
+      transport = res.ok ? `http:${res.status}` : `http-fail:${res.status}`;
+    } catch (err) {
+      transport = `http-error:${err instanceof Error ? err.message.slice(0, 60) : "fail"}`;
+    }
+  }
+
   store
     .prepare(`UPDATE iot_devices SET state = ? WHERE id = ?`)
     .run(state, deviceId);
   return {
     ok: true,
-    detail: `dry-run OK: ${device.name} = ${state}`,
+    detail: `${transport.startsWith("http:") ? "live" : "dry-run"} OK: ${device.name} = ${state} (${transport})`,
     device: { ...device, state },
   };
 }

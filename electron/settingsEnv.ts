@@ -46,7 +46,11 @@ export const SETTINGS_ENV_KEYS = [
   "MAIL_MODE",
   "MAIL_ACCOUNT",
   "MAIL_SMTP_HOST",
+  "MAIL_SMTP_PORT",
+  "MAIL_SMTP_USER",
+  "MAIL_SMTP_PASS",
   "MAIL_IMAP_HOST",
+  "FILES_EXTRA_ROOTS",
   "MESSAGING_ENABLED",
   "MESSAGING_MODE",
   "MESSAGING_CONFIRM",
@@ -77,6 +81,7 @@ const SECRET_KEYS = new Set<string>([
   "XAI_API_KEY",
   "ELEVENLABS_API_KEY",
   "TELEGRAM_BOT_TOKEN",
+  "MAIL_SMTP_PASS",
 ]);
 
 function envPath(): string {

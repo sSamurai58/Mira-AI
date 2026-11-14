@@ -612,6 +612,59 @@ async function probeTierAWithToken(
       };
     }
 
+    if (id === "linear") {
+      const res = await fetch("https://api.linear.app/graphql", {
+        method: "POST",
+        headers: {
+          Authorization: token,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ query: "{ viewer { id name } }" }),
+        signal: AbortSignal.timeout(8000),
+      });
+      if (res.ok) {
+        return {
+          state: "connected",
+          detail: "Linear GraphQL OK",
+          transport: "http",
+          tools: ["linear.viewer", "linear.issues"],
+          live: true,
+        };
+      }
+      return {
+        state: "error",
+        detail: `Linear API ${res.status}`,
+        transport: "http",
+        live: false,
+      };
+    }
+
+    if (id === "gmail") {
+      const res = await fetch(
+        "https://gmail.googleapis.com/gmail/v1/users/me/profile",
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: AbortSignal.timeout(8000),
+        },
+      );
+      if (res.ok) {
+        const json = (await res.json()) as { emailAddress?: string };
+        return {
+          state: "connected",
+          detail: `Gmail API OK · ${json.emailAddress || "user"}`,
+          transport: "http",
+          tools: ["gmail.profile", "gmail.messages"],
+          live: true,
+        };
+      }
+      return {
+        state: "error",
+        detail: `Gmail API ${res.status} — нужен OAuth token`,
+        transport: "http",
+        live: false,
+      };
+    }
+
     // Generic: token saved but no specific probe — stay honest.
     return {
       state: "needs-auth",

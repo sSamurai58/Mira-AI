@@ -72,7 +72,8 @@ export function shouldRequestConfirm(
   if (mode === "dangerous-list") {
     return dangerousList.includes(actionClass);
   }
-  // smart: only high-risk or explicitly dangerous classes
+  // smart: skip low-risk; high-risk only if class is on the dangerous list
+  // (unlike always — so browser/web-fetch high can pass without a dialog)
   if (risk === "low") return false;
-  return dangerousList.includes(actionClass) || risk === "high";
+  return dangerousList.includes(actionClass);
 }
