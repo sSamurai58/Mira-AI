@@ -650,6 +650,51 @@ export function searchMemory(
     .all(owner, like, limit) as MemoryHit[];
 }
 
+/**
+ * Delete utterances (and empty sessions) matching a topic query.
+ * Used by «Забыть тему …» in Memory.
+ */
+export function forgetMemoryByTopic(topic: string): {
+  deletedUtterances: number;
+  deletedSessions: number;
+  topic: string;
+} {
+  const q = topic.trim();
+  if (!q) {
+    return { deletedUtterances: 0, deletedSessions: 0, topic: "" };
+  }
+  const hits = searchMemory(q, { limit: 200 });
+  const store = openStore();
+  const owner = getOwnerId();
+  const utteranceIds = [...new Set(hits.map((h) => h.utterance_id))];
+  const sessionIds = [...new Set(hits.map((h) => h.session_id))];
+  let deletedUtterances = 0;
+  for (const id of utteranceIds) {
+    const r = store
+      .prepare(
+        `DELETE FROM utterances WHERE id = ? AND session_id IN
+          (SELECT id FROM sessions WHERE owner_id = ?)`,
+      )
+      .run(id, owner);
+    deletedUtterances += Number(r.changes);
+  }
+  let deletedSessions = 0;
+  for (const sid of sessionIds) {
+    const left = store
+      .prepare(
+        `SELECT COUNT(*) AS c FROM utterances WHERE session_id = ?`,
+      )
+      .get(sid) as { c: number };
+    if (left.c === 0) {
+      const r = store
+        .prepare(`DELETE FROM sessions WHERE id = ? AND owner_id = ?`)
+        .run(sid, owner);
+      deletedSessions += Number(r.changes);
+    }
+  }
+  return { deletedUtterances, deletedSessions, topic: q };
+}
+
 export function addBrowserVisit(
   url: string,
   source = "mira-open",

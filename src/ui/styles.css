@@ -3280,6 +3280,68 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   word-break: break-all;
 }
 
+.memory-day-group {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.memory-day-label {
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 4px 2px;
+}
+
+.skills-tree {
+  display: grid;
+  gap: 14px;
+}
+
+.skills-tree-group {
+  display: grid;
+  gap: 8px;
+}
+
+.skills-tree-folder {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 6px 2px;
+  border-bottom: 1px solid color-mix(in srgb, var(--panel-line) 70%, transparent);
+}
+
+.skills-tree-folder strong {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.85rem;
+}
+
+.calendar-toast-banner {
+  position: fixed;
+  right: 1.1rem;
+  bottom: 1.1rem;
+  z-index: 90;
+  max-width: min(360px, calc(100vw - 1.6rem));
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--panel, var(--bg)) 92%, var(--accent));
+  box-shadow: 0 18px 40px color-mix(in srgb, #000 40%, transparent);
+}
+
+.calendar-toast-banner strong {
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+.calendar-toast-banner p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
 .catalog-body-field {
   display: grid;
   gap: 8px;

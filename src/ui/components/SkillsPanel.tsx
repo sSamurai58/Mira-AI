@@ -174,6 +174,7 @@ export function SkillsPanel() {
         item.name,
         item.id,
         item.description,
+        item.folder ?? "",
         ...(item.triggers ?? []),
         ...(item.tags ?? []),
       ]
@@ -183,6 +184,37 @@ export function SkillsPanel() {
     });
     return sortCatalogItems(filtered, sort);
   }, [items, filter, query, sort]);
+
+  /** Tree: group skills by parent folder path (skills/<folder>/…). */
+  const skillTree = useMemo(() => {
+    const map = new Map<string, MiraCatalogItem[]>();
+    for (const item of visible) {
+      const folder = sanitizeParentFolder(item.folder);
+      const parts = folder.split("/").filter(Boolean);
+      const parent =
+        item.layout === "folder" && parts.length > 1
+          ? parts.slice(0, -1).join("/")
+          : item.layout === "folder" && parts.length === 1
+            ? ""
+            : folder || "";
+      const key = parent || "(корень)";
+      const list = map.get(key) ?? [];
+      list.push(item);
+      map.set(key, list);
+    }
+    for (const f of folders) {
+      const key = f || "(корень)";
+      if (!map.has(key) && f) {
+        // empty catalog folders still show as a group header
+        map.set(f, []);
+      }
+    }
+    return [...map.entries()].sort((a, b) => {
+      if (a[0] === "(корень)") return -1;
+      if (b[0] === "(корень)") return 1;
+      return a[0].localeCompare(b[0], "en");
+    });
+  }, [visible, folders]);
 
   function changeSort(next: CatalogSort) {
     setSort(next);
@@ -450,15 +482,52 @@ export function SkillsPanel() {
         </p>
       ) : null}
 
-      {visible.length === 0 ? (
+      {visible.length === 0 && folders.length === 0 ? (
         <p className="muted" style={{ margin: 0 }}>
           {items.length === 0
             ? "Пока пусто — «+ Папка» или «+ Скилл»."
             : "Ничего не найдено по запросу."}
         </p>
       ) : (
-        <div className="paths-grid">
-          {visible.map((item) => (
+        <div className="skills-tree">
+          {skillTree.map(([folderKey, groupItems]) => (
+            <section key={folderKey} className="skills-tree-group">
+              <div className="skills-tree-folder">
+                <strong>
+                  {folderKey === "(корень)"
+                    ? "skills/"
+                    : `skills/${folderKey}/`}
+                </strong>
+                <div className="row" style={{ gap: 6 }}>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() =>
+                      openFolderDialog(
+                        folderKey === "(корень)" ? "" : folderKey,
+                      )
+                    }
+                  >
+                    + Папка
+                  </button>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() =>
+                      openCreate(folderKey === "(корень)" ? "" : folderKey)
+                    }
+                  >
+                    + Скилл
+                  </button>
+                </div>
+              </div>
+              {groupItems.length === 0 ? (
+                <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
+                  Пустая папка — добавьте скилл.
+                </p>
+              ) : (
+                <div className="paths-grid">
+                  {groupItems.map((item) => (
             <article
               key={item.id}
               className={`paths-card panel ${item.enabled ? "is-enabled" : "is-disabled"}`}
@@ -564,6 +633,10 @@ export function SkillsPanel() {
                 </button>
               </div>
             </article>
+                  ))}
+                </div>
+              )}
+            </section>
           ))}
         </div>
       )}

@@ -64,11 +64,11 @@ export function getMessagingPolicy(): MessagingPolicy {
       { provider: "telegram", status: "partial" },
       {
         provider: "whatsapp",
-        status: process.env.WHATSAPP_BRIDGE_URL?.trim() ? "partial" : "stub",
+        status: "partial", // wa.me compose or WHATSAPP_BRIDGE_URL
       },
       {
         provider: "instagram",
-        status: process.env.INSTAGRAM_BRIDGE_URL?.trim() ? "partial" : "stub",
+        status: "partial", // profile open or INSTAGRAM_BRIDGE_URL
       },
     ],
   };
@@ -112,10 +112,20 @@ export function parseMessengerIntent(
     /ответь(?:\s+(?:ему|ей|им))?\s+в\s+(?:telegram|телеграм[еа]?|whatsapp|ватсап|вацап|instagram|инстаграм)\s*[,:]?\s*(?:что\s+)?(.+)$/i,
   );
   if (action === "reply" && replyPronoun) {
+    const last = listMessengerMessages(20).find(
+      (m) => m.provider === provider && m.direction === "out",
+    );
+    const lastContact = last
+      ? listMessengerContacts(provider).find((c) => c.id === last.contact_id)
+      : null;
     return {
       provider,
       action,
-      recipientQuery: "Иван",
+      recipientQuery:
+        lastContact?.display_name ||
+        lastContact?.handle ||
+        process.env.TELEGRAM_DEFAULT_CHAT_ID?.trim() ||
+        "последний",
       body: replyPronoun[1].trim(),
     };
   }
@@ -201,6 +211,92 @@ async function sendTelegramLive(
     externalId: String(json.result?.message_id ?? ""),
     detail: "Отправлено через Telegram Bot API",
   };
+}
+
+/** Digits-only phone for wa.me (country code + number, no +). */
+function whatsappPhoneDigits(raw: string): string {
+  return raw.replace(/[^\d]/g, "");
+}
+
+/**
+ * Open WhatsApp (desktop/web) with a prefilled message — no Meta Cloud API key.
+ * Uses chat_id / handle as phone, or WHATSAPP_DEFAULT_PHONE.
+ */
+async function openWhatsAppCompose(
+  contact: MessengerContactRow,
+  body: string,
+): Promise<{ ok: boolean; externalId: string | null; detail: string }> {
+  const phone = whatsappPhoneDigits(
+    contact.chat_id ||
+      contact.handle ||
+      process.env.WHATSAPP_DEFAULT_PHONE ||
+      "",
+  );
+  if (!phone || phone.length < 8) {
+    return {
+      ok: false,
+      externalId: null,
+      detail:
+        "Для WhatsApp нужен телефон (цифры с кодом страны) в контакте или WHATSAPP_DEFAULT_PHONE.",
+    };
+  }
+  const url = `https://wa.me/${phone}?text=${encodeURIComponent(body)}`;
+  try {
+    if (typeof process.versions.electron === "string") {
+      const { shell } = await import("electron");
+      await shell.openExternal(url);
+      return {
+        ok: true,
+        externalId: phone,
+        detail: `Открыл WhatsApp с текстом для +${phone}. Нажмите «Отправить» в приложении.`,
+      };
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      externalId: null,
+      detail: err instanceof Error ? err.message : String(err),
+    };
+  }
+  return {
+    ok: false,
+    externalId: null,
+    detail: `WhatsApp compose: ${url}`,
+  };
+}
+
+async function openInstagramProfile(
+  contact: MessengerContactRow,
+): Promise<{ ok: boolean; externalId: string | null; detail: string }> {
+  const handle = (contact.handle || contact.chat_id || "")
+    .replace(/^@/, "")
+    .trim();
+  if (!handle) {
+    return {
+      ok: false,
+      externalId: null,
+      detail: "Для Instagram нужен @username в контакте.",
+    };
+  }
+  const url = `https://www.instagram.com/${encodeURIComponent(handle)}/`;
+  try {
+    if (typeof process.versions.electron === "string") {
+      const { shell } = await import("electron");
+      await shell.openExternal(url);
+      return {
+        ok: true,
+        externalId: handle,
+        detail: `Открыл профиль @${handle}. Вставьте текст вручную в Direct (API Instagram закрыт).`,
+      };
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      externalId: null,
+      detail: err instanceof Error ? err.message : String(err),
+    };
+  }
+  return { ok: false, externalId: null, detail: url };
 }
 
 export async function sendOrReplyMessage(
@@ -313,7 +409,7 @@ export async function sendOrReplyMessage(
       provider === "whatsapp"
         ? process.env.WHATSAPP_BRIDGE_URL?.trim()
         : process.env.INSTAGRAM_BRIDGE_URL?.trim();
-    if (bridge && policy.mode === "live") {
+    if (bridge) {
       try {
         const res = await fetch(bridge.replace(/\/$/, "") + "/send", {
           method: "POST",
@@ -371,6 +467,33 @@ export async function sendOrReplyMessage(
         };
       }
     }
+
+    // No bridge: open native compose (WhatsApp) or profile (Instagram).
+    const assist =
+      provider === "whatsapp"
+        ? await openWhatsAppCompose(contact, intent.body)
+        : await openInstagramProfile(contact);
+    const message = addMessengerMessage({
+      provider,
+      contactId: contact.id,
+      chatId: contact.chat_id,
+      direction: "out",
+      body: intent.body,
+      status: assist.ok ? "sent" : "error",
+      externalId: assist.externalId,
+    });
+    return {
+      ok: assist.ok,
+      provider,
+      action: intent.action,
+      contact,
+      chatId: contact.chat_id,
+      body: intent.body,
+      mode: "live",
+      externalId: assist.externalId,
+      detail: assist.detail,
+      message,
+    };
   }
 
   const message = addMessengerMessage({
@@ -382,12 +505,6 @@ export async function sendOrReplyMessage(
     status: "dry-run",
     externalId: null,
   });
-  const liveHint =
-    provider === "telegram"
-      ? "Для live задайте TELEGRAM_BOT_TOKEN (+ chat id)."
-      : provider === "whatsapp"
-        ? "Для live задайте WHATSAPP_BRIDGE_URL (+ WHATSAPP_DEFAULT_CHAT_ID)."
-        : "Для live задайте INSTAGRAM_BRIDGE_URL (+ INSTAGRAM_DEFAULT_CHAT_ID).";
   return {
     ok: true,
     provider,
@@ -397,7 +514,8 @@ export async function sendOrReplyMessage(
     body: intent.body,
     mode: "dry-run",
     externalId: null,
-    detail: `Dry-run (${provider}): сообщение записано локально после confirm. ${liveHint}`,
+    detail:
+      "Dry-run (telegram): сообщение записано локально. Для live задайте TELEGRAM_BOT_TOKEN (+ chat id).",
     message,
   };
 }

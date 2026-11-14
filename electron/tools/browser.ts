@@ -282,7 +282,7 @@ export function looksLikeBrowserOpenIntent(text: string): boolean {
 }
 
 export function looksLikeBrowserHistoryIntent(text: string): boolean {
-  return /(история браузера|где я (уже )?был|сайты? на которых я|browser history|посещал)/i.test(
+  return /(история браузера|где я (уже )?был|сайты? на которых я|browser history|посещал|открой историю|найди в истории|какой сайт я открывал)/i.test(
     text,
   );
 }

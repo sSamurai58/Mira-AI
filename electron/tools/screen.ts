@@ -78,9 +78,18 @@ export function getScreenPolicy(): {
 }
 
 export function looksLikeScreenSeeIntent(text: string): boolean {
-  return /(что (у меня )?на экране|посмотри экран|видимость экрана|screen|screenshot|снимок экрана|что открыто)/i.test(
+  return /(что (у меня )?на экране|посмотри экран|видимость экрана|screen|screenshot|снимок экрана|что открыто|найди на экране|где на экране|покажи на экране|find on screen)/i.test(
     text,
   );
+}
+
+/** «Найди на экране кнопку Сохранить» → query for vision focus. */
+export function parseFindOnScreenQuery(text: string): string | null {
+  const m = text.match(
+    /(?:найди|где|покажи|find)\s+(?:на\s+экране|on\s+screen)\s*[:«"']?\s*(.+?)\s*$/i,
+  );
+  const q = m?.[1]?.trim().replace(/[«»"']/g, "");
+  return q || null;
 }
 
 export function looksLikeScreenControlIntent(text: string): boolean {

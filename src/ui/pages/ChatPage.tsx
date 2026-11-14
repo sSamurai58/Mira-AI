@@ -1259,7 +1259,10 @@ export function ChatPage({
             </span>
             {handsFree.enabled ? (
               <span className="chip">
-                hands-free <strong>«{handsFree.wakePhrase}»</strong>
+                {voiceState === "idle" && handsFree.enabled
+                  ? "слушаю wake"
+                  : "hands-free"}{" "}
+                <strong>«{handsFree.wakePhrase}»</strong>
               </span>
             ) : null}
             {contextNote ? <span className="chip">{contextNote}</span> : null}
