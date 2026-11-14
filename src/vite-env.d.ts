@@ -604,6 +604,38 @@ interface MiraBridge {
   setNotifyPrefs: (
     patch: Record<string, unknown>,
   ) => Promise<Record<string, unknown>>;
+  addNotifySound: (payload: {
+    name: string;
+    bytes: number[] | Uint8Array;
+    fileName: string;
+    mime?: string;
+  }) => Promise<
+    | {
+        ok: true;
+        prefs: Record<string, unknown>;
+        sound: { id: string; name: string; fileName?: string; mime?: string };
+      }
+    | { ok: false; detail: string }
+  >;
+  renameNotifySound: (
+    id: string,
+    name: string,
+  ) => Promise<
+    | { ok: true; prefs: Record<string, unknown> }
+    | { ok: false; detail: string }
+  >;
+  deleteNotifySound: (
+    id: string,
+  ) => Promise<
+    | { ok: true; prefs: Record<string, unknown> }
+    | { ok: false; detail: string }
+  >;
+  getNotifySoundData: (
+    id: string,
+  ) => Promise<
+    | { ok: true; base64: string; mime: string; name: string }
+    | { ok: false; detail: string }
+  >;
   testOsNotification: (payload?: {
     title?: string;
     body?: string;

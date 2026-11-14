@@ -1,6 +1,21 @@
 /** In-app + OS popup notification preferences (renderer). */
 
+import {
+  DEFAULT_NOTIFY_SOUND_ID,
+  isBuiltinSoundId,
+  parseCustomSoundId,
+  playBuiltinNotifySound,
+  playCustomNotifySound,
+} from "./notifySounds";
+
 export type NotifyPosition = "br" | "bl" | "tr" | "tl";
+
+export type NotifyCustomSound = {
+  id: string;
+  name: string;
+  fileName?: string;
+  mime?: string;
+};
 
 export type NotifyPrefs = {
   /** In-app HUD toasts (UpdateHudToast and future). */
@@ -27,6 +42,9 @@ export type NotifyPrefs = {
   quietHoursEnd: string;
 
   soundEnabled: boolean;
+  /** `builtin:chime` | `custom:<uuid>` */
+  soundId: string;
+  customSounds: NotifyCustomSound[];
   /** Seconds; 0 = sticky until dismiss. */
   durationSec: number;
   position: NotifyPosition;
@@ -57,6 +75,8 @@ export const DEFAULT_NOTIFY_PREFS: NotifyPrefs = {
   quietHoursStart: "22:00",
   quietHoursEnd: "08:00",
   soundEnabled: false,
+  soundId: DEFAULT_NOTIFY_SOUND_ID,
+  customSounds: [],
   durationSec: 12,
   position: "br",
   maxStack: 3,
@@ -72,10 +92,34 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return Boolean(v) && typeof v === "object" && !Array.isArray(v);
 }
 
+function normalizeCustomSounds(raw: unknown): NotifyCustomSound[] {
+  if (!Array.isArray(raw)) return [];
+  const out: NotifyCustomSound[] = [];
+  for (const item of raw) {
+    if (!isRecord(item)) continue;
+    const id = typeof item.id === "string" ? item.id.trim() : "";
+    const name = typeof item.name === "string" ? item.name.trim() : "";
+    if (!id || !name) continue;
+    out.push({
+      id,
+      name: name.slice(0, 64),
+      fileName:
+        typeof item.fileName === "string" ? item.fileName : undefined,
+      mime: typeof item.mime === "string" ? item.mime : undefined,
+    });
+    if (out.length >= 24) break;
+  }
+  return out;
+}
+
 export function normalizeNotifyPrefs(raw: unknown): NotifyPrefs {
   const src = isRecord(raw) ? raw : {};
-  const base = { ...DEFAULT_NOTIFY_PREFS };
+  const base: NotifyPrefs = {
+    ...DEFAULT_NOTIFY_PREFS,
+    customSounds: [],
+  };
   for (const key of Object.keys(base) as Array<keyof NotifyPrefs>) {
+    if (key === "customSounds") continue;
     const v = src[key as string];
     if (typeof base[key] === "boolean" && typeof v === "boolean") {
       (base as Record<string, unknown>)[key] = v;
@@ -85,6 +129,8 @@ export function normalizeNotifyPrefs(raw: unknown): NotifyPrefs {
       (base as Record<string, unknown>)[key] = v;
     }
   }
+  base.customSounds = normalizeCustomSounds(src.customSounds);
+  if (!base.soundId.trim()) base.soundId = DEFAULT_NOTIFY_SOUND_ID;
   if (!["br", "bl", "tr", "tl"].includes(base.position)) base.position = "br";
   if (!Number.isFinite(base.durationSec) || base.durationSec < 0) {
     base.durationSec = 12;
@@ -176,27 +222,27 @@ export function categoryAllowed(
   }
 }
 
-export function playNotifySound(prefs: NotifyPrefs): void {
-  if (!prefs.soundEnabled || prefs.doNotDisturb || inQuietHours(prefs)) return;
+export function playNotifySound(
+  prefs: NotifyPrefs,
+  opts?: { force?: boolean },
+): void {
+  if (!opts?.force) {
+    if (!prefs.soundEnabled || prefs.doNotDisturb || inQuietHours(prefs)) {
+      return;
+    }
+  }
   try {
-    const Ctx =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext?: typeof AudioContext })
-        .webkitAudioContext;
-    if (!Ctx) return;
-    const ctx = new Ctx();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.value = 880;
-    gain.gain.value = 0.04;
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.18);
-    osc.stop(ctx.currentTime + 0.2);
-    void ctx.resume();
-    setTimeout(() => void ctx.close(), 300);
+    const id = prefs.soundId || DEFAULT_NOTIFY_SOUND_ID;
+    if (isBuiltinSoundId(id)) {
+      playBuiltinNotifySound(id);
+      return;
+    }
+    const customId = parseCustomSoundId(id);
+    if (customId) {
+      void playCustomNotifySound(customId);
+      return;
+    }
+    playBuiltinNotifySound(DEFAULT_NOTIFY_SOUND_ID);
   } catch {
     /* ignore */
   }

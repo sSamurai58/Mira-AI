@@ -5355,6 +5355,63 @@ body.mira-hud-root *::-webkit-scrollbar {
   font-weight: 650;
 }
 
+.notify-sound-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.notify-sound-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 2px;
+}
+
+.notify-sound-library {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--panel-line) 80%, transparent);
+  background: color-mix(in srgb, var(--bg) 45%, transparent);
+}
+
+.notify-sound-library-title {
+  margin: 0;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.notify-sound-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.notify-sound-name {
+  min-width: 0;
+  width: 100%;
+}
+
+@media (max-width: 720px) {
+  .notify-sound-row {
+    grid-template-columns: 1fr;
+  }
+
+  .notify-sound-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .notify-sound-item .btn {
+    justify-self: stretch;
+  }
+}
+
 @keyframes mira-update-hud-in {
   from {
     opacity: 0;

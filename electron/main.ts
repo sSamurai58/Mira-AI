@@ -88,6 +88,12 @@ import {
   saveNotifyPrefs,
   type NotifyPrefs,
 } from "./notifyPrefs";
+import {
+  addNotifySound,
+  deleteNotifySound,
+  readNotifySound,
+  renameNotifySound,
+} from "./notifySounds";
 import { showOsNotification } from "./osNotify";
 import {
   closeStore,
@@ -1298,6 +1304,33 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
       return next;
     },
   );
+  on(
+    "mira:add-notify-sound",
+    (
+      _e,
+      payload: {
+        name: string;
+        bytes: number[] | Uint8Array;
+        fileName: string;
+        mime?: string;
+      },
+    ) => {
+      const res = addNotifySound(payload);
+      if (res.ok) broadcast("mira:notify-prefs", res.prefs);
+      return res;
+    },
+  );
+  on("mira:rename-notify-sound", (_e, payload: { id: string; name: string }) => {
+    const res = renameNotifySound(payload?.id ?? "", payload?.name ?? "");
+    if (res.ok) broadcast("mira:notify-prefs", res.prefs);
+    return res;
+  });
+  on("mira:delete-notify-sound", (_e, id: string) => {
+    const res = deleteNotifySound(id ?? "");
+    if (res.ok) broadcast("mira:notify-prefs", res.prefs);
+    return res;
+  });
+  on("mira:get-notify-sound-data", (_e, id: string) => readNotifySound(id ?? ""));
   on(
     "mira:test-os-notification",
     (_e, payload?: { title?: string; body?: string }) =>
