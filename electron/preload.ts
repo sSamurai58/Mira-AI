@@ -647,6 +647,8 @@ contextBridge.exposeInMainWorld("mira", {
     ipcRenderer.on("mira:update-event", listener);
     return () => ipcRenderer.removeListener("mira:update-event", listener);
   },
+  dismissUpdateHud: (key?: string | null) =>
+    call("mira:dismiss-update-hud", key),
   getNotifyPrefs: () => call("mira:get-notify-prefs"),
   setNotifyPrefs: (patch: Record<string, unknown>) =>
     call("mira:set-notify-prefs", patch),

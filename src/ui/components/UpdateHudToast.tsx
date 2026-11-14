@@ -19,6 +19,11 @@ import {
 export type UpdateHudToastProps = {
   /** Optional force-visible status for demos / tests. */
   demoStatus?: MiraUpdateStatus | null;
+  /**
+   * Always-on-top overlay window (#/update-hud): fill the BrowserWindow,
+   * notify main on dismiss so it stays hidden above other apps.
+   */
+  overlayWindow?: boolean;
 };
 
 type ToastKind = "available" | "downloading" | "downloaded" | "error" | "info";
@@ -41,7 +46,10 @@ function isActionable(channel: string): boolean {
   );
 }
 
-export function UpdateHudToast({ demoStatus = null }: UpdateHudToastProps) {
+export function UpdateHudToast({
+  demoStatus = null,
+  overlayWindow = false,
+}: UpdateHudToastProps) {
   const [status, setStatus] = useState<MiraUpdateStatus | null>(demoStatus);
   const [dismissed, setDismissed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -50,6 +58,16 @@ export function UpdateHudToast({ demoStatus = null }: UpdateHudToastProps) {
   const dismissedVersionRef = useRef<string | null>(null);
   const lastChannelRef = useRef<string | null>(null);
   const soundedForRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!overlayWindow) return;
+    document.documentElement.classList.add("mira-update-hud-root");
+    document.body.classList.add("mira-update-hud-root");
+    return () => {
+      document.documentElement.classList.remove("mira-update-hud-root");
+      document.body.classList.remove("mira-update-hud-root");
+    };
+  }, [overlayWindow]);
 
   useEffect(() => {
     let cancelled = false;
@@ -232,13 +250,17 @@ export function UpdateHudToast({ demoStatus = null }: UpdateHudToastProps) {
       status?.channel ||
       lastChannelRef.current ||
       "unknown";
-    if (status?.channel === "error") {
-      dismissedVersionRef.current = `error:${ver}`;
-    } else {
-      dismissedVersionRef.current = ver;
-    }
+    const key =
+      status?.channel === "error"
+        ? `error:${ver}`
+        : `${status?.channel || lastChannelRef.current || "unknown"}:${status?.availableVersion || ver}`;
+    dismissedVersionRef.current =
+      status?.channel === "error" ? `error:${ver}` : ver;
     setDismissed(true);
-  }, [status]);
+    if (overlayWindow && window.mira?.dismissUpdateHud) {
+      void window.mira.dismissUpdateHud(key);
+    }
+  }, [status, overlayWindow]);
 
   // Auto-dismiss by duration prefs (sticky when 0).
   useEffect(() => {
@@ -286,7 +308,11 @@ export function UpdateHudToast({ demoStatus = null }: UpdateHudToastProps) {
 
   const toast = (
     <div
-      className={`mira-update-hud mira-update-hud--${kind} mira-update-hud--pos-${prefs.position}`}
+      className={`mira-update-hud mira-update-hud--${kind}${
+        overlayWindow
+          ? " mira-update-hud--overlay"
+          : ` mira-update-hud--pos-${prefs.position}`
+      }`}
       role="status"
       aria-live="polite"
     >
@@ -334,6 +360,6 @@ export function UpdateHudToast({ demoStatus = null }: UpdateHudToastProps) {
     </div>
   );
 
-  if (typeof document === "undefined") return toast;
+  if (overlayWindow || typeof document === "undefined") return toast;
   return createPortal(toast, document.body);
 }

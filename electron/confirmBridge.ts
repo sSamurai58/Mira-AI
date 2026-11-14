@@ -119,17 +119,11 @@ export function requestUserConfirmDetailed(
     skillPropose: req.skillPropose,
   };
 
-  // Prefer the main Mira window — never the compact HUD (#/hud), which has no
-  // ConfirmModal and used to leave the main UI stuck behind a dead request.
+  // Prefer the main Mira window — never overlay HUD surfaces (#/hud, #/update-hud).
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { isMiraOverlayWindow } = require("./windowRoles") as typeof import("./windowRoles");
   const windows = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed());
-  const targets = windows.filter((w) => {
-    try {
-      const url = w.webContents.getURL();
-      return !url.includes("#/hud") && !url.includes("#hud");
-    } catch {
-      return true;
-    }
-  });
+  const targets = windows.filter((w) => !isMiraOverlayWindow(w));
   const sendTo = targets.length ? targets : windows;
 
   if (sendTo.length === 0) {

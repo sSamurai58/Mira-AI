@@ -45,7 +45,9 @@ function trayIcon(): Electron.NativeImage {
 }
 
 function mainWindow(): BrowserWindow | null {
-  return BrowserWindow.getAllWindows().find((w) => !w.isDestroyed()) ?? null;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { getMainBrowserWindow } = require("./windowRoles") as typeof import("./windowRoles");
+  return getMainBrowserWindow();
 }
 
 function showMain(): void {

@@ -229,11 +229,15 @@ if (!gotSingleInstanceLock) {
   app.quit();
 } else {
   app.on("second-instance", () => {
-    const win = BrowserWindow.getAllWindows()[0];
+    // Prefer main shell — never focus overlay HUD / update toast.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getMainBrowserWindow } = require("./windowRoles") as typeof import("./windowRoles");
+    let win = getMainBrowserWindow();
     if (!win) {
       createWindow();
-      return;
+      win = getMainBrowserWindow();
     }
+    if (!win) return;
     if (win.isMinimized()) win.restore();
     win.show();
     win.focus();
@@ -1309,8 +1313,24 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
       syncTrayFromPrefs();
       applyLoginItem(next.startWithOs);
       broadcast("mira:notify-prefs", next);
+      void import("./updateHud").then(
+        ({ hideUpdateHud, repositionUpdateHud, syncUpdateHud }) => {
+          if (!next.hudEnabled) {
+            hideUpdateHud();
+            return;
+          }
+          repositionUpdateHud();
+          void syncUpdateHud(getUpdateStatus());
+        },
+      );
       return next;
     },
+  );
+  on("mira:dismiss-update-hud", (_e, key?: string | null) =>
+    import("./updateHud").then(({ dismissUpdateHud }) => {
+      dismissUpdateHud(key ?? null);
+      return { ok: true as const };
+    }),
   );
   on(
     "mira:add-notify-sound",
@@ -1479,7 +1499,9 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
   }, 5_000);
 
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getMainBrowserWindow } = require("./windowRoles") as typeof import("./windowRoles");
+    if (!getMainBrowserWindow()) createWindow();
   });
 });
 

@@ -55,7 +55,17 @@ function setStatus(patch: Partial<UpdateStatus>): UpdateStatus {
   };
   broadcast?.("mira:update-event", status);
   void maybeOsUpdateNotify(status);
+  void syncFloatingUpdateHud(status);
   return status;
+}
+
+async function syncFloatingUpdateHud(snap: UpdateStatus): Promise<void> {
+  try {
+    const { syncUpdateHud } = await import("./updateHud");
+    await syncUpdateHud(snap);
+  } catch {
+    /* optional — window may be unavailable in tests */
+  }
 }
 
 async function maybeOsUpdateNotify(snap: UpdateStatus): Promise<void> {
@@ -77,9 +87,9 @@ async function maybeOsUpdateNotify(snap: UpdateStatus): Promise<void> {
           : "Ошибка обновления";
     const body =
       channel === "available"
-        ? `Доступна новая версия${snap.availableVersion ? ` ${snap.availableVersion}` : ""}. Откройте Mira, чтобы скачать.`
+        ? `Доступна новая версия${snap.availableVersion ? ` ${snap.availableVersion}` : ""}. Скачайте из HUD Mira.`
         : channel === "downloaded"
-          ? "Обновление скачано. Нажмите, чтобы открыть и установить."
+          ? "Обновление скачано. Установите из HUD или перезапустите Mira."
           : snap.detail || "Не удалось проверить обновления";
     showOsNotification({
       title,
@@ -236,6 +246,7 @@ export function scheduleAutoUpdateCheck(
 export function pushUpdateStatus(): UpdateStatus {
   const snap = getUpdateStatus();
   broadcast?.("mira:update-event", snap);
+  void syncFloatingUpdateHud(snap);
   return snap;
 }
 
