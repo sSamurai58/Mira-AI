@@ -15,6 +15,18 @@ export type MiraChangelogEntry = {
 
 export const MIRA_CHANGELOG: MiraChangelogEntry[] = [
   {
+    version: "0.1.19",
+    date: "14.11.2026",
+    summary:
+      "Настоящее Apple Liquid Glass; Apple внутри Внешнего вида; крупнее ядро на Home.",
+    bullets: [
+      "Apple: цветная атмосфера под стеклом, сильный blur, без неонового свечения Mira",
+      "Apple — подраздел Настройки → Внешний вид (не отдельный пункт слева)",
+      "Home: ядро крупнее по умолчанию (не от уровня)",
+      "macOS-стиль: синяя заливка nav, iOS-тогглы, мягкий ThemeSelect",
+    ],
+  },
+  {
     version: "0.1.18",
     date: "14.11.2026",
     summary:
