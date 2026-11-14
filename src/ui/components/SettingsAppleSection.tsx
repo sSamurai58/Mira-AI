@@ -71,12 +71,12 @@ export function SettingsAppleSection({
     <div className="apple-settings appearance-stack">
       <header className="appearance-block-head">
         <div className="row">
-          <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Оформление</h2>
+          <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Apple</h2>
           <StubBadge label="APPLE" />
         </div>
         <p className="muted" style={{ margin: 0 }}>
-          Светлая и тёмная темы в стиле iOS · Liquid Glass · системный шрифт.
-          Референс: apple-design skill.
+          Подраздел внешнего вида: светлая и тёмная iOS-темы, Liquid Glass,
+          SF Pro. Референс: apple-design skill.
         </p>
       </header>
 

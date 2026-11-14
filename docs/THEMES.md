@@ -2,7 +2,7 @@
 
 Расширенный каталог токенов по темам.  
 **Краткий список тем, палитр и акцентов** — обязательно смотреть в [`DESIGN.md`](./DESIGN.md) § «Цветовые темы, палитры и акценты».  
-Выбор UI: **Настройки → Внешний вид** (Mira) и **Настройки → Apple** (iOS). Референсы: `docs/themes/`.
+Выбор UI: **Настройки → Внешний вид** (Mira-темы + подраздел Apple). Референсы: `docs/themes/`.
 
 ## Правила тем
 
@@ -12,7 +12,7 @@
 4. Большинство тем — **dark-first** (продукт тёмный по умолчанию). Где палитра даёт светлый фон — помечено `supports_light`.
 5. Тема по умолчанию: **`deep-sea-neon`** (спокойный navy + золотой акцент, хорошо для диалога и терминала).
 6. Смена темы — мгновенно через CSS variables; без перезагрузки.
-7. Семейство **`apple`** (`apple-light` / `apple-dark`) живёт в **Настройки → Apple**: шрифт **San Francisco** (`SF Pro Text` / `SF Pro Display` из `public/fonts/sf`), iOS-цвета, Liquid Glass (`backdrop-filter`). Mira-темы остаются на Manrope/Syne. Не дублировать Apple в сетке «Внешний вид».
+7. Семейство **`apple`** (`apple-light` / `apple-dark`) — подраздел **Настройки → Внешний вид → Apple**: шрифт **San Francisco** (`SF Pro Text` / `SF Pro Display` из `public/fonts/sf`), iOS-цвета, Liquid Glass. Mira-темы остаются на Manrope/Syne и в общей сетке тем.
 
 ## UI выбора (Настройки → Внешний вид)
 
@@ -52,7 +52,7 @@
 | `apple-light` | Apple Light | `#007AFF` | System Blue (iOS light) | light · Apple |
 | `apple-dark` | Apple Dark | `#0A84FF` | System Blue (iOS dark) | dark · Apple |
 
-## UI выбора (Настройки → Apple)
+## UI выбора (Настройки → Внешний вид → Apple)
 
 Светлое / тёмное превью, уровень **Liquid Glass** (`solid` / `regular` / `clear`), опция «Жирный шрифт». Материалы: `--apple-glass-bg/blur/saturate/border/highlight`. Уважает `prefers-reduced-transparency`.
 
@@ -310,7 +310,7 @@
 2. Добавить строку в каталог + блок токенов.
 3. Завести id (`kebab-case`).
 4. Выбрать **один** `--accent` с проверкой контраста на `--bg` и на кнопке (`--accent-fg`).
-5. Mira-палитры — карточка в Настройки → Внешний вид; Apple-семейство — Настройки → Apple.
+5. Mira-палитры — карточка в Настройки → Внешний вид; Apple — подраздел там же.
 
 ---
 

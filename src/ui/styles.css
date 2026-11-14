@@ -7202,7 +7202,14 @@ html[data-theme="apple-light"] body {
   }
 }
 
-/* Settings → Apple section (iOS grouped list) */
+/* Settings → Внешний вид → Apple (subsection) */
+.appearance-apple-sub {
+  display: grid;
+  gap: 14px;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+}
+
 .apple-settings {
   gap: 18px;
 }

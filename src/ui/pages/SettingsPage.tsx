@@ -16,7 +16,6 @@ import { miraThemes, type ThemeId } from "../themes";
 
 const SECTIONS = [
   { id: "appearance", label: "Внешний вид" },
-  { id: "apple", label: "Apple" },
   { id: "general", label: "Общие" },
   { id: "notifications", label: "Всплывающие уведомления" },
   { id: "voice", label: "Голос и аудио" },
@@ -57,8 +56,8 @@ export function SettingsPage({
     if (hash.includes("data")) return "data";
     if (hash.includes("updates")) return "updates";
     if (hash.includes("general")) return "general";
-    if (hash.includes("apple")) return "apple";
-    if (hash.includes("appearance")) return "appearance";
+    /* Legacy #/settings/apple → Appearance subsection */
+    if (hash.includes("apple") || hash.includes("appearance")) return "appearance";
     return "appearance";
   }
 
@@ -177,14 +176,14 @@ export function SettingsPage({
                 </button>
               ))}
             </div>
-          </div>
-        ) : null}
 
-        {section === "apple" ? (
-          <SettingsAppleSection
-            themeId={themeId}
-            onThemeChange={onThemeChange}
-          />
+            <div className="appearance-apple-sub">
+              <SettingsAppleSection
+                themeId={themeId}
+                onThemeChange={onThemeChange}
+              />
+            </div>
+          </div>
         ) : null}
 
         {section === "general" ? <GeneralSection /> : null}

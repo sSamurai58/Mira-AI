@@ -68,7 +68,7 @@
 | 2026-11-11 | PRD #16 — встроенный терминал | Полноценный TTY в Мастерской; не корневой таб |
 | 2026-11-11 | Agent skills: emilkowalski design/animation | В `.cursor/skills/` только design+motion; on-demand |
 | 2026-11-11 | Темы UI: каталог в THEMES.md | Default `deep-sea-neon`; акцент зашит в тему; выбор в Настройки → Внешний вид |
-| 2026-11-14 | Apple themes + Liquid Glass | `apple-light`/`apple-dark`; Настройки → Apple; glass prefs; apple-design skill |
+| 2026-11-14 | Apple themes + Liquid Glass | `apple-light`/`apple-dark`; подраздел Внешний вид → Apple; glass prefs; apple-design skill |
 | 2026-11-14 | Catalog drafts (Черновики) | Skills/Protocols/Paths/Commands — unfinished create forms in localStorage under main grids |
 | 2026-11-14 | Apple SF Pro fonts | Bundled SF Pro Text/Display in `public/fonts/sf`; only `data-theme-family=apple` |
 | 2026-11-11 | Future F1/F2 в PRD | Камеры видеонаблюдения; умная техника/фурнитура — не must |
