@@ -15,6 +15,18 @@ export type MiraChangelogEntry = {
 
 export const MIRA_CHANGELOG: MiraChangelogEntry[] = [
   {
+    version: "0.1.15",
+    date: "14.11.2026",
+    summary:
+      "Интеграции пересобраны как карточки Путей: поиск, фильтры, brand-иконки, настройка в модалке.",
+    bullets: [
+      "Settings → Интеграции: сетка карточек (paths-grid) вместо длинных форм",
+      "Фильтры и поиск по каналам; переключатель включения на карточке",
+      "«Настроить» открывает портал-модалку с полями, help и тестами",
+      "Иконки каналов: Chrome / Telegram / Blender / Windows + веб-глиф",
+    ],
+  },
+  {
     version: "0.1.14",
     date: "13.11.2026",
     summary:

@@ -412,7 +412,7 @@ async function connectStdio(
       params: {
         protocolVersion: "2024-11-05",
         capabilities: {},
-        clientInfo: { name: "mira", version: "0.1.14" },
+        clientInfo: { name: "mira", version: "0.1.15" },
       },
     };
     try {
@@ -476,7 +476,7 @@ async function connectHttp(
         params: {
           protocolVersion: "2024-11-05",
           capabilities: {},
-          clientInfo: { name: "mira", version: "0.1.14" },
+          clientInfo: { name: "mira", version: "0.1.15" },
         },
       }),
       signal: AbortSignal.timeout(8000),

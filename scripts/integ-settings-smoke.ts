@@ -130,6 +130,21 @@ async function main() {
     "CatalogEditModal must portal to document.body above Workshop nav",
   );
 
+  const integUiSrc = fs.readFileSync(
+    path.join(root, "src/ui/components/SettingsIntegrationsSection.tsx"),
+    "utf8",
+  );
+  assert.match(
+    integUiSrc,
+    /paths-grid/,
+    "Integrations must use Paths-style card grid",
+  );
+  assert.match(
+    integUiSrc,
+    /createPortal\([\s\S]*document\.body/,
+    "Integrations edit modal must portal to document.body",
+  );
+
   const workshopNavCss =
     css.match(/\.workshop-layout\s*>\s*\.settings-nav\s*\{[\s\S]*?\n\}/)?.[0] ??
     "";

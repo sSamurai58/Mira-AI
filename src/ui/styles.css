@@ -3815,6 +3815,28 @@ select:disabled {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
+/* Settings → Интеграции: Paths-style cards + edit modal */
+.integ-paths-panel .integ-banner {
+  margin-top: 0;
+}
+
+.integ-edit-modal {
+  max-height: min(90vh, 920px);
+}
+
+.integ-edit-modal .integ-help {
+  margin: 0;
+}
+
+.integ-edit-modal .integ-fields {
+  margin-top: 4px;
+}
+
+.integ-edit-modal .integ-footer {
+  margin-top: 8px;
+  padding-top: 4px;
+}
+
 .settings-field {
   display: flex;
   flex-direction: column;
