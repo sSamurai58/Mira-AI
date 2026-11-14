@@ -1,8 +1,9 @@
 /**
  * Always-on-top update toast window — visible above other apps, not only Mira.
+ * Anchored to a corner of the Mira main window when it is visible.
  */
 import path from "node:path";
-import type { BrowserWindow } from "electron";
+import type { BrowserWindow, Rectangle } from "electron";
 import {
   categoryAllowed,
   loadNotifyPrefs,
@@ -15,8 +16,8 @@ let updateHudWindow: BrowserWindow | null = null;
 let dismissedKey: string | null = null;
 
 const WIDTH = 380;
-const HEIGHT = 210;
-const MARGIN = 24;
+const HEIGHT = 168;
+const MARGIN = 16;
 
 function dismissKeyFor(status: UpdateStatus): string {
   if (status.channel === "error") {
@@ -56,23 +57,44 @@ export function dismissUpdateHud(key?: string | null): void {
   hideUpdateHud();
 }
 
-function placeWindow(win: BrowserWindow, position: NotifyPosition): void {
+/** Prefer Mira's visible bounds so the toast sits in Mira's corner — not mid-window. */
+function anchorRect(): Rectangle {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { screen } = require("electron") as typeof import("electron");
-  const display = screen.getPrimaryDisplay();
-  const { x: ax, y: ay, width: aw, height: ah } = display.workArea;
-  let x = ax + aw - WIDTH - MARGIN;
-  let y = ay + ah - HEIGHT - MARGIN;
-  if (position === "bl") {
-    x = ax + MARGIN;
-    y = ay + ah - HEIGHT - MARGIN;
-  } else if (position === "tr") {
-    x = ax + aw - WIDTH - MARGIN;
-    y = ay + MARGIN;
-  } else if (position === "tl") {
-    x = ax + MARGIN;
-    y = ay + MARGIN;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { getMainBrowserWindow } = require("./windowRoles") as typeof import("./windowRoles");
+  const main = getMainBrowserWindow();
+  if (main && !main.isDestroyed()) {
+    const bounds = main.getBounds();
+    if (main.isVisible() && !main.isMinimized()) {
+      return bounds;
+    }
+    return screen.getDisplayMatching(bounds).workArea;
   }
+  return screen.getPrimaryDisplay().workArea;
+}
+
+function cornerOrigin(
+  area: Rectangle,
+  position: NotifyPosition,
+): { x: number; y: number } {
+  let x = area.x + area.width - WIDTH - MARGIN;
+  let y = area.y + area.height - HEIGHT - MARGIN;
+  if (position === "bl") {
+    x = area.x + MARGIN;
+    y = area.y + area.height - HEIGHT - MARGIN;
+  } else if (position === "tr") {
+    x = area.x + area.width - WIDTH - MARGIN;
+    y = area.y + MARGIN;
+  } else if (position === "tl") {
+    x = area.x + MARGIN;
+    y = area.y + MARGIN;
+  }
+  return { x: Math.round(x), y: Math.round(y) };
+}
+
+function placeWindow(win: BrowserWindow, position: NotifyPosition): void {
+  const { x, y } = cornerOrigin(anchorRect(), position);
   win.setBounds({ x, y, width: WIDTH, height: HEIGHT });
 }
 
@@ -87,10 +109,13 @@ async function ensureWindow(opts?: {
 
   const { BrowserWindow } = await import("electron");
   const prefs = loadNotifyPrefs();
+  const { x, y } = cornerOrigin(anchorRect(), prefs.position);
 
   const win = new BrowserWindow({
     width: WIDTH,
     height: HEIGHT,
+    x,
+    y,
     frame: false,
     transparent: true,
     resizable: false,

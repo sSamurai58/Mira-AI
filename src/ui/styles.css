@@ -5956,16 +5956,36 @@ body.mira-update-hud-root #root {
   animation: mira-update-hud-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-/* Always-on-top BrowserWindow (#/update-hud) — fills the floating surface. */
+/* Always-on-top BrowserWindow (#/update-hud) — pin card to the window corner. */
 .mira-update-hud--overlay {
   position: absolute;
-  inset: 8px;
-  width: auto;
-  right: auto;
-  bottom: auto;
+  right: 8px;
+  bottom: 8px;
   left: auto;
   top: auto;
+  width: min(360px, calc(100% - 16px));
   z-index: 1;
+}
+
+.mira-update-hud--overlay.mira-update-hud--pos-bl {
+  left: 8px;
+  right: auto;
+  bottom: 8px;
+  top: auto;
+}
+
+.mira-update-hud--overlay.mira-update-hud--pos-tr {
+  right: 8px;
+  top: 8px;
+  left: auto;
+  bottom: auto;
+}
+
+.mira-update-hud--overlay.mira-update-hud--pos-tl {
+  left: 8px;
+  top: 8px;
+  right: auto;
+  bottom: auto;
 }
 
 .mira-update-hud--pos-br {
@@ -6309,11 +6329,11 @@ body.mira-update-hud-root #root {
   font-size: 0.98rem;
   font-weight: 650;
   color: var(--text);
-  margin: 0 0 0.25rem;
+  margin: 0 0 0.65rem;
 }
 
 .mira-update-hud-detail {
-  margin: 0 0 0.65rem;
+  margin: -0.35rem 0 0.65rem;
   font-size: 0.78rem;
   line-height: 1.35;
   color: var(--text-muted);

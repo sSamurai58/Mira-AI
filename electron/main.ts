@@ -396,15 +396,35 @@ function createWindow(): BrowserWindow {
       focused: win.isFocused(),
     });
   };
-  win.on("maximize", emitChromeState);
-  win.on("unmaximize", emitChromeState);
-  win.on("enter-full-screen", emitChromeState);
-  win.on("leave-full-screen", emitChromeState);
+  const keepUpdateHudInCorner = () => {
+    void import("./updateHud").then(({ repositionUpdateHud }) => {
+      repositionUpdateHud();
+    });
+  };
+  win.on("maximize", () => {
+    emitChromeState();
+    keepUpdateHudInCorner();
+  });
+  win.on("unmaximize", () => {
+    emitChromeState();
+    keepUpdateHudInCorner();
+  });
+  win.on("enter-full-screen", () => {
+    emitChromeState();
+    keepUpdateHudInCorner();
+  });
+  win.on("leave-full-screen", () => {
+    emitChromeState();
+    keepUpdateHudInCorner();
+  });
+  win.on("move", keepUpdateHudInCorner);
+  win.on("resize", keepUpdateHudInCorner);
   win.on("focus", () => {
     emitChromeState();
     // Returning to the app: surface a pending update (or re-check, throttled).
     pushUpdateStatus();
     scheduleAutoUpdateCheck("focus");
+    keepUpdateHudInCorner();
   });
   win.on("blur", emitChromeState);
 
