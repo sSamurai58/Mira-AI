@@ -392,12 +392,22 @@ export function SettingsIntegrationsSection() {
 
   function statusLine(meta: IntegMeta): string {
     if (meta.id === "future") {
-      return futureStatus || "Статусы — по кнопке в карточке";
+      return "Камеры · IoT · почта · медиа · календарь";
     }
     if (!meta.enabledKey) return meta.summary;
-    return isTruthyEnv(draft[meta.enabledKey])
-      ? "Включено"
-      : "Выключено — включите переключателем или в настройках";
+    return isTruthyEnv(draft[meta.enabledKey]) ? "Включено" : "Выключено";
+  }
+
+  function openAndTest(id: IntegId) {
+    setEditorId(id);
+    void runQuickTest(id);
+  }
+
+  function testTone(text: string | null): "ok" | "fail" | "idle" {
+    if (!text) return "idle";
+    if (/^OK\b/i.test(text.trim()) || text.includes("ОК —")) return "ok";
+    if (/^FAIL\b/i.test(text.trim())) return "fail";
+    return "idle";
   }
 
   async function runQuickTest(id: IntegId) {
@@ -417,7 +427,12 @@ export function SettingsIntegrationsSection() {
       try {
         const res = await window.mira.testScreen();
         setScreenTest(
-          `${res.ok ? "OK" : "FAIL"} — ${res.detail}${res.path ? ` · ${res.path}` : ""}`,
+          [
+            `${res.ok ? "OK" : "FAIL"} — ${res.detail}`,
+            res.path || null,
+          ]
+            .filter(Boolean)
+            .join("\n"),
         );
       } finally {
         setBusy(null);
@@ -452,7 +467,7 @@ export function SettingsIntegrationsSection() {
       try {
         const res = await window.mira.testBlenderDemo();
         setBlenderTest(
-          `${res.ok ? "OK" : "FAIL"} · ${res.mode} — ${res.detail}`,
+          `${res.ok ? "OK" : "FAIL"} · ${res.mode}\n${res.detail}`,
         );
       } finally {
         setBusy(null);
@@ -874,9 +889,8 @@ export function SettingsIntegrationsSection() {
             disabled={busy !== null || !live}
             onClick={() => void runQuickTest("future")}
           >
-            Статус F1/F2/F3/F4/F7
+            {busy === "future" ? "Читаю…" : "Статус F1/F2/F3/F4/F7"}
           </button>
-          {futureStatus ? <span className="chip">{futureStatus}</span> : null}
           <button
             type="button"
             className="btn"
@@ -928,20 +942,19 @@ export function SettingsIntegrationsSection() {
           disabled={busy !== null || !live}
           onClick={() => void runQuickTest(meta.id)}
         >
-          {meta.id === "web"
-            ? "Тест web.search"
-            : meta.id === "screen"
-              ? "Тест screen.capture"
-              : meta.id === "browser"
-                ? "Тест open URL"
-                : meta.id === "messaging"
-                  ? "Тест send"
-                  : "Тест демо-сцены"}
+          {busy === meta.id
+            ? "Тест…"
+            : meta.id === "web"
+              ? "Тест web.search"
+              : meta.id === "screen"
+                ? "Тест screen.capture"
+                : meta.id === "browser"
+                  ? "Тест open URL"
+                  : meta.id === "messaging"
+                    ? "Тест send"
+                    : "Тест демо-сцены"}
         </button>
         {extra}
-        {lastTest(meta.id) ? (
-          <span className="chip">{lastTest(meta.id)}</span>
-        ) : null}
         <button
           type="button"
           className="btn"
@@ -950,6 +963,53 @@ export function SettingsIntegrationsSection() {
           Закрыть
         </button>
       </SaveRow>
+    );
+  }
+
+  function renderConnPanel(meta: IntegMeta): ReactNode {
+    const result = lastTest(meta.id);
+    const tone = testTone(result);
+    const running = busy === meta.id;
+    return (
+      <section className="integ-conn-panel" aria-live="polite">
+        <div className="integ-conn-head">
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <h3 className="integ-conn-title">Тест и подключение</h3>
+            <p className="muted integ-conn-hint">
+              Результат проверки канала — здесь, а не на карточке.
+            </p>
+          </div>
+          {meta.id !== "future" ? (
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={busy !== null || !live}
+              onClick={() => void runQuickTest(meta.id)}
+            >
+              {running ? "Проверка…" : "Запустить тест"}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={busy !== null || !live}
+              onClick={() => void runQuickTest("future")}
+            >
+              {running ? "Читаю…" : "Обновить статус"}
+            </button>
+          )}
+        </div>
+        <div
+          className={`integ-conn-log mono ${
+            tone === "ok" ? "is-ok" : tone === "fail" ? "is-fail" : ""
+          }${running ? " is-running" : ""}`}
+        >
+          {running
+            ? "Выполняется проверка…"
+            : result ||
+              "Ещё не запускали. Нажмите «Запустить тест» или «Тест» на карточке — откроется это окно."}
+        </div>
+      </section>
     );
   }
 
@@ -989,6 +1049,7 @@ export function SettingsIntegrationsSection() {
           </div>
 
           {renderEditorBody(editor)}
+          {renderConnPanel(editor)}
           <div className="integ-footer">{renderEditorFooter(editor)}</div>
         </form>
       </div>,
@@ -1060,7 +1121,6 @@ export function SettingsIntegrationsSection() {
         <div className="paths-grid">
           {filtered.map((item) => {
             const on = isEnabled(item);
-            const test = lastTest(item.id);
             return (
               <article
                 key={item.id}
@@ -1113,19 +1173,13 @@ export function SettingsIntegrationsSection() {
                   ))}
                 </div>
 
-                {test ? (
-                  <span className="chip" style={{ alignSelf: "flex-start" }}>
-                    {test}
-                  </span>
-                ) : null}
-
                 <div className="row paths-card-actions">
                   {item.id !== "future" ? (
                     <button
                       type="button"
                       className="btn paths-open-btn"
                       disabled={busy !== null || !live}
-                      onClick={() => void runQuickTest(item.id)}
+                      onClick={() => openAndTest(item.id)}
                     >
                       Тест
                     </button>
@@ -1134,7 +1188,7 @@ export function SettingsIntegrationsSection() {
                       type="button"
                       className="btn paths-open-btn"
                       disabled={busy !== null || !live}
-                      onClick={() => void runQuickTest("future")}
+                      onClick={() => openAndTest("future")}
                     >
                       Статус
                     </button>
