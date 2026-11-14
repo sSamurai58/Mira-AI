@@ -24,11 +24,17 @@ import {
 import { listLocalCustomCommands } from "../customCommandsLocal";
 import { notifyCoreProgress } from "../coreLevel";
 import {
+  emptyActionStep,
   emptyCommandStep,
-  newProtocolStepId,
   parseProtocolSequence,
+  PROTOCOL_ACTION_LABEL,
+  PROTOCOL_ACTION_TYPES,
+  PROTOCOL_QUICK_ADD,
+  PROTOCOL_VALUELESS,
   serializeProtocolSequence,
+  stepPlaceholder,
   summarizeProtocolSteps,
+  type ProtocolActionType,
   type ProtocolSeqStep,
 } from "../protocolSequence";
 import { useAppConfirm } from "./AppConfirm";
@@ -38,6 +44,7 @@ import { ThemeSelect } from "./ThemeSelect";
 type FilterId = "all" | "enabled" | "disabled";
 
 type CommandOption = { id: string; name: string; enabled: boolean };
+type AppPathOption = { id: string; name: string; path: string };
 
 type ProtocolDraft = {
   id: string;
@@ -54,11 +61,16 @@ type ProtocolDraft = {
 
 const SORT_KEY = "mira.protocols.sort";
 
-const STEP_TYPE_LABEL: Record<ProtocolSeqStep["type"], string> = {
-  command: "Команда",
-  say: "Сказать",
-  pause: "Пауза",
-};
+type StepKind = "command" | ProtocolActionType;
+
+function stepKindLabel(kind: StepKind): string {
+  if (kind === "command") return "Кастомная команда";
+  return PROTOCOL_ACTION_LABEL[kind];
+}
+
+function stepKindOf(step: ProtocolSeqStep): StepKind {
+  return step.type === "command" ? "command" : step.action;
+}
 
 function emptyDraft(): ProtocolDraft {
   return {
@@ -67,7 +79,7 @@ function emptyDraft(): ProtocolDraft {
     description: "",
     triggers: ["протокол тест"],
     tags: ["custom"],
-    steps: [emptyCommandStep()],
+    steps: [emptyActionStep("say"), emptyCommandStep()],
     notes: "",
     enabled: true,
     idLocked: false,
@@ -82,11 +94,39 @@ function draftFromItem(item: MiraCatalogItem): ProtocolDraft {
     description: item.description,
     triggers: [...(item.triggers ?? [])],
     tags: [...(item.tags ?? [])],
-    steps: parsed.steps.length ? parsed.steps : [emptyCommandStep()],
+    steps: parsed.steps.length
+      ? parsed.steps
+      : [emptyActionStep("say")],
     notes: parsed.notes,
     enabled: item.enabled,
     idLocked: true,
   };
+}
+
+function stepsReady(steps: ProtocolSeqStep[]): { ok: boolean; detail: string } {
+  if (!steps.length) {
+    return { ok: false, detail: "Добавьте хотя бы один шаг" };
+  }
+  for (const s of steps) {
+    if (s.type === "command" && !s.commandId.trim()) {
+      return {
+        ok: false,
+        detail: "Выберите кастомную команду для каждого шага «Кастомная команда»",
+      };
+    }
+    if (
+      s.type === "action" &&
+      !PROTOCOL_VALUELESS.includes(s.action) &&
+      s.action !== "clipboard_paste" &&
+      !s.value.trim()
+    ) {
+      return {
+        ok: false,
+        detail: `Заполните значение для шага «${PROTOCOL_ACTION_LABEL[s.action]}»`,
+      };
+    }
+  }
+  return { ok: true, detail: "" };
 }
 
 function ProtocolGlyph({ size = 40 }: { size?: number }) {
@@ -109,6 +149,7 @@ export function ProtocolsPanel() {
   const browserOnly = typeof window !== "undefined" && !window.mira;
   const [items, setItems] = useState<MiraCatalogItem[]>([]);
   const [commands, setCommands] = useState<CommandOption[]>([]);
+  const [appPaths, setAppPaths] = useState<AppPathOption[]>([]);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<FilterId>("all");
   const [sort, setSort] = useState<CatalogSort>(() =>
@@ -139,6 +180,23 @@ export function ProtocolsPanel() {
     );
   }, []);
 
+  const refreshPaths = useCallback(async () => {
+    if (!window.mira?.listAppPaths) {
+      setAppPaths([]);
+      return;
+    }
+    try {
+      const rows = await window.mira.listAppPaths();
+      setAppPaths(
+        rows
+          .filter((r) => r.enabled)
+          .map((r) => ({ id: r.id, name: r.name, path: r.path })),
+      );
+    } catch {
+      setAppPaths([]);
+    }
+  }, []);
+
   const refresh = useCallback(async () => {
     if (!window.mira) {
       const rows = listLocalProtocols();
@@ -154,7 +212,8 @@ export function ProtocolsPanel() {
   useEffect(() => {
     void refresh();
     void refreshCommands();
-  }, [refresh, refreshCommands]);
+    void refreshPaths();
+  }, [refresh, refreshCommands, refreshPaths]);
 
   useEffect(() => {
     if (!openStepMenu) return;
@@ -178,6 +237,25 @@ export function ProtocolsPanel() {
       })),
     ],
     [commands],
+  );
+
+  const pathSelectOptions = useMemo(
+    () => [
+      { value: "", label: "Выберите путь…" },
+      ...appPaths.map((p) => ({ value: p.id, label: p.name })),
+    ],
+    [appPaths],
+  );
+
+  const stepKindOptions = useMemo(
+    () => [
+      { value: "command", label: "Кастомная команда" },
+      ...PROTOCOL_ACTION_TYPES.map((t) => ({
+        value: t,
+        label: PROTOCOL_ACTION_LABEL[t],
+      })),
+    ],
+    [],
   );
 
   const counts = useMemo(() => {
@@ -220,6 +298,7 @@ export function ProtocolsPanel() {
     setTagDraft("");
     setNote("");
     void refreshCommands();
+    void refreshPaths();
   }
 
   function openEdit(item: MiraCatalogItem) {
@@ -228,6 +307,7 @@ export function ProtocolsPanel() {
     setTagDraft("");
     setNote("");
     void refreshCommands();
+    void refreshPaths();
   }
 
   function addChip(
@@ -266,79 +346,76 @@ export function ProtocolsPanel() {
     }
   }
 
-  function addStep(type: ProtocolSeqStep["type"]) {
+  function addStep(kind: StepKind) {
     if (!editor) return;
-    let step: ProtocolSeqStep;
-    if (type === "command") step = emptyCommandStep();
-    else if (type === "say")
-      step = { id: newProtocolStepId(), type: "say", value: "" };
-    else step = { id: newProtocolStepId(), type: "pause", value: "1" };
+    const step =
+      kind === "command" ? emptyCommandStep() : emptyActionStep(kind);
     setEditor({ ...editor, steps: [...editor.steps, step] });
+  }
+
+  function setStepKind(id: string, kind: StepKind) {
+    if (!editor) return;
+    setEditor({
+      ...editor,
+      steps: editor.steps.map((s) => {
+        if (s.id !== id) return s;
+        if (kind === "command") {
+          return {
+            id: s.id,
+            type: "command",
+            commandId: s.type === "command" ? s.commandId : "",
+          };
+        }
+        const prevValue = s.type === "action" ? s.value : "";
+        return {
+          id: s.id,
+          type: "action",
+          action: kind,
+          value:
+            kind === "pause" && !prevValue
+              ? "1"
+              : kind === "click" && !prevValue
+                ? "100, 200"
+                : PROTOCOL_VALUELESS.includes(kind)
+                  ? ""
+                  : prevValue,
+        };
+      }),
+    });
   }
 
   function updateStep(
     id: string,
-    patch:
-      | { type: "command"; commandId?: string }
-      | { type: "say"; value?: string }
-      | { type: "pause"; value?: string }
-      | { commandId: string }
-      | { value: string },
+    patch: { commandId?: string; value?: string },
   ) {
     if (!editor) return;
     setEditor({
       ...editor,
       steps: editor.steps.map((s) => {
         if (s.id !== id) return s;
-        if ("type" in patch && patch.type !== s.type) {
-          if (patch.type === "command") {
-            return {
-              id: s.id,
-              type: "command",
-              commandId:
-                "commandId" in patch && patch.commandId != null
-                  ? patch.commandId
-                  : s.type === "command"
-                    ? s.commandId
-                    : "",
-            };
-          }
-          if (patch.type === "say") {
-            return {
-              id: s.id,
-              type: "say",
-              value:
-                "value" in patch && patch.value != null
-                  ? patch.value
-                  : s.type === "say"
-                    ? s.value
-                    : "",
-            };
-          }
-          return {
-            id: s.id,
-            type: "pause",
-            value:
-              "value" in patch && patch.value != null
-                ? patch.value
-                : s.type === "pause"
-                  ? s.value
-                  : "1",
-          };
+        if (s.type === "command" && patch.commandId != null) {
+          return { ...s, commandId: patch.commandId };
         }
-        if (s.type === "command" && "commandId" in patch) {
-          return { ...s, commandId: patch.commandId ?? s.commandId };
-        }
-        if (
-          (s.type === "say" || s.type === "pause") &&
-          "value" in patch &&
-          patch.value != null
-        ) {
+        if (s.type === "action" && patch.value != null) {
           return { ...s, value: patch.value };
         }
         return s;
       }),
     });
+  }
+
+  async function browseLaunch(
+    stepId: string,
+    kind: "program" | "folder" = "program",
+  ) {
+    if (!editor) return;
+    if (!window.mira?.pickAppPath) {
+      setNote("Выбор файла доступен в Electron");
+      return;
+    }
+    const res = await window.mira.pickAppPath(kind);
+    if (res.canceled || !res.path) return;
+    updateStep(stepId, { value: res.path });
   }
 
   function moveStep(id: string, dir: -1 | 1) {
@@ -392,13 +469,9 @@ export function ProtocolsPanel() {
   async function saveEditor(e: FormEvent) {
     e.preventDefault();
     if (!editor || !editor.id.trim() || !editor.name.trim()) return;
-    const cmdSteps = editor.steps.filter((s) => s.type === "command");
-    if (cmdSteps.some((s) => s.type === "command" && !s.commandId.trim())) {
-      setNote("Выберите кастомную команду для каждого шага «Команда»");
-      return;
-    }
-    if (!cmdSteps.length) {
-      setNote("Добавьте хотя бы одну кастомную команду в последовательность");
+    const ready = stepsReady(editor.steps);
+    if (!ready.ok) {
+      setNote(ready.detail);
       return;
     }
     // Flush pending chips
@@ -427,9 +500,9 @@ export function ProtocolsPanel() {
 
   async function testEditor() {
     if (!editor) return;
-    const cmdSteps = editor.steps.filter((s) => s.type === "command");
-    if (!cmdSteps.length || cmdSteps.some((s) => !s.commandId.trim())) {
-      setNote("Сначала заполните шаги командами");
+    const ready = stepsReady(editor.steps);
+    if (!ready.ok) {
+      setNote(ready.detail);
       return;
     }
     setBusy(true);
@@ -702,139 +775,210 @@ export function ProtocolsPanel() {
 
               <div className="cc-chain">
                 <div className="field-label" style={{ marginBottom: 8 }}>
-                  Последовательность кастомных команд
+                  Последовательность шагов
                 </div>
-                <p className="muted" style={{ margin: "0 0 10px", fontSize: "0.85rem" }}>
-                  Как в «Кастомных командах», но шаги — готовые команды из
-                  Мастерской. Можно вставить «Сказать» и «Паузу».
+                <p
+                  className="muted"
+                  style={{ margin: "0 0 10px", fontSize: "0.85rem" }}
+                >
+                  Кастомные команды из Мастерской или действия напрямую: сайт,
+                  запуск, клавиши, клик, буфер, терминал, сказать, пауза…
                 </p>
 
-                {commands.length === 0 ? (
-                  <p className="muted" style={{ margin: "0 0 10px" }}>
-                    Пока нет кастомных команд — создайте их во вкладке «Команды»,
-                    затем добавьте сюда.
-                  </p>
-                ) : null}
-
                 <div className="cc-steps">
-                  {editor.steps.map((step, idx) => (
-                    <div key={step.id} className="cc-step">
-                      <span className="cc-step-num" aria-hidden>
-                        {idx + 1}
-                      </span>
+                  {editor.steps.map((step, idx) => {
+                    const kind = stepKindOf(step);
+                    return (
+                      <div key={step.id} className="cc-step">
+                        <span className="cc-step-num" aria-hidden>
+                          {idx + 1}
+                        </span>
 
-                      <div className="cc-step-type-wrap">
-                        <button
-                          type="button"
-                          className="cc-step-type"
-                          disabled={busy}
-                          aria-haspopup="listbox"
-                          aria-expanded={openStepMenu === step.id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setOpenStepMenu(
-                              openStepMenu === step.id ? null : step.id,
-                            );
-                          }}
-                        >
-                          {STEP_TYPE_LABEL[step.type]}
-                          <span className="cc-chevron" aria-hidden>
-                            ▾
-                          </span>
-                        </button>
-                        {openStepMenu === step.id ? (
-                          <ul
-                            className="cc-type-menu"
-                            role="listbox"
-                            onClick={(e) => e.stopPropagation()}
+                        <div className="cc-step-type-wrap">
+                          <button
+                            type="button"
+                            className="cc-step-type"
+                            disabled={busy}
+                            aria-haspopup="listbox"
+                            aria-expanded={openStepMenu === step.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenStepMenu(
+                                openStepMenu === step.id ? null : step.id,
+                              );
+                            }}
                           >
-                            {(
-                              ["command", "say", "pause"] as const
-                            ).map((t) => (
-                              <li key={t}>
-                                <button
-                                  type="button"
-                                  className={
-                                    t === step.type
-                                      ? "cc-type-option is-active"
-                                      : "cc-type-option"
+                            {stepKindLabel(kind)}
+                            <span className="cc-chevron" aria-hidden>
+                              ▾
+                            </span>
+                          </button>
+                          {openStepMenu === step.id ? (
+                            <ul
+                              className="cc-type-menu"
+                              role="listbox"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {stepKindOptions.map((opt) => (
+                                <li key={opt.value}>
+                                  <button
+                                    type="button"
+                                    className={
+                                      opt.value === kind
+                                        ? "cc-type-option is-active"
+                                        : "cc-type-option"
+                                    }
+                                    role="option"
+                                    aria-selected={opt.value === kind}
+                                    onClick={() => {
+                                      setStepKind(
+                                        step.id,
+                                        opt.value as StepKind,
+                                      );
+                                      setOpenStepMenu(null);
+                                    }}
+                                  >
+                                    {opt.label}
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : null}
+                        </div>
+
+                        <div className="cc-step-value">
+                          {step.type === "command" ? (
+                            <ThemeSelect
+                              className="cc-path-select"
+                              aria-label="Кастомная команда"
+                              value={step.commandId}
+                              options={commandSelectOptions}
+                              disabled={busy}
+                              onChange={(id) =>
+                                updateStep(step.id, { commandId: id })
+                              }
+                            />
+                          ) : PROTOCOL_VALUELESS.includes(step.action) ? (
+                            <span
+                              className="muted"
+                              style={{ fontSize: "0.85rem" }}
+                            >
+                              Best-effort для активного окна
+                            </span>
+                          ) : step.action === "open_path" ? (
+                            <div
+                              className="row"
+                              style={{ gap: 8, flex: 1, minWidth: 0 }}
+                            >
+                              {appPaths.length > 0 ? (
+                                <ThemeSelect
+                                  className="cc-path-select"
+                                  aria-label="Путь из Путей"
+                                  value={
+                                    appPaths.some((p) => p.id === step.value)
+                                      ? step.value
+                                      : ""
                                   }
-                                  role="option"
-                                  aria-selected={t === step.type}
-                                  onClick={() => {
-                                    updateStep(step.id, { type: t });
-                                    setOpenStepMenu(null);
-                                  }}
-                                >
-                                  {STEP_TYPE_LABEL[t]}
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : null}
-                      </div>
+                                  options={pathSelectOptions}
+                                  disabled={busy}
+                                  onChange={(id) =>
+                                    updateStep(step.id, { value: id })
+                                  }
+                                />
+                              ) : null}
+                              <input
+                                style={{ flex: 1, minWidth: 0 }}
+                                value={step.value}
+                                disabled={busy}
+                                placeholder={stepPlaceholder(step.action)}
+                                onChange={(e) =>
+                                  updateStep(step.id, {
+                                    value: e.target.value,
+                                  })
+                                }
+                              />
+                            </div>
+                          ) : step.action === "launch" ||
+                            step.action === "open_folder" ? (
+                            <div
+                              className="row"
+                              style={{ gap: 8, flex: 1, minWidth: 0 }}
+                            >
+                              <input
+                                style={{ flex: 1, minWidth: 0 }}
+                                value={step.value}
+                                disabled={busy}
+                                placeholder={stepPlaceholder(step.action)}
+                                onChange={(e) =>
+                                  updateStep(step.id, {
+                                    value: e.target.value,
+                                  })
+                                }
+                              />
+                              <button
+                                type="button"
+                                className="btn"
+                                disabled={busy}
+                                onClick={() =>
+                                  void browseLaunch(
+                                    step.id,
+                                    step.action === "open_folder"
+                                      ? "folder"
+                                      : "program",
+                                  )
+                                }
+                              >
+                                Выбрать
+                              </button>
+                            </div>
+                          ) : (
+                            <input
+                              value={step.value}
+                              disabled={busy}
+                              placeholder={stepPlaceholder(step.action)}
+                              onChange={(e) =>
+                                updateStep(step.id, {
+                                  value: e.target.value,
+                                })
+                              }
+                            />
+                          )}
+                        </div>
 
-                      <div className="cc-step-value">
-                        {step.type === "command" ? (
-                          <ThemeSelect
-                            className="cc-path-select"
-                            aria-label="Кастомная команда"
-                            value={step.commandId}
-                            options={commandSelectOptions}
+                        <div className="cc-step-controls">
+                          <button
+                            type="button"
+                            className="cc-icon-btn"
+                            aria-label="Выше"
+                            disabled={busy || idx === 0}
+                            onClick={() => moveStep(step.id, -1)}
+                          >
+                            ▲
+                          </button>
+                          <button
+                            type="button"
+                            className="cc-icon-btn"
+                            aria-label="Ниже"
+                            disabled={
+                              busy || idx === editor.steps.length - 1
+                            }
+                            onClick={() => moveStep(step.id, 1)}
+                          >
+                            ▼
+                          </button>
+                          <button
+                            type="button"
+                            className="cc-icon-btn"
+                            aria-label="Удалить шаг"
                             disabled={busy}
-                            onChange={(id) =>
-                              updateStep(step.id, { commandId: id })
-                            }
-                          />
-                        ) : (
-                          <input
-                            value={step.value}
-                            disabled={busy}
-                            placeholder={
-                              step.type === "say"
-                                ? "Текст для озвучки"
-                                : "Секунды, напр. 1.5"
-                            }
-                            onChange={(e) =>
-                              updateStep(step.id, {
-                                value: e.target.value,
-                              })
-                            }
-                          />
-                        )}
+                            onClick={() => removeStep(step.id)}
+                          >
+                            ×
+                          </button>
+                        </div>
                       </div>
-
-                      <div className="cc-step-controls">
-                        <button
-                          type="button"
-                          className="cc-icon-btn"
-                          aria-label="Выше"
-                          disabled={busy || idx === 0}
-                          onClick={() => moveStep(step.id, -1)}
-                        >
-                          ▲
-                        </button>
-                        <button
-                          type="button"
-                          className="cc-icon-btn"
-                          aria-label="Ниже"
-                          disabled={busy || idx === editor.steps.length - 1}
-                          onClick={() => moveStep(step.id, 1)}
-                        >
-                          ▼
-                        </button>
-                        <button
-                          type="button"
-                          className="cc-icon-btn"
-                          aria-label="Удалить шаг"
-                          disabled={busy}
-                          onClick={() => removeStep(step.id)}
-                        >
-                          ×
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 <div
@@ -842,30 +986,17 @@ export function ProtocolsPanel() {
                   role="group"
                   aria-label="Добавить шаг"
                 >
-                  <button
-                    type="button"
-                    className="cc-pill"
-                    disabled={busy}
-                    onClick={() => addStep("command")}
-                  >
-                    + Команда
-                  </button>
-                  <button
-                    type="button"
-                    className="cc-pill"
-                    disabled={busy}
-                    onClick={() => addStep("say")}
-                  >
-                    + Сказать
-                  </button>
-                  <button
-                    type="button"
-                    className="cc-pill"
-                    disabled={busy}
-                    onClick={() => addStep("pause")}
-                  >
-                    + Пауза
-                  </button>
+                  {PROTOCOL_QUICK_ADD.map((kind) => (
+                    <button
+                      key={kind}
+                      type="button"
+                      className="cc-pill"
+                      disabled={busy}
+                      onClick={() => addStep(kind)}
+                    >
+                      + {stepKindLabel(kind)}
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -927,8 +1058,8 @@ export function ProtocolsPanel() {
             {browserOnly ? <span className="chip">browser-demo</span> : null}
           </div>
           <p className="muted" style={{ margin: "6px 0 0" }}>
-            Последовательности кастомных команд. Триггер из Диалога или Run на
-            карточке.
+            Последовательности: команды и действия (сайт, клавиши, терминал…).
+            Триггер из Диалога или Run на карточке.
           </p>
         </div>
         <div className="catalog-sort">

@@ -1,20 +1,29 @@
-/** Protocol body as a sequence of custom commands (+ say/pause). */
+/** Protocol body as a sequence of custom commands + native actions. */
 
 import {
+  ACTION_TYPES,
   runCustomCommandById,
+  runCustomCommandStep,
   type CommandRunResult,
+  type CustomCommandActionType,
+  type CustomCommandStep,
 } from "./future/customCommands";
 import { loadMarkdownCatalog } from "./markdownCatalog";
 
+export type ProtocolActionType = CustomCommandActionType;
+
 export type ProtocolSeqStep =
   | { id: string; type: "command"; commandId: string }
-  | { id: string; type: "say"; value: string }
-  | { id: string; type: "pause"; value: string };
+  | { id: string; type: "action"; action: ProtocolActionType; value: string };
 
 let seqCounter = 0;
 function newId(): string {
   seqCounter += 1;
   return `ps-${Date.now().toString(36)}-${seqCounter}`;
+}
+
+function isActionType(raw: string): raw is ProtocolActionType {
+  return (ACTION_TYPES as string[]).includes(raw);
 }
 
 export function parseProtocolSequence(body: string): {
@@ -36,40 +45,59 @@ export function parseProtocolSequence(body: string): {
       }
       continue;
     }
+    const act = /^@act(?:\s+|:)(\S+)(?:\s+(.+))?$/i.exec(line);
+    if (act) {
+      const actionRaw = act[1]!.trim().toLowerCase();
+      if (isActionType(actionRaw)) {
+        steps.push({
+          id: newId(),
+          type: "action",
+          action: actionRaw,
+          value: (act[2] ?? "").trim(),
+        });
+      }
+      continue;
+    }
     const say = /^@say(?:\s+|:)(.+)$/i.exec(line);
     if (say) {
-      steps.push({ id: newId(), type: "say", value: say[1]!.trim() });
+      steps.push({
+        id: newId(),
+        type: "action",
+        action: "say",
+        value: say[1]!.trim(),
+      });
       continue;
     }
     const pause = /^@pause(?:\s+|:)(\S+)$/i.exec(line);
     if (pause) {
       steps.push({
         id: newId(),
-        type: "pause",
+        type: "action",
+        action: "pause",
         value: pause[1]!.trim() || "1",
       });
       continue;
+    }
+    const direct = /^@([a-z_]+)(?:\s+|:)(.*)$/i.exec(line);
+    if (direct) {
+      const actionRaw = direct[1]!.toLowerCase();
+      if (isActionType(actionRaw)) {
+        steps.push({
+          id: newId(),
+          type: "action",
+          action: actionRaw,
+          value: (direct[2] ?? "").trim(),
+        });
+        continue;
+      }
     }
     notes.push(raw);
   }
   return {
     steps,
     notes: notes.join("\n").trim(),
-    isSequence: steps.some((s) => s.type === "command"),
+    isSequence: steps.length > 0,
   };
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-function pauseMs(raw: string): number {
-  const t = raw.trim().toLowerCase();
-  if (t.endsWith("ms") || t.endsWith("мс")) {
-    return Math.max(0, Number(t.replace(/(ms|мс)$/i, "")) || 0);
-  }
-  const sec = Number(t.replace(",", ".")) || 1;
-  return Math.max(0, Math.round(sec * 1000));
 }
 
 export type ProtocolRunResult = {
@@ -139,24 +167,22 @@ export async function runProtocolSequence(
       }
       continue;
     }
-    if (step.type === "say") {
-      const text = step.value.trim();
-      if (!text) {
-        stepDetails.push(`${i + 1}. say: пусто`);
-        allOk = false;
-        continue;
-      }
-      spoken.push(text);
-      stepDetails.push(
-        `${i + 1}. say: ${dryRun ? "проверка" : "ok"} «${text.slice(0, 80)}»`,
-      );
-      continue;
+
+    const actionStep: CustomCommandStep = {
+      id: step.id,
+      type: step.action,
+      value: step.value,
+    };
+    const res = await runCustomCommandStep(actionStep, i, { dryRun });
+    stepDetails.push(`${i + 1}. ${res.type}: ${res.detail}`);
+    if (
+      (step.action === "say" || step.action === "hud_say") &&
+      res.ok &&
+      step.value.trim()
+    ) {
+      spoken.push(step.value.trim());
     }
-    const ms = pauseMs(step.value);
-    if (!dryRun && ms > 0) await sleep(ms);
-    stepDetails.push(
-      `${i + 1}. pause: ${dryRun ? `проверка ${ms}ms` : `${ms}ms`}`,
-    );
+    if (!res.ok) allOk = false;
   }
 
   const reply =

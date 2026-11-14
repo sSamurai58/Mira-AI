@@ -713,6 +713,15 @@ async function runStep(
   };
 }
 
+/** Run a single action step (shared with protocol sequences). */
+export async function runCustomCommandStep(
+  step: CustomCommandStep,
+  index = 0,
+  opts?: { dryRun?: boolean },
+): Promise<StepRunResult> {
+  return runStep(step, index, { dryRun: Boolean(opts?.dryRun) });
+}
+
 export async function runCustomCommand(
   command: CustomCommandRow,
   opts?: { dryRun?: boolean },
