@@ -98,6 +98,10 @@ import {
   looksLikeCustomCommandIntent,
 } from "./future/customCommands";
 import {
+  parseProtocolSequence,
+  runProtocolSequence,
+} from "./protocolSequence";
+import {
   buildReplyDiversityBlock,
   CHAT_DIVERSITY_SYSTEM_RULES,
 } from "./chatDiversity";
@@ -414,6 +418,59 @@ export async function sendChatMessage(
       ) ?? null;
   } else {
     protocol = selectProtocolForTurn(text);
+  }
+
+  // Sequence protocols run custom-command chains — skip LLM.
+  if (protocol && parseProtocolSequence(protocol.body).isSequence) {
+    emit({
+      type: "phase",
+      phase: "tools",
+      detail: "Протокол (последовательность)…",
+    });
+    const res = await runProtocolSequence(protocol.id, { dryRun: false });
+    const desktopUsed = `protocol:seq:${protocol.id}:${res.ok ? "ok" : "fail"}`;
+    emit({
+      type: "context",
+      skills: skills.map((s) => ({ id: s.id, name: s.name })),
+      protocol: { id: protocol.id, name: protocol.name },
+      web: null,
+      desktop: desktopUsed,
+      messaging: null,
+      terminal: null,
+      learned: null,
+      blender: null,
+      addon: null,
+    });
+    const replyText =
+      res.reply.trim() ||
+      `Протокол «${protocol.name}» ${res.ok ? "выполнен" : "с ошибками"}.`;
+    emit({
+      type: "phase",
+      phase: "llm",
+      detail: "Протокол-последовательность…",
+    });
+    emit({ type: "assistant_start", sessionId: session.id });
+    emit({ type: "token", text: replyText });
+    const assistantUtterance = addUtterance(
+      session.id,
+      "assistant",
+      replyText,
+    );
+    emit({
+      type: "assistant_done",
+      utterance: assistantUtterance,
+      memoryUsed: [],
+      skillsUsed: skills.map((s) => ({ id: s.id, name: s.name })),
+      protocolUsed: { id: protocol.id, name: protocol.name },
+      webUsed: null,
+      desktopUsed,
+      messagingUsed: null,
+      terminalUsed: null,
+      learnedUsed: null,
+      blenderUsed: null,
+      addonUsed: null,
+    });
+    return getSession(session.id) ?? session;
   }
 
   let webUsed: string | null = null;
