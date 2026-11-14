@@ -8,6 +8,12 @@ import {
 } from "react";
 import { emitActionLog } from "../actionLog";
 import {
+  newCatalogDraftId,
+  removeCatalogDraft,
+  upsertCatalogDraft,
+  type CatalogDraftEntry,
+} from "../catalogDrafts";
+import {
   ACTION_TYPES,
   deleteLocalCustomCommand,
   listLocalCustomCommands,
@@ -19,6 +25,7 @@ import {
   type CustomCommandStep,
 } from "../customCommandsLocal";
 import { useAppConfirm } from "./AppConfirm";
+import { CatalogDraftsSection } from "./CatalogDraftsSection";
 import { StubBadge } from "./StubBadge";
 import { ThemeSelect } from "./ThemeSelect";
 
@@ -103,6 +110,20 @@ function emptyDraft(): Draft {
     reply: "",
     enabled: true,
   };
+}
+
+function commandDraftMeaningful(d: Draft): boolean {
+  if (d.name.trim() || d.phrases.length || d.reply.trim()) return true;
+  return d.steps.some((s) => s.value.trim().length > 0);
+}
+
+function commandDraftSummary(d: Draft): string {
+  const bits = [
+    d.phrases.length ? `${d.phrases.length} фраз` : "",
+    `${d.steps.length} шагов`,
+    d.reply.trim() ? "ответ Mira" : "",
+  ].filter(Boolean);
+  return bits.join(" · ");
 }
 
 function stepPlaceholder(type: CustomCommandActionType): string {
@@ -327,6 +348,8 @@ export function CustomCommandsPanel() {
   const [items, setItems] = useState<CustomCommandItem[]>([]);
   const [note, setNote] = useState("");
   const [editor, setEditor] = useState<Draft | null>(null);
+  const [createDraftId, setCreateDraftId] = useState<string | null>(null);
+  const [draftsRev, setDraftsRev] = useState(0);
   const [phraseDraft, setPhraseDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [openStepMenu, setOpenStepMenu] = useState<string | null>(null);
@@ -416,8 +439,34 @@ export function CustomCommandsPanel() {
     [appPaths],
   );
 
+  function stashCommandDraft(next: Draft, draftId: string) {
+    if (!commandDraftMeaningful(next)) {
+      removeCatalogDraft(draftId);
+      setDraftsRev((n) => n + 1);
+      return;
+    }
+    upsertCatalogDraft({
+      id: draftId,
+      kind: "command",
+      title: next.name.trim() || "Новая команда",
+      summary: commandDraftSummary(next),
+      payload: next,
+    });
+    setDraftsRev((n) => n + 1);
+  }
+
+  function closeEditor(saveDraft: boolean) {
+    if (saveDraft && editor && createDraftId && !editor.id) {
+      stashCommandDraft(editor, createDraftId);
+    }
+    setEditor(null);
+    setCreateDraftId(null);
+    setPhraseDraft("");
+  }
+
   function openCreate() {
     setEditor(emptyDraft());
+    setCreateDraftId(newCatalogDraftId());
     setPhraseDraft("");
     setNote("");
     void refreshPaths();
@@ -432,6 +481,25 @@ export function CustomCommandsPanel() {
       reply: item.reply,
       enabled: item.enabled,
     });
+    setCreateDraftId(null);
+    setPhraseDraft("");
+    setNote("");
+    void refreshPaths();
+  }
+
+  function resumeDraft(entry: CatalogDraftEntry) {
+    const payload = entry.payload as Draft;
+    if (!payload || typeof payload !== "object") return;
+    setEditor({
+      name: payload.name ?? "",
+      phrases: Array.isArray(payload.phrases) ? [...payload.phrases] : [],
+      steps: Array.isArray(payload.steps)
+        ? payload.steps.map((s) => ({ ...s }))
+        : emptyDraft().steps,
+      reply: payload.reply ?? "",
+      enabled: payload.enabled !== false,
+    });
+    setCreateDraftId(entry.id);
     setPhraseDraft("");
     setNote("");
     void refreshPaths();
@@ -540,7 +608,12 @@ export function CustomCommandsPanel() {
         tag: "Команды",
         tone: "success",
       });
+      if (createDraftId) {
+        removeCatalogDraft(createDraftId);
+        setDraftsRev((n) => n + 1);
+      }
       setEditor(null);
+      setCreateDraftId(null);
       setPhraseDraft("");
       await refresh();
       setNote("Сохранено");
@@ -985,10 +1058,7 @@ export function CustomCommandsPanel() {
               type="button"
               className="btn"
               disabled={busy}
-              onClick={() => {
-                setEditor(null);
-                setPhraseDraft("");
-              }}
+              onClick={() => closeEditor(true)}
             >
               Отмена
             </button>
@@ -1089,6 +1159,14 @@ export function CustomCommandsPanel() {
             </article>
           ))}
         </div>
+      ) : null}
+
+      {!editor ? (
+        <CatalogDraftsSection
+          kind="command"
+          revision={draftsRev}
+          onResume={resumeDraft}
+        />
       ) : null}
     </div>
   );

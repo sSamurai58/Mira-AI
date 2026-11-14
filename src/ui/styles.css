@@ -7384,3 +7384,66 @@ html[data-theme-family="apple"] .apple-list-card {
 .apple-list-card .settings-toggle + .settings-toggle {
   border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
 }
+
+/* ─── Catalog drafts (Черновики) ─── */
+
+.catalog-drafts {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+  padding-top: 18px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+.catalog-drafts-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.catalog-drafts-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.catalog-drafts-hint {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.catalog-drafts-grid {
+  margin-top: 4px;
+}
+
+.catalog-draft-card {
+  border-style: dashed;
+  opacity: 0.96;
+}
+
+.catalog-draft-badge {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  font-size: 1.1rem;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-elevated));
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  flex: 0 0 auto;
+}
+
+html[data-theme-family="apple"] .catalog-drafts {
+  border-top-color: var(--apple-glass-border, color-mix(in srgb, var(--border) 55%, transparent));
+}
+
+html[data-theme-family="apple"] .catalog-draft-card {
+  background: var(--apple-glass-bg, color-mix(in srgb, var(--bg-elevated) 72%, transparent));
+  backdrop-filter: blur(var(--apple-glass-blur, 24px))
+    saturate(var(--apple-glass-saturate, 180%));
+  -webkit-backdrop-filter: blur(var(--apple-glass-blur, 24px))
+    saturate(var(--apple-glass-saturate, 180%));
+}

@@ -7,6 +7,13 @@ import {
   setLocalSkillEnabled,
 } from "../catalogLocal";
 import {
+  draftsDiffer,
+  newCatalogDraftId,
+  removeCatalogDraft,
+  upsertCatalogDraft,
+  type CatalogDraftEntry,
+} from "../catalogDrafts";
+import {
   CATALOG_SORT_OPTIONS,
   itemToCatalogDraft,
   loadCatalogSort,
@@ -17,6 +24,7 @@ import {
 } from "../catalogSort";
 import { notifyCoreProgress } from "../coreLevel";
 import { useAppConfirm } from "./AppConfirm";
+import { CatalogDraftsSection } from "./CatalogDraftsSection";
 import {
   CatalogEditModal,
   type CatalogEditDraft,
@@ -37,6 +45,14 @@ const EMPTY_DRAFT = (): CatalogEditDraft => ({
   body: "1. Уточни задачу.\n2. Дай короткий ответ по шагам.\n3. Предложи следующий шаг.",
   enabled: false,
 });
+
+function skillDraftSummary(d: CatalogEditDraft): string {
+  const bits = [
+    d.description.trim(),
+    d.triggers.trim() ? `триггеры: ${d.triggers.trim()}` : "",
+  ].filter(Boolean);
+  return bits.join(" · ") || d.id;
+}
 
 function SkillGlyph({ size = 40 }: { size?: number }) {
   return (
@@ -69,7 +85,11 @@ export function SkillsPanel() {
   const [editor, setEditor] = useState<{
     mode: "create" | "edit";
     draft: CatalogEditDraft;
+    /** Create-session draft id (localStorage черновик). */
+    draftId?: string;
+    baseline?: CatalogEditDraft;
   } | null>(null);
+  const [draftsRev, setDraftsRev] = useState(0);
 
   const refresh = useCallback(async () => {
     if (!window.mira) {
@@ -130,6 +150,43 @@ export function SkillsPanel() {
     await refresh();
   }
 
+  function stashCreateDraft(next: CatalogEditDraft, draftId: string, baseline: CatalogEditDraft) {
+    if (!draftsDiffer(next, baseline)) {
+      removeCatalogDraft(draftId);
+      setDraftsRev((n) => n + 1);
+      return;
+    }
+    upsertCatalogDraft({
+      id: draftId,
+      kind: "skill",
+      title: next.name.trim() || "Новый скилл",
+      summary: skillDraftSummary(next),
+      payload: next,
+    });
+    setDraftsRev((n) => n + 1);
+  }
+
+  function openCreate() {
+    const baseline = EMPTY_DRAFT();
+    setEditor({
+      mode: "create",
+      draft: baseline,
+      draftId: newCatalogDraftId(),
+      baseline,
+    });
+  }
+
+  function resumeDraft(entry: CatalogDraftEntry) {
+    const payload = entry.payload as CatalogEditDraft;
+    if (!payload || typeof payload !== "object") return;
+    setEditor({
+      mode: "create",
+      draft: payload,
+      draftId: entry.id,
+      baseline: EMPTY_DRAFT(),
+    });
+  }
+
   async function persist(draftIn: CatalogEditDraft) {
     const payload = {
       id: draftIn.id.trim(),
@@ -144,6 +201,10 @@ export function SkillsPanel() {
       saveLocalSkill(payload);
     } else {
       await window.mira.saveSkill(payload);
+    }
+    if (editor?.draftId) {
+      removeCatalogDraft(editor.draftId);
+      setDraftsRev((n) => n + 1);
     }
     await refresh();
     setNote(`Сохранён skill ${payload.id}`);
@@ -205,9 +266,7 @@ export function SkillsPanel() {
             <button
               type="button"
               className="btn btn-primary"
-              onClick={() =>
-                setEditor({ mode: "create", draft: EMPTY_DRAFT() })
-              }
+              onClick={openCreate}
             >
               + Создать
             </button>
@@ -349,6 +408,12 @@ export function SkillsPanel() {
         </div>
       )}
 
+      <CatalogDraftsSection
+        kind="skill"
+        revision={draftsRev}
+        onResume={resumeDraft}
+      />
+
       {editor ? (
         <CatalogEditModal
           open
@@ -361,6 +426,11 @@ export function SkillsPanel() {
           idLocked={editor.mode === "edit"}
           confirmLabel={editor.mode === "edit" ? "Сохранить" : "Создать"}
           onClose={() => setEditor(null)}
+          onDismiss={(next) => {
+            if (editor.mode === "create" && editor.draftId && editor.baseline) {
+              stashCreateDraft(next, editor.draftId, editor.baseline);
+            }
+          }}
           onSave={async (next) => {
             await persist(next);
           }}
