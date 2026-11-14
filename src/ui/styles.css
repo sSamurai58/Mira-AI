@@ -1813,6 +1813,14 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   flex: 0 0 auto;
 }
 
+.thread-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .thread {
   display: flex;
   flex-direction: column;
@@ -1833,13 +1841,89 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   display: none;
 }
 
+.thread-date {
+  position: sticky;
+  top: 4px;
+  z-index: 3;
+  align-self: center;
+  display: inline-flex;
+  margin: 2px 0 4px;
+  pointer-events: none;
+}
+
+.thread-date span {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--text) 88%, transparent);
+  background: color-mix(in srgb, var(--bg-elevated) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--panel-line) 80%, transparent);
+  box-shadow: 0 6px 18px color-mix(in srgb, #000 28%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.thread-jump {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 4;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--load-ram) 45%, transparent);
+  border-radius: 999px;
+  color: var(--text);
+  background:
+    radial-gradient(
+      circle at 30% 25%,
+      color-mix(in srgb, var(--load-ram) 28%, transparent),
+      color-mix(in srgb, var(--bg-elevated) 88%, transparent)
+    );
+  box-shadow:
+    0 8px 22px color-mix(in srgb, #000 40%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--text) 10%, transparent);
+  cursor: pointer;
+  animation: thread-jump-in 180ms var(--ease-out);
+  transition:
+    transform 140ms var(--ease-press),
+    border-color 140ms var(--ease-out),
+    background 140ms var(--ease-out);
+}
+
+.thread-jump:hover {
+  transform: translateY(1px) scale(1.04);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  color: var(--accent);
+}
+
+.thread-jump:active {
+  transform: translateY(2px) scale(0.98);
+}
+
+@keyframes thread-jump-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 .bubble {
   max-width: 80%;
-  padding: 10px 16px;
+  padding: 10px 16px 8px;
   line-height: 1.55;
   animation: bubble-in 180ms var(--ease-out);
   white-space: normal;
   overflow-wrap: anywhere;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .bubble.user {
@@ -1859,6 +1943,27 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   background: color-mix(in srgb, var(--bg) 55%, transparent);
   border: 1px solid color-mix(in srgb, var(--text-muted) 14%, transparent);
   border-radius: 18px 18px 18px 4px;
+}
+
+.bubble-time {
+  align-self: flex-end;
+  margin-top: 2px;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  opacity: 0.72;
+  color: inherit;
+}
+
+.bubble.user .bubble-time {
+  color: color-mix(in srgb, #fff 78%, transparent);
+  opacity: 1;
+}
+
+.bubble.assistant .bubble-time {
+  color: var(--text-muted);
+  opacity: 1;
 }
 
 .bubble-plain {
@@ -3690,6 +3795,7 @@ select:disabled {
   }
 
   .chat-card,
+  .thread-wrap,
   .thread,
   .journal-card,
   .journal-list {
