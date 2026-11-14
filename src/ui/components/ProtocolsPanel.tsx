@@ -931,26 +931,24 @@ export function ProtocolsPanel() {
             карточке.
           </p>
         </div>
-        <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-          <label className="row catalog-sort" style={{ gap: 6 }}>
-            <span className="muted" style={{ fontSize: "0.85rem" }}>
-              Сортировка
-            </span>
+        <div className="catalog-sort">
+          <span className="muted catalog-sort-caption">Сортировка</span>
+          <div className="catalog-sort-controls">
             <ThemeSelect
               aria-label="Сортировка протоколов"
               value={sort}
               options={CATALOG_SORT_OPTIONS}
               onChange={(v) => changeSort(v as CatalogSort)}
             />
-          </label>
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={busy}
-            onClick={openCreate}
-          >
-            + Создать
-          </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={busy}
+              onClick={openCreate}
+            >
+              + Создать
+            </button>
+          </div>
         </div>
       </div>
 
