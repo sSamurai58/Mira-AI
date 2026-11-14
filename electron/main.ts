@@ -1,4 +1,10 @@
-import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  type IpcMainInvokeEvent,
+} from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import { getPublicConfig, loadConfig, validateLlmConfig } from "./config";
@@ -6,12 +12,14 @@ import { getSettingsEnv, setSettingsEnv } from "./settingsEnv";
 import { wireConfirmBridge } from "./confirmBridge";
 import { createLlmAdapter } from "./llm";
 import {
+  deleteCatalogItem,
   ensureSeededCatalog,
   loadMarkdownCatalog,
   setCatalogEnabled,
   writeCatalogItem,
 } from "./markdownCatalog";
 import {
+  deleteLibraryMaterial,
   getLearnPlan,
   getLibraryItem,
   getLibrarySnapshot,
@@ -25,6 +33,8 @@ import {
   searchLearnedUnits,
 } from "./library/learn";
 import { runMemorySearch, sendChatMessage } from "./orchestrator";
+import { translateWithLlm } from "./translateAi";
+import { sampleSystemLoad, warmSystemMetrics } from "./systemMetrics";
 import {
   clearTerminalHistory,
   createTerminalSession,
@@ -61,8 +71,24 @@ import {
   getUpdateStatus,
   initUpdater,
   openReleasesPage,
+  pushUpdateStatus,
   quitAndInstall,
+  scheduleAutoUpdateCheck,
 } from "./updater";
+import {
+  applyLoginItem,
+  destroyTray,
+  handleWindowClose,
+  isAllowQuit,
+  setAllowQuit,
+  syncTrayFromPrefs,
+} from "./tray";
+import {
+  loadNotifyPrefs,
+  saveNotifyPrefs,
+  type NotifyPrefs,
+} from "./notifyPrefs";
+import { showOsNotification } from "./osNotify";
 import {
   closeStore,
   createSession,
@@ -81,17 +107,36 @@ import {
   addCustomPhrase,
   createVoiceProject,
   deleteCustomVoice,
+  deleteVoicePhrase,
   deleteVoiceProject,
   generatePhrases,
+  getCustomVoiceCorpus,
   getStudioSnapshot,
+  getVoicePreferenceCandidates,
   importClip,
   importClipBytes,
   listCustomVoices,
   listVoiceProjects,
+  resetVoicePhraseAudio,
+  submitVoicePreference,
+  synthesizeCustomVoiceNeural,
   trainVoiceModel,
   updateCustomVoice,
   updateVoiceProject,
 } from "./voiceStudio/studio";
+import {
+  ELEVENLABS_MODELS,
+  cloneElevenLabsVoice,
+  getElevenLabsStatus,
+  listElevenLabsVoices,
+  synthesizeElevenLabs,
+} from "./tts/elevenlabs";
+import {
+  connectMcp,
+  disconnectMcp,
+  getMcpRuntimeStatus,
+  listMcpRuntimeStatuses,
+} from "./mcp/runtime";
 import {
   getBlenderPolicy,
   runDemoScene,
@@ -131,6 +176,24 @@ import { listIotDevices } from "./future/iot";
 import { getMailPolicy, listMail } from "./future/mail";
 import { getMediaStatus } from "./future/media";
 import { searchFiles } from "./future/files";
+import {
+  autodiscoverAppPaths,
+  deleteAppPath,
+  listAppPaths,
+  openAppPathById,
+  pickAppPathDialog,
+  setAppPathEnabled,
+  upsertAppPath,
+  type AppPathKind,
+} from "./future/appPaths";
+import {
+  deleteCustomCommand,
+  listCustomCommands,
+  runCustomCommandById,
+  setCustomCommandEnabled,
+  upsertCustomCommand,
+  type CustomCommandStep,
+} from "./future/customCommands";
 import {
   deleteProfile,
   getActiveProfile,
@@ -183,6 +246,43 @@ function appIconPath(): string | undefined {
   return undefined;
 }
 
+/** Exclusive fullscreen covers the OS taskbar; maximize() does not (Windows). */
+function setWindowFullscreen(win: BrowserWindow, enabled: boolean): boolean {
+  if (win.isDestroyed()) return false;
+  if (win.isFullScreen() === enabled) return win.isFullScreen();
+  // setFullScreen uses the display the window is already on — safe for multi-monitor.
+  win.setFullScreen(enabled);
+  return win.isFullScreen();
+}
+
+function toggleWindowFullscreen(win: BrowserWindow): boolean {
+  return setWindowFullscreen(win, !win.isFullScreen());
+}
+
+/**
+ * Titlebar maximize / double-click:
+ * - Windows: exclusive fullscreen so the taskbar is covered (what users call «полный экран»).
+ * - Other platforms: standard maximize; use F11 for exclusive fullscreen.
+ */
+function toggleMaximizeOrFullscreen(win: BrowserWindow): {
+  maximized: boolean;
+  fullscreen: boolean;
+} {
+  if (process.platform === "win32") {
+    toggleWindowFullscreen(win);
+  } else if (win.isFullScreen()) {
+    setWindowFullscreen(win, false);
+  } else if (win.isMaximized()) {
+    win.unmaximize();
+  } else {
+    win.maximize();
+  }
+  return {
+    maximized: win.isMaximized(),
+    fullscreen: win.isFullScreen(),
+  };
+}
+
 function createWindow(): BrowserWindow {
   const icon = appIconPath();
   const win = new BrowserWindow({
@@ -190,6 +290,16 @@ function createWindow(): BrowserWindow {
     height: 800,
     minWidth: 960,
     minHeight: 640,
+    // Frameless: themed in-app titlebar (see TitleBar + mira:window-*).
+    // Avoids OS accent-colored chrome (e.g. solid purple Windows title bar).
+    frame: false,
+    fullscreenable: true,
+    ...(process.platform === "darwin"
+      ? {
+          titleBarStyle: "hiddenInset" as const,
+          trafficLightPosition: { x: 14, y: 12 },
+        }
+      : {}),
     backgroundColor: "#000814",
     title: "Mira",
     show: false,
@@ -204,16 +314,72 @@ function createWindow(): BrowserWindow {
   });
 
   win.once("ready-to-show", () => {
+    const prefs = loadNotifyPrefs();
+    if (prefs.launchMinimized && (prefs.closeToTray || prefs.trayEnabled)) {
+      syncTrayFromPrefs();
+      // Stay hidden — tray restores on click.
+      return;
+    }
     win.show();
     win.focus();
   });
   // Fallback if ready-to-show never fires (some GPU drivers)
   setTimeout(() => {
     if (!win.isDestroyed() && !win.isVisible()) {
+      const prefs = loadNotifyPrefs();
+      if (prefs.launchMinimized && (prefs.closeToTray || prefs.trayEnabled)) {
+        syncTrayFromPrefs();
+        return;
+      }
       win.show();
       win.focus();
     }
   }, 2500);
+
+  win.on("close", (e) => {
+    if (isAllowQuit()) return;
+    if (!handleWindowClose(win)) {
+      e.preventDefault();
+    }
+  });
+
+  // Auto-update HUD: check only after the renderer can receive IPC events.
+  // A boot-time timer in initUpdater used to fire while loadFile was still
+  // in flight — mira:update-event was dropped and the toast never appeared
+  // until the user clicked «Проверить обновления».
+  win.webContents.once("did-finish-load", () => {
+    pushUpdateStatus();
+    scheduleAutoUpdateCheck("renderer-ready");
+  });
+
+  const emitChromeState = () => {
+    if (win.isDestroyed()) return;
+    win.webContents.send("mira:window-state", {
+      maximized: win.isMaximized(),
+      fullscreen: win.isFullScreen(),
+      focused: win.isFocused(),
+    });
+  };
+  win.on("maximize", emitChromeState);
+  win.on("unmaximize", emitChromeState);
+  win.on("enter-full-screen", emitChromeState);
+  win.on("leave-full-screen", emitChromeState);
+  win.on("focus", () => {
+    emitChromeState();
+    // Returning to the app: surface a pending update (or re-check, throttled).
+    pushUpdateStatus();
+    scheduleAutoUpdateCheck("focus");
+  });
+  win.on("blur", emitChromeState);
+
+  // F11: exclusive fullscreen on the current display (covers taskbar on Windows).
+  // Esc exit is handled in the renderer TitleBar so open modals can take precedence.
+  win.webContents.on("before-input-event", (event, input) => {
+    if (input.type !== "keyDown" || input.isAutoRepeat) return;
+    if (input.key !== "F11") return;
+    event.preventDefault();
+    if (!win.isDestroyed()) toggleWindowFullscreen(win);
+  });
 
   win.webContents.on("did-fail-load", (_e, code, desc, url, isMainFrame) => {
     if (!isMainFrame || code === -3 /* aborted */) return;
@@ -279,6 +445,20 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
     console.error("[mira] updater init failed", err);
   }
 
+  try {
+    const prefs = loadNotifyPrefs();
+    syncTrayFromPrefs();
+    applyLoginItem(prefs.startWithOs);
+  } catch (err) {
+    console.error("[mira] notify/tray init failed", err);
+  }
+
+  try {
+    warmSystemMetrics();
+  } catch (err) {
+    console.error("[mira] system metrics warm failed", err);
+  }
+
   const on = (
     channel: string,
     fn: (...args: any[]) => unknown,
@@ -286,6 +466,8 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
   ) => {
     ipcMain.handle(channel, authed(fn as any, opts));
   };
+
+  on("mira:get-system-load", () => sampleSystemLoad());
 
   on("mira:get-health", () => {
     const health = getStoreHealth();
@@ -351,6 +533,19 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
     const adapter = createLlmAdapter(cfg);
     return adapter.testConnection();
   });
+
+  on(
+    "mira:translate-ai",
+    async (
+      _e,
+      payload: { text: string; source: string; target: string },
+    ) =>
+      translateWithLlm({
+        text: payload?.text ?? "",
+        source: payload?.source ?? "auto",
+        target: payload?.target ?? "ru",
+      }),
+  );
 
   on(
     "mira:send-chat",
@@ -450,6 +645,16 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
         body: string;
       },
     ) => writeCatalogItem("skills", item),
+  );
+  on(
+    "mira:delete-skill",
+    (_e, id: string) => deleteCatalogItem("skills", id),
+    { privileged: true },
+  );
+  on(
+    "mira:delete-protocol",
+    (_e, id: string) => deleteCatalogItem("protocols", id),
+    { privileged: true },
   );
 
   on("mira:get-web-policy", () => getWebPolicy());
@@ -663,16 +868,23 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
         bytes: number[] | Uint8Array;
         fileName: string;
         title?: string;
+        extractedText?: string;
       },
     ) =>
       importLibraryBytes({
         bytes: Uint8Array.from(payload.bytes),
         fileName: payload.fileName,
         title: payload.title,
+        extractedText: payload.extractedText,
       }),
     { privileged: true },
   );
   on("mira:process-library-item", (_e, id: string) => processLibraryItem(id));
+  on(
+    "mira:delete-library-item",
+    (_e, id: string) => deleteLibraryMaterial(id),
+    { privileged: true },
+  );
   on("mira:propose-library-skill", async (_e, id: string) =>
     proposeSkillFromItem(id),
   );
@@ -693,6 +905,9 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
   );
   on("mira:list-voice-projects", () => listVoiceProjects());
   on("mira:list-custom-voices", () => listCustomVoices());
+  on("mira:get-custom-voice-corpus", (_e, voiceId: string) =>
+    getCustomVoiceCorpus(voiceId),
+  );
   on(
     "mira:create-voice-project",
     (_e, payload?: { name?: string; lang?: string }) =>
@@ -727,13 +942,115 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
     "mira:add-voice-phrase",
     (_e, projectId: string, text: string) => addCustomPhrase(projectId, text),
   );
+  on(
+    "mira:delete-voice-phrase",
+    (_e, phraseId: string) => deleteVoicePhrase(phraseId),
+  );
+  on(
+    "mira:reset-voice-phrase-audio",
+    (_e, phraseId: string) => resetVoicePhraseAudio(phraseId),
+  );
   on("mira:train-voice-model", (_e, projectId: string) =>
-    trainVoiceModel(projectId),
+    trainVoiceModel(projectId, (ev) => {
+      broadcast("mira:voice-train-progress", ev);
+    }),
+  );
+  on("mira:get-voice-preference-candidates", (_e, voiceId: string) =>
+    getVoicePreferenceCandidates(voiceId),
+  );
+  on(
+    "mira:submit-voice-preference",
+    (
+      _e,
+      payload: { voiceId: string; preferred: "a" | "b"; text?: string },
+    ) =>
+      submitVoicePreference({
+        voiceId: payload.voiceId,
+        preferred: payload.preferred,
+        text: payload.text,
+      }),
+  );
+  on(
+    "mira:synthesize-custom-voice-neural",
+    (_e, voiceId: string, text: string) =>
+      synthesizeCustomVoiceNeural(voiceId, text),
+  );
+  on("mira:elevenlabs-status", (_e, probe?: boolean) =>
+    getElevenLabsStatus(Boolean(probe)),
+  );
+  on(
+    "mira:elevenlabs-synthesize",
+    (
+      _e,
+      payload: {
+        text: string;
+        voiceId?: string;
+        modelId?: string;
+        stream?: boolean;
+        voiceSettings?: {
+          stability?: number;
+          similarityBoost?: number;
+          style?: number;
+          useSpeakerBoost?: boolean;
+        };
+      },
+    ) =>
+      synthesizeElevenLabs({
+        text: payload?.text ?? "",
+        voiceId: payload?.voiceId,
+        modelId: payload?.modelId,
+        stream: payload?.stream,
+        voiceSettings: payload?.voiceSettings,
+      }),
+  );
+  on("mira:elevenlabs-models", () =>
+    ELEVENLABS_MODELS.map((m) => ({ ...m })),
+  );
+  on("mira:elevenlabs-list-voices", () => listElevenLabsVoices());
+  on(
+    "mira:elevenlabs-clone-voice",
+    (
+      _e,
+      payload: { name: string; description?: string; filePaths: string[] },
+    ) =>
+      cloneElevenLabsVoice({
+        name: payload?.name ?? "Mira clone",
+        description: payload?.description,
+        filePaths: payload?.filePaths ?? [],
+      }),
+    { privileged: true },
+  );
+  on("mira:mcp-runtime-list", () => listMcpRuntimeStatuses());
+  on("mira:mcp-runtime-status", (_e, connectorId?: string) =>
+    getMcpRuntimeStatus(connectorId),
+  );
+  on(
+    "mira:mcp-connect",
+    (
+      _e,
+      payload: {
+        connectorId: string;
+        command?: string;
+        args?: string[];
+        url?: string;
+        fields?: Record<string, string>;
+        auth?: "oauth" | "api-key" | "local" | "bridge";
+      },
+    ) => connectMcp(payload),
+    { privileged: true },
+  );
+  on("mira:mcp-disconnect", (_e, connectorId: string) =>
+    disconnectMcp(connectorId),
   );
   on(
     "mira:generate-voice-phrases",
-    (_e, projectId: string, count?: number) =>
-      generatePhrases(projectId, count ?? 5),
+    (
+      _e,
+      projectId: string,
+      countOrOpts?:
+        | number
+        | { count?: number; minWords?: number; maxWords?: number },
+    ) => generatePhrases(projectId, countOrOpts ?? 5),
   );
   on(
     "mira:import-voice-clip",
@@ -850,6 +1167,70 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
   on("mira:get-media-status", () => getMediaStatus());
   on("mira:search-files", (_e, query?: string) => searchFiles(query ?? "", 30));
 
+  on("mira:list-app-paths", () => listAppPaths());
+  on(
+    "mira:upsert-app-path",
+    (
+      _e,
+      payload: {
+        id?: string;
+        kind: AppPathKind;
+        name: string;
+        path?: string;
+        tags?: string[];
+        enabled?: boolean;
+      },
+    ) => upsertAppPath(payload),
+  );
+  on("mira:delete-app-path", (_e, id: string) => deleteAppPath(String(id ?? "")), {
+    privileged: true,
+  });
+  on(
+    "mira:set-app-path-enabled",
+    (_e, id: string, enabled: boolean) =>
+      setAppPathEnabled(String(id ?? ""), Boolean(enabled)),
+  );
+  on("mira:autodiscover-app-paths", () => autodiscoverAppPaths());
+  on("mira:open-app-path", (_e, id: string) => openAppPathById(String(id ?? "")));
+  on(
+    "mira:pick-app-path",
+    (_e, kind?: AppPathKind) =>
+      pickAppPathDialog(kind === "folder" || kind === "file" ? kind : "program"),
+  );
+
+  on("mira:list-custom-commands", () => listCustomCommands());
+  on(
+    "mira:upsert-custom-command",
+    (
+      _e,
+      payload: {
+        id?: string;
+        name: string;
+        phrases?: string[];
+        steps?: CustomCommandStep[];
+        reply?: string;
+        enabled?: boolean;
+      },
+    ) => upsertCustomCommand(payload),
+  );
+  on(
+    "mira:delete-custom-command",
+    (_e, id: string) => deleteCustomCommand(String(id ?? "")),
+    { privileged: true },
+  );
+  on(
+    "mira:set-custom-command-enabled",
+    (_e, id: string, enabled: boolean) =>
+      setCustomCommandEnabled(String(id ?? ""), Boolean(enabled)),
+  );
+  on(
+    "mira:run-custom-command",
+    (_e, id: string, opts?: { dryRun?: boolean }) =>
+      runCustomCommandById(String(id ?? ""), {
+        dryRun: Boolean(opts?.dryRun),
+      }),
+  );
+
   on("mira:list-profiles", () => listProfiles());
   on("mira:get-profiles-snapshot", () => getProfilesSnapshot());
   on("mira:get-active-profile", () => getActiveProfile());
@@ -872,6 +1253,86 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
   on("mira:delete-profile", (_e, id: string) => deleteProfile(id));
   on("mira:get-hud-policy", () => ({ ...getHudPolicy(), open: isHudOpen() }));
   on("mira:toggle-hud", async () => toggleHud({ isDev }));
+
+  const windowFromEvent = (e: IpcMainInvokeEvent) =>
+    BrowserWindow.fromWebContents(e.sender);
+
+  on("mira:window-minimize", (e) => {
+    windowFromEvent(e)?.minimize();
+    return { ok: true };
+  });
+  on("mira:window-maximize-toggle", (e) => {
+    const win = windowFromEvent(e);
+    if (!win) return { ok: false, maximized: false, fullscreen: false };
+    const state = toggleMaximizeOrFullscreen(win);
+    return { ok: true, ...state };
+  });
+  on("mira:window-fullscreen-toggle", (e) => {
+    const win = windowFromEvent(e);
+    if (!win) return { ok: false, fullscreen: false };
+    const fullscreen = toggleWindowFullscreen(win);
+    return { ok: true, fullscreen };
+  });
+  on("mira:window-set-fullscreen", (e, enabled?: boolean) => {
+    const win = windowFromEvent(e);
+    if (!win) return { ok: false, fullscreen: false };
+    const fullscreen = setWindowFullscreen(win, Boolean(enabled));
+    return { ok: true, fullscreen };
+  });
+  on("mira:window-close", (e) => {
+    const win = windowFromEvent(e);
+    if (!win) return { ok: false };
+    // Same path as chrome X — may hide to tray.
+    win.close();
+    return { ok: true };
+  });
+
+  on("mira:get-notify-prefs", () => loadNotifyPrefs());
+  on(
+    "mira:set-notify-prefs",
+    (_e, patch: Partial<NotifyPrefs>) => {
+      const next = saveNotifyPrefs(patch ?? {});
+      syncTrayFromPrefs();
+      applyLoginItem(next.startWithOs);
+      broadcast("mira:notify-prefs", next);
+      return next;
+    },
+  );
+  on(
+    "mira:test-os-notification",
+    (_e, payload?: { title?: string; body?: string }) =>
+      showOsNotification({
+        title: payload?.title || "Mira",
+        body:
+          payload?.body ||
+          "Тест всплывающего уведомления — даже если окно свёрнуто.",
+        category: "actions",
+        force: true,
+      }),
+  );
+  on("mira:window-get-state", (e) => {
+    const win = windowFromEvent(e);
+    if (!win) {
+      return { maximized: false, fullscreen: false, focused: false };
+    }
+    return {
+      maximized: win.isMaximized(),
+      fullscreen: win.isFullScreen(),
+      focused: win.isFocused(),
+    };
+  });
+  on(
+    "mira:window-set-chrome",
+    (e, payload?: { backgroundColor?: string }) => {
+      const win = windowFromEvent(e);
+      if (!win) return { ok: false };
+      const bg = payload?.backgroundColor?.trim();
+      if (bg && /^#[0-9A-Fa-f]{6}$/.test(bg)) {
+        win.setBackgroundColor(bg);
+      }
+      return { ok: true };
+    },
+  );
 
 
   on("mira:get-backup-status", () => getBackupStatus());
@@ -982,12 +1443,23 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
+  // Close-to-tray keeps a hidden window or no windows + tray — don't quit.
+  const prefs = loadNotifyPrefs();
+  if (prefs.closeToTray && !isAllowQuit()) {
+    syncTrayFromPrefs();
+    return;
+  }
   if (calendarTick) {
     clearInterval(calendarTick);
     calendarTick = null;
   }
   disposeAllTerminals();
   closeStore();
+  destroyTray();
   if (process.platform !== "darwin") app.quit();
+});
+
+app.on("before-quit", () => {
+  setAllowQuit(true);
 });
 

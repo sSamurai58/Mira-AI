@@ -50,10 +50,53 @@ function upsert(key: string, draft: Draft): MiraCatalogItem {
     body: draft.body,
     filePath: `local://${key}/${id}.md`,
     relativePath: `local/${key}/${id}.md`,
+    updatedAt: new Date().toISOString(),
   };
   items.unshift(row);
   write(key, items);
   return row;
+}
+
+export function deleteLocalSkill(id: string): {
+  ok: boolean;
+  detail: string;
+  deletedId: string | null;
+} {
+  const items = read(SKILLS_KEY);
+  const found = items.find((i) => i.id === id);
+  if (!found) {
+    return { ok: false, detail: `Skill «${id}» не найден`, deletedId: null };
+  }
+  write(
+    SKILLS_KEY,
+    items.filter((i) => i.id !== id),
+  );
+  return {
+    ok: true,
+    detail: `Удалён skill «${found.name}»`,
+    deletedId: found.id,
+  };
+}
+
+export function deleteLocalProtocol(id: string): {
+  ok: boolean;
+  detail: string;
+  deletedId: string | null;
+} {
+  const items = read(PROTOCOLS_KEY);
+  const found = items.find((i) => i.id === id);
+  if (!found) {
+    return { ok: false, detail: `Протокол «${id}» не найден`, deletedId: null };
+  }
+  write(
+    PROTOCOLS_KEY,
+    items.filter((i) => i.id !== id),
+  );
+  return {
+    ok: true,
+    detail: `Удалён протокол «${found.name}»`,
+    deletedId: found.id,
+  };
 }
 
 export function listLocalSkills(): MiraCatalogItem[] {

@@ -300,13 +300,16 @@ export function extractOpenUrl(text: string): string | null {
   return null;
 }
 
-export async function openBrowserUrl(url: string): Promise<BrowserOpenResult> {
+export async function openBrowserUrl(
+  url: string,
+  opts?: { skipConfirm?: boolean },
+): Promise<BrowserOpenResult> {
   const policy = getBrowserPolicy();
   if (!policy.enabled) {
     throw new Error("Браузер-инструмент выключен (BROWSER_ENABLED=false).");
   }
 
-  if (policy.requireConfirmOpen) {
+  if (policy.requireConfirmOpen && !opts?.skipConfirm) {
     const ok = await requestUserConfirm({
       actionClass: "browser",
       risk: "low",

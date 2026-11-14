@@ -2,12 +2,15 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { loadConfig } from "../electron/config";
 import {
+  deleteLibraryMaterial,
   importLibraryFile,
+  isReadableHumanText,
   looksLikeLibraryLearnIntent,
   processLibraryItem,
   proposeSkillFromItem,
   searchLearnedUnits,
 } from "../electron/library/learn";
+import { getLibraryItem } from "../electron/store";
 import { loadMarkdownCatalog } from "../electron/markdownCatalog";
 import { sendChatMessage } from "../electron/orchestrator";
 import { closeStore, getLearnPlan, listLearnedUnits, openStore } from "../electron/store";
@@ -23,6 +26,16 @@ assert.equal(
   true,
 );
 assert.equal(looksLikeLibraryLearnIntent("привет"), false);
+assert.equal(
+  isReadableHumanText(
+    "Главный тезис: внимание — это навык, а не черта характера.",
+  ),
+  true,
+);
+assert.equal(
+  isReadableHumanText("Õ± 5èüúa7nQáxE) 4@ $•vå*R.Ìì¼ÇÜÀÚ O7'm±ð .0EÛ¦ÒA"),
+  false,
+);
 
 async function main() {
   const sample = path.resolve(
@@ -31,14 +44,14 @@ async function main() {
     "library",
     "attention-notes.md",
   );
-  const item = importLibraryFile({
+  const item = await importLibraryFile({
     filePath: sample,
     title: "Внимание и фокус",
   });
   assert.equal(item.status, "new");
   assert.ok(item.extracted_text && item.extracted_text.length > 20);
 
-  const processed = processLibraryItem(item.id);
+  const processed = await processLibraryItem(item.id);
   assert.equal(processed.item.status, "ready");
   assert.ok(processed.units.length >= 4);
   assert.ok(processed.plan.length >= 3);
@@ -53,7 +66,7 @@ async function main() {
   assert.ok(found.length >= 1);
 
   // 14.8 reprocess bumps version
-  const again = processLibraryItem(item.id);
+  const again = await processLibraryItem(item.id);
   assert.equal(again.item.version, processed.item.version + 1);
 
   const skill = await proposeSkillFromItem(item.id);
@@ -77,6 +90,14 @@ async function main() {
   assert.ok(learnedUsed && learnedUsed.startsWith("learned:"));
   assert.notEqual(learnedUsed, "learned:none");
 
+  const doomed = await importLibraryFile({
+    filePath: sample,
+    title: "Временный материал для удаления",
+  });
+  const del = deleteLibraryMaterial(doomed.id);
+  assert.equal(del.ok, true);
+  assert.equal(getLibraryItem(doomed.id), null);
+
   console.log(
     JSON.stringify(
       {
@@ -87,6 +108,7 @@ async function main() {
         units: units.length,
         skillId: skill.skillId,
         chatLearned: learnedUsed,
+        deleted: del.deletedId,
       },
       null,
       2,

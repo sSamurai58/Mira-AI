@@ -1,5 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { StubBadge } from "../components/StubBadge";
+import {
+  displayLearnedContent,
+  learnedKindLabel,
+} from "../library/learnedLabels";
 
 type Session = {
   id: string;
@@ -173,9 +177,13 @@ export function MemoryPage({ onOpenSession }: MemoryPageProps) {
 
         <div className="stack">
           <div className="row">
-            <strong>Выученное (#14)</strong>
+            <strong>Выдержки из материалов (#14)</strong>
             <span className="chip">P8</span>
           </div>
+          <p className="muted" style={{ margin: 0, fontSize: "0.82rem" }}>
+            Тезисы/фразы из библиотеки — не skills. Skills создаются в Мастерская
+            → Библиотека → «Предложить skill».
+          </p>
           <form
             className="composer"
             onSubmit={(e) => {
@@ -189,7 +197,7 @@ export function MemoryPage({ onOpenSession }: MemoryPageProps) {
             <input
               value={learnedQuery}
               onChange={(e) => setLearnedQuery(e.target.value)}
-              placeholder="Поиск по выученному…"
+              placeholder="Поиск по выдержкам…"
             />
             <button type="submit" className="btn">
               Найти
@@ -201,12 +209,14 @@ export function MemoryPage({ onOpenSession }: MemoryPageProps) {
             </p>
           ) : (
             learned.slice(0, 12).map((u) => (
-              <div key={u.id} className="panel">
+              <div key={u.id} className="panel learned-unit-card">
                 <div className="row">
-                  <span className="chip">{u.kind}</span>
+                  <span className="chip">{learnedKindLabel(u.kind)}</span>
                   <span className="muted mono">{u.source_ref}</span>
                 </div>
-                <div>{u.content.slice(0, 240)}</div>
+                <div className="learned-unit-body">
+                  {displayLearnedContent(u.content)}
+                </div>
               </div>
             ))
           )}
