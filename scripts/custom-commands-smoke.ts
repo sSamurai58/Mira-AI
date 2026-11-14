@@ -43,6 +43,25 @@ async function main() {
   assert.ok(ACTION_TYPES.includes("type"));
   assert.ok(ACTION_TYPES.includes("click"));
   assert.ok(ACTION_TYPES.includes("terminal"));
+  assert.ok(ACTION_TYPES.includes("window_minimize_all"));
+  assert.ok(ACTION_TYPES.includes("window_snap"));
+  assert.ok(ACTION_TYPES.includes("desktop_new"));
+  assert.ok(ACTION_TYPES.includes("desktop_switch"));
+
+  const { parseLaunchValue, encodeLaunchValue } = await import(
+    "../electron/tools/windowLayout"
+  );
+  const enc = encodeLaunchValue({
+    target: "C:\\\\Steam\\\\steam.exe",
+    place: "left",
+    monitor: 1,
+  });
+  assert.match(enc, /place=left/);
+  assert.match(enc, /monitor=1/);
+  const parsed = parseLaunchValue(enc);
+  assert.equal(parsed.place, "left");
+  assert.equal(parsed.monitor, 1);
+  assert.equal(parseLaunchValue("plain.exe").place, "default");
 
   const before = listCustomCommands().length;
 
@@ -136,11 +155,20 @@ async function main() {
       { id: "n11", type: "terminal", value: "echo custom-commands-smoke" },
       { id: "n12", type: "pause", value: "0.01" },
       { id: "n13", type: "open_url", value: "example.com" },
+      { id: "n14", type: "window_minimize_all", value: "" },
+      { id: "n15", type: "window_snap", value: "left" },
+      { id: "n16", type: "desktop_new", value: "" },
+      { id: "n17", type: "desktop_switch", value: "next" },
+      {
+        id: "n18",
+        type: "launch",
+        value: `${pathRow.path || pathRow.id}||place=right||monitor=next`,
+      },
     ],
     reply: "Расширенные ok",
     enabled: true,
   });
-  assert.equal(expanded.steps.length, 13);
+  assert.equal(expanded.steps.length, 18);
 
   const kinds = new Set(expanded.steps.map((s) => s.type));
   const expectedKinds: CustomCommandActionType[] = [
@@ -157,6 +185,11 @@ async function main() {
     "terminal",
     "pause",
     "open_url",
+    "window_minimize_all",
+    "window_snap",
+    "desktop_new",
+    "desktop_switch",
+    "launch",
   ];
   for (const k of expectedKinds) {
     assert.ok(kinds.has(k), `missing kind ${k}`);
@@ -165,7 +198,7 @@ async function main() {
   const expandedDry = await runCustomCommandById(expanded.id, { dryRun: true });
   assert.ok("steps" in expandedDry && expandedDry.ok, JSON.stringify(expandedDry));
   if ("steps" in expandedDry) {
-    assert.equal(expandedDry.steps.length, 13);
+    assert.equal(expandedDry.steps.length, 18);
     assert.ok(expandedDry.steps.every((s) => s.ok), JSON.stringify(expandedDry.steps));
     const byType = Object.fromEntries(
       expandedDry.steps.map((s) => [s.type, s.detail]),
@@ -181,6 +214,11 @@ async function main() {
     assert.match(byType.window_close!, /закрыт/i);
     assert.match(byType.terminal!, /терминал/i);
     assert.match(byType.pause!, /задержк/i);
+    assert.match(byType.window_minimize_all!, /свернуть все|Win\+D/i);
+    assert.match(byType.window_snap!, /левая|left|раскладк|Проверка/i);
+    assert.match(byType.desktop_new!, /рабочий стол|Win\+Ctrl\+D/i);
+    assert.match(byType.desktop_switch!, /стол|следующ/i);
+    assert.match(byType.launch!, /запустить|Проверка/i);
   }
 
   // Live run of non-pty new kinds (screen control off → soft dry-run ok).

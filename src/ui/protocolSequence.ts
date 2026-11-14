@@ -1,7 +1,11 @@
 /** Protocol body as a sequence of custom commands + native actions. */
 
 import {
+  ACTION_LABEL,
+  ACTION_QUICK_ADD,
   ACTION_TYPES,
+  ACTION_VALUELESS,
+  defaultActionValue,
   type CustomCommandActionType,
 } from "./customCommandsLocal";
 
@@ -14,49 +18,16 @@ export type ProtocolSeqStep =
 export const PROTOCOL_ACTION_TYPES: ProtocolActionType[] = [...ACTION_TYPES];
 
 export const PROTOCOL_ACTION_LABEL: Record<ProtocolActionType, string> = {
-  open_url: "Открыть в браузере",
-  launch: "Запустить",
-  open_path: "Открыть путь",
-  open_folder: "Открыть папку",
-  keys: "Нажать клавиши",
-  type: "Ввести текст",
-  click: "Клик",
-  clipboard_copy: "Копировать в буфер",
-  clipboard_paste: "Вставить",
-  pause: "Задержка (сек)",
-  say: "Сказать",
-  notify: "Уведомление",
-  hud_say: "Сказать в HUD",
-  window_minimize: "Свернуть окно",
-  window_close: "Закрыть окно",
-  terminal: "Команда терминала",
+  ...ACTION_LABEL,
 };
 
-/** Quick-add pills in the protocol editor. */
-export const PROTOCOL_QUICK_ADD: Array<
-  "command" | ProtocolActionType
-> = [
+/** Quick-add pills — same actions as Commands, plus «кастомная команда». */
+export const PROTOCOL_QUICK_ADD: Array<"command" | ProtocolActionType> = [
   "command",
-  "open_url",
-  "launch",
-  "open_path",
-  "type",
-  "click",
-  "keys",
-  "clipboard_copy",
-  "clipboard_paste",
-  "pause",
-  "say",
-  "notify",
-  "hud_say",
-  "open_folder",
-  "terminal",
+  ...ACTION_QUICK_ADD,
 ];
 
-export const PROTOCOL_VALUELESS: ProtocolActionType[] = [
-  "window_minimize",
-  "window_close",
-];
+export const PROTOCOL_VALUELESS: ProtocolActionType[] = [...ACTION_VALUELESS];
 
 export function newProtocolStepId(): string {
   return `ps-${crypto.randomUUID().slice(0, 8)}`;
@@ -77,12 +48,7 @@ export function emptyActionStep(
     id: newProtocolStepId(),
     type: "action",
     action,
-    value:
-      action === "pause"
-        ? "1"
-        : action === "click"
-          ? "100, 200"
-          : "",
+    value: defaultActionValue(action),
   };
 }
 
@@ -248,8 +214,15 @@ export function stepPlaceholder(action: ProtocolActionType): string {
     case "hud_say":
       return "Текст в HUD / уведомление";
     case "window_minimize":
+    case "window_minimize_all":
     case "window_close":
+    case "desktop_new":
+    case "desktop_close":
       return "";
+    case "window_snap":
+      return "left | right | maximize | fullscreen";
+    case "desktop_switch":
+      return "next | prev";
     case "terminal":
       return "Команда (с подтверждением)";
   }
