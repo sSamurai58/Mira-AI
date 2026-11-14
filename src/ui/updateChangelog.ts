@@ -15,6 +15,18 @@ export type MiraChangelogEntry = {
 
 export const MIRA_CHANGELOG: MiraChangelogEntry[] = [
   {
+    version: "0.1.21",
+    date: "14.11.2026",
+    summary:
+      "Скиллы как папки SKILL.md: каталоги, импорт, Preview/Code как на GitHub.",
+    bullets: [
+      "Скилл = папка с SKILL.md; вложенные каталоги (например blender-3d/animation/)",
+      "Импорт файла .md / SKILL.md и импорт целой папки-каталога",
+      "Редактор: «Предварительный просмотр» / «Код» — таблицы, заголовки, списки, цитаты",
+      "Создание с полем «Каталог (папка)» → skills/<каталог>/<id>/SKILL.md",
+    ],
+  },
+  {
     version: "0.1.20",
     date: "14.11.2026",
     summary:
