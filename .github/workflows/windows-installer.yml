@@ -15,6 +15,7 @@ on:
       - ".github/workflows/windows-installer.yml"
     branches:
       - main
+      - develop
       - "cursor/**"
 
 permissions:
