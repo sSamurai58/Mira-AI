@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { StubBadge } from "./StubBadge";
 import { Field, ToggleRow } from "./SettingsFormBits";
 import { ThemeSelect } from "./ThemeSelect";
@@ -6,10 +6,19 @@ import {
   DEFAULT_NOTIFY_PREFS,
   loadNotifyPrefs,
   normalizeNotifyPrefs,
+  playNotifySound,
   saveNotifyPrefsLocal,
+  type NotifyCustomSound,
   type NotifyPrefs,
   type NotifyPosition,
 } from "../notifyPrefs";
+import {
+  BUILTIN_NOTIFY_SOUNDS,
+  customSoundPrefId,
+  deleteLocalCustomSoundBlob,
+  renameLocalCustomSoundBlob,
+  saveLocalCustomSoundBlob,
+} from "../notifySounds";
 
 const POSITION_OPTS: Array<{ value: NotifyPosition; label: string }> = [
   { value: "br", label: "Справа снизу" },
@@ -31,7 +40,21 @@ export function SettingsNotificationsSection() {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [testNote, setTestNote] = useState<string | null>(null);
+  const [renameDrafts, setRenameDrafts] = useState<Record<string, string>>({});
+  const soundFileRef = useRef<HTMLInputElement | null>(null);
   const live = Boolean(window.mira?.getNotifyPrefs);
+
+  const soundOptions = useMemo(() => {
+    const builtins = BUILTIN_NOTIFY_SOUNDS.map((s) => ({
+      value: s.id,
+      label: s.label,
+    }));
+    const customs = prefs.customSounds.map((s) => ({
+      value: customSoundPrefId(s.id),
+      label: `★ ${s.name}`,
+    }));
+    return [...builtins, ...customs];
+  }, [prefs.customSounds]);
 
   useEffect(() => {
     let cancelled = false;
@@ -91,6 +114,143 @@ export function SettingsNotificationsSection() {
       body: "Всплывающее уведомление работает — сверните окно и повторите.",
     });
     setTestNote(`${res.ok ? "OK" : "FAIL"} — ${res.detail}`);
+  }
+
+  function applyPrefs(next: NotifyPrefs) {
+    const normalized = normalizeNotifyPrefs(next);
+    setPrefs(normalized);
+    saveNotifyPrefsLocal(normalized);
+  }
+
+  function previewSound() {
+    playNotifySound(prefs, { force: true });
+  }
+
+  async function addCustomSound(file: File) {
+    setBusy(true);
+    setNote("");
+    try {
+      const buf = new Uint8Array(await file.arrayBuffer());
+      const name = file.name.replace(/\.[^.]+$/, "").trim() || "Мой звук";
+      if (window.mira?.addNotifySound) {
+        const res = await window.mira.addNotifySound({
+          name,
+          bytes: Array.from(buf),
+          fileName: file.name,
+          mime: file.type || undefined,
+        });
+        if (!res.ok) {
+          setNote(res.detail);
+          return;
+        }
+        applyPrefs(normalizeNotifyPrefs(res.prefs));
+        setNote(`Добавлен звук «${res.sound.name}»`);
+        return;
+      }
+
+      // Browser demo: keep blob in localStorage.
+      if (buf.byteLength > 2 * 1024 * 1024) {
+        setNote("Файл больше 2 МБ");
+        return;
+      }
+      const id = crypto.randomUUID();
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(reader.error ?? new Error("read fail"));
+        reader.readAsDataURL(file);
+      });
+      saveLocalCustomSoundBlob({
+        id,
+        name,
+        mime: file.type || "audio/wav",
+        dataUrl,
+      });
+      const sound: NotifyCustomSound = {
+        id,
+        name,
+        fileName: file.name,
+        mime: file.type || "audio/wav",
+      };
+      applyPrefs({
+        ...prefs,
+        customSounds: [...prefs.customSounds, sound],
+        soundId: customSoundPrefId(id),
+        soundEnabled: true,
+      });
+      setNote(`Добавлен звук «${name}» (browser)`);
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function renameCustom(id: string) {
+    const name = (renameDrafts[id] ?? "").trim();
+    if (!name) {
+      setNote("Введите имя");
+      return;
+    }
+    setBusy(true);
+    try {
+      if (window.mira?.renameNotifySound) {
+        const res = await window.mira.renameNotifySound(id, name);
+        if (!res.ok) {
+          setNote(res.detail);
+          return;
+        }
+        applyPrefs(normalizeNotifyPrefs(res.prefs));
+      } else {
+        renameLocalCustomSoundBlob(id, name);
+        applyPrefs({
+          ...prefs,
+          customSounds: prefs.customSounds.map((s) =>
+            s.id === id ? { ...s, name } : s,
+          ),
+        });
+      }
+      setNote("Имя сохранено");
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeCustom(id: string) {
+    setBusy(true);
+    try {
+      if (window.mira?.deleteNotifySound) {
+        const res = await window.mira.deleteNotifySound(id);
+        if (!res.ok) {
+          setNote(res.detail);
+          return;
+        }
+        applyPrefs(normalizeNotifyPrefs(res.prefs));
+      } else {
+        deleteLocalCustomSoundBlob(id);
+        const customSounds = prefs.customSounds.filter((s) => s.id !== id);
+        applyPrefs({
+          ...prefs,
+          customSounds,
+          soundId:
+            prefs.soundId === customSoundPrefId(id)
+              ? "builtin:chime"
+              : prefs.soundId,
+        });
+      }
+      setRenameDrafts((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setNote("Звук удалён");
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -202,10 +362,121 @@ export function SettingsNotificationsSection() {
         <h3 className="notify-card-title">Вид HUD</h3>
         <ToggleRow
           label="Звук"
-          hint="Короткий сигнал при появлении toast / OS (если не silent)"
+          hint="Сигнал при появлении toast / OS (если не silent)"
           checked={prefs.soundEnabled}
           onChange={(on) => set("soundEnabled", on)}
         />
+        <div className="notify-sound-row">
+          <Field label="Звук HUD" hint="Встроенные тона или свои файлы">
+            <ThemeSelect
+              aria-label="Звук HUD"
+              value={prefs.soundId}
+              options={soundOptions}
+              onChange={(v) => set("soundId", v)}
+            />
+          </Field>
+          <div className="notify-sound-actions">
+            <button
+              type="button"
+              className="btn"
+              disabled={busy}
+              onClick={previewSound}
+              title="Прослушать выбранный звук"
+            >
+              ▶ Слушать
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={busy}
+              onClick={() => soundFileRef.current?.click()}
+            >
+              + Свой
+            </button>
+            <input
+              ref={soundFileRef}
+              type="file"
+              accept="audio/*,.wav,.mp3,.ogg,.m4a,.webm,.flac"
+              hidden
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) void addCustomSound(file);
+              }}
+            />
+          </div>
+        </div>
+
+        {prefs.customSounds.length > 0 ? (
+          <div className="notify-sound-library">
+            <p className="muted notify-sound-library-title">Мои звуки</p>
+            {prefs.customSounds.map((s) => (
+              <div key={s.id} className="notify-sound-item">
+                <input
+                  className="notify-sound-name"
+                  value={renameDrafts[s.id] ?? s.name}
+                  aria-label={`Имя звука ${s.name}`}
+                  onChange={(e) =>
+                    setRenameDrafts((prev) => ({
+                      ...prev,
+                      [s.id]: e.target.value,
+                    }))
+                  }
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void renameCustom(s.id);
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={busy}
+                  onClick={() => {
+                    playNotifySound(
+                      {
+                        ...prefs,
+                        soundEnabled: true,
+                        soundId: customSoundPrefId(s.id),
+                      },
+                      { force: true },
+                    );
+                  }}
+                  title="Прослушать"
+                >
+                  ▶
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={
+                    busy ||
+                    (renameDrafts[s.id] ?? s.name).trim() === s.name ||
+                    !(renameDrafts[s.id] ?? s.name).trim()
+                  }
+                  onClick={() => void renameCustom(s.id)}
+                >
+                  Переименовать
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  disabled={busy}
+                  onClick={() => void removeCustom(s.id)}
+                >
+                  Удалить
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
+            Можно добавить свой wav / mp3 / ogg / m4a (до 2 МБ) и переименовать
+            его в списке ниже.
+          </p>
+        )}
+
         <div className="integ-grid-2">
           <Field label="Позиция HUD" hint="Угол экрана">
             <ThemeSelect

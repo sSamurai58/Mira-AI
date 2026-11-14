@@ -8,6 +8,13 @@ import { app } from "electron";
 
 export type NotifyPosition = "br" | "bl" | "tr" | "tl";
 
+export type NotifyCustomSound = {
+  id: string;
+  name: string;
+  fileName?: string;
+  mime?: string;
+};
+
 export type NotifyPrefs = {
   hudEnabled: boolean;
   osEnabled: boolean;
@@ -22,6 +29,9 @@ export type NotifyPrefs = {
   quietHoursStart: string;
   quietHoursEnd: string;
   soundEnabled: boolean;
+  /** `builtin:chime` | `custom:<uuid>` */
+  soundId: string;
+  customSounds: NotifyCustomSound[];
   durationSec: number;
   position: NotifyPosition;
   maxStack: number;
@@ -47,6 +57,8 @@ export const DEFAULT_NOTIFY_PREFS: NotifyPrefs = {
   quietHoursStart: "22:00",
   quietHoursEnd: "08:00",
   soundEnabled: false,
+  soundId: "builtin:chime",
+  customSounds: [],
   durationSec: 12,
   position: "br",
   maxStack: 3,
@@ -68,10 +80,34 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return Boolean(v) && typeof v === "object" && !Array.isArray(v);
 }
 
+function normalizeCustomSounds(raw: unknown): NotifyCustomSound[] {
+  if (!Array.isArray(raw)) return [];
+  const out: NotifyCustomSound[] = [];
+  for (const item of raw) {
+    if (!isRecord(item)) continue;
+    const id = typeof item.id === "string" ? item.id.trim() : "";
+    const name = typeof item.name === "string" ? item.name.trim() : "";
+    if (!id || !name) continue;
+    out.push({
+      id,
+      name: name.slice(0, 64),
+      fileName:
+        typeof item.fileName === "string" ? item.fileName : undefined,
+      mime: typeof item.mime === "string" ? item.mime : undefined,
+    });
+    if (out.length >= 24) break;
+  }
+  return out;
+}
+
 export function normalizeNotifyPrefs(raw: unknown): NotifyPrefs {
   const src = isRecord(raw) ? raw : {};
-  const base = { ...DEFAULT_NOTIFY_PREFS };
+  const base: NotifyPrefs = {
+    ...DEFAULT_NOTIFY_PREFS,
+    customSounds: [],
+  };
   for (const key of Object.keys(base) as Array<keyof NotifyPrefs>) {
+    if (key === "customSounds") continue;
     const v = src[key as string];
     if (typeof base[key] === "boolean" && typeof v === "boolean") {
       (base as Record<string, unknown>)[key] = v;
@@ -81,6 +117,8 @@ export function normalizeNotifyPrefs(raw: unknown): NotifyPrefs {
       (base as Record<string, unknown>)[key] = v;
     }
   }
+  base.customSounds = normalizeCustomSounds(src.customSounds);
+  if (!base.soundId.trim()) base.soundId = "builtin:chime";
   if (!["br", "bl", "tr", "tl"].includes(base.position)) base.position = "br";
   if (!Number.isFinite(base.durationSec) || base.durationSec < 0) {
     base.durationSec = 12;
