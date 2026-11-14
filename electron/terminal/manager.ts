@@ -64,7 +64,11 @@ export function getTerminalPrefs(): TerminalPrefs {
   const shell =
     process.env.TERMINAL_SHELL?.trim() ||
     process.env.SHELL?.trim() ||
-    (process.platform === "win32" ? "powershell.exe" : "/bin/bash");
+    (process.platform === "win32"
+      ? "powershell.exe"
+      : process.platform === "darwin"
+        ? "/bin/zsh"
+        : "/bin/bash");
   const fontSize = Number(process.env.TERMINAL_FONT_SIZE ?? "14") || 14;
   const scrollback = Number(process.env.TERMINAL_SCROLLBACK ?? "2000") || 2000;
   const defaultCwd =

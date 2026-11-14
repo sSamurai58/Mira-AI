@@ -1016,6 +1016,9 @@ interface MiraBridge {
     connectorId: string | null;
     detail: string;
   }>;
+  mcpOAuthRefresh?: (
+    connectorId: string,
+  ) => Promise<{ ok: boolean; detail: string }>;
   onVoiceTrainProgress?: (
     handler: (payload: {
       projectId: string;

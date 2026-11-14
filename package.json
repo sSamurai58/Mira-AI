@@ -1,6 +1,6 @@
 {
   "name": "mira-ai",
-  "version": "0.1.26",
+  "version": "0.1.27",
   "private": true,
   "description": "Mira — local voice AI assistant",
   "author": "Mira",
@@ -45,6 +45,8 @@
     "pack:dir": "npm run build && electron-builder --config electron-builder.yml --dir",
     "pack:win": "npm run build && electron-builder --win --x64 --config electron-builder.yml --publish never",
     "pack:windows": "npm run pack:win",
+    "pack:mac": "npm run build && electron-builder --mac --x64 --arm64 --config electron-builder.yml --publish never",
+    "pack:macos": "npm run pack:mac",
     "release": "npm run build && electron-builder --config electron-builder.yml --publish always",
     "start": "npm run build && electron ."
   },

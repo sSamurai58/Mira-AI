@@ -15,7 +15,7 @@ export type ScreenCaptureResult = {
   note: string;
 };
 
-export type ScreenClickMode = "xdotool" | "win32" | "dry-run";
+export type ScreenClickMode = "xdotool" | "win32" | "darwin" | "dry-run";
 
 export type ScreenClickResult = {
   ok: boolean;
@@ -369,6 +369,145 @@ async function typeViaWin32(text: string): Promise<void> {
   );
 }
 
+/** Escape for AppleScript string literals. */
+function appleScriptString(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+/**
+ * macOS click: prefer `cliclick` (Homebrew), else System Events via osascript
+ * (needs Accessibility permission for Mira / Terminal).
+ */
+async function clickViaDarwin(x: number, y: number): Promise<void> {
+  const xi = Math.round(x);
+  const yi = Math.round(y);
+  try {
+    await execFileAsync("cliclick", [`c:${xi},${yi}`], { timeout: 5000 });
+    return;
+  } catch {
+    /* fall through */
+  }
+  const script = `tell application "System Events" to click at {${xi}, ${yi}}`;
+  await execFileAsync("osascript", ["-e", script], { timeout: 5000 });
+}
+
+async function typeViaDarwin(text: string): Promise<void> {
+  const clipped = text.slice(0, 400);
+  try {
+    await execFileAsync("cliclick", [`t:${clipped}`], { timeout: 10000 });
+    return;
+  } catch {
+    /* fall through */
+  }
+  const script = `tell application "System Events" to keystroke "${appleScriptString(clipped)}"`;
+  await execFileAsync("osascript", ["-e", script], { timeout: 10000 });
+}
+
+async function keysViaDarwin(parts: string[]): Promise<void> {
+  const mods: string[] = [];
+  let key = "";
+  for (const p of parts) {
+    if (p === "ctrl" || p === "control") mods.push("control down");
+    else if (p === "shift") mods.push("shift down");
+    else if (p === "alt" || p === "option") mods.push("option down");
+    else if (
+      p === "cmd" ||
+      p === "command" ||
+      p === "meta" ||
+      p === "win" ||
+      p === "super"
+    )
+      mods.push("command down");
+    else key = p;
+  }
+  if (!key) key = parts[parts.length - 1] || "a";
+
+  // Named key codes (US layout) for specials / F-keys.
+  const keyCodes: Record<string, number> = {
+    enter: 36,
+    return: 36,
+    esc: 53,
+    escape: 53,
+    tab: 48,
+    space: 49,
+    backspace: 51,
+    delete: 117,
+    up: 126,
+    down: 125,
+    left: 123,
+    right: 124,
+    f1: 122,
+    f2: 120,
+    f3: 99,
+    f4: 118,
+    f5: 96,
+    f6: 97,
+    f7: 98,
+    f8: 100,
+    f9: 101,
+    f10: 109,
+    f11: 103,
+    f12: 111,
+  };
+  const using = mods.length ? ` using {${mods.join(", ")}}` : "";
+  if (keyCodes[key] !== undefined) {
+    const script = `tell application "System Events" to key code ${keyCodes[key]}${using}`;
+    await execFileAsync("osascript", ["-e", script], { timeout: 8000 });
+    return;
+  }
+  if (!mods.length && key.length === 1) {
+    try {
+      await execFileAsync("cliclick", [`kp:${key}`], { timeout: 5000 });
+      return;
+    } catch {
+      /* osascript */
+    }
+  }
+  const script = `tell application "System Events" to keystroke "${appleScriptString(key)}"${using}`;
+  await execFileAsync("osascript", ["-e", script], { timeout: 8000 });
+}
+
+async function scrollViaDarwin(
+  direction: ScrollIntent["direction"],
+  amount: number,
+  x?: number,
+  y?: number,
+): Promise<void> {
+  if (x !== undefined && y !== undefined) {
+    try {
+      await execFileAsync(
+        "cliclick",
+        [`m:${Math.round(x)},${Math.round(y)}`],
+        { timeout: 4000 },
+      );
+    } catch {
+      /* ignore move fail */
+    }
+  }
+  // cliclick w: / W: wheel; positive = up in cliclick docs varies — use osascript fallback.
+  const clicks = Math.max(1, Math.min(20, amount));
+  try {
+    const wheel =
+      direction === "up"
+        ? `w:${clicks}`
+        : direction === "down"
+          ? `w:${-clicks}`
+          : direction === "left"
+            ? `w:${clicks}`
+            : `w:${-clicks}`;
+    await execFileAsync("cliclick", [wheel], { timeout: 5000 });
+    return;
+  } catch {
+    /* osascript */
+  }
+  const dy =
+    direction === "up" ? -clicks * 40 : direction === "down" ? clicks * 40 : 0;
+  const dx =
+    direction === "left" ? -clicks * 40 : direction === "right" ? clicks * 40 : 0;
+  const script = `tell application "System Events" to scroll {${dx}, ${dy}}`;
+  await execFileAsync("osascript", ["-e", script], { timeout: 5000 });
+}
+
 export async function captureScreen(): Promise<ScreenCaptureResult> {
   const policy = getScreenPolicy();
   if (!policy.enabled) {
@@ -537,6 +676,16 @@ export async function clickAt(
           detail: "Клик выполнен через Win32",
         };
       }
+      if (process.platform === "darwin") {
+        await clickViaDarwin(x, y);
+        return {
+          ok: true,
+          x,
+          y,
+          mode: "darwin" as const,
+          detail: "Клик выполнен через macOS (cliclick/osascript)",
+        };
+      }
       await clickViaXdotool(x, y);
       return {
         ok: true,
@@ -624,6 +773,15 @@ export async function typeText(
           text,
           mode: "win32" as const,
           detail: "Текст введён через Win32 SendKeys",
+        };
+      }
+      if (process.platform === "darwin") {
+        await typeViaDarwin(text);
+        return {
+          ok: true,
+          text,
+          mode: "darwin" as const,
+          detail: "Текст введён через macOS (cliclick/osascript)",
         };
       }
       await typeViaXdotool(text);
@@ -889,6 +1047,15 @@ export async function pressKeys(
           detail: `Нажато ${parts.join("+")} (Win32)`,
         };
       }
+      if (process.platform === "darwin") {
+        await keysViaDarwin(parts);
+        return {
+          ok: true,
+          keys,
+          mode: "darwin" as const,
+          detail: `Нажато ${parts.join("+")} (macOS)`,
+        };
+      }
       await keysViaXdotool(parts);
       return {
         ok: true,
@@ -1083,6 +1250,23 @@ export async function scrollScreen(
           y,
           mode: "win32" as const,
           detail: `Scroll ${direction} ×${amount} (Win32)`,
+        };
+      }
+      if (process.platform === "darwin") {
+        await scrollViaDarwin(
+          direction,
+          amount,
+          x ?? undefined,
+          y ?? undefined,
+        );
+        return {
+          ok: true,
+          direction,
+          amount,
+          x,
+          y,
+          mode: "darwin" as const,
+          detail: `Scroll ${direction} ×${amount} (macOS)`,
         };
       }
       await scrollViaXdotool(

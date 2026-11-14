@@ -27,6 +27,111 @@ type PendingOAuth = {
 const pendingOAuth = new Map<string, PendingOAuth>();
 let oauthServer: http.Server | null = null;
 
+type StoredOAuthTokens = {
+  accessToken: string;
+  refreshToken?: string;
+  tokenUrl?: string;
+  clientId?: string;
+  clientSecret?: string;
+  updatedAt: string;
+};
+
+function oauthTokensPath(): string {
+  return path.join(dataRoot("mcp"), "oauth-tokens.json");
+}
+
+function loadOAuthTokens(): Record<string, StoredOAuthTokens> {
+  try {
+    const p = oauthTokensPath();
+    if (!fs.existsSync(p)) return {};
+    return JSON.parse(fs.readFileSync(p, "utf8")) as Record<
+      string,
+      StoredOAuthTokens
+    >;
+  } catch {
+    return {};
+  }
+}
+
+function saveOAuthToken(connectorId: string, tok: StoredOAuthTokens): void {
+  const all = loadOAuthTokens();
+  all[connectorId] = tok;
+  const dir = path.dirname(oauthTokensPath());
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(oauthTokensPath(), JSON.stringify(all, null, 2), "utf8");
+}
+
+/** Refresh access token when refresh_token was stored from prior callback. */
+export async function refreshOAuthToken(
+  connectorId: string,
+): Promise<{ ok: boolean; detail: string }> {
+  const all = loadOAuthTokens();
+  const tok = all[connectorId];
+  if (!tok?.refreshToken || !tok.tokenUrl || !tok.clientId) {
+    return {
+      ok: false,
+      detail: "Нет refresh_token / token_url — повторный OAuth в браузере",
+    };
+  }
+  try {
+    const body = new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: tok.refreshToken,
+      client_id: tok.clientId,
+    });
+    if (tok.clientSecret) body.set("client_secret", tok.clientSecret);
+    const res = await fetch(tok.tokenUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body,
+      signal: AbortSignal.timeout(15000),
+    });
+    const json = (await res.json().catch(() => ({}))) as {
+      access_token?: string;
+      refresh_token?: string;
+      error?: string;
+      error_description?: string;
+    };
+    if (!res.ok || !json.access_token) {
+      return {
+        ok: false,
+        detail: `Refresh ${res.status}: ${json.error_description || json.error || "fail"}`.slice(
+          0,
+          200,
+        ),
+      };
+    }
+    saveOAuthToken(connectorId, {
+      ...tok,
+      accessToken: json.access_token,
+      refreshToken: json.refresh_token || tok.refreshToken,
+      updatedAt: new Date().toISOString(),
+    });
+    const probed = await probeTierAWithToken(connectorId, {
+      token: json.access_token,
+      access_token: json.access_token,
+    });
+    setStatus(connectorId, {
+      ...probed,
+      detail: probed.live
+        ? `OAuth refresh OK · ${probed.detail}`
+        : `Refresh OK, probe: ${probed.detail}`,
+    });
+    return { ok: Boolean(probed.live), detail: probed.detail ?? "" };
+  } catch (err) {
+    return {
+      ok: false,
+      detail: `Refresh error: ${err instanceof Error ? err.message : String(err)}`.slice(
+        0,
+        200,
+      ),
+    };
+  }
+}
+
 export type McpConnectionState =
   | "disconnected"
   | "draft"
@@ -855,6 +960,7 @@ export async function completeOAuthWithCode(
     });
     const json = (await res.json().catch(() => ({}))) as {
       access_token?: string;
+      refresh_token?: string;
       token?: string;
       error?: string;
       error_description?: string;
@@ -877,6 +983,15 @@ export async function completeOAuthWithCode(
       return { ok: false, connectorId, detail };
     }
 
+    saveOAuthToken(connectorId, {
+      accessToken: token,
+      refreshToken: json.refresh_token,
+      tokenUrl: pending.tokenUrl,
+      clientId: pending.clientId,
+      clientSecret: pending.clientSecret,
+      updatedAt: new Date().toISOString(),
+    });
+
     pendingOAuth.delete(connectorId);
     // Probe with the fresh token (honest connected only if probe ok).
     const probed = await probeTierAWithToken(connectorId, {
@@ -886,7 +1001,7 @@ export async function completeOAuthWithCode(
     setStatus(connectorId, {
       ...probed,
       detail: probed.live
-        ? `OAuth callback OK · ${probed.detail}`
+        ? `OAuth callback OK · ${probed.detail}${json.refresh_token ? " · refresh сохранён" : ""}`
         : `OAuth token получен, но probe: ${probed.detail}`,
     });
     return {

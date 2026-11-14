@@ -33,7 +33,8 @@ cursor/feature-…  →  PR  →  develop  →  (релиз)  →  main  →  ta
 - Не пушить сырые фичи прямо в `main`.
 - Не коммитить `.exe` / `.zip` / `latest.yml` в репозиторий.
 - Не ставить тег `v*` с ветки, которой нет в истории `main` (после перехода на эту схему).
-- macOS-сборку — отдельно, по явной команде.
+- Непубликованные эксперименты — не в `main`.
+- macOS: с **0.1.27** Release workflow публикует DMG/ZIP (unsigned); Apple Developer signing — позже.
 
 ## CI
 

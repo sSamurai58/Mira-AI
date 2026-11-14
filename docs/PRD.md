@@ -160,31 +160,31 @@
 | 4 | Интернет | `partial` | P4: web.search (DDG) + web.fetch + WEB_* policy + confirm fetch |
 | 5 | Claude / Gemini / GPT / Grok | `partial` | OpenAI + Claude + Gemini + Grok (xAI) + offline/mock |
 
-| 6 | Видимость экрана | `partial` | desktopCapturer → PNG + multimodal image attach + vision describe |
-| 7 | Контроль экрана | `partial` | клик/ввод + confirm; xdotool / Win32 SendInput / dry-run |
-| 8 | Браузер | `partial` | P5: open URL + история Mira/Chromium; вкладки/deep control — later |
-| 9 | Скиллы | `partial` | P3: md-каталог; on-demand triggers; не весь каталог в контексте |
-| 10 | Протоколы | `partial` | P3: md + Панель CRUD/Run; триггер из Диалога |
-| 11 | Голоса | `partial` | P2 системные TTS + P9 custom voices из студии в каталоге |
-| 12 | Мессенджеры | `partial` | P6: Telegram send/reply + confirm; WA/IG stubs |
-| 13 | Blender 3D | `partial` | P10: CLI bpy bridge + dry-run; demo scene; skills on-demand |
-| 14 | Обучение по материалам | `partial` | library→analyze→learned; PDF + EPUB ZIP/OPF; AV sidecar/whisper/ffmpeg |
-| 15 | Студия голоса | `partial` | цикл 15.1–15.9; neural CPU train (worker) + unit stitch; IVC→EL |
-| 16 | Терминал | `partial` | P7: xterm + node-pty multi-session; dialog commands + confirm; prefs |
+| 6 | Видимость экрана | `partial` | desktopCapturer → PNG + multimodal + vision describe + find-on-screen |
+| 7 | Контроль экрана | `partial` | клик/ввод/scroll/hotkeys + confirm; Win32 / xdotool / **macOS cliclick+osascript** / dry-run; click-by-label nx/ny |
+| 8 | Браузер | `partial` | open URL + история Mira + Chrome/Edge/Brave/Firefox (**+ macOS paths**); reopen last |
+| 9 | Скиллы | `partial` | md-каталоги SKILL.md; on-demand; Preview/Code |
+| 10 | Протоколы | `partial` | md + CRUD/Run; последовательности шагов |
+| 11 | Голоса | `partial` | системный TTS + студия + ElevenLabs + parametric |
+| 12 | Мессенджеры | `partial` | Telegram live; WA Cloud API / bridge / wa.me; IG profile/bridge |
+| 13 | Blender 3D | `partial` | CLI bpy bridge + dry-run/live; demo scene |
+| 14 | Обучение по материалам | `partial` | library→analyze→learned; PDF + EPUB; AV sidecar |
+| 15 | Студия голоса | `partial` | neural GENERATE; IVC→EL; без cut/stitch по умолчанию |
+| 16 | Терминал | `partial` | xterm + node-pty; Win PowerShell / Linux bash / **macOS zsh** |
 
 ### На будущее (не must)
 
 | # | Возможность | Статус | Примечание |
 |---|-------------|--------|-----------|
-| F1 | Камеры | `partial` | registry + snapshot/PTZ stub |
-| F2 | IoT / умный дом | `partial` | devices + on/off confirm dry-run |
-| F3 | Календарь / напоминания / таймеры | `partial` | events + timers from chat |
-| F4 | Почта | `partial` | local inbox stub + draft/send confirm |
+| F1 | Камеры | `partial` | registry + HTTP snapshot + **ffmpeg RTSP** + PTZ HTTP |
+| F2 | IoT / умный дом | `partial` | devices + confirm; HTTP / **HA** / MQTT bridge |
+| F3 | Календарь / напоминания / таймеры | `partial` | events + timers from chat + TTS toast |
+| F4 | Почта | `partial` | local inbox + SMTP live + **IMAP sync с телом** |
 | F5 | Файловый менеджер | `partial` | search/open allowlisted paths |
-| F6 | Заметки | `partial` | notes table + Memory UI |
-| F7 | Музыка / медиа | `partial` | local playlist stub |
+| F6 | Заметки | `partial` | notes table + Memory UI + tags |
+| F7 | Музыка / медиа | `partial` | playlist + **playerctl / Win media keys / macOS Music** |
 | F8 | Мультиязычность | `partial` | ru/en UI + ASR lang |
-| F9 | Wake-word + barge-in | `partial` | Pluggable wake (Web Speech + Porcupine stub); barge-in Space hint |
+| F9 | Wake-word + barge-in | `partial` | Web Speech + local-fuzzy + **Porcupine hybrid/WASM probe** |
 | F10 | Профили пользователя | `partial` | data/profiles.json; UI Общие; secrets в .env |
 
 | F11 | Backup / export / import / «забыть» | `partial` | mira-backup-v1; secrets opt-in; forget + confirm |

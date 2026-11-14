@@ -422,6 +422,29 @@ function chromiumHistoryCandidates(): Array<{ path: string; source: string }> {
       ),
       source: "edge",
     },
+    {
+      path: path.join(
+        home,
+        "Library",
+        "Application Support",
+        "BraveSoftware",
+        "Brave-Browser",
+        "Default",
+        "History",
+      ),
+      source: "brave",
+    },
+    {
+      path: path.join(
+        home,
+        "Library",
+        "Application Support",
+        "Chromium",
+        "Default",
+        "History",
+      ),
+      source: "chromium",
+    },
   ];
 }
 

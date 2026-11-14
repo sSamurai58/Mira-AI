@@ -409,6 +409,8 @@ contextBridge.exposeInMainWorld("mira", {
   mcpOAuthCallbackInfo: () => call("mira:mcp-oauth-callback-info"),
   mcpOAuthComplete: (payload: { code: string; connectorId?: string }) =>
     call("mira:mcp-oauth-complete", payload),
+  mcpOAuthRefresh: (connectorId: string) =>
+    call("mira:mcp-oauth-refresh", connectorId),
   onVoiceTrainProgress: (
     handler: (payload: {
       projectId: string;

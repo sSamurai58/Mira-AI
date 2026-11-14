@@ -73,6 +73,38 @@ async function tryPlayerctl(
   }
 }
 
+async function tryDarwinMediaKey(
+  action: "play" | "pause" | "next" | "prev",
+): Promise<boolean> {
+  if (process.platform !== "darwin") return false;
+  // Media keys via CGEvent are awkward from osascript; use Music / System Events playpause.
+  const script =
+    action === "next"
+      ? 'tell application "System Events" to key code 124 using {command down}' // weak fallback
+      : action === "prev"
+        ? 'tell application "System Events" to key code 123 using {command down}'
+        : 'try\ntell application "Music" to playpause\non error\ntell application "System Events" to keystroke space\nend try';
+  try {
+    if (action === "next" || action === "prev") {
+      // Prefer Music app next/previous when available.
+      const music =
+        action === "next"
+          ? 'tell application "Music" to next track'
+          : 'tell application "Music" to previous track';
+      try {
+        await execFileAsync("osascript", ["-e", music], { timeout: 4000 });
+        return true;
+      } catch {
+        /* fall through */
+      }
+    }
+    await execFileAsync("osascript", ["-e", script], { timeout: 4000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function tryWindowsMediaKey(
   action: "play" | "pause" | "next" | "prev",
 ): Promise<boolean> {
@@ -171,6 +203,9 @@ export async function handleMediaFromChat(text: string): Promise<{
     } else if (await tryWindowsMediaKey("pause")) {
       player.backend = "media-keys";
       player.playing = false;
+    } else if (await tryDarwinMediaKey("pause")) {
+      player.backend = "media-keys";
+      player.playing = false;
     } else {
       player.playing = false;
       player.backend = "local-stub";
@@ -180,6 +215,9 @@ export async function handleMediaFromChat(text: string): Promise<{
       player.backend = "playerctl";
       player.playing = true;
     } else if (await tryWindowsMediaKey("next")) {
+      player.backend = "media-keys";
+      player.playing = true;
+    } else if (await tryDarwinMediaKey("next")) {
       player.backend = "media-keys";
       player.playing = true;
     } else {
@@ -194,6 +232,9 @@ export async function handleMediaFromChat(text: string): Promise<{
     } else if (await tryWindowsMediaKey("prev")) {
       player.backend = "media-keys";
       player.playing = true;
+    } else if (await tryDarwinMediaKey("prev")) {
+      player.backend = "media-keys";
+      player.playing = true;
     } else {
       player.index =
         (player.index - 1 + Math.max(tracks.length, 1)) %
@@ -206,6 +247,9 @@ export async function handleMediaFromChat(text: string): Promise<{
       player.backend = "playerctl";
       player.playing = true;
     } else if (await tryWindowsMediaKey("play")) {
+      player.backend = "media-keys";
+      player.playing = true;
+    } else if (await tryDarwinMediaKey("play")) {
       player.backend = "media-keys";
       player.playing = true;
     } else {

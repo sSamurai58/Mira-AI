@@ -15,6 +15,19 @@ export type MiraChangelogEntry = {
 
 export const MIRA_CHANGELOG: MiraChangelogEntry[] = [
   {
+    version: "0.1.27",
+    date: "14.11.2026",
+    summary:
+      "macOS контроль экрана + DMG; must polish; IMAP тело; MCP refresh.",
+    bullets: [
+      "macOS: клик/ввод/scroll/hotkeys через cliclick или osascript (Accessibility)",
+      "Release: Windows + macOS (dmg/zip x64+arm64); ЧИТАЙ-МЕНЯ для Mac",
+      "Терминал: /bin/zsh на Darwin; медиа — Music.app; история браузера — пути macOS",
+      "IMAP: тело письма из RFC822; MCP OAuth refresh_token на диске",
+      "Porcupine: hybrid + попытка WASM; must 6–16 / F* статусы обновлены в PRD",
+    ],
+  },
+  {
     version: "0.1.26",
     date: "14.11.2026",
     summary:

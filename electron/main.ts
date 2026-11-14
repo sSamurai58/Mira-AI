@@ -148,6 +148,7 @@ import {
   getMcpRuntimeStatus,
   getOAuthCallbackInfo,
   listMcpRuntimeStatuses,
+  refreshOAuthToken,
 } from "./mcp/runtime";
 import {
   getBlenderPolicy,
@@ -1164,6 +1165,10 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
     "mira:mcp-oauth-complete",
     (_e, payload: { code: string; connectorId?: string }) =>
       completeOAuthWithCode(payload?.code ?? "", payload?.connectorId),
+    { privileged: true },
+  );
+  on("mira:mcp-oauth-refresh", (_e, connectorId: string) =>
+    refreshOAuthToken(connectorId),
     { privileged: true },
   );
   on(

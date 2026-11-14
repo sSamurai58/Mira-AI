@@ -34,6 +34,30 @@ export function getMailPolicy() {
   };
 }
 
+/** Best-effort plain-text body from raw RFC822 source (no mailparser dep). */
+function extractMailTextBody(raw: string): string {
+  if (!raw.trim()) return "";
+  // Prefer text/plain part.
+  const plain = raw.match(
+    /Content-Type:\s*text\/plain[\s\S]*?\r?\n\r?\n([\s\S]*?)(?=\r?\n--|\r?\nContent-Type:|$)/i,
+  );
+  if (plain?.[1]) {
+    return plain[1]
+      .replace(/=\r?\n/g, "")
+      .replace(/=([0-9A-Fa-f]{2})/g, (_, h) =>
+        String.fromCharCode(parseInt(h, 16)),
+      )
+      .trim()
+      .slice(0, 8000);
+  }
+  // Strip headers from simple single-part messages.
+  const split = raw.split(/\r?\n\r?\n/);
+  if (split.length >= 2) {
+    return split.slice(1).join("\n\n").trim().slice(0, 8000);
+  }
+  return raw.trim().slice(0, 2000);
+}
+
 /** Pull recent INBOX messages via IMAP into local store (live mode). */
 export async function syncImapInbox(limit = 15): Promise<{
   ok: boolean;
@@ -84,7 +108,7 @@ export async function syncImapInbox(limit = 15): Promise<{
         // Sequence range of the newest N messages (imapflow has no `last` query).
         for await (const msg of client.fetch(`${start}:*`, {
           envelope: true,
-          source: false,
+          source: true,
         })) {
           const from =
             msg.envelope?.from?.[0]?.address ||
@@ -94,13 +118,14 @@ export async function syncImapInbox(limit = 15): Promise<{
           if (exists.get(subject, from)) continue;
           const date =
             msg.envelope?.date?.toISOString?.() || new Date().toISOString();
-          insert.run(
-            crypto.randomUUID(),
-            from,
-            subject,
-            "(тело не загружено — заголовок IMAP)",
-            date,
-          );
+          const raw =
+            typeof msg.source === "string"
+              ? msg.source
+              : Buffer.isBuffer(msg.source)
+                ? msg.source.toString("utf8")
+                : "";
+          const body = extractMailTextBody(raw) || "(пустое тело / только HTML)";
+          insert.run(crypto.randomUUID(), from, subject, body.slice(0, 8000), date);
           imported += 1;
           if (imported >= limit) break;
         }

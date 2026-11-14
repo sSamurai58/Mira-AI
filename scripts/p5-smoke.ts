@@ -86,7 +86,8 @@ async function main() {
   assert.ok(
     desktopUsed === "screen-click:dry-run" ||
       desktopUsed === "screen-click:xdotool" ||
-      desktopUsed === "screen-click:win32",
+      desktopUsed === "screen-click:win32" ||
+      desktopUsed === "screen-click:darwin",
     `unexpected click desktopUsed=${desktopUsed}`,
   );
 

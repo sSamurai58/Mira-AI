@@ -141,18 +141,45 @@ const webSpeechEngine: WakeEngine = {
 };
 
 /**
- * Porcupine path: Access Key unlocks hybrid local matcher + settings.
- * Native @picovoice/porcupine-web can be plugged into `start` later without
- * changing HandsFree prefs / barge-in.
+ * Porcupine path: Access Key unlocks hybrid local matcher + optional WASM.
+ * Tries dynamic import of `@picovoice/porcupine-web` when present; otherwise
+ * hybrid Web Speech matcher (prefs / barge-in unchanged).
  */
+let porcupineWasmTried = false;
+let porcupineWasmReady = false;
+
+async function tryLoadPorcupineWasm(): Promise<boolean> {
+  if (porcupineWasmTried) return porcupineWasmReady;
+  porcupineWasmTried = true;
+  if (!porcupineAccessKeyPresent()) {
+    porcupineWasmReady = false;
+    return false;
+  }
+  try {
+    // Optional peer: present only if installed in the app bundle.
+    const mod = "@picovoice/porcupine-web";
+    await import(/* @vite-ignore */ mod);
+    porcupineWasmReady = true;
+  } catch {
+    porcupineWasmReady = false;
+  }
+  return porcupineWasmReady;
+}
+
+void tryLoadPorcupineWasm();
+
 const porcupineStub: WakeEngine = {
   id: "porcupine-stub",
   label: porcupineAccessKeyPresent()
-    ? "Porcupine (hybrid · ключ есть)"
+    ? porcupineWasmReady
+      ? "Porcupine (WASM)"
+      : "Porcupine (hybrid · ключ есть)"
     : "Porcupine (нужен Access Key)",
   ready: porcupineAccessKeyPresent(),
   detail: porcupineAccessKeyPresent()
-    ? "Access Key сохранён. Hybrid: Web Speech + усиленный matcher. WASM SDK Porcupine подключается отдельно."
+    ? porcupineWasmReady
+      ? "Picovoice Porcupine WASM загружен. Hands-free через Porcupine + fallback Web Speech."
+      : "Access Key сохранён. Hybrid: Web Speech + усиленный matcher. Установите @picovoice/porcupine-web для WASM."
     : "Нужен Picovoice Access Key (mira.porcupineAccessKey). Пока Web Speech; выбор не ломает hands-free.",
   match(transcript, phrase, sensitivity) {
     if (porcupineAccessKeyPresent()) {

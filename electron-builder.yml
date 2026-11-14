@@ -29,6 +29,8 @@ extraResources:
 extraFiles:
   - from: build/ЧИТАЙ-МЕНЯ.txt
     to: ЧИТАЙ-МЕНЯ.txt
+  - from: build/ЧИТАЙ-МЕНЯ-macOS.txt
+    to: ЧИТАЙ-МЕНЯ-macOS.txt
 
 
 publish:
@@ -71,8 +73,20 @@ nsis:
   deleteAppDataOnUninstall: false
 mac:
   target:
-    - dmg
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
   category: public.app-category.productivity
   icon: build/icon.png
+  artifactName: Mira-${version}-macos-${arch}.${ext}
+  # Unsigned CI builds: Gatekeeper may require right-click → Open once.
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  identity: null
 extraMetadata:
   main: dist-electron/main.js
