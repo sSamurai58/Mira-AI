@@ -71,6 +71,7 @@
 | 2026-11-14 | Apple themes + Liquid Glass | `apple-light`/`apple-dark`; подраздел Внешний вид → Apple; glass prefs; apple-design skill |
 | 2026-11-14 | Catalog drafts (Черновики) | Skills/Protocols/Paths/Commands — unfinished create forms in localStorage under main grids |
 | 2026-11-14 | Apple SF Pro fonts | Bundled SF Pro Text/Display in `public/fonts/sf`; only `data-theme-family=apple` |
+| 2026-11-14 | Apple Liquid Glass redo | Colorful atmosphere under translucent chrome; macOS selection/toggles; no Mira neon glow |
 | 2026-11-11 | Future F1/F2 в PRD | Камеры видеонаблюдения; умная техника/фурнитура — не must |
 | 2026-11-11 | Future F3–F8 в PRD | Календарь/таймеры; почта; файлы; заметки; медиа; i18n — не must |
 | 2026-11-11 | Future F9–F13 в PRD | Wake/barge-in; профили; backup/забыть; режимы confirm; Doctor — не must; до F12 confirm = always |

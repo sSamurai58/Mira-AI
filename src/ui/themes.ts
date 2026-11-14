@@ -427,6 +427,7 @@ export function applyTheme(id: ThemeId): void {
     root.style.removeProperty("--radius");
     root.style.removeProperty("--radius-sm");
     root.style.removeProperty("--apple-glass-bg");
+    root.style.removeProperty("--apple-glass-fill");
     root.style.removeProperty("--apple-glass-blur");
     root.style.removeProperty("--apple-glass-saturate");
     root.style.removeProperty("--apple-glass-border");
