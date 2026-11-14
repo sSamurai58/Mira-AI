@@ -405,11 +405,15 @@ export function applyTheme(id: ThemeId): void {
 
   if (isAppleThemeId(theme.id)) {
     root.dataset.themeFamily = "apple";
+    /* Bundled SF Pro Text/Display from public/fonts/sf (see sfFonts.css) */
     root.style.setProperty(
       "--font-sans",
-      '-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", system-ui, sans-serif',
+      '"SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
     );
-    root.style.setProperty("--font-display", "inherit");
+    root.style.setProperty(
+      "--font-display",
+      '"SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, system-ui, sans-serif',
+    );
     root.style.setProperty("--radius", "12px");
     root.style.setProperty("--radius-sm", "10px");
     root.style.colorScheme = theme.id === "apple-light" ? "light" : "dark";

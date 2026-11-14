@@ -12,7 +12,7 @@
 4. Большинство тем — **dark-first** (продукт тёмный по умолчанию). Где палитра даёт светлый фон — помечено `supports_light`.
 5. Тема по умолчанию: **`deep-sea-neon`** (спокойный navy + золотой акцент, хорошо для диалога и терминала).
 6. Смена темы — мгновенно через CSS variables; без перезагрузки.
-7. Семейство **`apple`** (`apple-light` / `apple-dark`) живёт в **Настройки → Apple**: системный шрифт, iOS-цвета, Liquid Glass (`backdrop-filter`). Не дублировать в сетке «Внешний вид».
+7. Семейство **`apple`** (`apple-light` / `apple-dark`) живёт в **Настройки → Apple**: шрифт **San Francisco** (`SF Pro Text` / `SF Pro Display` из `public/fonts/sf`), iOS-цвета, Liquid Glass (`backdrop-filter`). Mira-темы остаются на Manrope/Syne. Не дублировать Apple в сетке «Внешний вид».
 
 ## UI выбора (Настройки → Внешний вид)
 
