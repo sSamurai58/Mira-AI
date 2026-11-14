@@ -127,6 +127,8 @@ export function ChatPage({
   /** When true, new bubbles / tokens pin the viewport to the latest message. */
   const stickToBottomRef = useRef(true);
   const [showJumpLatest, setShowJumpLatest] = useState(false);
+  /** Single floating day chip (never stack sticky dates). */
+  const [stickyDateLabel, setStickyDateLabel] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const asrRef = useRef<ReturnType<typeof createAsrSession> | null>(null);
   const wakeRef = useRef<ReturnType<typeof createAsrSession> | null>(null);
@@ -151,12 +153,37 @@ export function ChatPage({
     el.scrollTop = el.scrollHeight;
   }, []);
 
-  const onThreadScroll = useCallback((e: UIEvent<HTMLDivElement>) => {
-    const el = e.currentTarget;
-    const near = isNearBottom(el);
-    stickToBottomRef.current = near;
-    setShowJumpLatest(!near && el.scrollHeight > el.clientHeight + 24);
+  const syncStickyDate = useCallback((el: HTMLDivElement) => {
+    const markers = el.querySelectorAll<HTMLElement>("[data-thread-date]");
+    if (!markers.length) {
+      setStickyDateLabel(null);
+      return;
+    }
+    let active: HTMLElement | null = null;
+    for (const m of markers) {
+      if (m.offsetTop <= el.scrollTop + 10) active = m;
+      else break;
+    }
+    if (!active) {
+      setStickyDateLabel(null);
+      return;
+    }
+    // Show float only after the inline marker has scrolled away — one label.
+    const past = active.offsetTop < el.scrollTop - 2;
+    const label = active.dataset.threadDate?.trim() || null;
+    setStickyDateLabel(past && label ? label : null);
   }, []);
+
+  const onThreadScroll = useCallback(
+    (e: UIEvent<HTMLDivElement>) => {
+      const el = e.currentTarget;
+      const near = isNearBottom(el);
+      stickToBottomRef.current = near;
+      setShowJumpLatest(!near && el.scrollHeight > el.clientHeight + 24);
+      syncStickyDate(el);
+    },
+    [syncStickyDate],
+  );
 
   useEffect(() => {
     sessionIdRef.current = sessionId;
@@ -210,6 +237,12 @@ export function ChatPage({
     }
     return items;
   }, [bubbles]);
+
+  useLayoutEffect(() => {
+    const el = threadRef.current;
+    if (!el) return;
+    syncStickyDate(el);
+  }, [threadItems, showDialog, sessionId, syncStickyDate]);
 
   // Home TTS engine status (EL key/quota/fallback).
   useEffect(() => {
@@ -1273,6 +1306,11 @@ export function ChatPage({
           </div>
 
           <div className="thread-wrap">
+            {stickyDateLabel ? (
+              <div className="thread-date-float" aria-hidden>
+                <span>{stickyDateLabel}</span>
+              </div>
+            ) : null}
             <div
               className="thread hide-scroll"
               ref={threadRef}
@@ -1285,7 +1323,12 @@ export function ChatPage({
               ) : (
                 threadItems.map((item) =>
                   item.type === "date" ? (
-                    <div key={item.key} className="thread-date" role="separator">
+                    <div
+                      key={item.key}
+                      className="thread-date"
+                      role="separator"
+                      data-thread-date={item.label}
+                    >
                       <span>{item.label}</span>
                     </div>
                   ) : (
