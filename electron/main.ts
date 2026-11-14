@@ -200,6 +200,7 @@ import {
   upsertCustomCommand,
   type CustomCommandStep,
 } from "./future/customCommands";
+import { runProtocolSequence } from "./protocolSequence";
 import {
   deleteProfile,
   getActiveProfile,
@@ -661,6 +662,13 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
     "mira:delete-protocol",
     (_e, id: string) => deleteCatalogItem("protocols", id),
     { privileged: true },
+  );
+  on(
+    "mira:run-protocol-sequence",
+    (_e, id: string, opts?: { dryRun?: boolean }) =>
+      runProtocolSequence(String(id ?? ""), {
+        dryRun: Boolean(opts?.dryRun),
+      }),
   );
 
   on("mira:get-web-policy", () => getWebPolicy());

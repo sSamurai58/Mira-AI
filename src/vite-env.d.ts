@@ -396,6 +396,16 @@ interface MiraBridge {
   deleteProtocol: (
     id: string,
   ) => Promise<{ ok: boolean; detail: string; deletedId: string | null }>;
+  runProtocolSequence: (
+    id: string,
+    opts?: { dryRun?: boolean },
+  ) => Promise<{
+    ok: boolean;
+    mode: "sequence" | "llm";
+    detail: string;
+    reply: string;
+    stepDetails: string[];
+  }>;
   getWebPolicy: () => Promise<{
     enabled: boolean;
     allowlist: string[];
