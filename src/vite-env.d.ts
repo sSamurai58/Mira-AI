@@ -853,6 +853,12 @@ interface MiraBridge {
     frameCount?: number;
     durationMs?: number;
     method?: string;
+    cached?: boolean;
+  }>;
+  warmupCustomVoiceNeural: (voiceId: string) => Promise<{
+    ok: boolean;
+    detail: string;
+    hasWeights: boolean;
   }>;
   getElevenLabsStatus?: (probe?: boolean) => Promise<{
     hasKey: boolean;

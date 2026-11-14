@@ -1,7 +1,7 @@
 /**
  * VoiceEngine facade — one entry for local Mira speech.
  * Backends (neural pack / corpus stitch / Web Speech) stay behind speakText;
- * settings + presets + FX are the product contract (Stage A).
+ * settings + presets + FX + warmup/stream/cache are the product contract.
  */
 import { getActiveVoiceId, listCatalogVoices } from "./catalog";
 import { speakText, stopSpeaking, type SpeakHandlers } from "./tts";
@@ -13,6 +13,7 @@ import {
   type VoicePreset,
   type VoiceSettings,
 } from "./voiceSettings";
+import { warmupVoiceEngine } from "./voiceWarmup";
 
 export type VoiceEngineStatus = {
   settings: VoiceSettings;
@@ -46,9 +47,14 @@ export const VoiceEngine = {
     };
   },
 
+  warmup(voiceId?: string | null) {
+    return warmupVoiceEngine(voiceId);
+  },
+
   /**
    * Speak with current VoiceSettings (FX applied on local buffers).
    * Custom studio voices always use on-device neural/corpus — never cloud.
+   * Long text is spoken phrase-by-phrase with prefetch.
    */
   speak(
     text: string,

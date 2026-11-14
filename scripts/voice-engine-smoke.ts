@@ -1,10 +1,16 @@
 /**
- * Stage A VoiceEngine smoke — settings clamp, presets, prosody mapping.
+ * VoiceEngine smoke — settings, presets, prosody, phrase split, cache key.
  * Run: npx tsx scripts/voice-engine-smoke.ts
  */
 import assert from "node:assert/strict";
-
-// Use relative imports that don't need DOM.
+import {
+  getCachedSynthWav,
+  putCachedSynthWav,
+  synthCacheKey,
+} from "../electron/tts/localSynthCache";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import {
   applyVoicePreset,
   clampVoiceSettings,
@@ -13,6 +19,7 @@ import {
   neuralProsodyFromSettings,
   VOICE_LIMITS,
 } from "../src/ui/voice/voiceSettings";
+import { splitSpeakPhrases } from "../src/ui/voice/voicePhrases";
 
 function main() {
   const presets = listVoicePresets();
@@ -38,7 +45,6 @@ function main() {
   assert.equal(wild.emotion, DEFAULT_VOICE_SETTINGS.emotion);
   assert.equal(wild.quality, DEFAULT_VOICE_SETTINGS.quality);
 
-  // localStorage may be missing in Node — applyVoicePreset still returns clamped.
   const calm = applyVoicePreset("calm");
   assert.equal(calm.presetId, "calm");
   assert.ok(calm.speed < 1);
@@ -48,16 +54,36 @@ function main() {
   const prosody = neuralProsodyFromSettings(calm);
   assert.equal(prosody.speed, calm.speed);
   assert.equal(prosody.pauseScale, calm.pauseScale);
-  assert.equal(prosody.energy, calm.energy);
+  // Energy is applied in FX only.
+  assert.equal(prosody.energy, 1);
+
+  const phrases = splitSpeakPhrases(
+    "Привет! Я Mira. Чем могу помочь сегодня?",
+  );
+  assert.ok(phrases.length >= 2, "phrase split");
+  assert.ok(phrases[0]!.includes("Привет"));
+
+  const key = synthCacheKey("mira-studio-test", "Привет", {
+    speed: 1,
+    quality: "fast",
+  });
+  assert.equal(key.length, 40);
+  const tmp = path.join(os.tmpdir(), `mira-tts-smoke-${Date.now()}.wav`);
+  // Minimal RIFF header stub — cache only copies bytes.
+  fs.writeFileSync(tmp, Buffer.from("RIFF____WAVEfmt "));
+  const stored = putCachedSynthWav(key, tmp);
+  assert.ok(fs.existsSync(stored));
+  assert.equal(getCachedSynthWav(key), stored);
+  try {
+    fs.unlinkSync(tmp);
+  } catch {
+    /* ignore */
+  }
 
   console.log("voice-engine-smoke: ok", {
     presets: presets.map((p) => p.id),
-    calm: {
-      speed: calm.speed,
-      pitch: calm.pitchSemitones,
-      energy: calm.energy,
-      pause: calm.pauseScale,
-    },
+    phrases,
+    cacheKey: key.slice(0, 8),
   });
 }
 

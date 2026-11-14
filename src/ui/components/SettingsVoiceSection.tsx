@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { StubBadge } from "./StubBadge";
 import { Field, SliderField, ToggleRow } from "./SettingsFormBits";
 import { MicTestCard } from "./MicTestCard";
@@ -65,6 +65,7 @@ export function SettingsVoiceSection() {
   );
   const [voice, setVoice] = useState<VoiceSettings>(() => getVoiceSettings());
   const presets = listVoicePresets();
+  const previewTimer = useRef<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,19 +78,37 @@ export function SettingsVoiceSection() {
     return () => {
       cancelled = true;
       stopSpeaking();
+      if (previewTimer.current != null) {
+        window.clearTimeout(previewTimer.current);
+      }
     };
   }, []);
+
+  function schedulePreview() {
+    if (previewTimer.current != null) {
+      window.clearTimeout(previewTimer.current);
+    }
+    previewTimer.current = window.setTimeout(() => {
+      speakText(
+        "Проверка голоса Mira.",
+        activeVoiceId,
+        { preferPreview: true },
+      );
+    }, 420);
+  }
 
   function patchHands(patch: Partial<HandsFreePrefs>) {
     setHandsFree(setHandsFreePrefs(patch));
   }
 
-  function patchVoice(patch: Partial<VoiceSettings>) {
+  function patchVoice(patch: Partial<VoiceSettings>, preview = true) {
     setVoice(setVoiceSettings(patch));
+    if (preview) schedulePreview();
   }
 
   function pickPreset(id: string) {
     setVoice(applyVoicePreset(id));
+    schedulePreview();
   }
 
   return (

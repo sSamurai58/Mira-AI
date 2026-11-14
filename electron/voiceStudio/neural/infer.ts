@@ -29,10 +29,22 @@ export type LoadedNeuralPack = {
   hopLength: number;
 };
 
+type PackCacheEntry = {
+  mtimeMs: number;
+  pack: LoadedNeuralPack;
+};
+
+/** In-memory pack cache — avoids re-parsing multi‑MB weights every utterance. */
+const packCache = new Map<string, PackCacheEntry>();
+
 export function loadNeuralPack(packDir: string): LoadedNeuralPack | null {
   const file = path.join(packDir, "neural-weights.json");
   if (!fs.existsSync(file)) return null;
   try {
+    const mtimeMs = fs.statSync(file).mtimeMs;
+    const hit = packCache.get(packDir);
+    if (hit && hit.mtimeMs === mtimeMs) return hit.pack;
+
     const raw = JSON.parse(fs.readFileSync(file, "utf8")) as {
       encoder: import("./textEncoder").SerializedTextEncoder;
       decoder: import("./melDecoder").SerializedMelDecoder;
@@ -40,16 +52,23 @@ export function loadNeuralPack(packDir: string): LoadedNeuralPack | null {
       sampleRate?: number;
       hopLength?: number;
     };
-    return {
+    const pack: LoadedNeuralPack = {
       encoder: loadTextEncoder(raw.encoder),
       decoder: loadMelDecoder(raw.decoder),
       vocoder: raw.vocoder ? loadVocoder(raw.vocoder) : null,
       sampleRate: raw.sampleRate ?? 16000,
       hopLength: raw.hopLength ?? 160,
     };
+    packCache.set(packDir, { mtimeMs, pack });
+    return pack;
   } catch {
     return null;
   }
+}
+
+/** Force-load pack into memory (warmup). */
+export function warmupNeuralPack(packDir: string): boolean {
+  return loadNeuralPack(packDir) !== null;
 }
 
 function framesToMel(

@@ -287,10 +287,12 @@ export type NeuralProsodyOpts = {
 export function neuralProsodyFromSettings(
   s: VoiceSettings = getVoiceSettings(),
 ): NeuralProsodyOpts {
+  // Energy/pitch/gain are applied once in renderer FX — neural only gets
+  // duration priors so we do not double-loudness.
   return {
     speed: s.speed,
     pauseScale: s.pauseScale,
-    energy: s.energy,
+    energy: 1,
     quality: s.quality,
   };
 }

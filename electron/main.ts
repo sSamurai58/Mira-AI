@@ -126,6 +126,7 @@ import {
   resetVoicePhraseAudio,
   submitVoicePreference,
   synthesizeCustomVoiceNeural,
+  warmupCustomVoiceNeural,
   trainVoiceModel,
   updateCustomVoice,
   updateVoiceProject,
@@ -1024,6 +1025,9 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
         quality?: "fast" | "balanced" | "studio";
       },
     ) => synthesizeCustomVoiceNeural(voiceId, text, prosody),
+  );
+  on("mira:warmup-custom-voice-neural", (_e, voiceId: string) =>
+    warmupCustomVoiceNeural(voiceId),
   );
   on("mira:elevenlabs-status", (_e, probe?: boolean) =>
     getElevenLabsStatus(Boolean(probe)),

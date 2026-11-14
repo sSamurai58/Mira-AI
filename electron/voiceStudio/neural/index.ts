@@ -2,6 +2,7 @@ export { detectAccel } from "./cudaDetect";
 export {
   synthesizeNeuralSpeech,
   loadNeuralPack,
+  warmupNeuralPack,
   type NeuralProsody,
 } from "./infer";
 export {

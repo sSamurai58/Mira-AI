@@ -42,6 +42,7 @@ import {
 } from "./doctor/formatDoctorReport";
 import { getUiLang, t } from "./i18n";
 import { getVoiceEngineStatus } from "./voice/engineStatus";
+import { warmupVoiceEngine } from "./voice/voiceWarmup";
 import type { VoiceState } from "./voiceState";
 
 type RootNav =
@@ -210,8 +211,9 @@ export function App() {
   const [autoSpeak, setAutoSpeak] = useState(() => {
     if (localStorage.getItem("mira.autoSpeak") === "1") return true;
     if (localStorage.getItem("mira.autoSpeak") === "0") return false;
-    localStorage.setItem("mira.autoSpeak", "0");
-    return false;
+    // First run: autonomous local speech of Mira replies.
+    localStorage.setItem("mira.autoSpeak", "1");
+    return true;
   });
   const [navLabels, setNavLabels] = useState(() => navItems());
 
@@ -226,6 +228,11 @@ export function App() {
   useEffect(() => installAutoGrowTextareas(), []);
 
   useEffect(() => installActionLogBridge(), []);
+
+  // Stage B: warm local neural pack + AudioContext so first reply speaks fast.
+  useEffect(() => {
+    void warmupVoiceEngine();
+  }, []);
 
   useEffect(() => {
     localStorage.setItem("mira.voiceState", voiceState);

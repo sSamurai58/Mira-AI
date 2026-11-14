@@ -26,6 +26,16 @@ export function getActiveTtsEngine(): TtsEngineId {
   ) {
     return v;
   }
+  // Unset: prefer local neural when a studio voice is the active selection.
+  try {
+    const voice = localStorage.getItem("mira.activeVoiceId");
+    if (voice && voice.startsWith("mira-studio-")) {
+      localStorage.setItem(KEY, "neural-pack");
+      return "neural-pack";
+    }
+  } catch {
+    /* ignore */
+  }
   return "webspeech";
 }
 

@@ -31,7 +31,15 @@ import {
   listPreferenceCandidates,
   loadPreferences,
 } from "./neural/rlhf";
-import { synthesizeNeuralSpeech } from "./neural/infer";
+import {
+  synthesizeNeuralSpeech,
+  warmupNeuralPack,
+} from "./neural/infer";
+import {
+  getCachedSynthWav,
+  putCachedSynthWav,
+  synthCacheKey,
+} from "../tts/localSynthCache";
 import {
   accumulatePhraseIntoStats,
   buildCorpusLexStats,
@@ -2196,7 +2204,7 @@ export type CustomVoiceNeuralProsody = {
   quality?: "fast" | "balanced" | "studio";
 };
 
-/** Neural inference: text → encoder → decoder → vocoder WAV. */
+/** Neural inference: text → encoder → decoder → vocoder WAV (+ disk cache). */
 export function synthesizeCustomVoiceNeural(
   voiceId: string,
   text: string,
@@ -2208,11 +2216,31 @@ export function synthesizeCustomVoiceNeural(
   frameCount?: number;
   durationMs?: number;
   method?: string;
+  cached?: boolean;
 } {
   const voice = getCustomVoice(voiceId);
   if (!voice) throw new Error("Голос не найден");
+  const clean = text.trim();
+  if (!clean) {
+    return {
+      ok: false,
+      wavPath: null,
+      detail: "Пустой текст",
+    };
+  }
   const packDir = studioRoot(voice.project_id, "model-pack");
-  const result = synthesizeNeuralSpeech(packDir, text, { prosody });
+  const key = synthCacheKey(voiceId, clean, prosody ?? {});
+  const cachedPath = getCachedSynthWav(key);
+  if (cachedPath) {
+    return {
+      ok: true,
+      wavPath: cachedPath,
+      cached: true,
+      detail: "Нейро-синтез (кэш)",
+      method: "neural-mel-cpu-v1",
+    };
+  }
+  const result = synthesizeNeuralSpeech(packDir, clean, { prosody });
   if (!result) {
     return {
       ok: false,
@@ -2221,12 +2249,50 @@ export function synthesizeCustomVoiceNeural(
         "Нейро-веса не найдены или текст пуст. Соберите голос (neural-weights.json).",
     };
   }
+  const wavPath = putCachedSynthWav(key, result.wavPath);
   return {
     ok: true,
-    wavPath: result.wavPath,
+    wavPath,
+    cached: false,
     frameCount: result.frameCount,
     durationMs: result.durationMs,
     method: result.method,
     detail: `Нейро-синтез ${result.frameCount} кадров · ${Math.round(result.durationMs)} мс`,
+  };
+}
+
+/** Load neural pack + run a tiny synth so first chat reply is warm. */
+export function warmupCustomVoiceNeural(voiceId: string): {
+  ok: boolean;
+  detail: string;
+  hasWeights: boolean;
+} {
+  const voice = getCustomVoice(voiceId);
+  if (!voice) {
+    return { ok: false, hasWeights: false, detail: "Голос не найден" };
+  }
+  const packDir = studioRoot(voice.project_id, "model-pack");
+  const hasWeights = warmupNeuralPack(packDir);
+  if (!hasWeights) {
+    return {
+      ok: true,
+      hasWeights: false,
+      detail: "Веса ещё не собраны — будет склейка клипов",
+    };
+  }
+  const probe = synthesizeCustomVoiceNeural(voiceId, "Мм.", {
+    quality: "fast",
+    speed: 1,
+    pauseScale: 1,
+    energy: 1,
+  });
+  return {
+    ok: probe.ok,
+    hasWeights: true,
+    detail: probe.ok
+      ? probe.cached
+        ? "Warmup: кэш готов"
+        : "Warmup: нейро-пакет в памяти"
+      : probe.detail,
   };
 }
