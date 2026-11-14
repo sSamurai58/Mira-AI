@@ -671,7 +671,10 @@ async function runStep(
     if (!combo) {
       return { ...base, ok: false, detail: "Комбинация клавиш не задана" };
     }
-    const res = await pressKeys(combo, { dryRun: opts.dryRun });
+    const res = await pressKeys(combo, {
+      dryRun: opts.dryRun,
+      skipConfirm: true,
+    });
     return { ...base, ok: res.ok, detail: res.detail };
   }
 
@@ -716,7 +719,7 @@ async function runStep(
     }
     const paste = await pressKeys(
       process.platform === "darwin" ? "cmd+v" : "ctrl+v",
-      { dryRun: opts.dryRun },
+      { dryRun: opts.dryRun, skipConfirm: true },
     );
     return {
       ...base,

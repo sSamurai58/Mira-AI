@@ -53,6 +53,12 @@ async function main() {
   // F4 mail
   const mail = await handleMailFromChat("Прочитай входящие письма");
   assert.ok(mail.used.startsWith("mail:inbox:"));
+  const mailSearch = await handleMailFromChat("Найди в почте встреча");
+  assert.ok(mailSearch.used.startsWith("mail:search:"));
+  const mailDraft = await handleMailFromChat(
+    "Напиши письмо кому demo@example.com тема Тест текст привет",
+  );
+  assert.ok(mailDraft.used.startsWith("mail:draft:"));
 
   // F7 media
   const media = handleMediaFromChat("Включи музыку");
