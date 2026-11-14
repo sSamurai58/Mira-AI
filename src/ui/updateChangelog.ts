@@ -15,6 +15,18 @@ export type MiraChangelogEntry = {
 
 export const MIRA_CHANGELOG: MiraChangelogEntry[] = [
   {
+    version: "0.1.20",
+    date: "14.11.2026",
+    summary:
+      "Локальный VoiceEngine с характером голоса; раскладка окон и виртуальные столы Windows.",
+    bullets: [
+      "VoiceEngine: пресеты характера, FX (pitch/скорость/энергия/паузы), автоозвучка студийным голосом",
+      "Локальный синтез: warmup, кэш, пофразовый стрим — без облачных API для mira-studio-*",
+      "Команды и Протоколы: свернуть все, рабочие столы, раскладка окна left/right/fullscreen",
+      "«Запустить» с раскладкой и выбором монитора (задел под мультимонитор)",
+    ],
+  },
+  {
     version: "0.1.19",
     date: "14.11.2026",
     summary:
