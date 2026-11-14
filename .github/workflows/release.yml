@@ -4,7 +4,9 @@ name: Release
 # Cut a release only from main:
 #   1) merge develop → main (release PR with version bump)
 #   2) git tag vX.Y.Z && git push origin vX.Y.Z
-# Or: Actions → Release → Run workflow (select main ref)
+#
+# POLICY: every tagged release publishes Windows AND macOS together
+# (same GitHub Release / same tag). Never ship one OS alone.
 
 on:
   push:
@@ -16,7 +18,6 @@ permissions:
   contents: write
 
 jobs:
-  # Windows first: electron-updater needs latest.yml + NSIS from windows-latest.
   release-windows:
     runs-on: windows-latest
     timeout-minutes: 45
@@ -52,12 +53,11 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: npm run release -- --win --x64
 
-  # macOS: unsigned DMG/ZIP (no Apple Developer cert in CI yet).
-  # Users may need right-click → Open the first time (Gatekeeper).
+  # Unsigned DMG/ZIP until Apple Developer cert is wired.
+  # First open: right-click → Open (Gatekeeper).
   release-macos:
     runs-on: macos-latest
     timeout-minutes: 45
-    needs: release-windows
     steps:
       - uses: actions/checkout@v4
         with:
@@ -89,3 +89,25 @@ jobs:
           LLM_PROVIDER: mock
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: npm run release -- --mac --x64 --arm64
+
+  # Single gate: release is green only when BOTH platforms published.
+  release-all:
+    runs-on: ubuntu-latest
+    needs: [release-windows, release-macos]
+    if: always()
+    steps:
+      - name: Require Windows + macOS
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "windows=${{ needs.release-windows.result }}"
+          echo "macos=${{ needs.release-macos.result }}"
+          if [[ "${{ needs.release-windows.result }}" != "success" ]]; then
+            echo "::error::Windows release failed — do not treat tag as fully published."
+            exit 1
+          fi
+          if [[ "${{ needs.release-macos.result }}" != "success" ]]; then
+            echo "::error::macOS release failed — do not treat tag as fully published."
+            exit 1
+          fi
+          echo "OK: Windows + macOS published to the same GitHub Release."
