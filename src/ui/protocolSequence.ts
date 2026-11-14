@@ -28,7 +28,12 @@ export const PROTOCOL_ACTION_LABEL: Record<ProtocolActionType, string> = {
   notify: "Уведомление",
   hud_say: "Сказать в HUD",
   window_minimize: "Свернуть окно",
+  window_minimize_all: "Свернуть все",
   window_close: "Закрыть окно",
+  window_snap: "Раскладка окна",
+  desktop_new: "Новый рабочий стол",
+  desktop_close: "Закрыть рабочий стол",
+  desktop_switch: "Переключить стол",
   terminal: "Команда терминала",
 };
 
@@ -50,12 +55,19 @@ export const PROTOCOL_QUICK_ADD: Array<
   "notify",
   "hud_say",
   "open_folder",
+  "window_minimize_all",
+  "window_snap",
+  "desktop_new",
+  "desktop_switch",
   "terminal",
 ];
 
 export const PROTOCOL_VALUELESS: ProtocolActionType[] = [
   "window_minimize",
+  "window_minimize_all",
   "window_close",
+  "desktop_new",
+  "desktop_close",
 ];
 
 export function newProtocolStepId(): string {
@@ -82,7 +94,11 @@ export function emptyActionStep(
         ? "1"
         : action === "click"
           ? "100, 200"
-          : "",
+          : action === "window_snap"
+            ? "left"
+            : action === "desktop_switch"
+              ? "next"
+              : "",
   };
 }
 
@@ -248,8 +264,15 @@ export function stepPlaceholder(action: ProtocolActionType): string {
     case "hud_say":
       return "Текст в HUD / уведомление";
     case "window_minimize":
+    case "window_minimize_all":
     case "window_close":
+    case "desktop_new":
+    case "desktop_close":
       return "";
+    case "window_snap":
+      return "left | right | maximize | fullscreen";
+    case "desktop_switch":
+      return "next | prev";
     case "terminal":
       return "Команда (с подтверждением)";
   }

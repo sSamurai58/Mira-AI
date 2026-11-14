@@ -18,7 +18,12 @@ export type CustomCommandActionType =
   | "notify"
   | "hud_say"
   | "window_minimize"
+  | "window_minimize_all"
   | "window_close"
+  | "window_snap"
+  | "desktop_new"
+  | "desktop_close"
+  | "desktop_switch"
   | "terminal";
 
 export const ACTION_TYPES: CustomCommandActionType[] = [
@@ -36,7 +41,12 @@ export const ACTION_TYPES: CustomCommandActionType[] = [
   "notify",
   "hud_say",
   "window_minimize",
+  "window_minimize_all",
   "window_close",
+  "window_snap",
+  "desktop_new",
+  "desktop_close",
+  "desktop_switch",
   "terminal",
 ];
 
@@ -162,8 +172,18 @@ function dryLine(s: CustomCommandStep, i: number): string {
       return `${i + 1}. hud_say: Проверка: HUD «${v}»`;
     case "window_minimize":
       return `${i + 1}. window_minimize: Проверка: свернуть окно`;
+    case "window_minimize_all":
+      return `${i + 1}. window_minimize_all: Проверка: свернуть все окна`;
     case "window_close":
       return `${i + 1}. window_close: Проверка: закрыть окно`;
+    case "window_snap":
+      return `${i + 1}. window_snap: Проверка: раскладка окна «${v || "maximize"}»`;
+    case "desktop_new":
+      return `${i + 1}. desktop_new: Проверка: новый рабочий стол`;
+    case "desktop_close":
+      return `${i + 1}. desktop_close: Проверка: закрыть рабочий стол`;
+    case "desktop_switch":
+      return `${i + 1}. desktop_switch: Проверка: переключить стол (${v || "next"})`;
     case "terminal":
       return `${i + 1}. terminal: Проверка: терминал «${v}»`;
     default:

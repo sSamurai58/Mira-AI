@@ -705,10 +705,11 @@ async function keysViaWin32(parts: string[]): Promise<void> {
 /**
  * Press a key chord like «ctrl+shift+s».
  * Trusted custom-command path: respects SCREEN_CONTROL_ENABLED, no per-press confirm.
+ * `osTrusted` — window/desktop OS hotkeys (Win+D, snap) bypass screen-control gate.
  */
 export async function pressKeys(
   raw: string,
-  opts?: { dryRun?: boolean },
+  opts?: { dryRun?: boolean; osTrusted?: boolean },
 ): Promise<ScreenKeysResult> {
   const keys = raw.trim();
   const parts = parseKeyCombo(keys);
@@ -731,7 +732,10 @@ export async function pressKeys(
   }
 
   const policy = getScreenPolicy();
-  if (!policy.enabled || !policy.controlEnabled) {
+  if (
+    !opts?.osTrusted &&
+    (!policy.enabled || !policy.controlEnabled)
+  ) {
     return {
       ok: true,
       keys,

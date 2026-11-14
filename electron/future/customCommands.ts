@@ -15,6 +15,16 @@ import {
 import { openBrowserUrl } from "../tools/browser";
 import { clickAt, pressKeys, typeText } from "../tools/screen";
 import { executeTerminalFromChat } from "../tools/terminal";
+import {
+  applyLaunchPlacement,
+  closeVirtualDesktop,
+  createVirtualDesktop,
+  minimizeAllWindows,
+  parseLaunchValue,
+  snapForegroundWindow,
+  switchVirtualDesktop,
+  type WindowPlacement,
+} from "../tools/windowLayout";
 
 export type CustomCommandActionType =
   | "open_url"
@@ -31,7 +41,12 @@ export type CustomCommandActionType =
   | "notify"
   | "hud_say"
   | "window_minimize"
+  | "window_minimize_all"
   | "window_close"
+  | "window_snap"
+  | "desktop_new"
+  | "desktop_close"
+  | "desktop_switch"
   | "terminal";
 
 export type CustomCommandStep = {
@@ -95,7 +110,12 @@ export const ACTION_TYPES: CustomCommandActionType[] = [
   "notify",
   "hud_say",
   "window_minimize",
+  "window_minimize_all",
   "window_close",
+  "window_snap",
+  "desktop_new",
+  "desktop_close",
+  "desktop_switch",
   "terminal",
 ];
 
@@ -485,13 +505,38 @@ async function windowAction(
   }
   // Best-effort OS shortcut on the focused desktop app (Mira aside).
   const combo = kind === "minimize" ? "win+down" : "alt+f4";
-  const res = await pressKeys(combo, { dryRun: false });
+  const res = await pressKeys(combo, { dryRun: false, osTrusted: true });
   return {
     ok: res.ok,
     detail: res.ok
       ? `${label[0]!.toUpperCase()}${label.slice(1)}: ${res.detail}`
       : res.detail,
   };
+}
+
+function parseSnapPlace(raw: string): WindowPlacement {
+  const t = raw.trim().toLowerCase();
+  if (
+    t === "left" ||
+    t === "right" ||
+    t === "maximize" ||
+    t === "minimize" ||
+    t === "fullscreen" ||
+    t === "restore"
+  ) {
+    return t;
+  }
+  return "maximize";
+}
+
+function parseDesktopSwitchDir(
+  raw: string,
+): "next" | "prev" | "left" | "right" {
+  const t = raw.trim().toLowerCase();
+  if (t === "prev" || t === "left" || t === "назад" || t === "влево") {
+    return "prev";
+  }
+  return "next";
 }
 
 async function runStep(
@@ -526,38 +571,71 @@ async function runStep(
   }
 
   if (step.type === "launch") {
-    const target = step.value.trim();
+    const layout = parseLaunchValue(step.value);
+    const target = layout.target.trim();
     if (!target) {
       return { ...base, ok: false, detail: "Путь не задан" };
     }
+    const placeHint =
+      layout.place !== "default" || layout.monitor !== "current"
+        ? ` · ${layout.place}${layout.monitor !== "current" ? ` @${layout.monitor}` : ""}`
+        : "";
     // Prefer library «Пути» (id or name) so commands don't hardcode duplicates.
     const fromLibrary = resolveAppPathRef(target);
     if (fromLibrary) {
       if (opts.dryRun) {
         const exists = fs.existsSync(fromLibrary.path);
+        const placeCheck = await applyLaunchPlacement(
+          layout.place,
+          layout.monitor,
+          { dryRun: true },
+        );
         return {
           ...base,
           ok: exists,
           detail: exists
-            ? `Проверка: запустить «${fromLibrary.name}» (${fromLibrary.path})`
+            ? `Проверка: запустить «${fromLibrary.name}» (${fromLibrary.path})${placeHint}${placeCheck.detail ? ` · ${placeCheck.detail}` : ""}`
             : `Путь не найден: ${fromLibrary.path}`,
         };
       }
       const res = await openAppPathById(fromLibrary.id);
-      return { ...base, ok: res.ok, detail: res.detail };
+      if (!res.ok) return { ...base, ok: false, detail: res.detail };
+      const placed = await applyLaunchPlacement(layout.place, layout.monitor, {
+        dryRun: false,
+      });
+      return {
+        ...base,
+        ok: placed.ok,
+        detail: placed.detail
+          ? `${res.detail} → ${placed.detail}`
+          : res.detail,
+      };
     }
     if (opts.dryRun) {
       const exists = fs.existsSync(target);
+      const placeCheck = await applyLaunchPlacement(
+        layout.place,
+        layout.monitor,
+        { dryRun: true },
+      );
       return {
         ...base,
         ok: exists,
         detail: exists
-          ? `Проверка: запустить «${target}»`
+          ? `Проверка: запустить «${target}»${placeHint}${placeCheck.detail ? ` · ${placeCheck.detail}` : ""}`
           : `Путь не найден: ${target}`,
       };
     }
     const res = await openPathTarget(target);
-    return { ...base, ok: res.ok, detail: res.detail };
+    if (!res.ok) return { ...base, ok: false, detail: res.detail };
+    const placed = await applyLaunchPlacement(layout.place, layout.monitor, {
+      dryRun: false,
+    });
+    return {
+      ...base,
+      ok: placed.ok,
+      detail: placed.detail ? `${res.detail} → ${placed.detail}` : res.detail,
+    };
   }
 
   if (step.type === "open_path") {
@@ -701,8 +779,35 @@ async function runStep(
     return { ...base, ok: res.ok, detail: res.detail };
   }
 
+  if (step.type === "window_minimize_all") {
+    const res = await minimizeAllWindows(opts);
+    return { ...base, ok: res.ok, detail: res.detail };
+  }
+
   if (step.type === "window_close") {
     const res = await windowAction("close", opts);
+    return { ...base, ok: res.ok, detail: res.detail };
+  }
+
+  if (step.type === "window_snap") {
+    const place = parseSnapPlace(step.value || "maximize");
+    const res = await snapForegroundWindow(place, opts);
+    return { ...base, ok: res.ok, detail: res.detail };
+  }
+
+  if (step.type === "desktop_new") {
+    const res = await createVirtualDesktop(opts);
+    return { ...base, ok: res.ok, detail: res.detail };
+  }
+
+  if (step.type === "desktop_close") {
+    const res = await closeVirtualDesktop(opts);
+    return { ...base, ok: res.ok, detail: res.detail };
+  }
+
+  if (step.type === "desktop_switch") {
+    const dir = parseDesktopSwitchDir(step.value || "next");
+    const res = await switchVirtualDesktop(dir, opts);
     return { ...base, ok: res.ok, detail: res.detail };
   }
 

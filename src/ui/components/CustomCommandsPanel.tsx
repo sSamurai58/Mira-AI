@@ -28,6 +28,14 @@ import { useAppConfirm } from "./AppConfirm";
 import { CatalogDraftsSection } from "./CatalogDraftsSection";
 import { StubBadge } from "./StubBadge";
 import { ThemeSelect } from "./ThemeSelect";
+import {
+  encodeLaunchValue,
+  MONITOR_OPTIONS,
+  parseLaunchValue,
+  selectValueToMonitor,
+  WINDOW_PLACE_OPTIONS,
+  type WindowPlacement,
+} from "../windowLayout";
 
 const ACTION_LABEL: Record<CustomCommandActionType, string> = {
   open_url: "Открыть в браузере",
@@ -44,7 +52,12 @@ const ACTION_LABEL: Record<CustomCommandActionType, string> = {
   notify: "Уведомление",
   hud_say: "Сказать в HUD",
   window_minimize: "Свернуть окно",
+  window_minimize_all: "Свернуть все",
   window_close: "Закрыть окно",
+  window_snap: "Раскладка окна",
+  desktop_new: "Новый рабочий стол",
+  desktop_close: "Закрыть рабочий стол",
+  desktop_switch: "Переключить стол",
   terminal: "Команда терминала",
 };
 
@@ -62,11 +75,18 @@ const QUICK_ADD: CustomCommandActionType[] = [
   "say",
   "notify",
   "open_folder",
+  "window_minimize_all",
+  "window_snap",
+  "desktop_new",
+  "desktop_switch",
 ];
 
 const VALUELESS_TYPES: CustomCommandActionType[] = [
   "window_minimize",
+  "window_minimize_all",
   "window_close",
+  "desktop_new",
+  "desktop_close",
 ];
 
 type AppPathOption = {
@@ -98,7 +118,11 @@ function emptyStep(type: CustomCommandActionType = "launch"): CustomCommandStep 
         ? "1"
         : type === "click"
           ? "100, 200"
-          : "",
+          : type === "window_snap"
+            ? "left"
+            : type === "desktop_switch"
+              ? "next"
+              : "",
   };
 }
 
@@ -155,8 +179,15 @@ function stepPlaceholder(type: CustomCommandActionType): string {
     case "hud_say":
       return "Текст в HUD / уведомление";
     case "window_minimize":
+    case "window_minimize_all":
     case "window_close":
+    case "desktop_new":
+    case "desktop_close":
       return "";
+    case "window_snap":
+      return "left | right | maximize | fullscreen";
+    case "desktop_switch":
+      return "next | prev";
     case "terminal":
       return "Команда (с подтверждением)";
   }
@@ -277,7 +308,15 @@ function ActionIcon({ type }: { type: CustomCommandActionType }) {
       </svg>
     );
   }
-  if (type === "window_minimize" || type === "window_close") {
+  if (
+    type === "window_minimize" ||
+    type === "window_minimize_all" ||
+    type === "window_close" ||
+    type === "window_snap" ||
+    type === "desktop_new" ||
+    type === "desktop_close" ||
+    type === "desktop_switch"
+  ) {
     return (
       <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden>
         <rect
@@ -567,7 +606,11 @@ export function CustomCommandsPanel() {
     });
   }
 
-  async function browseLaunch(stepId: string, kind: "program" | "folder" = "program") {
+  async function browseLaunch(
+    stepId: string,
+    kind: "program" | "folder" = "program",
+    layout?: ReturnType<typeof parseLaunchValue>,
+  ) {
     if (!editor) return;
     if (!window.mira?.pickAppPath) {
       setNote("Выбор файла доступен в Electron");
@@ -575,6 +618,19 @@ export function CustomCommandsPanel() {
     }
     const res = await window.mira.pickAppPath(kind);
     if (res.canceled || !res.path) return;
+    if (layout || kind === "program") {
+      // Keep placement/monitor when re-picking a program for «Запустить».
+      const current = layout ?? parseLaunchValue(
+        editor.steps.find((s) => s.id === stepId)?.value ?? "",
+      );
+      updateStep(stepId, {
+        value: encodeLaunchValue({
+          ...current,
+          target: res.path,
+        }),
+      });
+      return;
+    }
     updateStep(stepId, { value: res.path });
   }
 
@@ -720,8 +776,43 @@ export function CustomCommandsPanel() {
     if (VALUELESS_TYPES.includes(step.type)) {
       return (
         <span className="muted" style={{ fontSize: "0.85rem" }}>
-          Best-effort для активного окна
+          {step.type === "window_minimize_all"
+            ? "Win+D — свернуть всё на рабочем столе"
+            : step.type.startsWith("desktop_")
+              ? "Виртуальные столы Windows (Win+Ctrl+…)"
+              : "Best-effort для активного окна"}
         </span>
+      );
+    }
+
+    if (step.type === "window_snap") {
+      return (
+        <ThemeSelect
+          className="cc-path-select"
+          aria-label="Раскладка окна"
+          value={step.value || "left"}
+          options={WINDOW_PLACE_OPTIONS.filter((o) => o.id !== "default").map(
+            (o) => ({ value: o.id, label: o.label }),
+          )}
+          disabled={busy}
+          onChange={(id) => updateStep(step.id, { value: id })}
+        />
+      );
+    }
+
+    if (step.type === "desktop_switch") {
+      return (
+        <ThemeSelect
+          className="cc-path-select"
+          aria-label="Направление стола"
+          value={step.value === "prev" || step.value === "left" ? "prev" : "next"}
+          options={[
+            { value: "next", label: "Следующий стол" },
+            { value: "prev", label: "Предыдущий стол" },
+          ]}
+          disabled={busy}
+          onChange={(id) => updateStep(step.id, { value: id })}
+        />
       );
     }
 
@@ -751,22 +842,118 @@ export function CustomCommandsPanel() {
       );
     }
 
-    if (step.type === "launch" || step.type === "open_folder") {
+    if (step.type === "launch") {
+      const layout = parseLaunchValue(step.value);
+      const fromLibrary = appPaths.some((p) => p.id === layout.target);
+      return (
+        <div className="stack" style={{ gap: 8, flex: 1, minWidth: 0 }}>
+          <div className="row" style={{ gap: 8, flex: 1, minWidth: 0 }}>
+            {appPaths.length > 0 ? (
+              <ThemeSelect
+                className="cc-path-select"
+                aria-label="Приложение из Путей"
+                value={fromLibrary ? layout.target : ""}
+                options={launchPathOptions}
+                disabled={busy}
+                onChange={(id) =>
+                  updateStep(step.id, {
+                    value: encodeLaunchValue({ ...layout, target: id }),
+                  })
+                }
+              />
+            ) : null}
+            <input
+              style={{ flex: 1, minWidth: 0 }}
+              value={
+                fromLibrary
+                  ? appPaths.find((p) => p.id === layout.target)?.path ||
+                    layout.target
+                  : layout.target
+              }
+              disabled={busy || fromLibrary}
+              placeholder={stepPlaceholder(step.type)}
+              onChange={(e) =>
+                updateStep(step.id, {
+                  value: encodeLaunchValue({
+                    ...layout,
+                    target: e.target.value,
+                  }),
+                })
+              }
+              title={
+                fromLibrary
+                  ? "Выбрано из библиотеки Путей — смените в списке слева или очистите выбор"
+                  : undefined
+              }
+            />
+            <button
+              type="button"
+              className="btn"
+              disabled={busy}
+              onClick={() => {
+                if (fromLibrary) {
+                  updateStep(step.id, {
+                    value: encodeLaunchValue({ ...layout, target: "" }),
+                  });
+                }
+                void browseLaunch(step.id, "program", layout);
+              }}
+            >
+              Выбрать
+            </button>
+          </div>
+          <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+            <ThemeSelect
+              className="cc-path-select"
+              aria-label="Раскладка при запуске"
+              value={layout.place}
+              options={WINDOW_PLACE_OPTIONS.map((o) => ({
+                value: o.id,
+                label: o.label,
+              }))}
+              disabled={busy}
+              onChange={(id) =>
+                updateStep(step.id, {
+                  value: encodeLaunchValue({
+                    ...layout,
+                    place: id as WindowPlacement,
+                  }),
+                })
+              }
+            />
+            <ThemeSelect
+              className="cc-path-select"
+              aria-label="Монитор"
+              value={String(layout.monitor)}
+              options={MONITOR_OPTIONS.map((o) => ({
+                value: o.id,
+                label: o.label,
+              }))}
+              disabled={busy}
+              onChange={(id) =>
+                updateStep(step.id, {
+                  value: encodeLaunchValue({
+                    ...layout,
+                    monitor: selectValueToMonitor(id),
+                  }),
+                })
+              }
+            />
+          </div>
+        </div>
+      );
+    }
+
+    if (step.type === "open_folder") {
       const fromLibrary = appPaths.some((p) => p.id === step.value);
-      const options =
-        step.type === "open_folder" ? folderPathOptions : launchPathOptions;
       return (
         <div className="row" style={{ gap: 8, flex: 1, minWidth: 0 }}>
           {appPaths.length > 0 ? (
             <ThemeSelect
               className="cc-path-select"
-              aria-label={
-                step.type === "open_folder"
-                  ? "Папка из Путей"
-                  : "Приложение из Путей"
-              }
+              aria-label="Папка из Путей"
               value={fromLibrary ? step.value : ""}
-              options={options}
+              options={folderPathOptions}
               disabled={busy}
               onChange={(id) => updateStep(step.id, { value: id })}
             />
@@ -795,10 +982,7 @@ export function CustomCommandsPanel() {
               if (fromLibrary) {
                 updateStep(step.id, { value: "" });
               }
-              void browseLaunch(
-                step.id,
-                step.type === "open_folder" ? "folder" : "program",
-              );
+              void browseLaunch(step.id, "folder");
             }}
           >
             Выбрать

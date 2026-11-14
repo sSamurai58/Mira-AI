@@ -48,6 +48,14 @@ import { useAppConfirm } from "./AppConfirm";
 import { CatalogDraftsSection } from "./CatalogDraftsSection";
 import { StubBadge } from "./StubBadge";
 import { ThemeSelect } from "./ThemeSelect";
+import {
+  encodeLaunchValue,
+  MONITOR_OPTIONS,
+  parseLaunchValue,
+  selectValueToMonitor,
+  WINDOW_PLACE_OPTIONS,
+  type WindowPlacement,
+} from "../windowLayout";
 
 type FilterId = "all" | "enabled" | "disabled";
 
@@ -534,6 +542,16 @@ export function ProtocolsPanel() {
     }
     const res = await window.mira.pickAppPath(kind);
     if (res.canceled || !res.path) return;
+    if (kind === "program") {
+      const step = editor.steps.find((s) => s.id === stepId);
+      const layout = parseLaunchValue(
+        step && step.type === "action" ? step.value : "",
+      );
+      updateStep(stepId, {
+        value: encodeLaunchValue({ ...layout, target: res.path }),
+      });
+      return;
+    }
     updateStep(stepId, { value: res.path });
   }
 
@@ -979,8 +997,46 @@ export function ProtocolsPanel() {
                               className="muted"
                               style={{ fontSize: "0.85rem" }}
                             >
-                              Best-effort для активного окна
+                              {step.action === "window_minimize_all"
+                                ? "Win+D — свернуть всё"
+                                : step.action.startsWith("desktop_")
+                                  ? "Виртуальные столы Windows"
+                                  : "Best-effort для активного окна"}
                             </span>
+                          ) : step.action === "window_snap" ? (
+                            <ThemeSelect
+                              className="cc-path-select"
+                              aria-label="Раскладка окна"
+                              value={step.value || "left"}
+                              options={WINDOW_PLACE_OPTIONS.filter(
+                                (o) => o.id !== "default",
+                              ).map((o) => ({
+                                value: o.id,
+                                label: o.label,
+                              }))}
+                              disabled={busy}
+                              onChange={(id) =>
+                                updateStep(step.id, { value: id })
+                              }
+                            />
+                          ) : step.action === "desktop_switch" ? (
+                            <ThemeSelect
+                              className="cc-path-select"
+                              aria-label="Направление стола"
+                              value={
+                                step.value === "prev" || step.value === "left"
+                                  ? "prev"
+                                  : "next"
+                              }
+                              options={[
+                                { value: "next", label: "Следующий стол" },
+                                { value: "prev", label: "Предыдущий стол" },
+                              ]}
+                              disabled={busy}
+                              onChange={(id) =>
+                                updateStep(step.id, { value: id })
+                              }
+                            />
                           ) : step.action === "open_path" ? (
                             <div
                               className="row"
@@ -1014,8 +1070,128 @@ export function ProtocolsPanel() {
                                 }
                               />
                             </div>
-                          ) : step.action === "launch" ||
-                            step.action === "open_folder" ? (
+                          ) : step.action === "launch" ? (
+                            (() => {
+                              const layout = parseLaunchValue(step.value);
+                              const fromLibrary = appPaths.some(
+                                (p) => p.id === layout.target,
+                              );
+                              return (
+                                <div
+                                  className="stack"
+                                  style={{ gap: 8, flex: 1, minWidth: 0 }}
+                                >
+                                  <div
+                                    className="row"
+                                    style={{ gap: 8, flex: 1, minWidth: 0 }}
+                                  >
+                                    {appPaths.length > 0 ? (
+                                      <ThemeSelect
+                                        className="cc-path-select"
+                                        aria-label="Приложение из Путей"
+                                        value={
+                                          fromLibrary ? layout.target : ""
+                                        }
+                                        options={launchPathOptions}
+                                        disabled={busy}
+                                        onChange={(id) =>
+                                          updateStep(step.id, {
+                                            value: encodeLaunchValue({
+                                              ...layout,
+                                              target: id,
+                                            }),
+                                          })
+                                        }
+                                      />
+                                    ) : null}
+                                    <input
+                                      style={{ flex: 1, minWidth: 0 }}
+                                      value={
+                                        fromLibrary
+                                          ? appPaths.find(
+                                              (p) => p.id === layout.target,
+                                            )?.path || layout.target
+                                          : layout.target
+                                      }
+                                      disabled={busy || fromLibrary}
+                                      placeholder={stepPlaceholder(
+                                        step.action,
+                                      )}
+                                      onChange={(e) =>
+                                        updateStep(step.id, {
+                                          value: encodeLaunchValue({
+                                            ...layout,
+                                            target: e.target.value,
+                                          }),
+                                        })
+                                      }
+                                    />
+                                    <button
+                                      type="button"
+                                      className="btn"
+                                      disabled={busy}
+                                      onClick={() => {
+                                        if (fromLibrary) {
+                                          updateStep(step.id, {
+                                            value: encodeLaunchValue({
+                                              ...layout,
+                                              target: "",
+                                            }),
+                                          });
+                                        }
+                                        void browseLaunch(step.id, "program");
+                                      }}
+                                    >
+                                      Выбрать
+                                    </button>
+                                  </div>
+                                  <div
+                                    className="row"
+                                    style={{ gap: 8, flexWrap: "wrap" }}
+                                  >
+                                    <ThemeSelect
+                                      className="cc-path-select"
+                                      aria-label="Раскладка при запуске"
+                                      value={layout.place}
+                                      options={WINDOW_PLACE_OPTIONS.map(
+                                        (o) => ({
+                                          value: o.id,
+                                          label: o.label,
+                                        }),
+                                      )}
+                                      disabled={busy}
+                                      onChange={(id) =>
+                                        updateStep(step.id, {
+                                          value: encodeLaunchValue({
+                                            ...layout,
+                                            place: id as WindowPlacement,
+                                          }),
+                                        })
+                                      }
+                                    />
+                                    <ThemeSelect
+                                      className="cc-path-select"
+                                      aria-label="Монитор"
+                                      value={String(layout.monitor)}
+                                      options={MONITOR_OPTIONS.map((o) => ({
+                                        value: o.id,
+                                        label: o.label,
+                                      }))}
+                                      disabled={busy}
+                                      onChange={(id) =>
+                                        updateStep(step.id, {
+                                          value: encodeLaunchValue({
+                                            ...layout,
+                                            monitor: selectValueToMonitor(id),
+                                          }),
+                                        })
+                                      }
+                                    />
+                                  </div>
+                                </div>
+                              );
+                            })()
+                          ) : step.action === "open_folder" ? (
                             <div
                               className="row"
                               style={{ gap: 8, flex: 1, minWidth: 0 }}
@@ -1023,21 +1199,13 @@ export function ProtocolsPanel() {
                               {appPaths.length > 0 ? (
                                 <ThemeSelect
                                   className="cc-path-select"
-                                  aria-label={
-                                    step.action === "open_folder"
-                                      ? "Папка из Путей"
-                                      : "Приложение из Путей"
-                                  }
+                                  aria-label="Папка из Путей"
                                   value={
                                     appPaths.some((p) => p.id === step.value)
                                       ? step.value
                                       : ""
                                   }
-                                  options={
-                                    step.action === "open_folder"
-                                      ? folderPathOptions
-                                      : launchPathOptions
-                                  }
+                                  options={folderPathOptions}
                                   disabled={busy}
                                   onChange={(id) =>
                                     updateStep(step.id, { value: id })
@@ -1062,11 +1230,6 @@ export function ProtocolsPanel() {
                                     value: e.target.value,
                                   })
                                 }
-                                title={
-                                  appPaths.some((p) => p.id === step.value)
-                                    ? "Выбрано из библиотеки Путей"
-                                    : undefined
-                                }
                               />
                               <button
                                 type="button"
@@ -1078,12 +1241,7 @@ export function ProtocolsPanel() {
                                   ) {
                                     updateStep(step.id, { value: "" });
                                   }
-                                  void browseLaunch(
-                                    step.id,
-                                    step.action === "open_folder"
-                                      ? "folder"
-                                      : "program",
-                                  );
+                                  void browseLaunch(step.id, "folder");
                                 }}
                               >
                                 Выбрать
