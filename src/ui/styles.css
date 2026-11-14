@@ -7107,13 +7107,18 @@ body.mira-update-hud-root #root {
   }
 }
 
-/* ─── Apple themes · Liquid Glass (apple-design skill) ─── */
+/* ─── Apple themes · real Liquid Glass / macOS System Settings ─── */
 
 html[data-theme-family="apple"] {
-  --panel-line: var(--apple-glass-border, color-mix(in srgb, var(--border) 55%, transparent));
-  --inset: color-mix(in srgb, var(--bg) 40%, transparent);
+  --panel-line: var(--apple-glass-border, rgba(255, 255, 255, 0.18));
+  --inset: var(--apple-glass-fill, rgba(255, 255, 255, 0.08));
   --radius: 12px;
   --radius-sm: 10px;
+  --apple-hairline: color-mix(in srgb, var(--text-muted) 28%, transparent);
+}
+
+html[data-theme="apple-light"] {
+  --apple-hairline: rgba(60, 60, 67, 0.18);
 }
 
 html[data-theme-family="apple"][data-apple-bold="1"] body,
@@ -7124,32 +7129,182 @@ html[data-theme-family="apple"][data-apple-bold="1"] .theme-card-body strong {
   font-weight: var(--apple-font-weight, 600);
 }
 
+/*
+ * Colorful atmosphere under glass so backdrop-filter has something to refract.
+ * Shell chrome goes translucent so materials read as floating glass, not opaque slabs.
+ */
+html[data-theme-family="apple"] .app-shell,
+html[data-theme-family="apple"] .app-shell-body {
+  background: transparent;
+}
+
+html[data-theme-family="apple"] .atmosphere {
+  background:
+    radial-gradient(
+      ellipse 70% 55% at 12% 18%,
+      color-mix(in srgb, var(--accent) 42%, transparent),
+      transparent 62%
+    ),
+    radial-gradient(
+      ellipse 55% 50% at 88% 12%,
+      color-mix(in srgb, var(--success) 28%, transparent),
+      transparent 58%
+    ),
+    radial-gradient(
+      ellipse 60% 45% at 70% 88%,
+      color-mix(in srgb, var(--warning) 22%, transparent),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 50% 40% at 20% 78%,
+      color-mix(in srgb, #af52de 24%, transparent),
+      transparent 55%
+    ),
+    var(--bg);
+}
+
+html[data-theme="apple-light"] .atmosphere {
+  background:
+    radial-gradient(
+      ellipse 70% 55% at 10% 15%,
+      color-mix(in srgb, #007aff 28%, transparent),
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 50% 45% at 90% 20%,
+      color-mix(in srgb, #34c759 18%, transparent),
+      transparent 55%
+    ),
+    radial-gradient(
+      ellipse 55% 40% at 75% 85%,
+      color-mix(in srgb, #ff9500 14%, transparent),
+      transparent 58%
+    ),
+    radial-gradient(
+      ellipse 45% 35% at 25% 80%,
+      color-mix(in srgb, #af52de 16%, transparent),
+      transparent 55%
+    ),
+    #e8e8ed;
+}
+
+html[data-theme-family="apple"] .atmosphere-grid {
+  opacity: 0.04;
+}
+
+/* Shared glass material */
+html[data-theme-family="apple"] .nav,
 html[data-theme-family="apple"] .panel,
 html[data-theme-family="apple"] .glass-card,
 html[data-theme-family="apple"] .settings-nav,
 html[data-theme-family="apple"] .home-rail > .glass-card,
 html[data-theme-family="apple"] .theme-card,
-html[data-theme-family="apple"] .bg-pattern-card {
-  background: var(--apple-glass-bg, color-mix(in srgb, var(--bg-elevated) 72%, transparent));
-  backdrop-filter: blur(var(--apple-glass-blur, 24px))
-    saturate(var(--apple-glass-saturate, 180%));
-  -webkit-backdrop-filter: blur(var(--apple-glass-blur, 24px))
-    saturate(var(--apple-glass-saturate, 180%));
-  border: 1px solid var(--apple-glass-border, color-mix(in srgb, var(--border) 55%, transparent));
+html[data-theme-family="apple"] .bg-pattern-card,
+html[data-theme-family="apple"] .mira-titlebar,
+html[data-theme-family="apple"] .apple-appearance-pick,
+html[data-theme-family="apple"] .apple-list-card,
+html[data-theme-family="apple"] .theme-select-menu {
+  background: var(--apple-glass-bg) !important;
+  background-image: none !important;
+  backdrop-filter: blur(var(--apple-glass-blur)) saturate(var(--apple-glass-saturate));
+  -webkit-backdrop-filter: blur(var(--apple-glass-blur))
+    saturate(var(--apple-glass-saturate));
+  border: 1px solid var(--apple-glass-border) !important;
   box-shadow:
-    inset 0 1px 0 var(--apple-glass-highlight, rgba(255, 255, 255, 0.22)),
-    0 8px 28px color-mix(in srgb, var(--bg) 35%, transparent);
+    inset 0 1px 0 var(--apple-glass-highlight),
+    0 10px 40px rgba(0, 0, 0, 0.18) !important;
   border-radius: var(--radius);
 }
 
+html[data-theme="apple-light"] .nav,
 html[data-theme="apple-light"] .panel,
 html[data-theme="apple-light"] .glass-card,
 html[data-theme="apple-light"] .settings-nav,
 html[data-theme="apple-light"] .theme-card,
-html[data-theme="apple-light"] .bg-pattern-card {
+html[data-theme="apple-light"] .bg-pattern-card,
+html[data-theme="apple-light"] .mira-titlebar,
+html[data-theme="apple-light"] .apple-appearance-pick,
+html[data-theme="apple-light"] .apple-list-card,
+html[data-theme="apple-light"] .theme-select-menu {
   box-shadow:
-    inset 0 1px 0 var(--apple-glass-highlight, rgba(255, 255, 255, 0.85)),
-    0 4px 18px rgba(0, 0, 0, 0.06);
+    inset 0 1px 0 var(--apple-glass-highlight),
+    0 8px 28px rgba(0, 0, 0, 0.08) !important;
+}
+
+html[data-theme-family="apple"] .mira-titlebar::before {
+  opacity: 0;
+}
+
+/* Content canvas: macOS Settings — soft grouped field, not neon slab */
+html[data-theme-family="apple"] .workspace {
+  background: transparent;
+}
+
+html[data-theme-family="apple"] .settings-layout > .panel.stack {
+  background: color-mix(in srgb, var(--bg) 35%, transparent) !important;
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  border: 1px solid var(--apple-glass-border) !important;
+  box-shadow: inset 0 1px 0 var(--apple-glass-highlight) !important;
+}
+
+html[data-theme="apple-light"] .settings-layout > .panel.stack {
+  background: rgba(242, 242, 247, 0.55) !important;
+}
+
+/* Sidebar selection — macOS blue pill, not neon outline */
+html[data-theme-family="apple"] .nav-btn {
+  border-radius: 8px;
+  border-color: transparent !important;
+  letter-spacing: -0.01em;
+}
+
+html[data-theme-family="apple"] .nav-btn:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent) !important;
+  color: var(--text);
+}
+
+html[data-theme-family="apple"] .nav-btn.active {
+  background: var(--accent) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+  font-weight: 600;
+  box-shadow: none !important;
+}
+
+html[data-theme-family="apple"] .nav-btn.active .nav-ico {
+  opacity: 1;
+  color: #fff;
+}
+
+html[data-theme-family="apple"] .settings-nav .nav-btn.active {
+  background: color-mix(in srgb, var(--accent) 88%, #000) !important;
+}
+
+/* Buttons — system, no glow */
+html[data-theme-family="apple"] .btn {
+  border-radius: 8px;
+  border: 1px solid var(--apple-glass-border);
+  background: var(--apple-glass-fill);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  box-shadow: inset 0 1px 0 var(--apple-glass-highlight);
+  color: var(--text);
+}
+
+html[data-theme-family="apple"] .btn:hover {
+  background: color-mix(in srgb, var(--apple-glass-fill) 70%, var(--text) 8%);
+}
+
+html[data-theme-family="apple"] .btn-primary {
+  background: var(--accent) !important;
+  border-color: transparent !important;
+  color: var(--accent-fg) !important;
+  box-shadow: none !important;
+}
+
+html[data-theme-family="apple"] .btn-primary:hover {
+  filter: brightness(1.06);
 }
 
 html[data-theme-family="apple"] .btn:active,
@@ -7160,33 +7315,92 @@ html[data-theme-family="apple"] .apple-mode-card:active {
   transition: transform 100ms ease-out;
 }
 
+/* ThemeSelect — macOS popup button, kill neon ring */
+html[data-theme-family="apple"] .theme-select-trigger {
+  border-radius: 8px !important;
+  border: 1px solid var(--apple-glass-border) !important;
+  background: var(--apple-glass-fill) !important;
+  background-image: none !important;
+  backdrop-filter: blur(20px) saturate(170%);
+  -webkit-backdrop-filter: blur(20px) saturate(170%);
+  box-shadow: inset 0 1px 0 var(--apple-glass-highlight) !important;
+  padding: 8px 12px;
+}
+
+html[data-theme-family="apple"] .theme-select-trigger:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--text-muted) 45%, transparent) !important;
+}
+
+html[data-theme-family="apple"] .theme-select.is-open .theme-select-trigger,
+html[data-theme-family="apple"] .theme-select-trigger:focus-visible {
+  border-color: var(--accent) !important;
+  box-shadow:
+    inset 0 1px 0 var(--apple-glass-highlight),
+    0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent) !important;
+}
+
+html[data-theme-family="apple"] .theme-select.is-open .theme-select-caret {
+  border-color: var(--text-muted);
+}
+
+html[data-theme-family="apple"] .theme-select-option.is-active {
+  background: var(--accent) !important;
+  color: #fff !important;
+}
+
+/* Form fields */
+html[data-theme-family="apple"] .panel input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="hidden"]):not([type="color"]),
+html[data-theme-family="apple"] .panel textarea,
+html[data-theme-family="apple"] .panel select,
+html[data-theme-family="apple"] .settings-layout input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="hidden"]):not([type="color"]),
+html[data-theme-family="apple"] .settings-layout textarea,
+html[data-theme-family="apple"] .settings-layout select {
+  border-radius: 8px !important;
+  border: 1px solid var(--apple-glass-border) !important;
+  background: var(--apple-glass-fill) !important;
+  background-image: none !important;
+  box-shadow: inset 0 1px 0 var(--apple-glass-highlight) !important;
+  color: var(--text);
+}
+
+/* Toggles — iOS green */
+html[data-theme-family="apple"] .settings-toggle {
+  border-color: transparent;
+  background: transparent;
+}
+
 html[data-theme-family="apple"] .settings-toggle input:checked + .settings-toggle-ui {
-  background: var(--success);
-  border-color: color-mix(in srgb, var(--success) 80%, transparent);
+  background: var(--success) !important;
+  border-color: transparent !important;
+}
+
+html[data-theme-family="apple"] .settings-toggle-ui {
+  background: color-mix(in srgb, var(--text-muted) 35%, transparent);
+  border-color: transparent;
 }
 
 html[data-theme-family="apple"] .settings-toggle-ui::after {
   background: #ffffff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-}
-
-html[data-theme-family="apple"] .nav-btn.active {
-  background: color-mix(in srgb, var(--accent) 14%, var(--bg-elevated));
-  color: var(--accent);
-  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
 }
 
 html[data-theme="apple-light"] body {
   color-scheme: light;
+  color: var(--text-muted);
 }
 
 @media (prefers-reduced-transparency: reduce) {
+  html[data-theme-family="apple"] .nav,
   html[data-theme-family="apple"] .panel,
   html[data-theme-family="apple"] .glass-card,
   html[data-theme-family="apple"] .settings-nav,
   html[data-theme-family="apple"] .theme-card,
   html[data-theme-family="apple"] .bg-pattern-card,
-  html[data-theme-family="apple"] .apple-list-card {
+  html[data-theme-family="apple"] .apple-list-card,
+  html[data-theme-family="apple"] .apple-appearance-pick,
+  html[data-theme-family="apple"] .mira-titlebar,
+  html[data-theme-family="apple"] .theme-select-menu,
+  html[data-theme-family="apple"] .settings-layout > .panel.stack {
     background: var(--bg-elevated) !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
@@ -7206,8 +7420,9 @@ html[data-theme="apple-light"] body {
 .appearance-apple-sub {
   display: grid;
   gap: 14px;
-  padding-top: 8px;
-  border-top: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+  padding-top: 12px;
+  margin-top: 4px;
+  border-top: 1px solid var(--apple-hairline, color-mix(in srgb, var(--border) 45%, transparent));
 }
 
 .apple-settings {
@@ -7238,17 +7453,6 @@ html[data-theme="apple-light"] body {
   border: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
 }
 
-html[data-theme-family="apple"] .apple-appearance-pick,
-html[data-theme-family="apple"] .apple-list-card {
-  background: var(--apple-glass-bg, var(--bg-elevated));
-  backdrop-filter: blur(var(--apple-glass-blur, 24px))
-    saturate(var(--apple-glass-saturate, 180%));
-  -webkit-backdrop-filter: blur(var(--apple-glass-blur, 24px))
-    saturate(var(--apple-glass-saturate, 180%));
-  border-color: var(--apple-glass-border, color-mix(in srgb, var(--border) 55%, transparent));
-  box-shadow: inset 0 1px 0 var(--apple-glass-highlight, rgba(255, 255, 255, 0.18));
-}
-
 .apple-mode-card {
   appearance: none;
   display: grid;
@@ -7265,11 +7469,12 @@ html[data-theme-family="apple"] .apple-list-card {
   display: grid;
   gap: 6px;
   align-content: start;
-  height: 120px;
+  height: 132px;
   padding: 12px 10px;
   border-radius: 14px;
-  border: 2px solid transparent;
+  border: 2.5px solid transparent;
   overflow: hidden;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
 }
 
 .apple-mode-card.active .apple-mode-preview {
@@ -7277,11 +7482,15 @@ html[data-theme-family="apple"] .apple-list-card {
 }
 
 .apple-mode-preview--light {
-  background: linear-gradient(160deg, #a8c8f0 0%, #f2f2f7 48%, #ffffff 100%);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.55), transparent 40%),
+    linear-gradient(160deg, #7eb6ff 0%, #f2f2f7 42%, #ffffff 100%);
 }
 
 .apple-mode-preview--dark {
-  background: linear-gradient(160deg, #1a2744 0%, #0a0a0c 48%, #1c1c1e 100%);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 35%),
+    linear-gradient(160deg, #2a3f6e 0%, #0a0a0c 45%, #1c1c1e 100%);
 }
 
 .apple-mode-preview-bar {
@@ -7301,7 +7510,8 @@ html[data-theme-family="apple"] .apple-list-card {
 .apple-mode-preview-row {
   height: 22px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(8px);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
@@ -7310,7 +7520,7 @@ html[data-theme-family="apple"] .apple-list-card {
 }
 
 .apple-mode-preview--dark .apple-mode-preview-row {
-  background: rgba(44, 44, 46, 0.92);
+  background: rgba(58, 58, 60, 0.72);
 }
 
 .apple-mode-meta {
@@ -7363,13 +7573,14 @@ html[data-theme-family="apple"] .apple-list-card {
 }
 
 .apple-list-row + .apple-list-row {
-  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  border-top: 1px solid var(--apple-hairline, color-mix(in srgb, var(--border) 55%, transparent));
 }
 
 .apple-list-label {
   font-size: 0.95rem;
   color: var(--text);
   font-weight: 500;
+  letter-spacing: -0.01em;
 }
 
 .apple-list-row--select {
@@ -7389,7 +7600,7 @@ html[data-theme-family="apple"] .apple-list-card {
 }
 
 .apple-list-card .settings-toggle + .settings-toggle {
-  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  border-top: 1px solid var(--apple-hairline, color-mix(in srgb, var(--border) 55%, transparent));
 }
 
 /* ─── Catalog drafts (Черновики) ─── */
@@ -7448,9 +7659,11 @@ html[data-theme-family="apple"] .catalog-drafts {
 }
 
 html[data-theme-family="apple"] .catalog-draft-card {
-  background: var(--apple-glass-bg, color-mix(in srgb, var(--bg-elevated) 72%, transparent));
-  backdrop-filter: blur(var(--apple-glass-blur, 24px))
-    saturate(var(--apple-glass-saturate, 180%));
-  -webkit-backdrop-filter: blur(var(--apple-glass-blur, 24px))
-    saturate(var(--apple-glass-saturate, 180%));
+  background: var(--apple-glass-bg) !important;
+  background-image: none !important;
+  backdrop-filter: blur(var(--apple-glass-blur)) saturate(var(--apple-glass-saturate));
+  -webkit-backdrop-filter: blur(var(--apple-glass-blur))
+    saturate(var(--apple-glass-saturate));
+  border: 1px dashed var(--apple-glass-border) !important;
+  box-shadow: inset 0 1px 0 var(--apple-glass-highlight) !important;
 }

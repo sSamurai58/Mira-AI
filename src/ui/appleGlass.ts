@@ -67,7 +67,11 @@ export function saveAppleAppearance(
   return next;
 }
 
-/** Map glass level → CSS custom properties on :root. */
+/**
+ * Map glass level → CSS custom properties on :root.
+ * Values tuned so backdrop-filter + colorful atmosphere actually read as glass
+ * (macOS vibrancy), not opaque Mira panels.
+ */
 export function applyAppleAppearanceToDom(
   prefs: AppleAppearancePrefs = loadAppleAppearance(),
   themeId?: string,
@@ -82,53 +86,60 @@ export function applyAppleAppearanceToDom(
   const levels = isDark
     ? {
         solid: {
-          bg: "rgba(28, 28, 30, 0.94)",
-          blur: "12px",
-          saturate: "140%",
-          border: "rgba(255, 255, 255, 0.08)",
-          highlight: "rgba(255, 255, 255, 0.12)",
+          bg: "rgba(38, 38, 40, 0.82)",
+          blur: "20px",
+          saturate: "160%",
+          border: "rgba(255, 255, 255, 0.14)",
+          highlight: "rgba(255, 255, 255, 0.2)",
+          fill: "rgba(44, 44, 46, 0.88)",
         },
         regular: {
-          bg: "rgba(28, 28, 30, 0.72)",
-          blur: "24px",
-          saturate: "180%",
-          border: "rgba(255, 255, 255, 0.14)",
-          highlight: "rgba(255, 255, 255, 0.22)",
+          bg: "rgba(44, 44, 46, 0.48)",
+          blur: "40px",
+          saturate: "190%",
+          border: "rgba(255, 255, 255, 0.22)",
+          highlight: "rgba(255, 255, 255, 0.34)",
+          fill: "rgba(58, 58, 60, 0.55)",
         },
         clear: {
-          bg: "rgba(44, 44, 46, 0.48)",
-          blur: "36px",
-          saturate: "200%",
-          border: "rgba(255, 255, 255, 0.2)",
-          highlight: "rgba(255, 255, 255, 0.32)",
+          bg: "rgba(60, 60, 67, 0.28)",
+          blur: "56px",
+          saturate: "220%",
+          border: "rgba(255, 255, 255, 0.28)",
+          highlight: "rgba(255, 255, 255, 0.42)",
+          fill: "rgba(72, 72, 74, 0.32)",
         },
       }
     : {
         solid: {
-          bg: "rgba(255, 255, 255, 0.94)",
-          blur: "12px",
-          saturate: "140%",
-          border: "rgba(60, 60, 67, 0.12)",
-          highlight: "rgba(255, 255, 255, 0.7)",
+          bg: "rgba(255, 255, 255, 0.86)",
+          blur: "18px",
+          saturate: "150%",
+          border: "rgba(0, 0, 0, 0.08)",
+          highlight: "rgba(255, 255, 255, 0.95)",
+          fill: "rgba(255, 255, 255, 0.92)",
         },
         regular: {
-          bg: "rgba(255, 255, 255, 0.72)",
-          blur: "24px",
+          bg: "rgba(255, 255, 255, 0.55)",
+          blur: "36px",
           saturate: "180%",
-          border: "rgba(60, 60, 67, 0.18)",
-          highlight: "rgba(255, 255, 255, 0.85)",
+          border: "rgba(0, 0, 0, 0.1)",
+          highlight: "rgba(255, 255, 255, 0.9)",
+          fill: "rgba(255, 255, 255, 0.62)",
         },
         clear: {
-          bg: "rgba(255, 255, 255, 0.48)",
-          blur: "36px",
-          saturate: "200%",
-          border: "rgba(60, 60, 67, 0.22)",
-          highlight: "rgba(255, 255, 255, 0.95)",
+          bg: "rgba(255, 255, 255, 0.32)",
+          blur: "52px",
+          saturate: "210%",
+          border: "rgba(0, 0, 0, 0.12)",
+          highlight: "rgba(255, 255, 255, 0.98)",
+          fill: "rgba(255, 255, 255, 0.38)",
         },
       };
 
   const g = levels[prefs.glass];
   root.style.setProperty("--apple-glass-bg", g.bg);
+  root.style.setProperty("--apple-glass-fill", g.fill);
   root.style.setProperty("--apple-glass-blur", g.blur);
   root.style.setProperty("--apple-glass-saturate", g.saturate);
   root.style.setProperty("--apple-glass-border", g.border);
