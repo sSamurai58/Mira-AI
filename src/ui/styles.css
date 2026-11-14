@@ -4181,15 +4181,30 @@ select:disabled {
 .terminal-host {
   flex: 1 1 auto;
   min-height: 360px;
-  padding: 10px 12px 8px;
+  padding: 12px 14px 14px;
+  /* Isolate from app `line-height: 1.5` so xterm cell metrics stay honest. */
+  line-height: normal;
+  overflow: hidden;
 }
 
 .terminal-host .xterm {
   height: 100%;
+  line-height: normal;
 }
 
 .terminal-host .xterm-viewport {
   border-radius: 0;
+}
+
+.terminal-host .xterm-screen,
+.terminal-host .xterm-rows,
+.terminal-host .xterm-rows > div {
+  line-height: normal;
+}
+
+/* Extra vertical room so descenders (g/y/p) are not clipped by cell boxes. */
+.terminal-host .xterm-rows > div {
+  overflow: visible;
 }
 
 .terminal-overlay {

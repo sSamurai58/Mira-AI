@@ -32,10 +32,21 @@ export function TerminalView() {
   useEffect(() => {
     if (!hostRef.current || termRef.current) return;
     const root = getComputedStyle(document.documentElement);
+    // Resolve real font names — canvas metrics ignore CSS `var(...)`.
+    const monoFont =
+      root.getPropertyValue("--font-mono").trim() ||
+      '"JetBrains Mono", ui-monospace, monospace';
+    const fontSize = Math.max(
+      11,
+      Number(localStorage.getItem("mira.terminalFontSize") || "14") || 14,
+    );
     const term = new Terminal({
       cursorBlink: true,
-      fontFamily: "var(--font-mono)",
-      fontSize: Number(localStorage.getItem("mira.terminalFontSize") || "14"),
+      fontFamily: monoFont,
+      fontSize,
+      // Default 1.0 clips JetBrains Mono descenders (g/y/p) on Windows DPI.
+      lineHeight: 1.28,
+      letterSpacing: 0.4,
       theme: {
         background:
           root.getPropertyValue("--terminal-bg").trim() || "#061018",
@@ -72,22 +83,32 @@ export function TerminalView() {
     termRef.current = term;
     fitRef.current = fit;
 
+    const refit = () => {
+      fit.fit();
+      const id = activeIdRef.current;
+      if (!id || !window.mira) return;
+      void window.mira.resizeTerminal(id, term.cols, term.rows);
+    };
+
+    // Remeasure after webfonts load so cell height matches real glyphs.
+    let cancelled = false;
+    void document.fonts.ready.then(() => {
+      if (cancelled || !termRef.current) return;
+      term.refresh(0, Math.max(0, term.rows - 1));
+      refit();
+    });
+
     term.onData((data) => {
       const id = activeIdRef.current;
       if (!id || !window.mira) return;
       void window.mira.writeTerminal(id, data);
     });
 
-    const onResize = () => {
-      fit.fit();
-      const id = activeIdRef.current;
-      if (!id || !window.mira) return;
-      void window.mira.resizeTerminal(id, term.cols, term.rows);
-    };
-    window.addEventListener("resize", onResize);
+    window.addEventListener("resize", refit);
 
     return () => {
-      window.removeEventListener("resize", onResize);
+      cancelled = true;
+      window.removeEventListener("resize", refit);
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
