@@ -14,7 +14,9 @@ import { createLlmAdapter } from "./llm";
 import {
   deleteCatalogItem,
   ensureSeededCatalog,
+  createSkillCatalogFolder,
   importSkillPath,
+  listSkillCatalogFolders,
   loadMarkdownCatalog,
   setCatalogEnabled,
   writeCatalogItem,
@@ -665,6 +667,11 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
   });
 
   on("mira:list-skills", () => loadMarkdownCatalog("skills"));
+  on("mira:list-skill-folders", () => listSkillCatalogFolders());
+  on(
+    "mira:create-skill-folder",
+    (_e, folderPath: string) => createSkillCatalogFolder(String(folderPath ?? "")),
+  );
   on("mira:list-protocols", () => loadMarkdownCatalog("protocols"));
   on("mira:set-skill-enabled", (_e, id: string, enabled: boolean) =>
     setCatalogEnabled("skills", id, enabled),
