@@ -1841,17 +1841,16 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   display: none;
 }
 
+/* Inline day markers in the stream (not sticky — sticky float is singular). */
 .thread-date {
-  position: sticky;
-  top: 4px;
-  z-index: 3;
   align-self: center;
   display: inline-flex;
   margin: 2px 0 4px;
   pointer-events: none;
 }
 
-.thread-date span {
+.thread-date span,
+.thread-date-float span {
   padding: 4px 12px;
   border-radius: 999px;
   font-size: 0.75rem;
@@ -1862,6 +1861,17 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   border: 1px solid color-mix(in srgb, var(--panel-line) 80%, transparent);
   box-shadow: 0 6px 18px color-mix(in srgb, #000 28%, transparent);
   backdrop-filter: blur(8px);
+}
+
+/* One floating chip — avoids «Вчера» stacking on «13 ноября». */
+.thread-date-float {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: inline-flex;
+  pointer-events: none;
 }
 
 .thread-jump {
