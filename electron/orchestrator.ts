@@ -15,7 +15,9 @@ import {
   getBrowserPolicy,
   looksLikeBrowserHistoryIntent,
   looksLikeBrowserOpenIntent,
+  looksLikeBrowserReopenIntent,
   openBrowserUrl,
+  reopenLastFromHistory,
   searchHistory,
 } from "./tools/browser";
 import {
@@ -42,8 +44,12 @@ import {
   getScreenPolicy,
   looksLikeScreenControlIntent,
   looksLikeScreenSeeIntent,
+  parseChatHotkey,
   parseClickCoords,
+  parseScrollIntent,
   parseTypeText,
+  pressKeys,
+  scrollScreen,
   typeText,
 } from "./tools/screen";
 import { describeScreenshot } from "./llm/vision";
@@ -669,6 +675,8 @@ export async function sendChatMessage(
     ) {
       const typed = parseTypeText(text);
       const coords = parseClickCoords(text);
+      const scroll = parseScrollIntent(text);
+      const hotkey = parseChatHotkey(text);
       if (typed && !coords) {
         const typedResult = await typeText(typed);
         desktopUsed = typedResult.ok
@@ -681,11 +689,30 @@ export async function sendChatMessage(
           ? `screen-click:${click.mode}`
           : "screen-click-denied";
         desktopBlock = formatScreenBlock("click", click);
+      } else if (scroll) {
+        const scrolled = await scrollScreen(scroll);
+        desktopUsed = scrolled.ok
+          ? `screen-scroll:${scrolled.mode}`
+          : "screen-scroll-denied";
+        desktopBlock = formatScreenBlock("scroll", scrolled);
+      } else if (hotkey) {
+        const keys = await pressKeys(hotkey);
+        desktopUsed = keys.ok
+          ? `screen-keys:${keys.mode}`
+          : "screen-keys-denied";
+        desktopBlock = formatScreenBlock("keys", keys);
       } else {
         desktopUsed = "screen-control-need-coords";
         desktopBlock =
-          "[Экран: control]\nНужны явные координаты, например: «кликни 640, 360». Без координат клик не выполняется (защита от случайного клика по окну Mira).";
+          "[Экран: control]\nНужны координаты («кликни 640, 360»), текст («введи текст: …»), scroll («прокрути вниз») или хоткей («нажми ctrl+s»).";
       }
+    } else if (
+      looksLikeBrowserReopenIntent(text) &&
+      getBrowserPolicy().enabled
+    ) {
+      const opened = await reopenLastFromHistory();
+      desktopUsed = opened.ok ? "browser-reopen" : "browser-reopen-denied";
+      desktopBlock = formatBrowserBlock("open", opened);
     } else if (looksLikeBrowserOpenIntent(text) && getBrowserPolicy().enabled) {
       const url = extractOpenUrl(text);
       if (url) {

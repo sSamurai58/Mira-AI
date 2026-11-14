@@ -93,7 +93,9 @@ export function parseFindOnScreenQuery(text: string): string | null {
 }
 
 export function looksLikeScreenControlIntent(text: string): boolean {
-  return /(кликни|нажми|click|введи текст|type\s+|напечатай)/i.test(text);
+  return /(кликни|нажми|click|введи текст|type\s+|напечатай|прокрут|скролл|scroll)/i.test(
+    text,
+  );
 }
 
 export function parseClickCoords(text: string): { x: number; y: number } | null {
@@ -110,6 +112,54 @@ export function parseTypeText(text: string): string | null {
   );
   if (!m?.[1]) return null;
   return m[1].trim();
+}
+
+/** «нажми ctrl+s» / «press alt+f4» — not coordinate clicks. */
+export function parseChatHotkey(text: string): string | null {
+  if (parseClickCoords(text)) return null;
+  const m = text.match(
+    /(?:нажми|press|hotkey|shortcut)\s+(?:клавиш[уи]\s+)?([a-z0-9+]+(?:\+[a-z0-9+]+)*)/i,
+  );
+  if (!m?.[1]) return null;
+  const raw = m[1].trim();
+  if (!raw.includes("+") && !/^(enter|esc|escape|tab|space|f\d{1,2})$/i.test(raw)) {
+    return null;
+  }
+  return raw.toLowerCase();
+}
+
+export type ScrollIntent = {
+  direction: "up" | "down" | "left" | "right";
+  amount: number;
+  x?: number;
+  y?: number;
+};
+
+/** «прокрути вниз», «скролл вверх 3», «scroll down at 400,300». */
+export function parseScrollIntent(text: string): ScrollIntent | null {
+  if (!/(прокрут|скролл|scroll)/i.test(text)) return null;
+  const dirMatch = text.match(
+    /(?:прокрут[а-яё]*|скролл|scroll)\s*(?:экран[а-яё]*\s*)?(вверх|вниз|влево|вправо|up|down|left|right)/i,
+  );
+  if (!dirMatch?.[1]) return null;
+  const raw = dirMatch[1].toLowerCase();
+  const direction: ScrollIntent["direction"] =
+    raw === "вверх" || raw === "up"
+      ? "up"
+      : raw === "влево" || raw === "left"
+        ? "left"
+        : raw === "вправо" || raw === "right"
+          ? "right"
+          : "down";
+  const amountMatch = text.match(/(?:на\s+)?(\d{1,2})\s*(?:раз|steps?|ticks?)?/i);
+  const amount = Math.min(20, Math.max(1, Number(amountMatch?.[1] ?? 3)));
+  const at = text.match(/(?:at|в|на)\s*(\d{1,5})\s*[, ]\s*(\d{1,5})/i);
+  return {
+    direction,
+    amount,
+    x: at ? Number(at[1]) : undefined,
+    y: at ? Number(at[2]) : undefined,
+  };
 }
 
 /**
@@ -713,12 +763,16 @@ async function keysViaWin32(parts: string[]): Promise<void> {
 
 /**
  * Press a key chord like «ctrl+shift+s».
- * Trusted custom-command path: respects SCREEN_CONTROL_ENABLED, no per-press confirm.
+ * Chat path confirms unless `skipConfirm`.
  * `osTrusted` — window/desktop OS hotkeys (Win+D, snap) bypass screen-control gate.
  */
 export async function pressKeys(
   raw: string,
-  opts?: { dryRun?: boolean; osTrusted?: boolean },
+  opts?: {
+    dryRun?: boolean;
+    osTrusted?: boolean;
+    skipConfirm?: boolean;
+  },
 ): Promise<ScreenKeysResult> {
   const keys = raw.trim();
   const parts = parseKeyCombo(keys);
@@ -751,6 +805,24 @@ export async function pressKeys(
       mode: "dry-run",
       detail: `Контроль экрана выключен — зафиксировано нажатие ${parts.join("+")}`,
     };
+  }
+
+  if (!opts?.skipConfirm && !opts?.osTrusted) {
+    const ok = await requestUserConfirm({
+      actionClass: "screen",
+      risk: "high",
+      title: "Подтверждение горячих клавиш",
+      body: `Mira хочет нажать: ${parts.join("+")}\nОкно Mira будет временно скрыто.\nРазрешить?`,
+      confirmLabel: "Нажать",
+    });
+    if (!ok) {
+      return {
+        ok: false,
+        keys,
+        mode: "dry-run",
+        detail: "Отклонено пользователем",
+      };
+    }
   }
 
   if (!isElectronRuntime()) {
@@ -792,13 +864,221 @@ export async function pressKeys(
   }
 }
 
+export type ScreenScrollResult = {
+  ok: boolean;
+  direction: ScrollIntent["direction"];
+  amount: number;
+  x: number | null;
+  y: number | null;
+  mode: ScreenClickMode;
+  detail: string;
+};
+
+async function scrollViaXdotool(
+  direction: ScrollIntent["direction"],
+  amount: number,
+  x?: number,
+  y?: number,
+): Promise<void> {
+  if (x !== undefined && y !== undefined) {
+    await execFileAsync(
+      "xdotool",
+      ["mousemove", String(x), String(y)],
+      { timeout: 3000 },
+    );
+  }
+  const button =
+    direction === "up"
+      ? "4"
+      : direction === "down"
+        ? "5"
+        : direction === "left"
+          ? "6"
+          : "7";
+  for (let i = 0; i < amount; i++) {
+    await execFileAsync("xdotool", ["click", button], { timeout: 3000 });
+  }
+}
+
+async function scrollViaWin32(
+  direction: ScrollIntent["direction"],
+  amount: number,
+  x?: number,
+  y?: number,
+): Promise<void> {
+  const delta =
+    direction === "up" || direction === "left"
+      ? 120 * amount
+      : -120 * amount;
+  const horizontal = direction === "left" || direction === "right" ? 1 : 0;
+  const xi = x !== undefined ? Math.round(x) : -1;
+  const yi = y !== undefined ? Math.round(y) : -1;
+  const script = [
+    "Add-Type -TypeDefinition @'",
+    "using System;",
+    "using System.Runtime.InteropServices;",
+    "public static class MiraScroll {",
+    "  [StructLayout(LayoutKind.Sequential)] public struct INPUT { public uint type; public MOUSEINPUT mi; }",
+    "  [StructLayout(LayoutKind.Sequential)] public struct MOUSEINPUT {",
+    "    public int dx; public int dy; public uint mouseData; public uint dwFlags; public uint time; public IntPtr dwExtraInfo;",
+    "  }",
+    "  [DllImport(\"user32.dll\")] public static extern bool SetCursorPos(int X, int Y);",
+    "  [DllImport(\"user32.dll\")] public static extern uint SendInput(uint n, INPUT[] p, int cb);",
+    "  public const uint INPUT_MOUSE = 0;",
+    "  public const uint WHEEL = 0x0800;",
+    "  public const uint HWHEEL = 0x1000;",
+    "  public static void Wheel(int delta, bool horizontal) {",
+    "    INPUT[] a = new INPUT[1];",
+    "    a[0].type = INPUT_MOUSE;",
+    "    a[0].mi.mouseData = unchecked((uint)delta);",
+    "    a[0].mi.dwFlags = horizontal ? HWHEEL : WHEEL;",
+    "    SendInput(1, a, Marshal.SizeOf(typeof(INPUT)));",
+    "  }",
+    "}",
+    "'@",
+    xi >= 0 && yi >= 0
+      ? `[MiraScroll]::SetCursorPos(${xi}, ${yi}) | Out-Null; Start-Sleep -Milliseconds 40`
+      : "",
+    `[MiraScroll]::Wheel(${delta}, $${horizontal === 1})`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  await execFileAsync(
+    "powershell.exe",
+    ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+    { timeout: 8000, windowsHide: true },
+  );
+}
+
+export async function scrollScreen(
+  intent: ScrollIntent,
+  opts?: { dryRun?: boolean; skipConfirm?: boolean },
+): Promise<ScreenScrollResult> {
+  const { direction, amount } = intent;
+  const x = intent.x ?? null;
+  const y = intent.y ?? null;
+
+  if (opts?.dryRun) {
+    return {
+      ok: true,
+      direction,
+      amount,
+      x,
+      y,
+      mode: "dry-run",
+      detail: `Проверка: scroll ${direction} ×${amount}`,
+    };
+  }
+
+  const policy = getScreenPolicy();
+  if (!policy.enabled || !policy.controlEnabled) {
+    if (opts?.skipConfirm) {
+      return {
+        ok: true,
+        direction,
+        amount,
+        x,
+        y,
+        mode: "dry-run",
+        detail: `Контроль экрана выключен — зафиксирован scroll ${direction}`,
+      };
+    }
+    throw new Error("Контроль экрана выключен.");
+  }
+
+  if (!opts?.skipConfirm) {
+    const ok = await requestUserConfirm({
+      actionClass: "screen",
+      risk: "high",
+      title: "Подтверждение прокрутки",
+      body: `Mira хочет прокрутить экран: ${direction} ×${amount}${
+        x != null && y != null ? ` в точке (${x}, ${y})` : ""
+      }.\nОкно Mira будет временно скрыто.\nРазрешить?`,
+      confirmLabel: "Прокрутить",
+    });
+    if (!ok) {
+      return {
+        ok: false,
+        direction,
+        amount,
+        x,
+        y,
+        mode: "dry-run",
+        detail: "Отклонено пользователем",
+      };
+    }
+  }
+
+  if (!isElectronRuntime()) {
+    return {
+      ok: true,
+      direction,
+      amount,
+      x,
+      y,
+      mode: "dry-run",
+      detail: `Зафиксировано без GUI: scroll ${direction} ×${amount}`,
+    };
+  }
+
+  try {
+    return await withMiraWindowsAside(async () => {
+      if (process.platform === "win32") {
+        await scrollViaWin32(
+          direction,
+          amount,
+          x ?? undefined,
+          y ?? undefined,
+        );
+        return {
+          ok: true,
+          direction,
+          amount,
+          x,
+          y,
+          mode: "win32" as const,
+          detail: `Scroll ${direction} ×${amount} (Win32)`,
+        };
+      }
+      await scrollViaXdotool(
+        direction,
+        amount,
+        x ?? undefined,
+        y ?? undefined,
+      );
+      return {
+        ok: true,
+        direction,
+        amount,
+        x,
+        y,
+        mode: "xdotool" as const,
+        detail: `Scroll ${direction} ×${amount} (xdotool)`,
+      };
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      ok: true,
+      direction,
+      amount,
+      x,
+      y,
+      mode: "dry-run",
+      detail: `Системный scroll недоступен (${message.slice(0, 120)}). Зафиксировано dry-run.`,
+    };
+  }
+}
+
 export function formatScreenBlock(
-  kind: "capture" | "click" | "type" | "keys",
+  kind: "capture" | "click" | "type" | "keys" | "scroll",
   payload:
     | ScreenCaptureResult
     | ScreenClickResult
     | ScreenTypeResult
-    | ScreenKeysResult,
+    | ScreenKeysResult
+    | ScreenScrollResult,
   visionNote?: string | null,
 ): string {
   if (kind === "capture") {
@@ -816,6 +1096,12 @@ export function formatScreenBlock(
   if (kind === "keys") {
     const k = payload as ScreenKeysResult;
     return `[Экран: keys ${k.mode}]\n«${k.keys}» · ${k.detail}`;
+  }
+  if (kind === "scroll") {
+    const s = payload as ScreenScrollResult;
+    return `[Экран: scroll ${s.mode}]\n${s.direction} ×${s.amount}${
+      s.x != null && s.y != null ? ` @(${s.x},${s.y})` : ""
+    } · ${s.detail}`;
   }
   const c = payload as ScreenClickResult;
   return `[Экран: click ${c.mode}]\n(${c.x}, ${c.y}) · ${c.detail}`;

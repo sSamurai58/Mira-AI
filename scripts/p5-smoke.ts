@@ -11,6 +11,7 @@ import {
   extractOpenUrl,
   looksLikeBrowserHistoryIntent,
   looksLikeBrowserOpenIntent,
+  looksLikeBrowserReopenIntent,
   openBrowserUrl,
   searchHistory,
 } from "../electron/tools/browser";
@@ -18,7 +19,9 @@ import {
   captureScreen,
   looksLikeScreenControlIntent,
   looksLikeScreenSeeIntent,
+  parseChatHotkey,
   parseClickCoords,
+  parseScrollIntent,
   parseTypeText,
 } from "../electron/tools/screen";
 
@@ -37,9 +40,12 @@ assert.equal(looksLikeScreenSeeIntent("привет"), false);
 assert.equal(looksLikeScreenControlIntent("кликни 120, 240"), true);
 assert.deepEqual(parseClickCoords("кликни 120, 240"), { x: 120, y: 240 });
 assert.equal(parseTypeText("введи текст: hello Mira"), "hello Mira");
+assert.equal(parseChatHotkey("нажми ctrl+s"), "ctrl+s");
+assert.equal(parseScrollIntent("прокрути вниз")?.direction, "down");
 assert.equal(looksLikeBrowserOpenIntent("открой сайт example.com"), true);
 assert.equal(extractOpenUrl("открой https://example.com/path"), "https://example.com/path");
 assert.equal(looksLikeBrowserHistoryIntent("где я уже был в браузере"), true);
+assert.equal(looksLikeBrowserReopenIntent("открой последний сайт"), true);
 
 async function main() {
   const shot = await captureScreen();
@@ -75,6 +81,30 @@ async function main() {
       desktopUsed === "screen-click:xdotool" ||
       desktopUsed === "screen-click:win32",
     `unexpected click desktopUsed=${desktopUsed}`,
+  );
+
+  desktopUsed = null;
+  await sendChatMessage(
+    { sessionId: null, text: "Прокрути вниз" },
+    (e) => {
+      if (e.type === "assistant_done") desktopUsed = e.desktopUsed;
+    },
+  );
+  assert.ok(
+    typeof desktopUsed === "string" && desktopUsed.startsWith("screen-scroll:"),
+    `unexpected scroll desktopUsed=${desktopUsed}`,
+  );
+
+  desktopUsed = null;
+  await sendChatMessage(
+    { sessionId: null, text: "Нажми ctrl+s" },
+    (e) => {
+      if (e.type === "assistant_done") desktopUsed = e.desktopUsed;
+    },
+  );
+  assert.ok(
+    typeof desktopUsed === "string" && desktopUsed.startsWith("screen-keys:"),
+    `unexpected keys desktopUsed=${desktopUsed}`,
   );
 
   desktopUsed = null;

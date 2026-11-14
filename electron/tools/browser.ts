@@ -334,74 +334,239 @@ export async function openBrowserUrl(
   };
 }
 
-/** Read Chromium/Chrome History if present (read-only copy). */
-export function readChromiumHistory(limit = 20): BrowserVisitRow[] {
-  const candidates = [
-    path.join(os.homedir(), ".config", "google-chrome", "Default", "History"),
-    path.join(os.homedir(), ".config", "chromium", "Default", "History"),
-    path.join(
-      os.homedir(),
-      "AppData",
-      "Local",
-      "Google",
-      "Chrome",
-      "User Data",
-      "Default",
-      "History",
-    ),
-    path.join(
-      os.homedir(),
-      "Library",
-      "Application Support",
-      "Google",
-      "Chrome",
-      "Default",
-      "History",
-    ),
-  ];
-
-  const systemHistory =
+function systemHistoryEnabled(): boolean {
+  return (
     (process.env.BROWSER_SYSTEM_HISTORY ?? "true").trim().toLowerCase() !==
-    "false";
-  if (!systemHistory) return [];
+    "false"
+  );
+}
 
-  for (const histPath of candidates) {
-    if (!fs.existsSync(histPath)) continue;
+function chromiumHistoryCandidates(): Array<{ path: string; source: string }> {
+  const home = os.homedir();
+  return [
+    {
+      path: path.join(home, ".config", "google-chrome", "Default", "History"),
+      source: "chrome",
+    },
+    {
+      path: path.join(home, ".config", "chromium", "Default", "History"),
+      source: "chromium",
+    },
+    {
+      path: path.join(home, ".config", "microsoft-edge", "Default", "History"),
+      source: "edge",
+    },
+    {
+      path: path.join(home, ".config", "BraveSoftware", "Brave-Browser", "Default", "History"),
+      source: "brave",
+    },
+    {
+      path: path.join(
+        home,
+        "AppData",
+        "Local",
+        "Google",
+        "Chrome",
+        "User Data",
+        "Default",
+        "History",
+      ),
+      source: "chrome",
+    },
+    {
+      path: path.join(
+        home,
+        "AppData",
+        "Local",
+        "Microsoft",
+        "Edge",
+        "User Data",
+        "Default",
+        "History",
+      ),
+      source: "edge",
+    },
+    {
+      path: path.join(
+        home,
+        "AppData",
+        "Local",
+        "BraveSoftware",
+        "Brave-Browser",
+        "User Data",
+        "Default",
+        "History",
+      ),
+      source: "brave",
+    },
+    {
+      path: path.join(
+        home,
+        "Library",
+        "Application Support",
+        "Google",
+        "Chrome",
+        "Default",
+        "History",
+      ),
+      source: "chrome",
+    },
+    {
+      path: path.join(
+        home,
+        "Library",
+        "Application Support",
+        "Microsoft Edge",
+        "Default",
+        "History",
+      ),
+      source: "edge",
+    },
+  ];
+}
+
+function readOneChromiumHistory(
+  histPath: string,
+  source: string,
+  limit: number,
+): BrowserVisitRow[] {
+  const tmp = path.join(
+    os.tmpdir(),
+    `mira-${source}-history-${process.pid}-${Math.random().toString(36).slice(2)}.db`,
+  );
+  fs.copyFileSync(histPath, tmp);
+  const db = new DatabaseSync(tmp, { readOnly: true });
+  try {
+    const rows = db
+      .prepare(
+        `SELECT url as url, title as title, last_visit_time
+         FROM urls
+         ORDER BY last_visit_time DESC
+         LIMIT ?`,
+      )
+      .all(limit) as Array<{
+      url: string;
+      title: string;
+      last_visit_time: number;
+    }>;
+    return rows.map((r, i) => ({
+      id: `${source}-${i}`,
+      url: r.url,
+      title: r.title || r.url,
+      source,
+      visited_at: new Date(
+        Math.max(0, r.last_visit_time / 1000 - 11_644_473_600_000),
+      ).toISOString(),
+    }));
+  } finally {
     try {
-      // History DB is often locked; copy then query via node:sqlite
+      db.close();
+    } catch {
+      /* ignore */
+    }
+    try {
+      fs.unlinkSync(tmp);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/** Read Chromium-family History DBs (Chrome/Edge/Brave) if present. */
+export function readChromiumHistory(limit = 20): BrowserVisitRow[] {
+  if (!systemHistoryEnabled()) return [];
+  const out: BrowserVisitRow[] = [];
+  const seen = new Set<string>();
+  for (const cand of chromiumHistoryCandidates()) {
+    if (!fs.existsSync(cand.path)) continue;
+    try {
+      const rows = readOneChromiumHistory(cand.path, cand.source, limit);
+      for (const row of rows) {
+        const key = row.url.replace(/\/$/, "").toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(row);
+        if (out.length >= limit) return out;
+      }
+    } catch {
+      /* try next */
+    }
+  }
+  return out;
+}
+
+function firefoxPlacesCandidates(): string[] {
+  const home = os.homedir();
+  const roots = [
+    path.join(home, ".mozilla", "firefox"),
+    path.join(home, "AppData", "Roaming", "Mozilla", "Firefox", "Profiles"),
+    path.join(home, "Library", "Application Support", "Firefox", "Profiles"),
+  ];
+  const out: string[] = [];
+  for (const root of roots) {
+    if (!fs.existsSync(root)) continue;
+    try {
+      for (const ent of fs.readdirSync(root, { withFileTypes: true })) {
+        if (!ent.isDirectory()) continue;
+        const places = path.join(root, ent.name, "places.sqlite");
+        if (fs.existsSync(places)) out.push(places);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return out;
+}
+
+/** Read Firefox places.sqlite (copy-then-query). */
+export function readFirefoxHistory(limit = 20): BrowserVisitRow[] {
+  if (!systemHistoryEnabled()) return [];
+  for (const places of firefoxPlacesCandidates()) {
+    try {
       const tmp = path.join(
         os.tmpdir(),
-        `mira-chrome-history-${process.pid}.db`,
+        `mira-firefox-history-${process.pid}-${Math.random().toString(36).slice(2)}.db`,
       );
-      fs.copyFileSync(histPath, tmp);
-      // Lazy import to avoid circular issues
+      fs.copyFileSync(places, tmp);
       const db = new DatabaseSync(tmp, { readOnly: true });
-      const rows = db
-        .prepare(
-          `SELECT url as url, title as title, last_visit_time
-           FROM urls
-           ORDER BY last_visit_time DESC
-           LIMIT ?`,
-        )
-        .all(limit) as Array<{ url: string; title: string; last_visit_time: number }>;
-      db.close();
       try {
-        fs.unlinkSync(tmp);
-      } catch {
-        /* ignore */
+        const rows = db
+          .prepare(
+            `SELECT url as url, title as title, last_visit_date
+             FROM moz_places
+             WHERE url LIKE 'http%'
+             ORDER BY last_visit_date DESC
+             LIMIT ?`,
+          )
+          .all(limit) as Array<{
+          url: string;
+          title: string | null;
+          last_visit_date: number | null;
+        }>;
+        return rows.map((r, i) => ({
+          id: `firefox-${i}`,
+          url: r.url,
+          title: r.title || r.url,
+          source: "firefox",
+          // Firefox stores µs since Unix epoch.
+          visited_at: new Date(
+            Math.max(0, (r.last_visit_date ?? 0) / 1000),
+          ).toISOString(),
+        }));
+      } finally {
+        try {
+          db.close();
+        } catch {
+          /* ignore */
+        }
+        try {
+          fs.unlinkSync(tmp);
+        } catch {
+          /* ignore */
+        }
       }
-      return rows.map((r, i) => ({
-        id: `chrome-${i}`,
-        url: r.url,
-        title: r.title || r.url,
-        source: "chromium",
-        // Chrome stores WebKit epoch µs; approximate to ISO for display.
-        visited_at: new Date(
-          Math.max(0, r.last_visit_time / 1000 - 11_644_473_600_000),
-        ).toISOString(),
-      }));
     } catch {
-      // try next
+      /* try next profile */
     }
   }
   return [];
@@ -416,16 +581,19 @@ function matchesHistoryQuery(row: BrowserVisitRow, query: string): boolean {
   return tokens.some((t) => hay.includes(t));
 }
 
-/** Merge Mira visit log + Chromium history (dedupe by URL). */
+/** Merge Mira visit log + Chrome/Edge/Brave/Firefox history (dedupe by URL). */
 export function searchHistory(query: string, limit = 20): BrowserVisitRow[] {
   const q = query.trim();
   const miraHits = searchBrowserVisits(q, limit);
-  const chrome = readChromiumHistory(Math.max(50, limit * 2)).filter((v) =>
-    matchesHistoryQuery(v, q),
-  );
+  const system = [
+    ...readChromiumHistory(Math.max(50, limit * 2)),
+    ...readFirefoxHistory(Math.max(50, limit * 2)),
+  ].filter((v) => matchesHistoryQuery(v, q));
+  // Prefer newer by visited_at when merging.
+  system.sort((a, b) => (a.visited_at < b.visited_at ? 1 : -1));
   const seen = new Set<string>();
   const merged: BrowserVisitRow[] = [];
-  for (const row of [...miraHits, ...chrome]) {
+  for (const row of [...miraHits, ...system]) {
     const key = row.url.replace(/\/$/, "").toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
@@ -433,6 +601,26 @@ export function searchHistory(query: string, limit = 20): BrowserVisitRow[] {
     if (merged.length >= limit) break;
   }
   return merged;
+}
+
+/** «открой то что вчера / последний сайт» */
+export function looksLikeBrowserReopenIntent(text: string): boolean {
+  return /(открой (то|сайт) (что|который) (я )?(вчера|недавно|последн)|открой последн[а-яё]* (сайт|вкладк|url)|reopen last|открой снова)/i.test(
+    text,
+  );
+}
+
+export async function reopenLastFromHistory(): Promise<BrowserOpenResult> {
+  const hits = searchHistory("", 5);
+  const first = hits[0];
+  if (!first?.url) {
+    return {
+      ok: false,
+      url: "",
+      detail: "В истории нет сайтов, чтобы открыть снова",
+    };
+  }
+  return openBrowserUrl(first.url);
 }
 
 /** Keep domain/site words; drop filler phrases from history intents. */
@@ -456,7 +644,7 @@ export function formatBrowserBlock(
   }
   const rows = payload as BrowserVisitRow[];
   if (!rows.length) {
-    return "[Браузер: history]\nИстория пуста. Пока пишутся только URL, открытые через Mira; Chromium History не найден или недоступен.";
+    return "[Браузер: history]\nИстория пуста. Mira visits + Chrome/Edge/Brave/Firefox History не найдены или выключены (BROWSER_SYSTEM_HISTORY).";
   }
   const lines = rows.map(
     (r, i) => `${i + 1}. ${r.title}\n   ${r.url}\n   ${r.visited_at} · ${r.source}`,

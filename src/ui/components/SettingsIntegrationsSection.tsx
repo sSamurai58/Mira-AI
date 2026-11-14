@@ -31,6 +31,7 @@ type IntegId =
   | "web"
   | "screen"
   | "browser"
+  | "mail"
   | "messaging"
   | "blender"
   | "future";
@@ -73,7 +74,27 @@ const INTEG_META: IntegMeta[] = [
     summary: "Открытие URL и просмотр истории визитов",
     tags: ["BROWSER_ENABLED", "URL", "history"],
     enabledKey: "BROWSER_ENABLED",
-    saveKeys: ["BROWSER_ENABLED", "BROWSER_PREFERRED", "BROWSER_OPEN_CONFIRM"],
+    saveKeys: [
+      "BROWSER_ENABLED",
+      "BROWSER_PREFERRED",
+      "BROWSER_OPEN_CONFIRM",
+      "BROWSER_SYSTEM_HISTORY",
+    ],
+  },
+  {
+    id: "mail",
+    name: "Почта",
+    kind: "Почта · F4",
+    summary: "Входящие, поиск, черновик и отправка с confirm",
+    tags: ["MAIL_ENABLED", "SMTP", "IMAP"],
+    enabledKey: "MAIL_ENABLED",
+    saveKeys: [
+      "MAIL_ENABLED",
+      "MAIL_MODE",
+      "MAIL_ACCOUNT",
+      "MAIL_SMTP_HOST",
+      "MAIL_IMAP_HOST",
+    ],
   },
   {
     id: "messaging",
@@ -104,10 +125,10 @@ const INTEG_META: IntegMeta[] = [
   },
   {
     id: "future",
-    name: "Камеры · IoT · почта · медиа",
-    kind: "Future · F1–F7",
+    name: "Камеры · IoT · медиа",
+    kind: "Future · F1–F3 · F5 · F7",
     summary: "Заготовки каналов — статусы из Electron",
-    tags: ["F1", "F2", "F3", "F4", "F7"],
+    tags: ["F1", "F2", "F3", "F5", "F7"],
     saveKeys: [],
   },
 ];
@@ -117,6 +138,7 @@ const FILTERS: { id: FilterId; label: string }[] = [
   { id: "web", label: "Веб" },
   { id: "screen", label: "Экран" },
   { id: "browser", label: "Браузер" },
+  { id: "mail", label: "Почта" },
   { id: "messaging", label: "Мессенджеры" },
   { id: "blender", label: "Blender" },
   { id: "future", label: "Future" },
@@ -196,6 +218,31 @@ function IntegChannelIcon({ id, size = 40 }: { id: IntegId; size?: number }) {
     );
   }
 
+  if (id === "mail") {
+    return (
+      <svg {...common}>
+        <rect width="40" height="40" rx="10" fill="#1E3A5F" />
+        <rect
+          x="9"
+          y="13"
+          width="22"
+          height="14"
+          rx="2"
+          fill="none"
+          stroke="#DBEAFE"
+          strokeWidth="1.8"
+        />
+        <path
+          d="M10 14.5 20 22 30 14.5"
+          fill="none"
+          stroke="#DBEAFE"
+          strokeWidth="1.6"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+
   return (
     <svg {...common}>
       <rect width="40" height="40" rx="10" fill="#312E81" />
@@ -235,6 +282,7 @@ export function SettingsIntegrationsSection() {
   const [webTest, setWebTest] = useState<string | null>(null);
   const [screenTest, setScreenTest] = useState<string | null>(null);
   const [browserTest, setBrowserTest] = useState<string | null>(null);
+  const [mailTest, setMailTest] = useState<string | null>(null);
   const [messagingTest, setMessagingTest] = useState<string | null>(null);
   const [blenderTest, setBlenderTest] = useState<string | null>(null);
   const [futureStatus, setFutureStatus] = useState<string | null>(null);
@@ -357,6 +405,7 @@ export function SettingsIntegrationsSection() {
       web: 0,
       screen: 0,
       browser: 0,
+      mail: 0,
       messaging: 0,
       blender: 0,
       future: 0,
@@ -392,7 +441,7 @@ export function SettingsIntegrationsSection() {
 
   function statusLine(meta: IntegMeta): string {
     if (meta.id === "future") {
-      return "Камеры · IoT · почта · медиа · календарь";
+      return "Камеры · IoT · медиа · календарь · файлы";
     }
     if (!meta.enabledKey) return meta.summary;
     return isTruthyEnv(draft[meta.enabledKey]) ? "Включено" : "Выключено";
@@ -449,6 +498,23 @@ export function SettingsIntegrationsSection() {
       }
       return;
     }
+    if (id === "mail") {
+      setBusy("mail");
+      try {
+        const [policy, rows] = await Promise.all([
+          window.mira.getMailPolicy(),
+          window.mira.listMail("inbox"),
+        ]);
+        setMailTest(
+          `OK — mode=${policy.mode} · inbox=${rows.length}${
+            policy.account ? ` · ${policy.account}` : ""
+          }`,
+        );
+      } finally {
+        setBusy(null);
+      }
+      return;
+    }
     if (id === "messaging") {
       setBusy("messaging");
       try {
@@ -497,6 +563,7 @@ export function SettingsIntegrationsSection() {
     if (id === "web") return webTest;
     if (id === "screen") return screenTest;
     if (id === "browser") return browserTest;
+    if (id === "mail") return mailTest;
     if (id === "messaging") return messagingTest;
     if (id === "blender") return blenderTest;
     if (id === "future") return futureStatus;
@@ -657,9 +724,81 @@ export function SettingsIntegrationsSection() {
                 setField("BROWSER_OPEN_CONFIRM", boolToEnv(on))
               }
             />
+            <ToggleRow
+              label="Читать системную историю"
+              hint="BROWSER_SYSTEM_HISTORY · Chrome/Edge/Brave/Firefox"
+              checked={isTruthyEnv(draft.BROWSER_SYSTEM_HISTORY ?? "true")}
+              onChange={(on) =>
+                setField("BROWSER_SYSTEM_HISTORY", boolToEnv(on))
+              }
+            />
             {historyText ? (
               <pre className="mono integ-pre">{historyText}</pre>
             ) : null}
+          </div>
+        </>
+      );
+    }
+
+    if (meta.id === "mail") {
+      return (
+        <>
+          <PurposeBlock
+            purpose="Локальный inbox + черновики. Live SMTP — очередь по хосту; полный transport позже."
+            howto={
+              <ol>
+                <li>Включите MAIL_ENABLED.</li>
+                <li>MAIL_MODE=dry-run — безопасно; live — очередь на SMTP host.</li>
+                <li>
+                  В Диалоге: «прочитай входящие», «найди в почте встреча», «напиши
+                  письмо кому a@b.ru тема …».
+                </li>
+              </ol>
+            }
+          />
+          <div className="integ-fields">
+            <ToggleRow
+              label="Почта"
+              hint="MAIL_ENABLED"
+              checked={isTruthyEnv(draft.MAIL_ENABLED ?? "true")}
+              onChange={(on) => setField("MAIL_ENABLED", boolToEnv(on))}
+            />
+            <Field label="Режим" hint="MAIL_MODE">
+              <ThemeSelect
+                aria-label="Режим почты"
+                value={
+                  (draft.MAIL_MODE ?? "dry-run").toLowerCase() === "live"
+                    ? "live"
+                    : "dry-run"
+                }
+                onChange={(v) => setField("MAIL_MODE", v)}
+                options={[
+                  { value: "dry-run", label: "dry-run (безопасно)" },
+                  { value: "live", label: "live (SMTP queue)" },
+                ]}
+              />
+            </Field>
+            <Field label="Аккаунт" hint="MAIL_ACCOUNT">
+              <input
+                value={draft.MAIL_ACCOUNT ?? ""}
+                onChange={(e) => setField("MAIL_ACCOUNT", e.target.value)}
+                placeholder="you@example.com"
+              />
+            </Field>
+            <Field label="SMTP host" hint="MAIL_SMTP_HOST">
+              <input
+                value={draft.MAIL_SMTP_HOST ?? ""}
+                onChange={(e) => setField("MAIL_SMTP_HOST", e.target.value)}
+                placeholder="smtp.example.com"
+              />
+            </Field>
+            <Field label="IMAP host" hint="MAIL_IMAP_HOST">
+              <input
+                value={draft.MAIL_IMAP_HOST ?? ""}
+                onChange={(e) => setField("MAIL_IMAP_HOST", e.target.value)}
+                placeholder="imap.example.com"
+              />
+            </Field>
           </div>
         </>
       );
@@ -950,9 +1089,11 @@ export function SettingsIntegrationsSection() {
                 ? "Тест screen.capture"
                 : meta.id === "browser"
                   ? "Тест open URL"
-                  : meta.id === "messaging"
-                    ? "Тест send"
-                    : "Тест демо-сцены"}
+                  : meta.id === "mail"
+                    ? "Тест inbox"
+                    : meta.id === "messaging"
+                      ? "Тест send"
+                      : "Тест демо-сцены"}
         </button>
         {extra}
         <button
