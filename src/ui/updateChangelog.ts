@@ -15,6 +15,20 @@ export type MiraChangelogEntry = {
 
 export const MIRA_CHANGELOG: MiraChangelogEntry[] = [
   {
+    version: "0.1.18",
+    date: "14.11.2026",
+    summary:
+      "Apple-темы с Liquid Glass и SF Pro; черновики каталога; Workshop HUD; запуск из Путей.",
+    bullets: [
+      "Настройки → Apple: светлая/тёмная тема, Liquid Glass, жирный шрифт",
+      "San Francisco (SF Pro Text/Display) только в Apple-темах",
+      "Черновики под сетками Скиллов, Протоколов, Путей и Команд",
+      "Workshop HUD: виджеты, таймер, секундомер, напоминания",
+      "«Запустить»: выбор приложений из библиотеки Путей",
+      "Memory hub и Create справа от сортировки в каталоге",
+    ],
+  },
+  {
     version: "0.1.17",
     date: "14.11.2026",
     summary:
