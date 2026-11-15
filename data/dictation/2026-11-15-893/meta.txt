@@ -1,8 +1,0 @@
-session_id: 2026-11-15-893
-created_at: 2026-11-15T13:22:55.239Z
-status: draft
-source: dictation
-current_version: 1
-locked_source: true
-read_position: paragraph-0
-note_id: 
