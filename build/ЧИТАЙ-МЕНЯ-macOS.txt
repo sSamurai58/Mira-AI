@@ -58,3 +58,17 @@ Mira на macOS — куда смотреть после установки
 Почему так: пока нет Apple Developer ID / notarization. Когда подпись
 подключат, это окно исчезнет. Сборка при этом нормальная — блокирует macOS,
 а не «сломанный» файл.
+
+Подпись / нотаризация (для релиза без Gatekeeper)
+-------------------------------------------------
+Нужны секреты на машине сборки / в CI:
+  CSC_LINK + CSC_KEY_PASSWORD  (Developer ID Application .p12)
+  APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID  (notarize)
+В electron-builder.yml сейчас identity: null — без сертификата подписать нельзя.
+Без них остаётся способ A/B/C выше.
+
+Метрики «Ресурсы» на Mac
+------------------------
+ОЗУ считается через vm_stat (как Activity Monitor: free+inactive+purgeable),
+а не через os.freemem() — иначе кольцо почти всегда «100%».
+GPU/VRAM — через IOKit (IOAccelerator); на Apple Silicon VRAM = unified memory.

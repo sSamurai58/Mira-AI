@@ -1299,7 +1299,7 @@ export function ChatPage({
                 <CoreOrb
                   level={coreLevel}
                   voiceState={voiceState}
-                  size={440}
+                  size={typeof window !== "undefined" && window.devicePixelRatio >= 2 ? 360 : 420}
                   active={showHome}
                 />
                 <div

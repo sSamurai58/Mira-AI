@@ -262,6 +262,10 @@ if (process.platform === "win32") {
 if (process.env.MIRA_DISABLE_GPU === "1") {
   app.disableHardwareAcceleration();
 }
+// Prefer GPU raster on macOS (Retina + WebGL orb); keeps UI off the CPU path.
+if (process.platform === "darwin") {
+  app.commandLine.appendSwitch("enable-gpu-rasterization");
+}
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
@@ -360,6 +364,9 @@ function createWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      // Pause timers/rAF when minimized — critical for macOS battery + fan noise.
+      backgroundThrottling: true,
+      spellcheck: false,
     },
   });
 
@@ -529,11 +536,14 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
     console.error("[mira] notify/tray init failed", err);
   }
 
-  try {
-    warmSystemMetrics();
-  } catch (err) {
-    console.error("[mira] system metrics warm failed", err);
-  }
+  // Defer CPU baseline so first paint isn't blocked by /proc or vm_stat.
+  setTimeout(() => {
+    try {
+      warmSystemMetrics();
+    } catch (err) {
+      console.error("[mira] system metrics warm failed", err);
+    }
+  }, 800);
 
   const on = (
     channel: string,

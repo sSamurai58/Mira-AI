@@ -13,7 +13,9 @@ import type { VoiceState } from "../voiceState";
 
 /** ~1 hour at 60s cadence after a short warm-up burst. */
 const SAMPLE_COUNT = 60;
-const POLL_MS = 2500;
+/** Live rings: keep IPC/vm_stat light on macOS Retina + fans. */
+const POLL_MS = 4_000;
+const POLL_HIDDEN_MS = 20_000;
 const SERIES_STEP_MS = 60_000;
 
 type LoadPoint = {
@@ -67,7 +69,16 @@ export function HomeRail({
             tone="success"
             unavailable={load.vramPct == null}
           />
-          <Ring value={load.ram} label="ОЗУ" tone="warning" />
+          <Ring
+            value={load.ram}
+            label="ОЗУ"
+            sub={
+              load.ramUsedGb != null && load.ramTotalGb != null
+                ? `${fmtGb(load.ramUsedGb)}/${fmtGb(load.ramTotalGb)} ГБ`
+                : undefined
+            }
+            tone="warning"
+          />
         </div>
         <p className="mono tiny muted" style={{ margin: "12px 0 0" }}>
           модель · {modelLabel}
@@ -137,10 +148,16 @@ function formatPct(v: number | null | undefined): string {
   return `${Math.round(v)}%`;
 }
 
+function fmtGb(v: number): string {
+  return v.toFixed(1).replace(".", ",");
+}
+
 function useLiveLoad(_voiceState: VoiceState) {
   const [series, setSeries] = useState<LoadPoint[]>([]);
   const [gpu, setGpu] = useState<number | null>(null);
   const [ram, setRam] = useState(0);
+  const [ramUsedGb, setRamUsedGb] = useState<number | null>(null);
+  const [ramTotalGb, setRamTotalGb] = useState<number | null>(null);
   const [vramGb, setVramGb] = useState<number | null>(null);
   const [vramTotalGb, setVramTotalGb] = useState<number | null>(null);
   const [clock, setClock] = useState(() => formatClock());
@@ -151,6 +168,7 @@ function useLiveLoad(_voiceState: VoiceState) {
   useEffect(() => {
     let cancelled = false;
     let frame = 0;
+    let timer: number | null = null;
 
     const pushSample = (point: LoadPoint, force = false) => {
       setSeries((prev) => {
@@ -171,6 +189,8 @@ function useLiveLoad(_voiceState: VoiceState) {
       sample: {
         cpu: number;
         ram: number;
+        ramUsedGb?: number;
+        ramTotalGb?: number;
         gpu: number | null;
         vramUsedGb: number | null;
         vramTotalGb: number | null;
@@ -182,6 +202,16 @@ function useLiveLoad(_voiceState: VoiceState) {
       const t = sample.ts ?? Date.now();
       setSource(via);
       setRam(sample.ram);
+      setRamUsedGb(
+        sample.ramUsedGb != null && Number.isFinite(sample.ramUsedGb)
+          ? sample.ramUsedGb
+          : null,
+      );
+      setRamTotalGb(
+        sample.ramTotalGb != null && Number.isFinite(sample.ramTotalGb)
+          ? sample.ramTotalGb
+          : null,
+      );
       setGpu(sample.gpu);
       setVramGb(sample.vramUsedGb);
       setVramTotalGb(sample.vramTotalGb);
@@ -216,14 +246,28 @@ function useLiveLoad(_voiceState: VoiceState) {
       if (frame % 2 === 0) setClock(formatClock());
     };
 
+    const schedule = () => {
+      if (timer != null) window.clearInterval(timer);
+      const ms =
+        document.visibilityState === "hidden" ? POLL_HIDDEN_MS : POLL_MS;
+      timer = window.setInterval(() => {
+        void tick();
+      }, ms);
+    };
+
+    const onVis = () => {
+      schedule();
+      if (document.visibilityState === "visible") void tick();
+    };
+
     void tick();
-    const id = window.setInterval(() => {
-      void tick();
-    }, POLL_MS);
+    schedule();
+    document.addEventListener("visibilitychange", onVis);
 
     return () => {
       cancelled = true;
-      window.clearInterval(id);
+      if (timer != null) window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVis);
     };
   }, []);
 
@@ -236,6 +280,8 @@ function useLiveLoad(_voiceState: VoiceState) {
     series,
     gpu,
     ram,
+    ramUsedGb,
+    ramTotalGb,
     vramGb,
     vramPct,
     clock,
@@ -345,11 +391,7 @@ function Ring({
           className="ring-value"
           fill="var(--text)"
         >
-          {unavailable || value == null
-            ? "н/д"
-            : sub
-              ? `${value}`
-              : `${value}%`}
+          {unavailable || value == null ? "н/д" : `${Math.round(value)}%`}
         </text>
       </svg>
       <span className="mono tiny">{label}</span>

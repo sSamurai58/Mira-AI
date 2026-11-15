@@ -188,11 +188,14 @@ export function createCoreWebgl(
     palette: CorePalette;
   },
 ): CoreHandle | null {
+  // "default" avoids pinning discrete GPU on dual-GPU MacBooks / Windows
+  // laptops — high-performance caused fans + lag with a decorative orb.
   const glMaybe = canvas.getContext("webgl2", {
     alpha: true,
     antialias: false,
     premultipliedAlpha: true,
-    powerPreference: "high-performance",
+    powerPreference: "default",
+    desynchronized: true,
   });
   if (!glMaybe) return null;
   const gl: WebGL2RenderingContext = glMaybe;
@@ -224,7 +227,14 @@ export function createCoreWebgl(
   let time = 0;
   let prev = performance.now();
   let frameSkip = 0;
-  let PR = Math.min(window.devicePixelRatio || 1, 2);
+  /** Retina 2× FBOs × bloom = heavy; cap pixels for a decorative orb. */
+  const maxDpr = () => {
+    const dpr = window.devicePixelRatio || 1;
+    if (dpr >= 2) return 1.25;
+    if (dpr > 1.5) return 1.5;
+    return Math.min(dpr, 1.5);
+  };
+  let PR = maxDpr();
   let W = 1;
   let H = 1;
   let fs: Fbo;
@@ -335,7 +345,7 @@ export function createCoreWebgl(
   }
 
   function resize() {
-    PR = Math.min(window.devicePixelRatio || 1, 2);
+    PR = maxDpr();
     const cw = Math.max(1, Math.floor(canvas.clientWidth * PR));
     const ch = Math.max(1, Math.floor(canvas.clientHeight * PR));
     if (canvas.width !== cw || canvas.height !== ch) {
@@ -350,10 +360,11 @@ export function createCoreWebgl(
     disposeFbo(fc1);
     disposeFbo(fc2);
     fs = makeFbo(W, H);
-    fb1 = makeFbo(W >> 2, H >> 2);
-    fb2 = makeFbo(W >> 2, H >> 2);
-    fc1 = makeFbo(W >> 3, H >> 3);
-    fc2 = makeFbo(W >> 3, H >> 3);
+    // Coarser bloom buffers = fewer fill-rate hits on integrated GPUs.
+    fb1 = makeFbo(Math.max(1, W >> 3), Math.max(1, H >> 3));
+    fb2 = makeFbo(Math.max(1, W >> 3), Math.max(1, H >> 3));
+    fc1 = makeFbo(Math.max(1, W >> 4), Math.max(1, H >> 4));
+    fc2 = makeFbo(Math.max(1, W >> 4), Math.max(1, H >> 4));
   }
 
   function pass(
@@ -391,8 +402,8 @@ export function createCoreWebgl(
     }
     raf = requestAnimationFrame(frame);
 
-    // Throttle: drop every other frame when reduced-motion or low DPR budget.
-    const lodThrottle = reduced || PR <= 1;
+    // Throttle: idle / reduced-motion / HiDPI → ~30fps; keep voice states smoother.
+    const lodThrottle = reduced || voice === "idle" || PR > 1.01;
     if (lodThrottle) {
       frameSkip = (frameSkip + 1) % 2;
       if (frameSkip === 1) {
@@ -517,14 +528,21 @@ export function createCoreWebgl(
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     };
 
+    // Idle: 4 blur passes; active voice: full 8 (still on tiny FBOs).
     blur(fs, fb1, 1, 0, 0.32);
     blur(fb1, fb2, 0, 1, 0);
     blur(fb2, fb1, 1, 0, 0);
     blur(fb1, fb2, 0, 1, 0);
-    blur(fb2, fc1, 1, 0, 0);
-    blur(fc1, fc2, 0, 1, 0);
-    blur(fc2, fc1, 1, 0, 0);
-    blur(fc1, fc2, 0, 1, 0);
+    if (voice !== "idle" && !reduced) {
+      blur(fb2, fc1, 1, 0, 0);
+      blur(fc1, fc2, 0, 1, 0);
+      blur(fc2, fc1, 1, 0, 0);
+      blur(fc1, fc2, 0, 1, 0);
+    } else {
+      // Keep fc2 defined for composite; reuse fb2 as soft bloom.
+      blur(fb2, fc1, 1, 0, 0);
+      blur(fc1, fc2, 0, 1, 0);
+    }
 
     // Composite to canvas (transparent around core).
     pass(pC, null, W, H);
