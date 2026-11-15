@@ -125,7 +125,20 @@ export function handleWindowClose(win: BrowserWindow): boolean {
   quittingToTray = true;
   ensureTray();
   win.hide();
+  // macOS: keep a Dock presence so users can restore without hunting the tray.
+  if (process.platform === "darwin") {
+    try {
+      app.dock?.show();
+    } catch {
+      /* ignore */
+    }
+  }
   return false;
+}
+
+/** Restore main window (Dock / tray / second-instance). */
+export function showMainWindow(): void {
+  showMain();
 }
 
 export function applyLoginItem(prefsStartWithOs: boolean): void {

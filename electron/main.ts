@@ -262,6 +262,10 @@ if (process.platform === "win32") {
 if (process.env.MIRA_DISABLE_GPU === "1") {
   app.disableHardwareAcceleration();
 }
+// Prefer GPU raster on macOS (Retina + WebGL orb); keeps UI off the CPU path.
+if (process.platform === "darwin") {
+  app.commandLine.appendSwitch("enable-gpu-rasterization");
+}
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
@@ -360,6 +364,9 @@ function createWindow(): BrowserWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      // Pause timers/rAF when minimized — critical for macOS battery + fan noise.
+      backgroundThrottling: true,
+      spellcheck: false,
     },
   });
 
@@ -462,6 +469,26 @@ function createWindow(): BrowserWindow {
     });
   });
 
+  // Tab switches (WebGL teardown + heavy glass panels) can kill the renderer on
+  // macOS Metal — window stays hidden/blank while the process lives in tray.
+  win.webContents.on("render-process-gone", (_e, details) => {
+    console.error("[mira] renderer gone", details.reason, details.exitCode);
+    if (win.isDestroyed()) return;
+    const reload = () => {
+      if (win.isDestroyed()) return;
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+      void win.webContents.reloadIgnoringCache();
+    };
+    if (details.reason === "clean-exit") return;
+    setTimeout(reload, 250);
+  });
+
+  win.on("unresponsive", () => {
+    console.warn("[mira] renderer unresponsive");
+  });
+
   if (isDev) {
     void win.loadURL(process.env.MIRA_DEV_URL ?? "http://127.0.0.1:5173");
   } else {
@@ -529,11 +556,14 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
     console.error("[mira] notify/tray init failed", err);
   }
 
-  try {
-    warmSystemMetrics();
-  } catch (err) {
-    console.error("[mira] system metrics warm failed", err);
-  }
+  // Defer CPU baseline so first paint isn't blocked by /proc or vm_stat.
+  setTimeout(() => {
+    try {
+      warmSystemMetrics();
+    } catch (err) {
+      console.error("[mira] system metrics warm failed", err);
+    }
+  }, 800);
 
   const on = (
     channel: string,
@@ -1723,7 +1753,16 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
   app.on("activate", () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getMainBrowserWindow } = require("./windowRoles") as typeof import("./windowRoles");
-    if (!getMainBrowserWindow()) createWindow();
+    const win = getMainBrowserWindow();
+    if (!win) {
+      createWindow();
+      return;
+    }
+    // macOS Dock click: hidden-to-tray windows still exist — must show(), not
+    // only recreate. Otherwise Mira looks "stuck in background work".
+    if (win.isMinimized()) win.restore();
+    if (!win.isVisible()) win.show();
+    win.focus();
   });
 });
 

@@ -187,8 +187,17 @@ export function App() {
   const [nav, setNavState] = useState<RootNav>(() =>
     navFromHash(typeof window !== "undefined" ? window.location.hash : ""),
   );
+  /** Last home/chat panel — frozen while other tabs are open so WebGL stays alive. */
+  const [chatPanel, setChatPanel] = useState<"home" | "dialog">(() => {
+    const initial = navFromHash(
+      typeof window !== "undefined" ? window.location.hash : "",
+    );
+    return initial === "chat" ? "dialog" : "home";
+  });
   const setNav = useCallback((id: RootNav) => {
     setNavState(id);
+    if (id === "home") setChatPanel("home");
+    else if (id === "chat") setChatPanel("dialog");
     const next = hashForNav(id);
     if (window.location.hash !== next) {
       window.location.hash = next;
@@ -268,7 +277,10 @@ export function App() {
 
   useEffect(() => {
     function onHash() {
-      setNavState(navFromHash(window.location.hash));
+      const next = navFromHash(window.location.hash);
+      setNavState(next);
+      if (next === "home") setChatPanel("home");
+      else if (next === "chat") setChatPanel("dialog");
     }
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
@@ -480,7 +492,7 @@ export function App() {
         </aside>
       </ErrorBoundary>
 
-      <ErrorBoundary fallbackTitle="Рабочая область Mira сбойнула">
+      <ErrorBoundary key={nav} fallbackTitle="Рабочая область Mira сбойнула">
         <div className="workspace">
           {errorMessage ? (
             <ErrorBanner
@@ -496,9 +508,19 @@ export function App() {
           ) : null}
 
           <div className="workspace-body">
-            {nav === "home" || nav === "chat" ? (
+            {/*
+              Keep Chat/Home mounted when switching tabs. Unmounting tears down
+              WebGL (Core orb) while other panels mount glass blurs — on macOS
+              Metal that often kills the renderer and leaves Mira "in background".
+            */}
+            <div
+              className="workspace-pane"
+              hidden={nav !== "home" && nav !== "chat"}
+              aria-hidden={nav !== "home" && nav !== "chat"}
+            >
               <ChatPage
-                panel={nav === "home" ? "home" : "dialog"}
+                panel={chatPanel}
+                surfaceActive={nav === "home" || nav === "chat"}
                 voiceState={voiceState}
                 sessionId={sessionId}
                 onSessionChange={handleSessionChange}
@@ -508,7 +530,7 @@ export function App() {
                 coreLevel={coreLevel}
                 coreProgressPct={levelPct}
               />
-            ) : null}
+            </div>
             {nav === "memory" ? (
               <MemoryPage
                 onOpenSession={(id) => {
@@ -519,7 +541,8 @@ export function App() {
             ) : null}
             {nav === "workshop" ? <WorkshopPage /> : null}
             {nav === "translate" ? <TranslatePage /> : null}
-            {nav === "settings" ? (              <SettingsPage
+            {nav === "settings" ? (
+              <SettingsPage
                 themeId={themeId}
                 onThemeChange={setThemeId}
                 bgPatternId={bgPatternId}

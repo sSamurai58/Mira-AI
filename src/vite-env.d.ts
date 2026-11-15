@@ -306,7 +306,13 @@ type MiraSystemLoad = {
   gpu: number | null;
   vramUsedGb: number | null;
   vramTotalGb: number | null;
-  gpuSource: "nvidia-smi" | "windows-counter" | "drm" | "none";
+  gpuSource:
+    | "nvidia-smi"
+    | "windows-counter"
+    | "drm"
+    | "macos-ioreg"
+    | "none";
+  ramSource: "os-freemem" | "macos-vm-stat" | "linux-meminfo";
   ts: number;
 };
 

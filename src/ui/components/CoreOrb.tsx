@@ -48,49 +48,60 @@ export function CoreOrb({
     const wrap = wrapRef.current;
     if (!canvas || !wrap) return;
 
-    const palette = paletteFromElement(wrap);
-    const handle = createCoreWebgl(canvas, {
-      level: lv,
-      voice: toCoreVoice(voiceState),
-      palette,
-    });
-    if (!handle) {
-      setUseFallback(true);
-      return;
-    }
-    handleRef.current = handle;
-    setUseFallback(false);
+    let cancelled = false;
+    let mo: MutationObserver | null = null;
+    let ro: ResizeObserver | null = null;
+    let handle: CoreHandle | null = null;
+    let syncPalette: (() => void) | null = null;
 
-    const syncPalette = () => {
-      handleRef.current?.setPalette(paletteFromElement(wrap));
-    };
-    // Theme changes: CSS vars on <html>, plus explicit mira:theme event
-    const mo = new MutationObserver(syncPalette);
-    mo.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["data-theme", "class", "style"],
-    });
-    window.addEventListener(MIRA_THEME_EVENT, syncPalette);
-
-    const ro = new ResizeObserver(() => handle.resize());
-    ro.observe(wrap);
-
-    // Keep the canvas sized when the Home tab becomes visible again
-    // (rAF may throttle while hidden; a zero-size frame looks frozen).
     const onVisible = () => {
-      if (document.visibilityState === "visible") handle.resize();
+      if (document.visibilityState === "visible") handle?.resize();
     };
-    document.addEventListener("visibilitychange", onVisible);
-    // First layout pass after mount (clientWidth can be 0 in the same tick).
-    requestAnimationFrame(() => handle.resize());
+
+    // Defer WebGL until after first paint — Home chrome loads without waiting on shaders/FBOs.
+    const boot = window.setTimeout(() => {
+      if (cancelled) return;
+      const palette = paletteFromElement(wrap);
+      handle = createCoreWebgl(canvas, {
+        level: lv,
+        voice: toCoreVoice(voiceState),
+        palette,
+      });
+      if (!handle) {
+        setUseFallback(true);
+        return;
+      }
+      handleRef.current = handle;
+      setUseFallback(false);
+      handle.setActive(active);
+
+      syncPalette = () => {
+        handleRef.current?.setPalette(paletteFromElement(wrap));
+      };
+      mo = new MutationObserver(syncPalette);
+      mo.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ["data-theme", "class", "style"],
+      });
+      window.addEventListener(MIRA_THEME_EVENT, syncPalette);
+
+      ro = new ResizeObserver(() => handle?.resize());
+      ro.observe(wrap);
+      document.addEventListener("visibilitychange", onVisible);
+      requestAnimationFrame(() => handle?.resize());
+    }, 50);
 
     return () => {
-      mo.disconnect();
-      window.removeEventListener(MIRA_THEME_EVENT, syncPalette);
+      cancelled = true;
+      window.clearTimeout(boot);
+      mo?.disconnect();
+      if (syncPalette) {
+        window.removeEventListener(MIRA_THEME_EVENT, syncPalette);
+      }
       document.removeEventListener("visibilitychange", onVisible);
-      ro.disconnect();
-      handle.destroy();
-      handleRef.current = null;
+      ro?.disconnect();
+      handle?.destroy();
+      if (handleRef.current === handle) handleRef.current = null;
     };
   }, []);
 

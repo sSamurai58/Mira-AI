@@ -75,6 +75,11 @@ import type { VoiceState } from "../voiceState";
 type ChatPageProps = {
   /** home = ядро; dialog = чат на отдельной вкладке */
   panel?: "home" | "dialog";
+  /**
+   * False while another root tab is shown (ChatPage stays mounted).
+   * Pauses WebGL / heavy home chrome without tearing the GL context down.
+   */
+  surfaceActive?: boolean;
   voiceState: VoiceState;
   sessionId: string | null;
   onSessionChange: (sessionId: string) => void;
@@ -106,6 +111,7 @@ function isNearBottom(el: HTMLElement, threshold = NEAR_BOTTOM_PX): boolean {
 
 export function ChatPage({
   panel = "dialog",
+  surfaceActive = true,
   voiceState,
   sessionId,
   onSessionChange,
@@ -1259,6 +1265,7 @@ export function ChatPage({
 
   const showHome = panel === "home";
   const levelPctClamped = Math.min(100, Math.max(0, coreProgressPct));
+  const orbActive = showHome && surfaceActive;
 
   return (
     <div className={`home-grid ${showDialog ? "is-dialog-tab" : "is-home-tab"}`}>
@@ -1299,8 +1306,8 @@ export function ChatPage({
                 <CoreOrb
                   level={coreLevel}
                   voiceState={voiceState}
-                  size={440}
-                  active={showHome}
+                  size={typeof window !== "undefined" && window.devicePixelRatio >= 2 ? 360 : 420}
+                  active={orbActive}
                 />
                 <div
                   className="core-level-controls"
@@ -1738,7 +1745,7 @@ export function ChatPage({
         ) : null}
       </div>
 
-      {showHome ? (
+      {showHome && surfaceActive ? (
         <HomeRail
           modelLabel={modelLabel}
           voiceNote={

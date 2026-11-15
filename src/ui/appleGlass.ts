@@ -85,55 +85,56 @@ export function applyAppleAppearanceToDom(
     id === "apple-dark" || (id !== "apple-light" && prefs.mode === "dark");
   const levels = isDark
     ? {
+        // Cap blur — 40–56px on every panel freezes Metal when switching tabs.
         solid: {
           bg: "rgba(38, 38, 40, 0.82)",
-          blur: "20px",
+          blur: "16px",
           saturate: "160%",
           border: "rgba(255, 255, 255, 0.14)",
           highlight: "rgba(255, 255, 255, 0.2)",
           fill: "rgba(44, 44, 46, 0.88)",
         },
         regular: {
-          bg: "rgba(44, 44, 46, 0.48)",
-          blur: "40px",
-          saturate: "190%",
+          bg: "rgba(44, 44, 46, 0.55)",
+          blur: "22px",
+          saturate: "180%",
           border: "rgba(255, 255, 255, 0.22)",
           highlight: "rgba(255, 255, 255, 0.34)",
-          fill: "rgba(58, 58, 60, 0.55)",
+          fill: "rgba(58, 58, 60, 0.62)",
         },
         clear: {
-          bg: "rgba(60, 60, 67, 0.28)",
-          blur: "56px",
-          saturate: "220%",
+          bg: "rgba(60, 60, 67, 0.38)",
+          blur: "28px",
+          saturate: "200%",
           border: "rgba(255, 255, 255, 0.28)",
           highlight: "rgba(255, 255, 255, 0.42)",
-          fill: "rgba(72, 72, 74, 0.32)",
+          fill: "rgba(72, 72, 74, 0.42)",
         },
       }
     : {
         solid: {
           bg: "rgba(255, 255, 255, 0.86)",
-          blur: "18px",
+          blur: "14px",
           saturate: "150%",
           border: "rgba(0, 0, 0, 0.08)",
           highlight: "rgba(255, 255, 255, 0.95)",
           fill: "rgba(255, 255, 255, 0.92)",
         },
         regular: {
-          bg: "rgba(255, 255, 255, 0.55)",
-          blur: "36px",
-          saturate: "180%",
+          bg: "rgba(255, 255, 255, 0.62)",
+          blur: "20px",
+          saturate: "170%",
           border: "rgba(0, 0, 0, 0.1)",
           highlight: "rgba(255, 255, 255, 0.9)",
-          fill: "rgba(255, 255, 255, 0.62)",
+          fill: "rgba(255, 255, 255, 0.68)",
         },
         clear: {
-          bg: "rgba(255, 255, 255, 0.32)",
-          blur: "52px",
-          saturate: "210%",
+          bg: "rgba(255, 255, 255, 0.42)",
+          blur: "26px",
+          saturate: "190%",
           border: "rgba(0, 0, 0, 0.12)",
           highlight: "rgba(255, 255, 255, 0.98)",
-          fill: "rgba(255, 255, 255, 0.38)",
+          fill: "rgba(255, 255, 255, 0.48)",
         },
       };
 
