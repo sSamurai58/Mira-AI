@@ -15,6 +15,15 @@ export type MiraChangelogEntry = {
 
 export const MIRA_CHANGELOG: MiraChangelogEntry[] = [
   {
+    version: "0.1.30",
+    date: "15.11.2026",
+    summary: "Одно окно Update HUD при скачивании обновления.",
+    bullets: [
+      "Убраны дубли тоста «MIRA · UPDATE» (гонка ensureWindow на download-progress)",
+      "Сиротские always-on-top окна закрываются; in-app toast не дублирует overlay",
+    ],
+  },
+  {
     version: "0.1.29",
     date: "15.11.2026",
     summary: "Голосовой пайплайн: диктовка на диск, PTT, VAD, вычитка, бэкап.",
