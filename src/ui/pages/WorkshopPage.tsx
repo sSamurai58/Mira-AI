@@ -31,16 +31,18 @@ const SEGMENTS = [
   { id: "paths", label: "Пути", phase: "P12" },
   { id: "commands", label: "Кастомные команды", phase: "P12" },
   { id: "hud", label: "HUD", phase: "F3" },
+  { id: "voice-studio", label: "Студия голоса", phase: "P9" },
   { id: "voices", label: "Голоса", phase: "P9" },
   { id: "library", label: "Обучение", phase: "P8" },
   { id: "notes", label: "Заметки/файлы", phase: "F2/F5" },
   { id: "terminal", label: "Терминал", phase: "P7" },
 ] as const;
 
+type WorkshopSegment = (typeof SEGMENTS)[number]["id"];
+
 export function WorkshopPage() {
   const confirm = useAppConfirm();
-  const [segment, setSegment] =
-    useState<(typeof SEGMENTS)[number]["id"]>("skills");
+  const [segment, setSegment] = useState<WorkshopSegment>("skills");
   const [voices, setVoices] = useState<VoiceInfo[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [focusVoiceProjectId, setFocusVoiceProjectId] = useState<string | null>(
@@ -89,7 +91,8 @@ export function WorkshopPage() {
     if (!voice.custom) return;
     const projectId = voice.projectId;
     if (projectId) setFocusVoiceProjectId(projectId);
-    setVoiceNote(`Настройка «${voice.name}» — панель студии выше`);
+    setSegment("voice-studio");
+    setVoiceNote(`Открыта студия для «${voice.name}»`);
   }
 
   async function removeVoice(voice: VoiceInfo) {
@@ -146,15 +149,18 @@ export function WorkshopPage() {
         {segment === "skills" ? <SkillsPanel /> : null}
         {segment === "protocols" ? <ProtocolsPanel /> : null}
 
+        {segment === "voice-studio" ? (
+          <VoiceStudioPanel
+            focusProjectId={focusVoiceProjectId}
+            onCatalogChanged={() => {
+              void refreshVoices();
+              notifyCoreProgress();
+            }}
+          />
+        ) : null}
+
         {segment === "voices" ? (
           <div className="stack">
-            <VoiceStudioPanel
-              focusProjectId={focusVoiceProjectId}
-              onCatalogChanged={() => {
-                void refreshVoices();
-                notifyCoreProgress();
-              }}
-            />
             <div className="panel stack">
               <div className="row">
                 <h2 style={{ margin: 0, fontSize: "1.05rem" }}>
@@ -163,8 +169,8 @@ export function WorkshopPage() {
                 <StubBadge label="P2/P9 #11" />
               </div>
               <p className="muted" style={{ margin: 0 }}>
-                Свои модели — настройка и удаление. Системные — превью / выбор /
-                скрыть из списка.
+                Свои модели — настройка (откроет раздел «Студия голоса») и
+                удаление. Системные — превью / выбор / скрыть из списка.
               </p>
               {voiceNote ? (
                 <p className="muted" style={{ margin: 0 }}>
