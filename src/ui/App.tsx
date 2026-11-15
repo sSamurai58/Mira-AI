@@ -577,8 +577,14 @@ export function App() {
         />
       </ErrorBoundary>
 
-      {/* Electron: toast lives in always-on-top #/update-hud window. */}
-      {typeof window !== "undefined" && !window.mira ? (
+      {/*
+        Electron: toast lives ONLY in always-on-top #/update-hud window.
+        Never mount a second in-app copy when preload is present — that
+        duplicated «MIRA · UPDATE» during download (one in Mira, one floating).
+      */}
+      {typeof window !== "undefined" &&
+      !window.mira &&
+      !isUpdateHud ? (
         <UpdateHudToast />
       ) : null}
 

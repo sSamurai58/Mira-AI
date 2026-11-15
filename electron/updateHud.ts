@@ -12,6 +12,8 @@ import {
 import type { UpdateStatus } from "./updater";
 
 let updateHudWindow: BrowserWindow | null = null;
+/** Deduplicate concurrent ensureWindow() during download progress floods. */
+let ensureWindowInflight: Promise<BrowserWindow | null> | null = null;
 /** Session dismiss for a channel+version so sync does not immediately re-show. */
 let dismissedKey: string | null = null;
 
@@ -98,6 +100,25 @@ function placeWindow(win: BrowserWindow, position: NotifyPosition): void {
   win.setBounds({ x, y, width: WIDTH, height: HEIGHT });
 }
 
+function closeOrphanUpdateWindows(keep?: BrowserWindow | null): void {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { BrowserWindow } = require("electron") as typeof import("electron");
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (keep && w === keep) continue;
+      if (w.isDestroyed()) continue;
+      if (w.getTitle() !== "Mira Update") continue;
+      try {
+        w.close();
+      } catch {
+        /* ignore */
+      }
+    }
+  } catch {
+    /* non-electron */
+  }
+}
+
 async function ensureWindow(opts?: {
   isDev?: boolean;
 }): Promise<BrowserWindow | null> {
@@ -106,68 +127,85 @@ async function ensureWindow(opts?: {
   if (updateHudWindow && !updateHudWindow.isDestroyed()) {
     return updateHudWindow;
   }
+  if (ensureWindowInflight) return ensureWindowInflight;
 
-  const { BrowserWindow } = await import("electron");
-  const prefs = loadNotifyPrefs();
-  const { x, y } = cornerOrigin(anchorRect(), prefs.position);
+  ensureWindowInflight = (async () => {
+    // Re-check after awaiting the lock — another caller may have finished.
+    if (updateHudWindow && !updateHudWindow.isDestroyed()) {
+      return updateHudWindow;
+    }
 
-  const win = new BrowserWindow({
-    width: WIDTH,
-    height: HEIGHT,
-    x,
-    y,
-    frame: false,
-    transparent: true,
-    resizable: false,
-    maximizable: false,
-    minimizable: false,
-    fullscreenable: false,
-    skipTaskbar: true,
-    alwaysOnTop: true,
-    hasShadow: false,
-    focusable: true,
-    show: false,
-    backgroundColor: "#00000000",
-    title: "Mira Update",
-    webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
-    },
-  });
+    const { BrowserWindow } = await import("electron");
+    // Kill any leftover HUD from a prior race (download % floods syncUpdateHud).
+    closeOrphanUpdateWindows(null);
+
+    const prefs = loadNotifyPrefs();
+    const { x, y } = cornerOrigin(anchorRect(), prefs.position);
+
+    const win = new BrowserWindow({
+      width: WIDTH,
+      height: HEIGHT,
+      x,
+      y,
+      frame: false,
+      transparent: true,
+      resizable: false,
+      maximizable: false,
+      minimizable: false,
+      fullscreenable: false,
+      skipTaskbar: true,
+      alwaysOnTop: true,
+      hasShadow: false,
+      focusable: true,
+      show: false,
+      backgroundColor: "#00000000",
+      title: "Mira Update",
+      webPreferences: {
+        preload: path.join(__dirname, "preload.js"),
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: false,
+      },
+    });
+
+    try {
+      // Highest practical level so the toast stays above other apps.
+      win.setAlwaysOnTop(true, "screen-saver");
+      win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    } catch {
+      try {
+        win.setAlwaysOnTop(true, "floating");
+      } catch {
+        /* platforms differ */
+      }
+    }
+
+    placeWindow(win, prefs.position);
+    updateHudWindow = win;
+
+    const isDev = opts?.isDev ?? process.env.MIRA_DEV === "1";
+    if (isDev) {
+      void win.loadURL(
+        `${process.env.MIRA_DEV_URL ?? "http://127.0.0.1:5173"}#/update-hud`,
+      );
+    } else {
+      void win.loadFile(path.join(__dirname, "..", "dist", "index.html"), {
+        hash: "/update-hud",
+      });
+    }
+
+    win.on("closed", () => {
+      if (updateHudWindow === win) updateHudWindow = null;
+    });
+
+    return win;
+  })();
 
   try {
-    // Highest practical level so the toast stays above other apps.
-    win.setAlwaysOnTop(true, "screen-saver");
-    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  } catch {
-    try {
-      win.setAlwaysOnTop(true, "floating");
-    } catch {
-      /* platforms differ */
-    }
+    return await ensureWindowInflight;
+  } finally {
+    ensureWindowInflight = null;
   }
-
-  placeWindow(win, prefs.position);
-  updateHudWindow = win;
-
-  const isDev = opts?.isDev ?? process.env.MIRA_DEV === "1";
-  if (isDev) {
-    void win.loadURL(
-      `${process.env.MIRA_DEV_URL ?? "http://127.0.0.1:5173"}#/update-hud`,
-    );
-  } else {
-    void win.loadFile(path.join(__dirname, "..", "dist", "index.html"), {
-      hash: "/update-hud",
-    });
-  }
-
-  win.on("closed", () => {
-    updateHudWindow = null;
-  });
-
-  return win;
 }
 
 /** Show / hide / reposition the update toast for the latest updater status. */
