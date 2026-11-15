@@ -379,6 +379,7 @@ contextBridge.exposeInMainWorld("mira", {
     voiceId?: string;
     modelId?: string;
     stream?: boolean;
+    styleInstruction?: string;
     voiceSettings?: {
       stability?: number;
       similarityBoost?: number;
@@ -506,6 +507,17 @@ contextBridge.exposeInMainWorld("mira", {
     tags?: string;
     sessionId?: string | null;
   }) => call("mira:upsert-note", payload),
+  deleteNote: (id: string) => call("mira:delete-note", id),
+  saveDictationSession: (session: unknown) =>
+    call("mira:dictation-save", session),
+  loadDictationSession: (sessionId: string) =>
+    call("mira:dictation-load", sessionId),
+  listDictationSessions: () => call("mira:dictation-list"),
+  exportDictationBackup: () => call("mira:dictation-backup-export"),
+  restoreDictationBackup: (packagePath: string) =>
+    call("mira:dictation-backup-restore", packagePath),
+  verifyDictationBackup: (packagePath: string) =>
+    call("mira:dictation-backup-verify", packagePath),
   listCalendarEvents: () => call("mira:list-calendar-events"),
   listUpcomingReminders: (horizonHours?: number) =>
     call("mira:list-upcoming-reminders", horizonHours),

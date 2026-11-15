@@ -46,7 +46,24 @@ async function main() {
   const { setVoiceStyleId, getVoiceStyleInstruction } = await import(
     "../src/ui/voice/voiceStyle"
   );
-  const { splitParagraphs } = await import("../src/ui/voice/dictationSession");
+  const { splitParagraphs, remapParagraphIndex, saveDictationVersion: saveVer } =
+    await import("../src/ui/voice/dictationSession");
+  const { proofreadLocal } = await import("../src/ui/voice/proofreadLocal");
+  const { upsertNameEntry, applyNameDictionary } = await import(
+    "../src/ui/voice/nameDictionary"
+  );
+  const { runInPhase, getPipelinePhase } = await import(
+    "../src/ui/voice/modelQueue"
+  );
+  const { vadPushLevel, vadAttachTranscript, listVadSegments, clearVadSegments } =
+    await import("../src/ui/voice/vadSegments");
+  const { setExternalPolicy, gateExternalTts, grantExternalOnce, gateExternalTtsWithGrant } =
+    await import("../src/ui/voice/externalPolicy");
+  const {
+    saveDictationToDisk,
+    exportDictationBackupPackage,
+    verifyDictationBackup,
+  } = await import("../electron/dictation/fsStore");
 
   // 1 modes + confirm
   setInteractionMode("command");
@@ -110,6 +127,80 @@ async function main() {
   setInteractionMode("command");
   const r2 = routeVoiceTranscript("режим диктовки");
   assert.equal(r2.handled, true);
+
+  // proofread + dictionary
+  const pr = proofreadLocal("Привет  привет мир мир.");
+  assert.ok(pr.issues.length >= 1);
+  upsertNameEntry("мираа", "Мира");
+  assert.match(applyNameDictionary("привет мираа").text, /Мира/i);
+
+  // remap
+  const mapped = remapParagraphIndex(
+    "Абзац один про котов.\n\nАбзац два про собак.",
+    "Абзац один про котов и чай.\n\nАбзац два про собак.\n\nНовый.",
+    1,
+  );
+  assert.equal(mapped, 1);
+
+  // VAD segments
+  clearVadSegments();
+  vadPushLevel(0.5, 1000);
+  vadPushLevel(0.5, 1100);
+  vadPushLevel(0.0, 2000);
+  vadAttachTranscript("раз два");
+  assert.ok(listVadSegments().length >= 1);
+
+  // external policy
+  setExternalPolicy({ blockExternal: true, confirmEachExternal: false });
+  assert.equal(gateExternalTts().allow, false);
+  setExternalPolicy({ blockExternal: false, confirmEachExternal: true });
+  assert.equal(gateExternalTts().allow, false);
+  grantExternalOnce();
+  assert.equal(gateExternalTtsWithGrant().allow, true);
+
+  // model queue ordering
+  const order: string[] = [];
+  await runInPhase("asr", async () => {
+    order.push("asr");
+  });
+  await runInPhase("llm", async () => {
+    order.push("llm");
+  });
+  await runInPhase("tts", async () => {
+    order.push("tts");
+  });
+  assert.deepEqual(order, ["asr", "llm", "tts"]);
+  assert.equal(getPipelinePhase(), "idle");
+
+  // disk dictation + backup verify
+  newDictationSession();
+  appendDictation("Тест бэкапа диктовки с именем Анна.");
+  saveVer("smoke-disk");
+  const disk = saveDictationToDisk({
+    meta: {
+      session_id: getDictationSession().sessionId,
+      created_at: getDictationSession().createdAt,
+      status: "draft",
+      source: "dictation",
+      current_version: getDictationSession().currentVersion,
+      locked_source: true,
+      read_position: "paragraph-0",
+    },
+    sourceDictation: getDictationSession().sourceDictation,
+    cleanedText: getDictationSession().cleanedText,
+    versions: getDictationSession().versions.map((v) => ({
+      number: v.number,
+      operation: v.operation,
+      body: v.body,
+      createdAt: v.createdAt,
+    })),
+    segments: getDictationSession().segments,
+  });
+  assert.equal(disk.ok, true);
+  const bak = exportDictationBackupPackage();
+  assert.equal(bak.ok, true);
+  const ver = verifyDictationBackup(bak.packagePath);
+  assert.equal(ver.ok, true);
 
   console.log("voice-pipeline-smoke: ok");
 }

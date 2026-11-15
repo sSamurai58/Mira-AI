@@ -8,12 +8,14 @@ import {
 import { synthesizeParametricBuffer } from "./parametricSynth";
 import { getActiveTtsEngine } from "./ttsEngines";
 import { normalizeForTts } from "./ttsNormalize";
+import { gateExternalTtsWithGrant } from "./externalPolicy";
 import { applyVoiceFx } from "./voiceFx";
 import { splitSpeakPhrases } from "./voicePhrases";
 import {
   getVoiceSettings,
   neuralProsodyFromSettings,
 } from "./voiceSettings";
+import { getVoiceStyleInstruction } from "./voiceStyle";
 
 
 export type SpeakHandlers = {
@@ -815,11 +817,29 @@ async function speakElevenLabs(
     return;
   }
 
+  const gate = gateExternalTtsWithGrant();
+  if (!gate.allow) {
+    if (gate.needsConfirm) {
+      // Auto-grant once after UI/voice confirm path; fall back to Web Speech now.
+      handlers.onStatus?.(gate.reason);
+      handlers.onError?.(gate.reason);
+      // Soft fallback so chat is not stuck; caller may re-request after confirm.
+      speakWebSpeech(clean, null, handlers, isCurrent);
+      return;
+    }
+    handlers.onStatus?.(gate.reason);
+    speakWebSpeech(clean, null, handlers, isCurrent);
+    return;
+  }
+
   handlers.onStatus?.("ElevenLabs: синтез…");
   let result: Awaited<ReturnType<NonNullable<typeof window.mira.synthesizeElevenLabs>>>;
   try {
     // Prefer validated MP3; main process falls back from /stream → convert.
-    result = await window.mira.synthesizeElevenLabs({ text: clean });
+    result = await window.mira.synthesizeElevenLabs({
+      text: clean,
+      styleInstruction: getVoiceStyleInstruction(),
+    });
   } catch (err) {
     if (!isCurrent()) return;
     handlers.onError?.(

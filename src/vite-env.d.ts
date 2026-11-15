@@ -914,6 +914,7 @@ interface MiraBridge {
     voiceId?: string;
     modelId?: string;
     stream?: boolean;
+    styleInstruction?: string;
     voiceSettings?: {
       stability?: number;
       similarityBoost?: number;
@@ -1233,6 +1234,30 @@ interface MiraBridge {
     session_id: string | null;
     created_at: string;
     updated_at: string;
+  }>;
+  deleteNote: (id: string) => Promise<{ ok: boolean }>;
+  saveDictationSession: (session: unknown) => Promise<{
+    ok: boolean;
+    dir: string;
+    detail: string;
+  }>;
+  loadDictationSession: (sessionId: string) => Promise<unknown | null>;
+  listDictationSessions: () => Promise<string[]>;
+  exportDictationBackup: () => Promise<{
+    ok: boolean;
+    packagePath: string;
+    detail: string;
+    count: number;
+  }>;
+  restoreDictationBackup: (packagePath: string) => Promise<{
+    ok: boolean;
+    detail: string;
+    restored: number;
+  }>;
+  verifyDictationBackup: (packagePath: string) => Promise<{
+    ok: boolean;
+    detail: string;
+    sampleSource: string;
   }>;
   listCalendarEvents: () => Promise<unknown[]>;
   listTimers: () => Promise<unknown[]>;

@@ -167,6 +167,13 @@ export async function exportBackup(opts?: {
     if (voiceCount || fs.existsSync(dataRoot("voice-studio"))) {
       parts.push("voice-studio");
     }
+    const dictationCount = copyDirRecursive(
+      dataRoot("dictation"),
+      path.join(packagePath, "dictation"),
+    );
+    if (dictationCount || fs.existsSync(dataRoot("dictation"))) {
+      parts.push("dictation");
+    }
     copyDirRecursive(dataRoot("skills"), path.join(packagePath, "skills"));
     parts.push("skills");
     copyDirRecursive(
@@ -266,6 +273,10 @@ export async function importBackup(packagePath: string): Promise<{
         path.join(abs, "voice-studio"),
         dataRoot("voice-studio"),
       );
+    }
+    if (manifest.parts.includes("dictation")) {
+      rmDirContents(dataRoot("dictation"));
+      copyDirRecursive(path.join(abs, "dictation"), dataRoot("dictation"));
     }
     if (manifest.parts.includes("skills")) {
       rmDirContents(dataRoot("skills"));

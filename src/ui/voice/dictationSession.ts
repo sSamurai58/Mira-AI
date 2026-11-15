@@ -18,6 +18,12 @@ export type ReadPosition = {
   status: "idle" | "playing" | "paused";
 };
 
+export type DictationSegment = {
+  index: number;
+  text: string;
+  at: string;
+};
+
 export type DictationSession = {
   sessionId: string;
   createdAt: string;
@@ -32,6 +38,10 @@ export type DictationSession = {
   comments: string;
   readPosition: ReadPosition;
   lockedSource: boolean;
+  /** Linked notes row id when created via voice */
+  noteId?: string | null;
+  /** Numbered ASR/VAD segments */
+  segments: DictationSegment[];
 };
 
 const KEY = "mira.dictationSession.v1";
@@ -74,6 +84,8 @@ function emptySession(): DictationSession {
       status: "idle",
     },
     lockedSource: false,
+    noteId: null,
+    segments: [],
   };
 }
 
@@ -84,7 +96,12 @@ function loadOrCreate(): DictationSession {
     if (!raw) return emptySession();
     const parsed = JSON.parse(raw) as DictationSession;
     if (!parsed?.sessionId) return emptySession();
-    return parsed;
+    return {
+      ...emptySession(),
+      ...parsed,
+      segments: Array.isArray(parsed.segments) ? parsed.segments : [],
+      noteId: parsed.noteId ?? null,
+    };
   } catch {
     return emptySession();
   }
@@ -93,6 +110,36 @@ function loadOrCreate(): DictationSession {
 function persist() {
   if (typeof localStorage === "undefined") return;
   localStorage.setItem(KEY, JSON.stringify(session));
+  void syncSessionToDisk();
+}
+
+async function syncSessionToDisk(): Promise<void> {
+  if (typeof window === "undefined" || !window.mira?.saveDictationSession) return;
+  try {
+    await window.mira.saveDictationSession({
+      meta: {
+        session_id: session.sessionId,
+        created_at: session.createdAt,
+        status: session.status,
+        source: session.source,
+        current_version: session.currentVersion,
+        locked_source: session.lockedSource,
+        read_position: `paragraph-${session.readPosition.paragraph}`,
+        note_id: session.noteId ?? null,
+      },
+      sourceDictation: session.sourceDictation,
+      cleanedText: session.cleanedText,
+      versions: session.versions.map((v) => ({
+        number: v.number,
+        operation: v.operation,
+        body: v.body,
+        createdAt: v.createdAt,
+      })),
+      segments: session.segments,
+    });
+  } catch {
+    /* disk sync best-effort */
+  }
 }
 
 export function subscribeDictation(listener: () => void): () => void {
@@ -118,6 +165,11 @@ export function newDictationSession(titleHint?: string): DictationSession {
 export function appendDictation(fragment: string): DictationSession {
   const piece = fragment.trim();
   if (!piece) return session;
+  const seg: DictationSegment = {
+    index: (session.segments.at(-1)?.index ?? 0) + 1,
+    text: piece,
+    at: nowIso(),
+  };
   if (session.lockedSource) {
     // Source locked after first version save — append only to cleaned draft buffer
     // via a soft "working" line in cleanedText.
@@ -125,6 +177,7 @@ export function appendDictation(fragment: string): DictationSession {
     session = {
       ...session,
       cleanedText: `${session.cleanedText}${sep}${piece}`,
+      segments: [...session.segments, seg],
     };
   } else {
     const sep =
@@ -136,8 +189,16 @@ export function appendDictation(fragment: string): DictationSession {
       ...session,
       sourceDictation: nextSource,
       cleanedText: nextSource,
+      segments: [...session.segments, seg],
     };
   }
+  persist();
+  notify();
+  return session;
+}
+
+export function setDictationNoteId(noteId: string | null): DictationSession {
+  session = { ...session, noteId };
   persist();
   notify();
   return session;
@@ -153,13 +214,15 @@ export function setCleanedText(text: string): DictationSession {
 
 /**
  * Freeze source as read-only and create an immutable version snapshot.
- * Does not overwrite sourceDictation.
+ * Does not overwrite sourceDictation. Remaps read position when body changes.
  */
 export function saveDictationVersion(operation: string, body?: string): {
   session: DictationSession;
   version: DictationVersion;
   statusPhrase: string;
 } {
+  const prevBody = getActiveBody();
+  const prevPara = session.readPosition.paragraph;
   const text = (body ?? (session.cleanedText || session.sourceDictation)).trim();
   const number = session.currentVersion + 1;
   const version: DictationVersion = {
@@ -169,6 +232,7 @@ export function saveDictationVersion(operation: string, body?: string): {
     body: text,
     parentVersion: session.currentVersion || null,
   };
+  const remapped = remapParagraphIndex(prevBody, text, prevPara);
   session = {
     ...session,
     lockedSource: true,
@@ -177,7 +241,7 @@ export function saveDictationVersion(operation: string, body?: string): {
     cleanedText: text,
     readPosition: {
       version: number,
-      paragraph: 0,
+      paragraph: remapped,
       charInParagraph: 0,
       status: "idle",
     },
@@ -189,6 +253,49 @@ export function saveDictationVersion(operation: string, body?: string): {
     version,
     statusPhrase: `Черновик сохранён, версия ${number}`,
   };
+}
+
+/** Map old paragraph index into new text by best token overlap. */
+export function remapParagraphIndex(
+  oldText: string,
+  newText: string,
+  oldIndex: number,
+): number {
+  const oldParas = splitParagraphs(oldText);
+  const newParas = splitParagraphs(newText);
+  if (!newParas.length) return 0;
+  if (!oldParas.length) return Math.min(oldIndex, newParas.length - 1);
+  const target = oldParas[Math.min(oldIndex, oldParas.length - 1)] ?? "";
+  if (!target) return 0;
+  const tokens = new Set(
+    target
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, " ")
+      .split(/\s+/)
+      .filter((t) => t.length > 2),
+  );
+  if (!tokens.size) {
+    return Math.min(oldIndex, newParas.length - 1);
+  }
+  let bestIdx = Math.min(oldIndex, newParas.length - 1);
+  let bestScore = -1;
+  newParas.forEach((p, i) => {
+    const pt = p
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, " ")
+      .split(/\s+/)
+      .filter(Boolean);
+    let score = 0;
+    for (const t of pt) {
+      if (tokens.has(t)) score += 1;
+    }
+    const norm = score / Math.max(tokens.size, 1);
+    if (norm > bestScore) {
+      bestScore = norm;
+      bestIdx = i;
+    }
+  });
+  return bestIdx;
 }
 
 export function getVersionBody(versionNumber: number): string | null {

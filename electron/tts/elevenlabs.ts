@@ -385,6 +385,8 @@ export async function synthesizeElevenLabs(opts: {
    */
   stream?: boolean;
   voiceSettings?: Partial<ElevenLabsVoiceSettings>;
+  /** Natural-language style hint from Mira voice styles (mapped into settings / v3 tags). */
+  styleInstruction?: string;
 }): Promise<ElevenLabsSynthResult> {
   const clean = (opts.text || "").trim();
   if (!clean) {
@@ -406,11 +408,40 @@ export async function synthesizeElevenLabs(opts: {
     return { ok: false, detail: "Не задан Voice ID ElevenLabs" };
   }
 
+  const styleHint = (opts.styleInstruction || "").trim();
+  const styleBoost = styleHint
+    ? Math.min(
+        1,
+        0.35 +
+          Math.min(0.5, styleHint.length / 200) +
+          (/оператор|чётк/i.test(styleHint) ? 0.15 : 0) +
+          (/жив|естеств/i.test(styleHint) ? 0.1 : 0),
+      )
+    : undefined;
+  const voiceSettings = buildVoiceSettingsBody({
+    ...opts.voiceSettings,
+    ...(styleBoost != null ? { style: styleBoost } : {}),
+  });
+
+  // v3 supports inline audio tags; keep instruction out of spoken text for other models.
+  let speakText = clean;
+  if (styleHint && modelId === "eleven_v3") {
+    const tag = /оператор|чётк/i.test(styleHint)
+      ? "[clearly] "
+      : /спокой|диктор/i.test(styleHint)
+        ? "[calm] "
+        : "[warmly] ";
+    speakText = `${tag}${clean}`;
+  }
+
   const body: Record<string, unknown> = {
-    text: clean,
+    text: speakText,
     model_id: modelId,
-    voice_settings: buildVoiceSettingsBody(opts.voiceSettings),
+    voice_settings: voiceSettings,
   };
+  if (styleHint) {
+    body.previous_text = styleHint.slice(0, 200);
+  }
   // eleven_v3 / flash / turbo accept language_code; multilingual_v2 ignores it.
   if (modelId !== "eleven_multilingual_v2") {
     body.language_code = "ru";

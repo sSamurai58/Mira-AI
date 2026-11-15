@@ -50,6 +50,11 @@ import {
   type HandsFreePrefs,
 } from "../voice/handsFree";
 import {
+  getDictationSession,
+  setDictationNoteId,
+} from "../voice/dictationSession";
+import { grantExternalOnce } from "../voice/externalPolicy";
+import {
   getInteractionMode,
   setInteractionMode,
   subscribeInteractionMode,
@@ -57,11 +62,13 @@ import {
 } from "../voice/interactionMode";
 import { getMicDeviceId } from "../voice/micDevices";
 import { acquireMicLevel, releaseMicLevel } from "../voice/micLevel";
+import { runInPhase } from "../voice/modelQueue";
 import { statusPhrase } from "../voice/statusPhrases";
 import { normalizeForTts } from "../voice/ttsNormalize";
 import { getActiveTtsEngine, listTtsEngines } from "../voice/ttsEngines";
 import { speakText, stopSpeaking } from "../voice/tts";
 import type { VoiceInfo } from "../voice/types";
+import { vadPushLevel, resetVadSession } from "../voice/vadSegments";
 import { routeVoiceTranscript } from "../voice/voiceRoute";
 import type { VoiceState } from "../voiceState";
 
@@ -328,7 +335,9 @@ export function ChatPage({
       }
       const tick = () => {
         if (cancelled) return;
-        setMicLevel(read?.() ?? 0);
+        const lvl = read?.() ?? 0;
+        setMicLevel(lvl);
+        vadPushLevel(lvl);
         raf = requestAnimationFrame(tick);
       };
       raf = requestAnimationFrame(tick);
@@ -394,20 +403,55 @@ export function ChatPage({
           onError: () => onVoiceState("idle"),
           onStatus: (msg) => setEngineNote(msg),
         },
+        onCreateNote: async (title) => {
+          if (!window.mira?.upsertNote) return;
+          const body = getDictationSession().cleanedText || title || "";
+          const row = await window.mira.upsertNote({
+            title: (title || "Заметка").slice(0, 80),
+            body,
+            tags: "dictation",
+            sessionId: sessionIdRef.current,
+          });
+          setDictationNoteId(row.id);
+          setEngineNote(`Заметка «${row.title}»`);
+          return row.id;
+        },
+        onDeleteNote: async (title) => {
+          if (!window.mira?.searchNotes || !window.mira.deleteNote) return;
+          const hits = await window.mira.searchNotes(title || "");
+          const row =
+            hits[0] ||
+            (getDictationSession().noteId
+              ? { id: getDictationSession().noteId! }
+              : null);
+          if (!row?.id) {
+            setEngineNote("Не нашла заметку для удаления");
+            return;
+          }
+          await window.mira.deleteNote(row.id);
+          setDictationNoteId(null);
+          setEngineNote(statusPhrase("note_deleted"));
+        },
+        onSendExternal: () => {
+          grantExternalOnce();
+          setEngineNote("Облачный TTS разрешён для следующего синтеза");
+        },
       });
       if (!routed.handled) {
-        void sendTextRef.current(transcript);
+        void runInPhase("llm", () => sendTextRef.current(transcript));
         return;
       }
       setInteractionModeState(getInteractionMode());
       if (routed.speak) {
         setEngineNote(routed.speak);
-        speakStatus(routed.speak);
+        void runInPhase("tts", async () => {
+          speakStatus(routed.speak!);
+        });
       } else {
         onVoiceState("idle");
       }
       if (routed.chatText) {
-        void sendTextRef.current(routed.chatText);
+        void runInPhase("llm", () => sendTextRef.current(routed.chatText!));
       }
     },
     [onVoiceState, speakStatus],
@@ -1088,15 +1132,58 @@ export function ChatPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional wake loop
   }, [handsFree.enabled, handsFree.wakePhrase, handsFree.sensitivity, voiceState, busy]);
 
+  const pttDownAtRef = useRef<number | null>(null);
+  const pttHoldTimerRef = useRef<number | null>(null);
+  const pttModeRef = useRef<"command" | "dictation" | null>(null);
+
   function handlePtt(down: boolean) {
     if (busy) return;
 
     if (down) {
-      startCommandListen();
+      pttDownAtRef.current = Date.now();
+      pttModeRef.current = null;
+      if (pttHoldTimerRef.current != null) {
+        window.clearTimeout(pttHoldTimerRef.current);
+      }
+      // Hold ≥400ms → dictation; short click handled on release as command.
+      pttHoldTimerRef.current = window.setTimeout(() => {
+        pttModeRef.current = "dictation";
+        setInteractionMode("dictation");
+        setInteractionModeState("dictation");
+        resetVadSession();
+        setEngineNote(statusPhrase("mode_dictation"));
+        startCommandListen();
+      }, 400);
       return;
     }
 
-    asrRef.current?.stop();
+    if (pttHoldTimerRef.current != null) {
+      window.clearTimeout(pttHoldTimerRef.current);
+      pttHoldTimerRef.current = null;
+    }
+    const started = pttDownAtRef.current;
+    pttDownAtRef.current = null;
+    const heldMs = started != null ? Date.now() - started : 0;
+
+    if (pttModeRef.current === "dictation" || heldMs >= 400) {
+      asrRef.current?.stop();
+      pttModeRef.current = null;
+      return;
+    }
+
+    // Short click → command mode listen
+    pttModeRef.current = "command";
+    setInteractionMode("command");
+    setInteractionModeState("command");
+    setEngineNote(statusPhrase("mode_command"));
+    startCommandListen();
+    // Auto-stop after a command utterance window if user doesn't hold
+    window.setTimeout(() => {
+      if (pttModeRef.current === "command") {
+        asrRef.current?.stop();
+        pttModeRef.current = null;
+      }
+    }, 6000);
   }
 
   function handleDemoPtt() {
@@ -1346,6 +1433,20 @@ export function ChatPage({
                 title="Фразы = текст в черновик"
               >
                 Диктовка
+              </button>
+              <span className="chip" title="Микрофон">
+                клик = команда · удержание = диктовка
+              </span>
+              <button
+                type="button"
+                className="btn"
+                title="Разрешить один облачный TTS (ElevenLabs)"
+                onClick={() => {
+                  grantExternalOnce();
+                  setEngineNote("Облачный TTS: одно разрешение выдано");
+                }}
+              >
+                Разрешить облако TTS
               </button>
             </div>
             {handsFree.enabled ? (

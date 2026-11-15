@@ -7,6 +7,7 @@ import {
   appendDictation,
   newDictationSession,
   saveDictationVersion,
+  setDictationNoteId,
 } from "./dictationSession";
 import {
   answerPendingConfirm,
@@ -16,7 +17,9 @@ import {
   requestConfirm,
   setInteractionMode,
   type CommandIntent,
+  type DangerousAction,
 } from "./interactionMode";
+import { applyNameDictionary } from "./nameDictionary";
 import {
   continueReading,
   nextParagraph,
@@ -27,6 +30,7 @@ import {
   type ReadControllerHandlers,
 } from "./readController";
 import { statusPhrase } from "./statusPhrases";
+import { vadAttachTranscript } from "./vadSegments";
 
 export type RouteResult =
   | {
@@ -44,8 +48,18 @@ export type RouteDeps = {
   readHandlers?: ReadControllerHandlers;
   /** Called when delete confirmed — UI supplies real file tool */
   onDeleteNote?: (title?: string) => void | Promise<void>;
-  onCreateNote?: (title?: string) => void | Promise<void>;
+  onCreateNote?: (title?: string) => void | string | Promise<void | string>;
+  onSendExternal?: () => void | Promise<void>;
 };
+
+/** Ask user to confirm cloud/external send (TTS etc.). */
+export function requestExternalSendConfirm(objectLabel: string): string {
+  const { prompt } = requestConfirm({
+    action: "send_external" satisfies DangerousAction,
+    objectLabel,
+  });
+  return prompt;
+}
 
 /**
  * Route a final ASR transcript. Returns handled=true when Mira should NOT
@@ -76,6 +90,9 @@ export function routeVoiceTranscript(
       });
       if (pending.action === "delete_note") {
         void deps.onDeleteNote?.(pending.payload?.title);
+      }
+      if (pending.action === "send_external") {
+        void deps.onSendExternal?.();
       }
       return {
         handled: true,
@@ -123,11 +140,13 @@ export function routeVoiceTranscript(
       const msg = stopReading();
       return { handled: true, kind: "stop", speak: msg };
     }
-    appendDictation(text);
+    const { text: withNames } = applyNameDictionary(text);
+    vadAttachTranscript(withNames);
+    appendDictation(withNames);
     logJournal({
       type: "command",
       tool: "append_dictation",
-      transcript: text,
+      transcript: withNames,
     });
     return {
       handled: true,
@@ -198,7 +217,9 @@ function handleIntent(
     }
     case "create_note": {
       newDictationSession(intent.title);
-      void deps.onCreateNote?.(intent.title);
+      void Promise.resolve(deps.onCreateNote?.(intent.title)).then((id) => {
+        if (typeof id === "string") setDictationNoteId(id);
+      });
       logJournal({ type: "command", tool: "create_note", transcript: raw });
       return {
         handled: true,

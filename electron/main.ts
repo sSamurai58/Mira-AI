@@ -175,7 +175,16 @@ import {
   type ConfirmClass,
   type ConfirmMode,
 } from "./confirmPolicy";
-import { listNotes, searchNotes, upsertNote } from "./future/notes";
+import { deleteNote, listNotes, searchNotes, upsertNote } from "./future/notes";
+import {
+  exportDictationBackupPackage,
+  listDictationSessionsOnDisk,
+  loadDictationFromDisk,
+  restoreDictationBackupPackage,
+  saveDictationToDisk,
+  verifyDictationBackup,
+  type DiskDictationSession,
+} from "./dictation/fsStore";
 import {
   cancelTimer,
   createEvent,
@@ -1262,6 +1271,23 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
         sessionId?: string | null;
       },
     ) => upsertNote(payload),
+  );
+  on("mira:delete-note", (_e, id: string) => ({
+    ok: deleteNote(String(id || "")),
+  }));
+  on("mira:dictation-save", (_e, session: DiskDictationSession) =>
+    saveDictationToDisk(session),
+  );
+  on("mira:dictation-load", (_e, sessionId: string) =>
+    loadDictationFromDisk(String(sessionId || "")),
+  );
+  on("mira:dictation-list", () => listDictationSessionsOnDisk());
+  on("mira:dictation-backup-export", () => exportDictationBackupPackage());
+  on("mira:dictation-backup-restore", (_e, packagePath: string) =>
+    restoreDictationBackupPackage(String(packagePath || "")),
+  );
+  on("mira:dictation-backup-verify", (_e, packagePath: string) =>
+    verifyDictationBackup(String(packagePath || "")),
   );
   on("mira:list-calendar-events", () => listEvents());
   on("mira:list-upcoming-reminders", (_e, horizonHours?: number) =>
