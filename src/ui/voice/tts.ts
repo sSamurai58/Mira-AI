@@ -7,12 +7,14 @@ import {
 } from "./corpusTts";
 import { synthesizeParametricBuffer } from "./parametricSynth";
 import { getActiveTtsEngine } from "./ttsEngines";
+import { normalizeForTts } from "./ttsNormalize";
 import { applyVoiceFx } from "./voiceFx";
 import { splitSpeakPhrases } from "./voicePhrases";
 import {
   getVoiceSettings,
   neuralProsodyFromSettings,
 } from "./voiceSettings";
+
 
 export type SpeakHandlers = {
   onStart?: () => void;
@@ -870,6 +872,7 @@ export function speakText(
   handlers: SpeakHandlers = {},
 ): void {
   const engine = getActiveTtsEngine();
+  text = normalizeForTts(text);
 
   const gen = ++speakGeneration;
   const isCurrent = () => gen === speakGeneration;

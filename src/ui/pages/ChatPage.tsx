@@ -49,11 +49,20 @@ import {
   stripWakePhrase,
   type HandsFreePrefs,
 } from "../voice/handsFree";
+import {
+  getInteractionMode,
+  setInteractionMode,
+  subscribeInteractionMode,
+  type InteractionMode,
+} from "../voice/interactionMode";
 import { getMicDeviceId } from "../voice/micDevices";
 import { acquireMicLevel, releaseMicLevel } from "../voice/micLevel";
+import { statusPhrase } from "../voice/statusPhrases";
+import { normalizeForTts } from "../voice/ttsNormalize";
 import { getActiveTtsEngine, listTtsEngines } from "../voice/ttsEngines";
 import { speakText, stopSpeaking } from "../voice/tts";
 import type { VoiceInfo } from "../voice/types";
+import { routeVoiceTranscript } from "../voice/voiceRoute";
 import type { VoiceState } from "../voiceState";
 
 type ChatPageProps = {
@@ -112,6 +121,8 @@ export function ChatPage({
   const [handsFree, setHandsFree] = useState<HandsFreePrefs>(() =>
     getHandsFreePrefs(),
   );
+  const [interactionMode, setInteractionModeState] =
+    useState<InteractionMode>(() => getInteractionMode());
   const [pendingFiles, setPendingFiles] = useState<PendingChatAttachment[]>([]);
   const [addToLibrary, setAddToLibrary] = useState(false);
   const [attachNote, setAttachNote] = useState<string | null>(null);
@@ -138,6 +149,7 @@ export function ChatPage({
   const voiceStateRef = useRef(voiceState);
   const busyRef = useRef(busy);
   const handsFreeRef = useRef(handsFree);
+  const activeVoiceIdRef = useRef(activeVoiceId);
   const startCommandListenRef = useRef<() => void>(() => undefined);
 
   const showDialog = panel === "dialog";
@@ -198,6 +210,14 @@ export function ChatPage({
   useEffect(() => {
     handsFreeRef.current = handsFree;
   }, [handsFree]);
+  useEffect(() => {
+    activeVoiceIdRef.current = activeVoiceId;
+  }, [activeVoiceId]);
+  useEffect(() => {
+    return subscribeInteractionMode(() => {
+      setInteractionModeState(getInteractionMode());
+    });
+  }, []);
 
   // Pin to latest while the user is (or should be) at the bottom.
   useLayoutEffect(() => {
@@ -348,13 +368,58 @@ export function ChatPage({
     };
   }, []);
 
+  const speakStatus = useCallback(
+    (text: string) => {
+      const spoken = normalizeForTts(text.trim());
+      if (!spoken) {
+        onVoiceState("idle");
+        return;
+      }
+      speakText(spoken, activeVoiceIdRef.current, {
+        onStart: () => onVoiceState("speaking"),
+        onEnd: () => onVoiceState("idle"),
+        onError: () => onVoiceState("idle"),
+      });
+    },
+    [onVoiceState],
+  );
+
+  const handleRoutedTranscript = useCallback(
+    (transcript: string) => {
+      const routed = routeVoiceTranscript(transcript, {
+        readHandlers: {
+          voiceId: activeVoiceIdRef.current,
+          onStart: () => onVoiceState("speaking"),
+          onEnd: () => onVoiceState("idle"),
+          onError: () => onVoiceState("idle"),
+          onStatus: (msg) => setEngineNote(msg),
+        },
+      });
+      if (!routed.handled) {
+        void sendTextRef.current(transcript);
+        return;
+      }
+      setInteractionModeState(getInteractionMode());
+      if (routed.speak) {
+        setEngineNote(routed.speak);
+        speakStatus(routed.speak);
+      } else {
+        onVoiceState("idle");
+      }
+      if (routed.chatText) {
+        void sendTextRef.current(routed.chatText);
+      }
+    },
+    [onVoiceState, speakStatus],
+  );
+
   const speakAssistant = useCallback(
     (text: string) => {
       if (!autoSpeak) {
         onVoiceState("idle");
         return;
       }
-      const spoken = textForSpeech(text);
+      const spoken = normalizeForTts(textForSpeech(text));
       if (!spoken) {
         onVoiceState("idle");
         return;
@@ -940,7 +1005,7 @@ export function ChatPage({
           ? stripWakePhrase(transcript, prefs.wakePhrase)
           : transcript;
         const text = cleaned.trim() || transcript.trim();
-        void sendTextRef.current(text);
+        handleRoutedTranscript(text);
       },
       onError: (msg) => {
         onError(msg);
@@ -982,7 +1047,7 @@ export function ChatPage({
           const rest = stripWakePhrase(transcript, prefs.wakePhrase).trim();
           if (rest) {
             stopWakeListen();
-            void sendTextRef.current(rest);
+            handleRoutedTranscript(rest);
           } else {
             startCommandListenRef.current();
           }
@@ -1257,6 +1322,32 @@ export function ChatPage({
             <span className="chip">
               Модель <strong>{modelLabel}</strong>
             </span>
+            <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className={`btn ${interactionMode === "command" ? "btn-primary" : ""}`}
+                onClick={() => {
+                  setInteractionMode("command");
+                  setInteractionModeState("command");
+                  setEngineNote(statusPhrase("mode_command"));
+                }}
+                title="Фразы = команды / чат"
+              >
+                Команды
+              </button>
+              <button
+                type="button"
+                className={`btn ${interactionMode === "dictation" ? "btn-primary" : ""}`}
+                onClick={() => {
+                  setInteractionMode("dictation");
+                  setInteractionModeState("dictation");
+                  setEngineNote(statusPhrase("mode_dictation"));
+                }}
+                title="Фразы = текст в черновик"
+              >
+                Диктовка
+              </button>
+            </div>
             {handsFree.enabled ? (
               <span className="chip">
                 {voiceState === "idle" && handsFree.enabled

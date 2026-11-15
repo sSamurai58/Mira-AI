@@ -3,6 +3,7 @@ import { StubBadge } from "./StubBadge";
 import { Field, SliderField, ToggleRow } from "./SettingsFormBits";
 import { MicTestCard } from "./MicTestCard";
 import { SettingsElevenLabsSection } from "./SettingsElevenLabsSection";
+import { SttTestPanel } from "./SttTestPanel";
 import { ThemeSelect } from "./ThemeSelect";
 import {
   getActiveVoiceId,
@@ -48,6 +49,14 @@ import {
   VOICE_LIMITS,
   type VoiceSettings,
 } from "../voice/voiceSettings";
+import {
+  getVoiceStyleId,
+  getVoiceStyleInstruction,
+  listVoiceStyles,
+  setCustomStyleInstruction,
+  setVoiceStyleId,
+  type VoiceStyleId,
+} from "../voice/voiceStyle";
 import type { VoiceInfo } from "../voice/types";
 
 const SENS_OPTS: Array<{ value: WakeSensitivity; label: string }> = [
@@ -76,6 +85,12 @@ export function SettingsVoiceSection() {
     getActiveTtsEngine(),
   );
   const [voice, setVoice] = useState<VoiceSettings>(() => getVoiceSettings());
+  const [styleId, setStyleIdState] = useState<VoiceStyleId>(() =>
+    getVoiceStyleId(),
+  );
+  const [styleInstruction, setStyleInstruction] = useState(() =>
+    getVoiceStyleInstruction(),
+  );
   const [profile, setProfile] = useState<VoiceProfileAnalysis | null>(null);
   const [profileBusy, setProfileBusy] = useState(false);
   const [profileNote, setProfileNote] = useState("");
@@ -296,6 +311,43 @@ export function SettingsVoiceSection() {
             }}
           />
         </Field>
+        <Field
+          label="Стиль речи"
+          hint="Живой / оператор / диктор — как в GigaTTS; инструкция для движков с support"
+        >
+          <ThemeSelect
+            aria-label="Стиль речи"
+            value={styleId}
+            options={listVoiceStyles().map((s) => ({
+              value: s.id,
+              label: `${s.title} — ${s.description}`,
+            }))}
+            onChange={(id) => {
+              const next = id as VoiceStyleId;
+              setVoiceStyleId(next);
+              setStyleIdState(next);
+              setStyleInstruction(getVoiceStyleInstruction());
+              setVoice(getVoiceSettings());
+              schedulePreview();
+            }}
+          />
+        </Field>
+        {styleId === "custom" ? (
+          <Field label="Инструкция голосу" hint="Свободный текст стиля">
+            <input
+              value={styleInstruction}
+              onChange={(e) => {
+                setStyleInstruction(e.target.value);
+                setCustomStyleInstruction(e.target.value);
+              }}
+              placeholder="Говори мягче, с паузами…"
+            />
+          </Field>
+        ) : (
+          <p className="muted mono" style={{ margin: 0, fontSize: "0.85rem" }}>
+            {styleInstruction || "—"}
+          </p>
+        )}
         <div className="integ-grid-2">
           <SliderField
             label="Базовая частота (Гц)"
@@ -458,6 +510,10 @@ export function SettingsVoiceSection() {
           ) : null}
         </article>
       ) : null}
+
+      <article className="panel stack notify-card">
+        <SttTestPanel />
+      </article>
 
       <article className="panel stack notify-card">
         <h3 className="notify-card-title">Hands-free · wake-word</h3>
