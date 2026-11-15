@@ -469,6 +469,26 @@ function createWindow(): BrowserWindow {
     });
   });
 
+  // Tab switches (WebGL teardown + heavy glass panels) can kill the renderer on
+  // macOS Metal — window stays hidden/blank while the process lives in tray.
+  win.webContents.on("render-process-gone", (_e, details) => {
+    console.error("[mira] renderer gone", details.reason, details.exitCode);
+    if (win.isDestroyed()) return;
+    const reload = () => {
+      if (win.isDestroyed()) return;
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+      void win.webContents.reloadIgnoringCache();
+    };
+    if (details.reason === "clean-exit") return;
+    setTimeout(reload, 250);
+  });
+
+  win.on("unresponsive", () => {
+    console.warn("[mira] renderer unresponsive");
+  });
+
   if (isDev) {
     void win.loadURL(process.env.MIRA_DEV_URL ?? "http://127.0.0.1:5173");
   } else {
@@ -1733,7 +1753,16 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
   app.on("activate", () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { getMainBrowserWindow } = require("./windowRoles") as typeof import("./windowRoles");
-    if (!getMainBrowserWindow()) createWindow();
+    const win = getMainBrowserWindow();
+    if (!win) {
+      createWindow();
+      return;
+    }
+    // macOS Dock click: hidden-to-tray windows still exist — must show(), not
+    // only recreate. Otherwise Mira looks "stuck in background work".
+    if (win.isMinimized()) win.restore();
+    if (!win.isVisible()) win.show();
+    win.focus();
   });
 });
 

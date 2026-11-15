@@ -840,6 +840,19 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   flex-direction: column;
 }
 
+/* Keep Home/Chat mounted off-tab without layout cost or GL teardown. */
+.workspace-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.workspace-pane[hidden] {
+  display: none !important;
+}
+
 .workspace-body > .stack,
 .workspace-body > .settings-layout,
 .workspace-body > .workshop-layout,
@@ -7575,8 +7588,8 @@ html[data-theme-family="apple"] .workspace {
 
 html[data-theme-family="apple"] .settings-layout > .panel.stack {
   background: color-mix(in srgb, var(--bg) 35%, transparent) !important;
-  backdrop-filter: blur(28px) saturate(160%);
-  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
   border: 1px solid var(--apple-glass-border) !important;
   box-shadow: inset 0 1px 0 var(--apple-glass-highlight) !important;
 }

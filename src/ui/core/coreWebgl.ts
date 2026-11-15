@@ -190,12 +190,12 @@ export function createCoreWebgl(
 ): CoreHandle | null {
   // "default" avoids pinning discrete GPU on dual-GPU MacBooks / Windows
   // laptops — high-performance caused fans + lag with a decorative orb.
+  // Avoid desynchronized: true — Metal/Electron often loses context on tab swaps.
   const glMaybe = canvas.getContext("webgl2", {
     alpha: true,
     antialias: false,
     premultipliedAlpha: true,
     powerPreference: "default",
-    desynchronized: true,
   });
   if (!glMaybe) return null;
   const gl: WebGL2RenderingContext = glMaybe;
@@ -644,20 +644,24 @@ export function createCoreWebgl(
         false,
       );
       document.removeEventListener("visibilitychange", onVisibility);
-      if (contextLost) return;
-      for (const layer of layers) {
-        for (const b of layer.buffers) gl.deleteBuffer(b);
-        gl.deleteVertexArray(layer.vao);
+      if (contextLost || gl.isContextLost()) return;
+      try {
+        for (const layer of layers) {
+          for (const b of layer.buffers) gl.deleteBuffer(b);
+          gl.deleteVertexArray(layer.vao);
+        }
+        gl.deleteBuffer(quad);
+        disposeFbo(fs);
+        disposeFbo(fb1);
+        disposeFbo(fb2);
+        disposeFbo(fc1);
+        disposeFbo(fc2);
+        gl.deleteProgram(pS);
+        gl.deleteProgram(pB);
+        gl.deleteProgram(pC);
+      } catch {
+        // Metal can throw mid-teardown when the tab is already swapping.
       }
-      gl.deleteBuffer(quad);
-      disposeFbo(fs);
-      disposeFbo(fb1);
-      disposeFbo(fb2);
-      disposeFbo(fc1);
-      disposeFbo(fc2);
-      gl.deleteProgram(pS);
-      gl.deleteProgram(pB);
-      gl.deleteProgram(pC);
     },
   };
 }
