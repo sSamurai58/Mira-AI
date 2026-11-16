@@ -8473,78 +8473,205 @@ html[data-layout^="tablet"] #root {
   overflow: hidden;
 }
 
-/* Workshop: horizontal segment chips */
+/*
+ * Settings / Workshop: keep DESKTOP side tabs, just compact.
+ * (Do not move section nav to a top chip strip.)
+ */
 [data-layout^="tablet"] .settings-layout.workshop-layout,
 [data-layout^="tablet"] .settings-layout {
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(132px, 158px) minmax(0, 1fr);
   gap: 8px;
+}
+
+[data-layout="tablet-portrait"] .settings-layout.workshop-layout,
+[data-layout="tablet-portrait"] .settings-layout {
+  grid-template-columns: minmax(118px, 138px) minmax(0, 1fr);
+  gap: 6px;
 }
 
 [data-layout^="tablet"] .workshop-seg-nav.settings-nav,
 [data-layout^="tablet"] .settings-nav {
-  position: static;
-  flex-direction: row;
+  position: sticky;
+  top: 0;
+  flex-direction: column;
   flex-wrap: nowrap;
-  overflow-x: auto;
-  overflow-y: hidden;
-  max-height: none;
-  gap: 6px;
-  padding-bottom: 2px;
-  scrollbar-width: thin;
+  overflow-x: hidden;
+  overflow-y: auto;
+  max-height: 100%;
+  gap: 3px;
+  align-self: start;
+  padding-bottom: 0;
 }
 
 [data-layout^="tablet"] .settings-nav .nav-btn {
   flex: 0 0 auto;
-  white-space: nowrap;
-  min-height: 40px;
-  padding: 8px 12px;
-  font-size: 0.85rem;
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+  white-space: normal;
+  line-height: 1.2;
+  min-height: 32px;
+  padding: 6px 8px;
+  font-size: 0.72rem;
 }
 
-[data-layout="tablet-portrait"] .workshop-seg-label {
-  max-width: 9.5rem;
+[data-layout^="tablet"] .workshop-seg-label {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+/* Chat: dialog uses full width — do NOT reserve home-rail column */
+[data-layout^="tablet"] .home-grid.is-dialog-tab {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+[data-layout^="tablet"] .home-grid.is-dialog-tab .home-rail {
+  display: none !important;
+}
+
+[data-layout^="tablet"] .home-grid.is-home-tab {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+[data-layout="tablet-landscape"] .home-grid.is-home-tab {
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 240px);
+}
+
+[data-layout^="tablet"] .home-grid.is-dialog-tab .home-center,
+[data-layout^="tablet"] .home-grid.is-dialog-tab .chat-card {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+}
+
 /* Chat toolbar compaction */
 [data-layout^="tablet"] .chat-toolbar {
-  gap: 6px;
+  gap: 5px;
 }
 
 [data-layout^="tablet"] .chat-toolbar .chat-toolbar-extra {
   display: none;
 }
 
-[data-layout="tablet-portrait"] .chat-toolbar .chip,
-[data-layout="tablet-portrait"] .chat-toolbar .btn {
-  font-size: 0.82rem;
-  padding: 6px 10px;
+[data-layout^="tablet"] .chat-toolbar .chip,
+[data-layout^="tablet"] .chat-toolbar .btn {
+  font-size: 0.78rem;
+  padding: 5px 9px;
+  min-height: 32px;
+}
+
+[data-layout^="tablet"] .voice-select {
+  font-size: 0.78rem;
 }
 
 [data-layout="tablet-portrait"] .voice-select {
   flex: 1 1 100%;
 }
 
-/* Skills / paths cards — denser, touch-friendly */
+/* Skills / paths — denser, less crooked wrap */
+[data-layout^="tablet"] .paths-header {
+  gap: 8px !important;
+  align-items: flex-start;
+}
+
+[data-layout^="tablet"] .paths-header .row {
+  flex-wrap: wrap;
+  gap: 6px !important;
+  align-items: center;
+}
+
+[data-layout^="tablet"] .paths-header h2 {
+  font-size: 1.05rem !important;
+}
+
+[data-layout^="tablet"] .catalog-panel .catalog-sort {
+  flex: 1 1 auto;
+  max-width: 100%;
+}
+
+[data-layout^="tablet"] .catalog-panel .catalog-sort-caption {
+  font-size: 0.72rem;
+}
+
+[data-layout^="tablet"] .catalog-panel .catalog-sort-controls {
+  gap: 5px;
+  max-width: 100%;
+  justify-content: flex-start;
+}
+
+[data-layout^="tablet"] .catalog-panel .catalog-sort-controls .theme-select {
+  flex: 0 1 140px;
+  min-width: 110px;
+  max-width: 160px;
+}
+
+[data-layout^="tablet"] .catalog-panel .catalog-sort-controls .btn,
+[data-layout^="tablet"] .paths-header .btn,
+[data-layout^="tablet"] .paths-toolbar .btn,
+[data-layout^="tablet"] .paths-filter-btn {
+  font-size: 0.72rem;
+  padding: 5px 8px;
+  min-height: 28px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+
+[data-layout^="tablet"] .paths-toolbar {
+  gap: 6px !important;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
 [data-layout="tablet-landscape"] .paths-grid {
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
 }
 
 [data-layout="tablet-portrait"] .paths-grid {
   grid-template-columns: 1fr;
-  gap: 10px;
+  gap: 8px;
 }
 
 [data-layout^="tablet"] .paths-card {
-  gap: 8px;
-  padding: 12px;
+  gap: 6px;
+  padding: 10px;
+}
+
+[data-layout^="tablet"] .paths-card-name {
+  font-size: 0.88rem;
+}
+
+[data-layout^="tablet"] .paths-card-actions {
+  flex-wrap: nowrap;
+  gap: 4px;
 }
 
 [data-layout^="tablet"] .paths-card .row .btn,
-[data-layout^="tablet"] .paths-card-actions .btn {
-  min-height: 40px;
+[data-layout^="tablet"] .paths-card-actions .btn,
+[data-layout^="tablet"] .paths-card-actions .paths-delete-btn {
+  flex: 1 1 0;
+  min-height: 28px;
+  min-width: 0;
+  padding: 4px 5px;
+  font-size: 0.66rem;
+  white-space: nowrap;
+}
+
+/* Memory: one segment control — hide duplicate filter row (keeps hub chips) */
+[data-layout^="tablet"] .memory-hub .paths-toolbar > .paths-filters {
+  display: none;
+}
+
+[data-layout^="tablet"] .memory-hub-stats .memory-stat,
+[data-layout^="tablet"] .settings-stat-chip {
+  font-size: 0.74rem;
+  padding: 5px 10px;
+}
+
+[data-layout^="tablet"] .memory-search {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* Catalog / skill edit modal — almost full-bleed on tablet */
@@ -8567,34 +8694,13 @@ html[data-layout^="tablet"] #root {
   max-height: min(36vh, 320px);
 }
 
-/* Voice studio: two columns on landscape tablet */
 [data-layout="tablet-landscape"] .workshop-main > .panel.stack,
 [data-layout="tablet-landscape"] .workshop-main {
   min-width: 0;
 }
 
-[data-layout="tablet-landscape"] .vs-studio-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
-  gap: 12px;
-  align-items: start;
-}
-
 [data-layout^="tablet"] .vs-train-pipeline {
   grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-[data-layout="tablet-portrait"] .vs-train-pipeline {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0.2rem;
-}
-
-[data-layout^="tablet"] .home-grid {
-  grid-template-columns: 1fr;
-}
-
-[data-layout="tablet-landscape"] .home-grid {
-  grid-template-columns: minmax(0, 1fr) var(--rail-w);
 }
 
 [data-layout^="tablet"] .btn,
@@ -8603,8 +8709,14 @@ html[data-layout^="tablet"] #root {
   touch-action: manipulation;
 }
 
+/* Core level chip on icon-rail: ring only, no clipped label */
+[data-layout="tablet-landscape"] .nav--rail .core-level-chip .core-level-copy,
+[data-layout="tablet-landscape"] .nav--rail .core-level-chip p,
+[data-layout="tablet-landscape"] .nav--rail .core-level-chip .muted {
+  display: none;
+}
+
 @media (max-width: 1280px) and (min-width: 821px) and (orientation: landscape) {
-  /* Fallback if JS hook late: prefer rail feel */
   :root {
     --nav-w: 76px;
   }
