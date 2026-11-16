@@ -15,6 +15,17 @@ export type MiraChangelogEntry = {
 
 export const MIRA_CHANGELOG: MiraChangelogEntry[] = [
   {
+    version: "0.1.33",
+    date: "16.11.2026",
+    summary: "Менее «роботный» нейро-голос: меньше Griffin-Lim и телефонного фильтра.",
+    bullets: [
+      "Синтез опирается на neural vocoder (не на 55%+ Griffin-Lim)",
+      "Снят узкий 3.4 кГц фильтр; короткие фразы без нарезки чанков",
+      "Без двойного time-scale в плеере; кэш синтеза сброшен (v2)",
+      "Release: сначала Windows, потом macOS — чтобы не терять latest.yml",
+    ],
+  },
+  {
     version: "0.1.32",
     date: "16.11.2026",
     summary: "Update HUD снова кликается и закрывается на Windows.",
