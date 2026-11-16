@@ -1,10 +1,25 @@
-# Agent skills — design & animation only
+# Agent skills
 
-Source: https://github.com/emilkowalski/skills (Emil Kowalski)
+Скиллы **разработки** (Cursor / агент). Не путать с runtime-каталогом Mira (PRD #9).
 
-Installed for **UI design and animation** work on Mira. Not product runtime skills (#9).
+## product-team
 
-## Included
+Источник: https://github.com/sSamurai58/skills/tree/main/product-team
+
+| | |
+|---|---|
+| Путь | `.cursor/skills/product-team/` |
+| Вход | [`product-team/SKILL.md`](./product-team/SKILL.md) |
+| Агент | [`product-team/AGENTS.md`](./product-team/AGENTS.md) |
+| Менеджер | [`product-team/manager/SKILL.md`](./product-team/manager/SKILL.md) |
+
+Пользователь говорит с **менеджером**. Менеджер ведёт `docs/` и поручает одну роль за ход.
+
+Обновление: re-copy sparse tree `product-team` из upstream.
+
+## design & animation (Emil Kowalski)
+
+Источник: https://github.com/emilkowalski/skills
 
 | Skill | Use |
 |-------|-----|
@@ -23,14 +38,6 @@ Installed for **UI design and animation** work on Mira. Not product runtime skil
 | `break-ui` | Worst-case content stress |
 | `pick-ui-library` | Pick trusted UI libs |
 
-## Excluded (not needed for Mira design/animation now)
+Activate **on-demand** when designing UI / motion. Do **not** load all at once.
 
-`animate-expo`, `mobile-native`, `write-swift`, `ask-sonner`
-
-## Policy
-
-- Activate **on-demand** when designing UI, motion, or reviewing DESIGN.md implementations.
-- Do **not** keep all skills in every prompt (aligns with Mira PRD #9).
-- Upstream updates: re-copy from `emilkowalski/skills` when refreshing.
-
-License / attribution: see upstream repo.
+License / attribution: see upstream repos.
