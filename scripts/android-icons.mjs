@@ -25,6 +25,18 @@ if (!fs.existsSync(src)) {
   process.exit(1);
 }
 
+// Prefer committed mipmaps on CI (no Pillow). Regenerate locally when changing brand mark.
+const probe = path.join(res, "mipmap-xxxhdpi", "ic_launcher.png");
+const check = spawnSync("python3", ["-c", "from PIL import Image"], { encoding: "utf8" });
+if (check.status !== 0) {
+  if (fs.existsSync(probe)) {
+    console.warn("Pillow missing — keeping committed Android mipmaps.");
+    process.exit(0);
+  }
+  console.error("Pillow required to generate icons (pip install pillow)");
+  process.exit(1);
+}
+
 function writePng(outPath, size) {
   const py = `
 from PIL import Image
