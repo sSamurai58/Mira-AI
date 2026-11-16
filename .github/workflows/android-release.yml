@@ -1,17 +1,23 @@
 name: Android Release (only)
 
-# One-shot / hotfix: publish a signed APK to an existing GitHub Release tag.
-# Does NOT build Windows or macOS.
+# Publishes a signed APK only (no Windows / macOS).
 #
-#   gh workflow run android-release.yml -f tag=v0.1.37
+# Trigger A — Actions UI / CLI:
+#   gh workflow run android-release.yml -f tag=v0.1.36
+# Trigger B — push tag (CI token-safe):
+#   git tag apk/v0.1.36 && git push origin apk/v0.1.36
+#   → builds from main, uploads Mira-0.1.36-android.apk into Release v0.1.36
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing release tag to upload APK into (e.g. v0.1.37)"
+        description: "Existing release tag to upload APK into (e.g. v0.1.36)"
         required: true
         type: string
+  push:
+    tags:
+      - "apk/v*"
 
 permissions:
   contents: write
@@ -21,7 +27,27 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      # Always build from main (signing + Mira icons). Upload into the chosen tag.
+      - name: Resolve target release tag
+        id: target
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TAG="${{ inputs.tag }}"
+          else
+            # refs/tags/apk/v0.1.36 → v0.1.36
+            RAW="${GITHUB_REF_NAME}"
+            TAG="${RAW#apk/}"
+          fi
+          if [[ ! "$TAG" =~ ^v[0-9] ]]; then
+            echo "::error::Bad target tag: $TAG"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "ver=${TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "Target release: $TAG"
+
+      # Always build from main (signing + Mira icons).
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -48,8 +74,7 @@ jobs:
       - name: Build signed APK
         run: |
           set -euo pipefail
-          TAG="${{ inputs.tag }}"
-          VER="${TAG#v}"
+          VER="${{ steps.target.outputs.ver }}"
           npm run build:web
           node scripts/android-icons.mjs
           npx cap sync android
@@ -69,8 +94,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          TAG="${{ inputs.tag }}"
-          VER="${TAG#v}"
+          TAG="${{ steps.target.outputs.tag }}"
+          VER="${{ steps.target.outputs.ver }}"
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             gh release create "$TAG" --title "$VER" --notes "Android hotfix APK (signed)" --latest=false
           fi
