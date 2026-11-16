@@ -1,0 +1,83 @@
+name: Windows Release (only)
+
+# Publishes Windows installer only (no macOS / Android).
+#
+# Trigger A — Actions UI / CLI:
+#   gh workflow run windows-release.yml -f tag=v0.1.41
+# Trigger B — push tag (CI token-safe):
+#   git tag win/v0.1.41 && git push origin win/v0.1.41
+#   → builds from main, publishes Mira-*-windows-x64 into Release v0.1.41
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish into (e.g. v0.1.41)"
+        required: true
+        type: string
+  push:
+    tags:
+      - "win/v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release-windows-only:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Resolve target release tag
+        id: target
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TAG="${{ inputs.tag }}"
+          else
+            # refs/tags/win/v0.1.41 → v0.1.41
+            RAW="${GITHUB_REF_NAME}"
+            TAG="${RAW#win/}"
+          fi
+          if [[ ! "$TAG" =~ ^v[0-9] ]]; then
+            echo "::error::Bad target tag: $TAG"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "ver=${TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "Target release: $TAG"
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build + publish Windows only
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LLM_PROVIDER: mock
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npm run release -- --win --x64
+
+      - name: Ensure release notes / latest
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.target.outputs.tag }}"
+          VER="${{ steps.target.outputs.ver }}"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "$VER" --notes "Windows-only hotfix" --latest=false
+          fi
+          gh release edit "$TAG" --draft=false --latest || true
+          echo "Windows assets → $TAG"
+          gh release view "$TAG" --json assets --jq '.assets[].name'
