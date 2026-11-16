@@ -5,7 +5,7 @@ name: Release
 #   1) merge develop → main (release PR with version bump)
 #   2) git tag vX.Y.Z && git push origin vX.Y.Z
 #
-# POLICY: every tagged release publishes Windows AND macOS together
+# POLICY: every tagged release publishes Windows + macOS + Android together
 # (same GitHub Release / same tag). Never ship one OS alone.
 
 on:
@@ -93,18 +93,86 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: npm run release -- --mac --x64 --arm64
 
-  # Single gate: release is green only when BOTH platforms published.
+  # Capacitor WebView shell — tablet UI; Electron APIs unavailable (browser fallbacks).
+  release-android:
+    needs: [release-windows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure release commit is on main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          if git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "OK: $GITHUB_SHA is reachable from origin/main"
+          else
+            echo "::error::Tag/commit $GITHUB_SHA is not on main. Merge the release into main first, then tag."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install
+        run: npm ci
+
+      - name: Sync Capacitor + assembleRelease
+        run: |
+          set -euo pipefail
+          npm run build:web
+          npx cap sync android
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          VER="${GITHUB_REF_NAME#v}"
+          mkdir -p ../release-android
+          SRC=$(find app/build/outputs/apk -name '*.apk' | head -n 1)
+          cp "$SRC" "../release-android/Mira-${VER}-android.apk"
+          ls -la ../release-android
+
+      - name: Upload Android APK to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          # Wait briefly for Windows job to create the Release object.
+          for i in 1 2 3 4 5 6 7 8; do
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              break
+            fi
+            sleep 15
+          done
+          gh release upload "$TAG" release-android/Mira-*-android.apk --clobber
+
+  # Single gate: release is green only when Win + mac + Android published.
   release-all:
     runs-on: ubuntu-latest
-    needs: [release-windows, release-macos]
+    needs: [release-windows, release-macos, release-android]
     if: always()
     steps:
-      - name: Require Windows + macOS
+      - name: Require Windows + macOS + Android
         shell: bash
         run: |
           set -euo pipefail
           echo "windows=${{ needs.release-windows.result }}"
           echo "macos=${{ needs.release-macos.result }}"
+          echo "android=${{ needs.release-android.result }}"
           if [[ "${{ needs.release-windows.result }}" != "success" ]]; then
             echo "::error::Windows release failed — do not treat tag as fully published."
             exit 1
@@ -113,4 +181,8 @@ jobs:
             echo "::error::macOS release failed — do not treat tag as fully published."
             exit 1
           fi
-          echo "OK: Windows + macOS published to the same GitHub Release."
+          if [[ "${{ needs.release-android.result }}" != "success" ]]; then
+            echo "::error::Android release failed — do not treat tag as fully published."
+            exit 1
+          fi
+          echo "OK: Windows + macOS + Android published to the same GitHub Release."

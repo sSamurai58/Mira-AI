@@ -134,7 +134,7 @@ export function WorkshopPage() {
 
   return (
     <div className="settings-layout workshop-layout">
-      <nav className="settings-nav" aria-label="Мастерская">
+      <nav className="settings-nav workshop-seg-nav" aria-label="Мастерская">
         {SEGMENTS.map((s) => (
           <button
             key={s.id}
@@ -142,7 +142,7 @@ export function WorkshopPage() {
             className={`nav-btn ${segment === s.id ? "active" : ""}`}
             onClick={() => setSegment(s.id)}
           >
-            {s.label}
+            <span className="workshop-seg-label">{s.label}</span>
           </button>
         ))}
       </nav>

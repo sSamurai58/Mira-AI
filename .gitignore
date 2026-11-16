@@ -6,6 +6,15 @@ dist/
 dist-electron/
 release/
 out/
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+android/captures/
+android/*.apk
+android/*.aab
+android/app/release/
+android/app/debug/
 
 # env / local data
 .env

@@ -25,19 +25,20 @@ cursor/feature-…  →  PR  →  develop  →  (релиз)  →  main  →  ta
    - с `develop` собираем релизный PR в **`main`** (bump `package.json`, changelog, MEMORY);
    - мержим в `main`;
    - ставим тег **`vX.Y.Z`** на коммит **`main`**;
-   - workflow `Release` **всегда** публикует **Windows и macOS вместе** в один GitHub Release
-     (`latest.yml` + `latest-mac.yml`, exe/zip + dmg/zip). Релиз не считается готовым,
-     пока не зелёны оба job’а (`release-all` gate).
+   - workflow `Release` **всегда** публикует **Windows + macOS + Android** в один GitHub Release
+     (`latest.yml` + `latest-mac.yml`, exe/zip + dmg/zip + `Mira-*-android.apk`).
+     Релиз не считается готовым, пока не зелёны все job’ы (`release-all` gate).
 4. После релиза `main` = то, что ставится; `develop` продолжает жить дальше (при необходимости fast-forward / merge main → develop).
 
 ## Запреты
 
 - Не пушить сырые фичи прямо в `main`.
-- Не коммитить `.exe` / `.zip` / `latest.yml` в репозиторий.
+- Не коммитить `.exe` / `.zip` / `latest.yml` / `.apk` в репозиторий.
 - Не ставить тег `v*` с ветки, которой нет в истории `main` (после перехода на эту схему).
 - Непубликованные эксперименты — не в `main`.
-- **Не выпускать релиз только под Windows или только под macOS** — всегда оба в одном теге.
+- **Не выпускать релиз только под одну ОС** — всегда Windows + macOS + Android в одном теге.
 - macOS DMG/ZIP пока **unsigned** (Gatekeeper: ПКМ → Открыть); Apple Developer signing — позже.
+- Android APK — Capacitor WebView (tablet UI); без Electron IPC (см. `docs/ANDROID.md`).
 
 ## CI
 

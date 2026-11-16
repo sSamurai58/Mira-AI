@@ -1417,12 +1417,12 @@ export function ChatPage({
               >
                 Диктовка
               </button>
-              <span className="chip" title="Микрофон">
+              <span className="chip chat-toolbar-extra" title="Микрофон">
                 клик = команда · удержание = диктовка
               </span>
               <button
                 type="button"
-                className="btn"
+                className="btn chat-toolbar-extra"
                 title="Разрешить один облачный TTS (ElevenLabs)"
                 onClick={() => {
                   grantExternalOnce();
@@ -1440,8 +1440,12 @@ export function ChatPage({
                 <strong>«{handsFree.wakePhrase}»</strong>
               </span>
             ) : null}
-            {contextNote ? <span className="chip">{contextNote}</span> : null}
-            {memoryNote ? <span className="chip">{memoryNote}</span> : null}
+            {contextNote ? (
+              <span className="chip chat-toolbar-extra">{contextNote}</span>
+            ) : null}
+            {memoryNote ? (
+              <span className="chip chat-toolbar-extra">{memoryNote}</span>
+            ) : null}
             {interim ? (
               <span className="chip">
                 Слушаю: <strong>{interim}</strong>
