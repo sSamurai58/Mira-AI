@@ -50,8 +50,8 @@ export function synthCacheKey(
   } = {},
 ): string {
   const payload = JSON.stringify({
-    // v3: unit-stitch prefer + speechiness vocode + clarity EQ (bust robot caches)
-    v: 3,
+    // v4: F5/Chatterbox/Cosy sidecar preference baked into voiceId composite
+    v: 4,
     voiceId,
     text: text.trim(),
     speed: prosody.speed ?? 1,

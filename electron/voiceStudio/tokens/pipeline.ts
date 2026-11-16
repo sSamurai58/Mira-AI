@@ -1,5 +1,5 @@
 /**
- * End-to-end token pipeline: normalize → chunk → (Cosy|neural) → cache.
+ * End-to-end token pipeline: normalize → stitch → (F5|Chatterbox|Cosy|neural) → cache.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -11,8 +11,14 @@ import {
 import { parseWavInfo } from "../modelPack";
 import { synthesizeNeuralSpeech } from "../neural/infer";
 import { synthesizeUnitStitch } from "../unitStitchSynth";
+import {
+  chatterboxAvailable,
+  synthesizeViaChatterbox,
+} from "./chatterboxSidecar";
 import { chunkSpeechText, crossfadeJoinInt16 } from "./chunking";
 import { cosyVoiceAvailable, synthesizeViaCosy } from "./cosySidecar";
+import { resolveExternalTtsOrder } from "./externalTtsOrder";
+import { f5TtsAvailable, synthesizeViaF5 } from "./f5Sidecar";
 import { loadSpeakerPack, speakerPackPaths } from "./speakerPack";
 import { normalizeSpeechText } from "./textNormalize";
 import { tokenizeAndStoreUtterance } from "./tokenStore";
@@ -40,35 +46,18 @@ export type PipelineSpeakResult = {
   ok: boolean;
   wavPath: string | null;
   detail: string;
-  backend: "cosyvoice" | "unit-stitch" | "neural-mel" | "cache";
+  backend:
+    | "f5-tts"
+    | "chatterbox"
+    | "cosyvoice"
+    | "unit-stitch"
+    | "neural-mel"
+    | "cache";
   chunks: number;
   normalizedText: string;
   speakerReady: boolean;
   cached?: boolean;
 };
-
-function readWavPcm16Mono(wavPath: string): Int16Array | null {
-  const info = parseWavInfo(wavPath);
-  if (!info || info.bitsPerSample !== 16) return null;
-  const buf = fs.readFileSync(wavPath);
-  const bytes = Math.min(info.dataSize, buf.length - info.dataOffset);
-  const samples = new Int16Array(
-    buf.buffer,
-    buf.byteOffset + info.dataOffset,
-    Math.floor(bytes / 2),
-  );
-  if (info.channels === 1) return samples;
-  const frames = Math.floor(samples.length / info.channels);
-  const mono = new Int16Array(frames);
-  for (let i = 0; i < frames; i++) {
-    let acc = 0;
-    for (let c = 0; c < info.channels; c++) {
-      acc += samples[i * info.channels + c]!;
-    }
-    mono[i] = Math.round(acc / info.channels);
-  }
-  return mono;
-}
 
 function writePcm16Wav(
   outPath: string,
@@ -136,8 +125,7 @@ function joinChunkWavs(wavPaths: string[], outPath: string): boolean {
 }
 
 /**
- * Full speak path with T0 normalize, chunking, speaker pack awareness,
- * CosyVoice sidecar (optional), neural fallback, expanded cache key.
+ * Full speak path: stitch → F5 / Chatterbox / Cosy sidecars → neural-mel.
  */
 export function speakTokenPipeline(opts: PipelineSpeakOpts): PipelineSpeakResult {
   const norm = normalizeSpeechText(opts.text);
@@ -145,22 +133,14 @@ export function speakTokenPipeline(opts: PipelineSpeakOpts): PipelineSpeakResult
   const pack = loadSpeakerPack(opts.projectRoot, style);
   const speakerReady = Boolean(pack);
   const instruct = opts.prosody?.instruct?.trim() || undefined;
+  const sidecarOrder = resolveExternalTtsOrder();
+  const sidecarKey = sidecarOrder.join("+") || "off";
 
-  const cacheKey = synthCacheKey(opts.voiceId, norm.text, {
-    speed: opts.prosody?.speed,
-    pauseScale: opts.prosody?.pauseScale,
-    energy: opts.prosody?.energy,
-    quality: opts.prosody?.quality,
-    // Extended fields via quality string bake-in for instruct/seed/style
-    // (localSynthCache v1) — append into text channel for hash stability:
-  });
-  // Bake instruct/style/seed into key by synthesizing a composite text key
   const compositeKey = synthCacheKey(
-    `${opts.voiceId}::${style}::${instruct ?? ""}::${opts.prosody?.seed ?? ""}`,
+    `${opts.voiceId}::${style}::${instruct ?? ""}::${opts.prosody?.seed ?? ""}::${sidecarKey}`,
     norm.text,
     opts.prosody ?? {},
   );
-  void cacheKey;
   const cachedPath = getCachedSynthWav(compositeKey);
   if (cachedPath) {
     return {
@@ -176,7 +156,6 @@ export function speakTokenPipeline(opts: PipelineSpeakOpts): PipelineSpeakResult
   }
 
   // V7 E1: TokenStore is analysis/storage only — does not drive synthesis.
-  // Still persist for studio/debug when asked; speak uses stitch → neural.
   if (opts.storeTokens) {
     try {
       tokenizeAndStoreUtterance({
@@ -214,12 +193,16 @@ export function speakTokenPipeline(opts: PipelineSpeakOpts): PipelineSpeakResult
     };
   }
 
-  // Neural-mel Griffin-Lim must NOT be chunked for short replies: each chunk
-  // gets independent phase → robotic jumps + crossfade whoosh.
-  // CosyVoice still benefits from sentence chunks on long text.
+  const f5Probe = f5TtsAvailable();
+  const cbProbe = chatterboxAvailable();
   const cosyProbe = cosyVoiceAvailable();
-  const preferWhole =
-    !cosyProbe.ok || norm.text.length < 280;
+  const anySidecar =
+    (sidecarOrder.includes("f5") && f5Probe.ok) ||
+    (sidecarOrder.includes("chatterbox") && cbProbe.ok) ||
+    (sidecarOrder.includes("cosy") && cosyProbe.ok);
+
+  // Neural-mel must NOT be chunked for short replies (phase jumps).
+  const preferWhole = !anySidecar || norm.text.length < 280;
   const chunks = preferWhole
     ? [{ text: norm.text, index: 0 }]
     : chunkSpeechText(norm.text);
@@ -240,28 +223,66 @@ export function speakTokenPipeline(opts: PipelineSpeakOpts): PipelineSpeakResult
   const chunkWavs: string[] = [];
   let backend: PipelineSpeakResult["backend"] = "neural-mel";
 
-  const cosy = cosyProbe;
   const cosyPt = speakerPackPaths(opts.projectRoot, style).cosyPt;
-  const useCosy = cosy.ok && (fs.existsSync(cosyPt) || Boolean(pack?.meta.sourceWav));
+  const refWav = pack?.meta.sourceWav;
+  const hasRef = Boolean(refWav && fs.existsSync(refWav));
+  const useCosy =
+    sidecarOrder.includes("cosy") &&
+    cosyProbe.ok &&
+    (fs.existsSync(cosyPt) || hasRef);
+  const useF5 = sidecarOrder.includes("f5") && f5Probe.ok && hasRef;
+  const useCb = sidecarOrder.includes("chatterbox") && cbProbe.ok;
 
   for (const ch of chunks) {
     const out = path.join(tmpDir, `c${ch.index}-${Date.now()}.wav`);
-    if (useCosy) {
-      const res = synthesizeViaCosy({
-        text: ch.text,
-        speakerPt: fs.existsSync(cosyPt) ? cosyPt : undefined,
-        refWav: pack?.meta.sourceWav,
-        outWav: out,
-        speed: opts.prosody?.speed,
-        instruct,
-      });
-      if (res.ok) {
-        chunkWavs.push(out);
-        backend = "cosyvoice";
-        continue;
+    let done = false;
+
+    for (const engine of sidecarOrder) {
+      if (done) break;
+      if (engine === "f5" && useF5) {
+        const res = synthesizeViaF5({
+          text: ch.text,
+          refWav,
+          outWav: out,
+          speed: opts.prosody?.speed,
+          language: "ru",
+        });
+        if (res.ok) {
+          chunkWavs.push(out);
+          backend = "f5-tts";
+          done = true;
+        }
+      } else if (engine === "chatterbox" && useCb) {
+        const res = synthesizeViaChatterbox({
+          text: ch.text,
+          refWav: hasRef ? refWav : undefined,
+          outWav: out,
+          speed: opts.prosody?.speed,
+          language: "ru",
+        });
+        if (res.ok) {
+          chunkWavs.push(out);
+          backend = "chatterbox";
+          done = true;
+        }
+      } else if (engine === "cosy" && useCosy) {
+        const res = synthesizeViaCosy({
+          text: ch.text,
+          speakerPt: fs.existsSync(cosyPt) ? cosyPt : undefined,
+          refWav,
+          outWav: out,
+          speed: opts.prosody?.speed,
+          instruct,
+        });
+        if (res.ok) {
+          chunkWavs.push(out);
+          backend = "cosyvoice";
+          done = true;
+        }
       }
     }
-    // Per-chunk: try word stitch before neural mush.
+    if (done) continue;
+
     const chunkStitch = synthesizeUnitStitch(opts.packDir, ch.text, {
       outPath: out,
       minCoverage: 0.35,
@@ -279,7 +300,7 @@ export function speakTokenPipeline(opts: PipelineSpeakOpts): PipelineSpeakResult
         ok: false,
         wavPath: null,
         detail:
-          "Нет нейро-весов и CosyVoice недоступен. Соберите голос в Studio.",
+          "Нет нейро-весов и sidecar (F5/Chatterbox/Cosy) недоступен. Соберите голос в Studio или задайте F5_HOME.",
         backend: "neural-mel",
         chunks: chunks.length,
         normalizedText: norm.text,
@@ -309,7 +330,6 @@ export function speakTokenPipeline(opts: PipelineSpeakOpts): PipelineSpeakResult
     };
   }
 
-  // Cleanup chunk temps
   for (const p of chunkWavs) {
     try {
       fs.unlinkSync(p);

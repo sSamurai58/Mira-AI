@@ -116,6 +116,11 @@ export function localStudioSnapshot(projectId?: string) {
       tokens: null,
       cosyAvailable: false,
       cosyDetail: "Browser-demo · TokenStore только в Electron",
+      f5Available: false,
+      f5Detail: "Browser-demo · F5 sidecar только в Electron",
+      chatterboxAvailable: false,
+      chatterboxDetail: "Browser-demo · Chatterbox только в Electron",
+      sidecarOrder: ["f5", "chatterbox", "cosy"],
     },
     trainHealth: {
       hasWeights: Boolean(project?.custom_voice_id),

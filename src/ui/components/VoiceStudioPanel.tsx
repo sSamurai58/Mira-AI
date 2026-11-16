@@ -266,6 +266,11 @@ export function VoiceStudioPanel(props: {
     } | null;
     cosyAvailable: boolean;
     cosyDetail: string;
+    f5Available?: boolean;
+    f5Detail?: string;
+    chatterboxAvailable?: boolean;
+    chatterboxDetail?: string;
+    sidecarOrder?: string[];
   } | null>(null);
   const [trainHealth, setTrainHealth] = useState<TrainHealth | null>(null);
 
@@ -1250,10 +1255,21 @@ export function VoiceStudioPanel(props: {
                 {" · "}
                 FT-pairs {tokenPipeline.tokens?.ftPairs ?? 0}
                 {" · "}
-                Cosy{" "}
-                {tokenPipeline.cosyAvailable
-                  ? "sidecar"
-                  : "off (Mira neural)"}
+                Sidecar{" "}
+                {(tokenPipeline.sidecarOrder ?? ["f5", "chatterbox", "cosy"]).join(
+                  "→",
+                )}
+                {" · "}
+                F5 {tokenPipeline.f5Available ? "on" : "off"}
+                {" · "}
+                CB {tokenPipeline.chatterboxAvailable ? "on" : "off"}
+                {" · "}
+                Cosy {tokenPipeline.cosyAvailable ? "on" : "off"}
+                {!tokenPipeline.f5Available &&
+                !tokenPipeline.chatterboxAvailable &&
+                !tokenPipeline.cosyAvailable
+                  ? " (Mira neural/stitch)"
+                  : ""}
               </div>
             ) : null}
             {needMoreClips > 0 ? (
