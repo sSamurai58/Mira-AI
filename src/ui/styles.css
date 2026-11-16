@@ -6029,7 +6029,8 @@ body.mira-update-hud-root {
   margin: 0;
   padding: 0;
   overflow: hidden;
-  background: transparent !important;
+  /* Opaque — matches BrowserWindow; transparent overlay ate clicks on Win. */
+  background: #14101c !important;
   width: 100%;
   height: 100%;
 }
@@ -6037,7 +6038,8 @@ body.mira-update-hud-root {
 body.mira-update-hud-root #root {
   width: 100%;
   height: 100%;
-  background: transparent;
+  background: #14101c;
+  pointer-events: auto;
 }
 
 .mira-update-hud {
@@ -6050,36 +6052,30 @@ body.mira-update-hud-root #root {
   animation: mira-update-hud-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-/* Always-on-top BrowserWindow (#/update-hud) — pin card to the window corner. */
+/* Always-on-top BrowserWindow (#/update-hud) — fill the whole small window. */
 .mira-update-hud--overlay {
   position: absolute;
-  right: 8px;
-  bottom: 8px;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  right: auto;
+  bottom: auto;
   left: auto;
   top: auto;
-  width: min(360px, calc(100% - 16px));
   z-index: 1;
+  margin: 0;
+  pointer-events: auto;
 }
 
-.mira-update-hud--overlay.mira-update-hud--pos-bl {
-  left: 8px;
-  right: auto;
-  bottom: 8px;
-  top: auto;
-}
-
-.mira-update-hud--overlay.mira-update-hud--pos-tr {
-  right: 8px;
-  top: 8px;
-  left: auto;
-  bottom: auto;
-}
-
-.mira-update-hud--overlay.mira-update-hud--pos-tl {
-  left: 8px;
-  top: 8px;
-  right: auto;
-  bottom: auto;
+.mira-update-hud--overlay.mira-update-hud--pos-bl,
+.mira-update-hud--overlay.mira-update-hud--pos-tr,
+.mira-update-hud--overlay.mira-update-hud--pos-tl,
+.mira-update-hud--overlay.mira-update-hud--pos-br {
+  inset: 0;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
 }
 
 .mira-update-hud--pos-br {
@@ -6409,6 +6405,47 @@ body.mira-update-hud-root #root {
     0 18px 40px color-mix(in srgb, #000 45%, transparent);
   padding: 0.85rem 1rem 0.95rem;
   backdrop-filter: blur(12px);
+  pointer-events: auto;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.mira-update-hud--overlay .mira-update-hud-body {
+  border-radius: 0;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  min-height: 100%;
+}
+
+.mira-update-hud-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.mira-update-hud-close {
+  appearance: none;
+  border: 0;
+  background: color-mix(in srgb, var(--fg, #fff) 10%, transparent);
+  color: var(--text-muted, #aaa);
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 8px;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  pointer-events: auto;
+  flex: 0 0 auto;
+}
+
+.mira-update-hud-close:hover {
+  background: color-mix(in srgb, var(--fg, #fff) 18%, transparent);
+  color: var(--text, #fff);
 }
 
 .mira-update-hud-kicker {
@@ -6416,7 +6453,7 @@ body.mira-update-hud-root #root {
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: color-mix(in srgb, var(--accent) 80%, var(--text-muted));
-  margin-bottom: 0.25rem;
+  margin: 0;
 }
 
 .mira-update-hud-title {
