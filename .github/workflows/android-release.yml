@@ -1,0 +1,91 @@
+name: Android Release (only)
+
+# One-shot / hotfix: publish a signed APK to an existing GitHub Release tag.
+# Does NOT build Windows or macOS.
+#
+#   gh workflow run android-release.yml -f tag=v0.1.37
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to upload APK into (e.g. v0.1.37)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release-android-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag }}
+
+      - name: Ensure tag commit is on main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          SHA=$(git rev-list -n 1 "${{ inputs.tag }}")
+          if git merge-base --is-ancestor "$SHA" origin/main; then
+            echo "OK: $SHA (${{ inputs.tag }}) is on main"
+          else
+            echo "::error::Tag ${{ inputs.tag }} is not on main."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools build-tools;35.0.0 platforms;android-36
+
+      - name: Install
+        run: npm ci
+
+      - name: Build signed APK
+        run: |
+          set -euo pipefail
+          TAG="${{ inputs.tag }}"
+          VER="${TAG#v}"
+          npm run build:web
+          node scripts/android-icons.mjs
+          npx cap sync android
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon -Dorg.gradle.jvmargs="-Xmx4g"
+          mkdir -p ../release-android
+          SRC="app/build/outputs/apk/release/app-release.apk"
+          test -f "$SRC"
+          cp "$SRC" "../release-android/Mira-${VER}-android.apk"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs \
+            "../release-android/Mira-${VER}-android.apk"
+          ls -la ../release-android
+
+      - name: Upload APK to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ inputs.tag }}"
+          VER="${TAG#v}"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "$VER" --notes "Android hotfix APK" --latest=false
+          fi
+          gh release upload "$TAG" "release-android/Mira-${VER}-android.apk" --clobber
+          gh release edit "$TAG" --draft=false
+          echo "Uploaded Mira-${VER}-android.apk → $TAG"
