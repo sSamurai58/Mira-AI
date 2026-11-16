@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useModalLock } from "../hooks/useModalLock";
 
 export type SkillProposeForm = {
   defaultId: string;
@@ -124,6 +125,8 @@ export function ConfirmModal({
     existing.has(normalizedId);
   const invalidId = Boolean(skillPropose) && !normalizedId;
   const canSubmit = !skillPropose || (!duplicate && !invalidId);
+
+  useModalLock(open);
 
   if (!open) return null;
 

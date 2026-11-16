@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useModalLock } from "../hooks/useModalLock";
 import { StubBadge } from "./StubBadge";
 import {
   Field,
@@ -303,6 +304,7 @@ export function SettingsIntegrationsSection() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<FilterId>("all");
   const [editorId, setEditorId] = useState<IntegId | null>(null);
+  useModalLock(editorId != null);
 
   useEffect(() => {
     let cancelled = false;
