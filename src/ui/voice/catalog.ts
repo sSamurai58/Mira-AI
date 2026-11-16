@@ -115,30 +115,101 @@ export function resolveSpeechVoice(
   );
 }
 
+function mapElevenLabsRow(v: {
+  voiceId: string;
+  name: string;
+  category?: string;
+  labels?: Record<string, string>;
+}): VoiceInfo {
+  const lang =
+    v.labels?.language ||
+    v.labels?.accent ||
+    (v.labels?.ru ? "ru" : "multilingual");
+  const cat = v.category && v.category !== "unknown" ? ` · ${v.category}` : "";
+  return {
+    id: catalogIdForElevenLabs(v.voiceId),
+    name: `${v.name} (ElevenLabs${cat})`,
+    lang: String(lang),
+    localService: false,
+    elevenLabs: true,
+  };
+}
+
+/**
+ * ElevenLabs entries for the Голос dropdown.
+ * If the API key is saved, ALWAYS show at least the configured Voice ID —
+ * even when /v1/voices fails (network / rate limit). Previously we required
+ * res.ok and the list stayed studio+Irina only.
+ */
 async function listElevenLabsCatalogVoices(): Promise<VoiceInfo[]> {
-  if (!window.mira?.listElevenLabsVoices) return [];
+  if (typeof window === "undefined" || !window.mira) return [];
+
+  const byId = new Map<string, VoiceInfo>();
+
+  // 1) Key + configured Voice ID from settings / status (no network required).
   try {
-    const res = await window.mira.listElevenLabsVoices();
-    // Only list when API key works — otherwise chat dropdown stays studio+system.
-    if (!res?.ok) return [];
-    const rows = res.voices ?? [];
-    if (!rows.length) return [];
-    return rows.map((v) => {
-      const lang =
-        v.labels?.language ||
-        v.labels?.accent ||
-        (v.labels?.ru ? "ru" : "multilingual");
-      return {
-        id: catalogIdForElevenLabs(v.voiceId),
-        name: `${v.name} (ElevenLabs)`,
-        lang: String(lang),
-        localService: false,
-        elevenLabs: true,
-      };
-    });
+    const { loadSettingsEnv } = await import("../settingsEnvClient");
+    const snap = await loadSettingsEnv();
+    const hasKey = Boolean(snap.secretsSet?.ELEVENLABS_API_KEY);
+    const voiceId =
+      snap.values.ELEVENLABS_VOICE_ID?.trim() ||
+      (await import("./ttsEngines")).DEFAULT_ELEVENLABS_VOICE_ID;
+    if (hasKey && voiceId) {
+      byId.set(
+        voiceId,
+        mapElevenLabsRow({
+          voiceId,
+          name: `Ваш голос · ${voiceId.slice(0, 8)}…`,
+          category: "saved",
+          labels: { language: "ru" },
+        }),
+      );
+    }
   } catch {
-    return [];
+    /* ignore */
   }
+
+  try {
+    if (window.mira.getElevenLabsStatus) {
+      const st = await window.mira.getElevenLabsStatus(false);
+      if (st?.hasKey && st.voiceId) {
+        byId.set(
+          st.voiceId,
+          mapElevenLabsRow({
+            voiceId: st.voiceId,
+            name: `Ваш голос · ${st.voiceId.slice(0, 8)}…`,
+            category: "saved",
+            labels: { language: "ru" },
+          }),
+        );
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  // 2) Full account list when API responds (ok or partial).
+  if (window.mira.listElevenLabsVoices) {
+    try {
+      const res = await window.mira.listElevenLabsVoices();
+      for (const v of res?.voices ?? []) {
+        if (!v?.voiceId) continue;
+        byId.set(
+          v.voiceId,
+          mapElevenLabsRow({
+            voiceId: v.voiceId,
+            name: v.name || v.voiceId,
+            category: v.category,
+            labels: v.labels,
+          }),
+        );
+      }
+    } catch {
+      /* keep saved entry */
+    }
+  }
+
+  return [...byId.values()];
 }
 
 export async function listCatalogVoices(): Promise<VoiceInfo[]> {
@@ -170,8 +241,8 @@ export async function listCatalogVoices(): Promise<VoiceInfo[]> {
   }));
 
   const eleven = await listElevenLabsCatalogVoices();
-  // Studio → ElevenLabs (when key works) → system
-  return [...mapped, ...eleven, ...system];
+  // ElevenLabs first (when key saved) so they are obvious in the dropdown.
+  return [...eleven, ...mapped, ...system];
 }
 
 export function waitForVoices(timeoutMs = 2500): Promise<VoiceInfo[]> {

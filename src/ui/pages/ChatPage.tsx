@@ -291,6 +291,10 @@ export function ChatPage({
               ? `EL ${st.connected ? "ok" : "ключ"}${quota}`
               : "EL нет ключа → fallback",
           );
+          // Ensure Голос dropdown picks up EL entries once key is known.
+          if (st.hasKey) {
+            window.dispatchEvent(new Event("mira:catalog-voices-changed"));
+          }
           return;
         } catch {
           /* fall through */
@@ -369,13 +373,20 @@ export function ChatPage({
       setEngineNote(getVoiceEngineStatus().detail);
     }
     void bootVoices();
+    // EL voices may appear after settings/.env hydrate — retry briefly.
+    const retry = window.setTimeout(() => {
+      void bootVoices();
+    }, 1200);
     const onCatalog = () => {
       void bootVoices();
     };
     window.addEventListener("mira:catalog-voices-changed", onCatalog);
+    window.addEventListener("focus", onCatalog);
     return () => {
       cancelled = true;
+      window.clearTimeout(retry);
       window.removeEventListener("mira:catalog-voices-changed", onCatalog);
+      window.removeEventListener("focus", onCatalog);
       stopSpeaking();
       asrRef.current?.stop();
       wakeRef.current?.stop();

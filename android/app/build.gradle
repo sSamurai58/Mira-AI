@@ -1,7 +1,7 @@
 apply plugin: 'com.android.application'
 
-def miraVersionName = "0.1.40"
-def miraVersionCode = 40
+def miraVersionName = "0.1.41"
+def miraVersionCode = 41
 try {
     def pkg = new File(rootProject.projectDir, '../package.json')
     if (pkg.exists()) {
