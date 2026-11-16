@@ -21,23 +21,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
+      # Always build from main (signing + Mira icons). Upload into the chosen tag.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ inputs.tag }}
-
-      - name: Ensure tag commit is on main
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch origin main
-          SHA=$(git rev-list -n 1 "${{ inputs.tag }}")
-          if git merge-base --is-ancestor "$SHA" origin/main; then
-            echo "OK: $SHA (${{ inputs.tag }}) is on main"
-          else
-            echo "::error::Tag ${{ inputs.tag }} is not on main."
-            exit 1
-          fi
+          ref: main
 
       - uses: actions/setup-node@v4
         with:
@@ -84,8 +72,8 @@ jobs:
           TAG="${{ inputs.tag }}"
           VER="${TAG#v}"
           if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" --title "$VER" --notes "Android hotfix APK" --latest=false
+            gh release create "$TAG" --title "$VER" --notes "Android hotfix APK (signed)" --latest=false
           fi
           gh release upload "$TAG" "release-android/Mira-${VER}-android.apk" --clobber
-          gh release edit "$TAG" --draft=false
+          gh release edit "$TAG" --draft=false || true
           echo "Uploaded Mira-${VER}-android.apk → $TAG"
