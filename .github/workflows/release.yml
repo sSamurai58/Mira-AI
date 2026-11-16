@@ -125,8 +125,12 @@ jobs:
           distribution: temurin
           java-version: "21"
 
+      # Do NOT install obsolete SDK package "tools" (removed upstream) —
+      # android-actions/setup-android@v3 defaults to it and fails.
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools build-tools;35.0.0 platforms;android-36
 
       - name: Install
         run: npm ci
@@ -138,10 +142,14 @@ jobs:
           npx cap sync android
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon
+          # Prefer unsigned release APK for GitHub Releases (no Play keystore yet).
+          ./gradlew assembleRelease --no-daemon \
+            -Dorg.gradle.jvmargs="-Xmx4g" \
+            || ./gradlew assembleDebug --no-daemon
           VER="${GITHUB_REF_NAME#v}"
           mkdir -p ../release-android
           SRC=$(find app/build/outputs/apk -name '*.apk' | head -n 1)
+          test -n "$SRC"
           cp "$SRC" "../release-android/Mira-${VER}-android.apk"
           ls -la ../release-android
 
