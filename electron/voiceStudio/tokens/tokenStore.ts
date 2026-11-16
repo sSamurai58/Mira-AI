@@ -140,7 +140,9 @@ export function tokenizeAndStoreUtterance(opts: {
       const mel = extractMelFromWav(opts.clipPath);
       if (mel) {
         const codes = encodeMelToTokens(mel, book);
-        fs.writeFileSync(path.join(dir, "t3.codec.u16"), Buffer.from(codes.buffer));
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const { bufferFromView } = require("./bufferView") as typeof import("./bufferView");
+        fs.writeFileSync(path.join(dir, "t3.codec.u16"), bufferFromView(codes));
         acousticTokens = codes.length;
         meta.acousticFrames = codes.length;
         meta.vocabRev = book.vocabRev;

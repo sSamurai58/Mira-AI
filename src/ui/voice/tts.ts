@@ -494,7 +494,17 @@ async function tryNeuralPhraseBuffer(
     const decodeCache = new Map<string, AudioBuffer>();
     const buf = await decodeClip(ctx, neural.wavPath, decodeCache);
     if (!isCurrent()) return null;
-    if (!audioBufferSoundsLikeNeuralSynth(buf)) return null;
+    // V19: unit-stitch is real corpus audio — never reject on ZCR gate.
+    // Gate only neural/griffin-ish backends (HF mush).
+    const backend =
+      typeof (neural as { backend?: string }).backend === "string"
+        ? (neural as { backend: string }).backend
+        : "";
+    const isStitch =
+      backend === "unit-stitch" ||
+      /склейк/i.test(neural.detail || "") ||
+      backend === "cache";
+    if (!isStitch && !audioBufferSoundsLikeNeuralSynth(buf)) return null;
     // Neural already baked speed/pause into mel frame count — do not time-scale
     // again (double resample = smear / chipmunk on Griffin-Lim).
     const vs = getVoiceSettings();
@@ -504,8 +514,10 @@ async function tryNeuralPhraseBuffer(
       pauseScale: 1,
     });
     const detail = neural.cached
-      ? "Нейро-синтез (кэш)"
-      : neural.detail || "Нейро-синтез (encoder→decoder→vocoder)";
+      ? backend === "unit-stitch" || isStitch
+        ? "Склейка корпуса (кэш)"
+        : "Нейро-синтез (кэш)"
+      : neural.detail || "Синтез голоса";
     return { buffer: shaped, detail };
   } catch {
     return null;

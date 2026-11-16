@@ -29,37 +29,37 @@ TRAIN: buildVoiceModelPack (energy word cuts) → runNeuralMelTrain (16 kHz / ho
 
 ### P0 — ломают разборчивость
 
-| ID | Где | Суть |
-|----|-----|------|
-| **V1** | `neural/vocoder.ts` `vocoderSynthesize` | Hann длиной = hop, без overlap; нормализация `s·w / w² = s/w` → на краях кадра усиление ×сотн и дырки → ~100 Гц «пилька» |
-| **V2** | `vocoder.ts` train vs synthesize | Train учит на сыром hop-PCM; infer применяет Hann+w² — сеть не учит то, что играет |
-| **V3** | `train.ts` `downsampleMel` + vocoder targets `f * hop` | Глобальная прореживание mel; PCM берётся с `f*160`, а спектр с `⌊f·step⌋` — пары mel↔wave перепутаны |
-| **V4** | `train.ts` decoder на ≤96 downsample frames | Train учит «шаг = большой скачок времени»; infer — 10 ms/кадр → смазанные форманты |
-| **V5** | `unitStitchSynth` + `modelPack` | При failed slice в лексикон кладётся **весь phrase WAV** как «слово»; stitch читает файл целиком, `startMs`/`endMs` игнор |
-| **V6** | `modelPack.stitchPcm` / `joinChunkWavs` | Разный SR → слово **молча выкидывается** или join берёт SR последнего чанка без resample |
+| ID | Статус | Суть |
+|----|--------|------|
+| **V1** | fixed | Hann=hop убран; abut + crossfade 16 |
+| **V2** | fixed | Train targets = raw hop как infer |
+| **V3** | fixed | `cropMelWindow` + `srcFrameOffset` для PCM |
+| **V4** | fixed | Decoder на contiguous ≤96 crops |
+| **V5** | fixed | `needsSlice` + slice по start/endMs |
+| **V6** | fixed | Resample все parts к 16 kHz mono |
 
 ### P1 — сильный вред качеству
 
-| ID | Где | Суть |
-|----|-----|------|
-| **V7** | `tokens/pipeline.ts` | TokenStore не кормит encoder/vocoder; grapheme-only |
-| **V8** | `productionVocode` | `speechinessScore` (ZCR/tilt) может выбрать шумный Griffin-Lim вместо neural |
-| **V9** | `pipeline` minCoverage **0.35** | Большая доля formant fill → гибрид «кусок записи + робот» |
-| **V10** | `estimateWordBoundariesByEnergy` | Нет forced alignment — кривые срезы слов |
-| **V11** | GL vs neural длина | ISTFT `(F-1)*hop+nFFT` vs `F*hop` → шов при blend |
-| **V12** | melDecoder / attention | Mel без clamp; query = raw mel → почти uniform attention |
-| **V13** | `normalizeLexKey` без `ё→е` | Расхождение с encoder → промах лексикона |
-| **V14** | Старые `neural-weights.json` до 0.1.34 | Геометрия SR/hop могла не совпасть; нужен **полный retrain** |
+| ID | Статус | Суть |
+|----|--------|------|
+| **V7** | fixed (E1) | TokenStore = склад; не драйвер speak |
+| **V8** | fixed | Neural-primary; ZCR не выбирает GL |
+| **V9** | fixed | minCoverage 0.75; нет low-coverage fill |
+| **V10** | fixed (MVP) | Отказ от срезов <80 ms в lexicon |
+| **V11** | fixed | `alignWaveLength` перед blend |
+| **V12** | fixed | Mel clamp; tanh query |
+| **V13** | fixed | `ё→е` в `normalizeLexKey` |
+| **V14** | fixed | `weightsFormat: 2`; incompatible → null |
 
 ### P2 — порча данных / упаковка
 
-| ID | Где | Суть |
-|----|-----|------|
-| **V15** | `tokenStore` / `speakerPack` | `Buffer.from(typedArray.buffer)` без byteOffset/byteLength |
-| **V16** | `prosody` binary | Глобалы плана не сериализуются |
-| **V17** | `loadTextEncoder` | При смене vocab молча оставляет random emb |
-| **V18** | Stereo unit + mono fill | Каналы могут перемешаться в PCM |
-| **V19** | Renderer ZCR gate | Может отбросить stitch/neural → parametric 22.05 kHz formants |
+| ID | Статус | Суть |
+|----|--------|------|
+| **V15** | fixed | `bufferFromView` |
+| **V16** | fixed | Prosody magic header + globals |
+| **V17** | fixed | Emb/vocab mismatch → throw |
+| **V18** | fixed | Downmix mono в stitch |
+| **V19** | fixed | ZCR gate не бьёт unit-stitch |
 
 ## Логические ошибки системы (не «баг в строке»)
 
