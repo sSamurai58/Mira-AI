@@ -103,8 +103,10 @@ async function main() {
   const paras = splitParagraphs("A\n\nB\n\nC");
   assert.deepEqual(paras, ["A", "B", "C"]);
 
-  // 5 normalize + status
+  // 5 normalize + status (numbers→words, lowercase)
   assert.match(normalizeForTts("Проверь API и TTS"), /эй пи ай/i);
+  assert.match(normalizeForTts("У меня 42 яблока"), /сорок два/);
+  assert.ok(!/[A-Z]/.test(normalizeForTts("Hello API")));
   assert.match(statusPhrase("draft_saved", { version: "2" }), /версия 2/);
 
   // 6 styles

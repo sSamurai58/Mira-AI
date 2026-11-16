@@ -738,6 +738,22 @@ interface MiraBridge {
     phrases: MiraVoicePhrase[];
     clips: MiraVoiceClip[];
     customVoices: MiraCustomVoice[];
+    tokenPipeline?: {
+      speaker: {
+        styles: string[];
+        defaultReady: boolean;
+        cosyPtReady: boolean;
+      } | null;
+      tokens: {
+        utterances: number;
+        symbolCounts: Array<{ symbol: string; count: number }>;
+        stored: number;
+        codebook: boolean;
+        ftPairs: number;
+      } | null;
+      cosyAvailable: boolean;
+      cosyDetail: string;
+    };
   }>;
   listVoiceProjects: () => Promise<MiraVoiceProject[]>;
   listCustomVoices: () => Promise<MiraCustomVoice[]>;
@@ -887,11 +903,27 @@ interface MiraBridge {
     durationMs?: number;
     method?: string;
     cached?: boolean;
+    pipeline?: string;
+    chunks?: number;
+    speakerReady?: boolean;
+    normalizedText?: string;
+    backend?: string;
   }>;
   warmupCustomVoiceNeural: (voiceId: string) => Promise<{
     ok: boolean;
     detail: string;
     hasWeights: boolean;
+  }>;
+  getCustomVoiceSpeakerStatus: (voiceId: string) => Promise<{
+    ok: boolean;
+    detail: string;
+    hasSpeaker: boolean;
+    styles: string[];
+    status: {
+      styles: string[];
+      defaultReady: boolean;
+      cosyPtReady: boolean;
+    } | null;
   }>;
   getElevenLabsStatus?: (probe?: boolean) => Promise<{
     hasKey: boolean;
