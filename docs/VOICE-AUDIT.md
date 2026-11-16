@@ -71,6 +71,8 @@ TRAIN: buildVoiceModelPack (energy word cuts) → runNeuralMelTrain (16 kHz / ho
 
 ## Порядок починки (поручение бэкенду)
 
+Подробный план по каждому ID, волны A–G, критерии «готово» и ветки: **[`VOICE-FIX-PLAN.md`](./VOICE-FIX-PLAN.md)**.
+
 1. V1+V2 — оконный OLA vocoder (win ≥ 2–4× hop, COLA) одинаково в train и infer.  
 2. V3+V4 — contiguous crops вместо global `downsampleMel`; PCM index = исходный кадр.  
 3. V5+V6+V13 — stitch режет по `startMs`/`endMs`, resample к 16 kHz, `ё→е`.  

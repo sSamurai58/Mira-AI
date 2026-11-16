@@ -24,6 +24,7 @@
 | Дата | Решение | Почему |
 |------|---------|--------|
 | 2026-11-16 | **Аудит голоса → VOICE-AUDIT.md** | TokenStore не драйвит синтез; vocoder Hann=hop; downsampleMel портит targets; stitch игнорит start/endMs; GL по ZCR. Чинить по P0 V1–V6 |
+| 2026-11-16 | **План починки голоса → VOICE-FIX-PLAN.md** | Волны A–G по V1–V19: файлы, шаги, критерии, ветки; E1 честный TokenStore до E2 G2P |
 | 2026-11-14 | **Ветки: develop / main** | Разработка на `develop`; в `main` только актуальный релиз; `.exe` не в git — GitHub Releases + `latest.yml`; см. `docs/BRANCHING.md` |
 | 2026-11-14 | **Релиз = Windows + macOS всегда** | Один тег `v*` → оба OS в одном GitHub Release; запрет отдельных OS-only релизов; gate `release-all` |
 | 2026-11-16 | **Релиз 0.1.34** (`v0.1.34`) | Разборчивый speak (unit-stitch + vocode); честный % ОЗУ; темы Carbon Mist / Silicon Valley / Ember Violet; Win+mac; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.34 |
@@ -202,6 +203,7 @@
 | 2026-11-14 | Релиз **0.1.16** (`v0.1.16`) — protocol command sequences, settings panels, HUD sounds, chat UX |
 | 2026-11-14 | Релиз **0.1.17** (`v0.1.17`) — update HUD always-on-top, mic picker/spectrum, protocol steps, chat/composer polish |
 | 2026-11-16 | Аудит голоса: `docs/VOICE-AUDIT.md` (V1–V19); кастомный TTS системно неразборчив |
+| 2026-11-16 | План починки: `docs/VOICE-FIX-PLAN.md` (волны A–G, детально по каждому ID) |
 
 ---
 
