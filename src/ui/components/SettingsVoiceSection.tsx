@@ -246,8 +246,16 @@ export function SettingsVoiceSection() {
               label: `${eng.label}${eng.ready ? "" : eng.id === "elevenlabs" ? " (нужен Electron)" : " (недоступен)"}`,
             }))}
             onChange={(id) => {
-              setTtsEngine(setActiveTtsEngine(id as TtsEngineId));
+              const next = setActiveTtsEngine(id as TtsEngineId);
+              setTtsEngine(next);
               setEngineDetail(getVoiceEngineStatus().detail);
+              // ElevenLabs: engine choice is the voice source — don't keep
+              // implying a system/studio catalog voice is what you hear.
+              if (next === "elevenlabs") {
+                setEngineDetail(
+                  "ElevenLabs — голос из Voice ID (не системный каталог)",
+                );
+              }
             }}
           />
         </Field>
