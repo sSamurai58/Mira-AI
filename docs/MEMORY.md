@@ -13,7 +13,7 @@
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`/`ARCHITECTURE`, `TASKS`, `DECISIONS`, `GLOSSARY`, `RELEASE`, `RISKS`, `VOICE-AUDIT`, `WIP` |
 | Дорожная карта | Must + future F* закрыты (partial→done stubs where noted) |
 
-**Сейчас:** **0.1.41** — EL голос всегда виден в «Голос» при ключе. После 0.1.35 — **переобучить** голос (`weightsFormat: 2`).
+**Сейчас:** discovery **Администрирование** (`docs/ADMIN.md`) — без кода; по очереди: раздел → Пользователи → Роли. Релиз **0.1.41** на GitHub (Win уже в assets).
 
 
 ## Решения
@@ -22,6 +22,7 @@
 
 | Дата | Решение | Почему |
 |------|---------|--------|
+| 2026-11-16 | **Админ: сначала discovery, потом код** | Заказчик: по пунктам, максимум информации в разговоре; план в `docs/ADMIN.md` |
 | 2026-11-16 | **Релиз 0.1.41** (`v0.1.41`) | EL в dropdown даже без ok /v1/voices; Win+mac+Android |
 | 2026-11-16 | **Релиз 0.1.40** (`v0.1.40`) | ElevenLabs Voice ID в dropdown; без system fallback; Win+mac+Android |
 | 2026-11-16 | **Релиз 0.1.39** (`v0.1.39`) | F5/Chatterbox/Cosy sidecar voice; Win+mac+Android |
