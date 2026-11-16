@@ -15,6 +15,16 @@ export type MiraChangelogEntry = {
 
 export const MIRA_CHANGELOG: MiraChangelogEntry[] = [
   {
+    version: "0.1.32",
+    date: "16.11.2026",
+    summary: "Update HUD снова кликается и закрывается на Windows.",
+    bullets: [
+      "Исправлено «залипшее» always-on-top окно обновления: клики проходили насквозь",
+      "«Скрыть» / × / Esc закрывают окно; ошибки авто-скрываются через ~12 с",
+      "Релиз Windows + macOS одним тегом",
+    ],
+  },
+  {
     version: "0.1.31",
     date: "16.11.2026",
     summary:
