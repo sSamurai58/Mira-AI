@@ -7,7 +7,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { miraRoot } from "../appPaths";
 
-const MAX_ENTRIES = 96;
+/** Keep disk cache small — each WAV is ~100–400 KB; 96 was multi‑ten MB. */
+const MAX_ENTRIES = 32;
 
 type CacheIndex = {
   entries: Array<{ key: string; file: string; at: number; bytes: number }>;

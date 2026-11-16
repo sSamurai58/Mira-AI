@@ -224,7 +224,8 @@ export function createCoreWebgl(
   let time = 0;
   let prev = performance.now();
   let frameSkip = 0;
-  let PR = Math.min(window.devicePixelRatio || 1, 2);
+  // Cap DPR — Retina 2× balloons GPU+RAM buffers for a decorative orb.
+  let PR = Math.min(window.devicePixelRatio || 1, 1.5);
   let W = 1;
   let H = 1;
   let fs: Fbo;
@@ -335,7 +336,7 @@ export function createCoreWebgl(
   }
 
   function resize() {
-    PR = Math.min(window.devicePixelRatio || 1, 2);
+    PR = Math.min(window.devicePixelRatio || 1, 1.5);
     const cw = Math.max(1, Math.floor(canvas.clientWidth * PR));
     const ch = Math.max(1, Math.floor(canvas.clientHeight * PR));
     if (canvas.width !== cw || canvas.height !== ch) {

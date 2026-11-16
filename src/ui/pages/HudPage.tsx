@@ -46,6 +46,7 @@ type LoadSnap = {
   cpu?: number | null;
   ramUsedGb?: number | null;
   ramTotalGb?: number | null;
+  processRssGb?: number | null;
   vramUsedGb?: number | null;
   vramTotalGb?: number | null;
 };
@@ -233,6 +234,9 @@ export function HudPage() {
         load.cpu != null ? `CPU ${Math.round(Number(load.cpu))}%` : null,
         load.ramUsedGb != null && load.ramTotalGb != null
           ? `RAM ${Number(load.ramUsedGb).toFixed(1)}/${Number(load.ramTotalGb).toFixed(0)}`
+          : null,
+        load.processRssGb != null
+          ? `Mira ${Number(load.processRssGb).toFixed(1)}`
           : null,
         load.vramUsedGb != null && load.vramTotalGb != null
           ? `VRAM ${Number(load.vramUsedGb).toFixed(1)}/${Number(load.vramTotalGb).toFixed(0)}`
