@@ -5,9 +5,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
-  extractMelFromWav,
+  extractMelFromSamples,
   griffinLimFromMel,
   melToSummary,
+  readPcmMonoNormalized,
   writeMonoWavFile,
   type MelSpectrogram,
   type MelSummary,
@@ -54,7 +55,11 @@ import {
 } from "./vocoder";
 
 export const NEURAL_METHOD = "neural-mel-cpu-v1";
-export const DEFAULT_NEURAL_EPOCHS = 4;
+/** More epochs than the old 4 — toy MLP still needs repeats for formants. */
+export const DEFAULT_NEURAL_EPOCHS = 6;
+/** Canonical neural geometry — must match infer defaults. */
+export const NEURAL_SAMPLE_RATE = 16_000;
+export const NEURAL_HOP = 160;
 
 export type NeuralEpochLoss = {
   epoch: number;
@@ -131,6 +136,35 @@ function downsampleMel(mel: MelSpectrogram, maxFrames: number): MelSpectrogram {
   };
 }
 
+/** Linear resample to neural SR so hop/vocoder targets stay aligned. */
+function resampleMono(
+  samples: Float32Array,
+  fromRate: number,
+  toRate: number,
+): Float32Array {
+  if (fromRate === toRate || samples.length < 2) return samples;
+  const ratio = toRate / Math.max(1, fromRate);
+  const n = Math.max(1, Math.round(samples.length * ratio));
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = i / ratio;
+    const i0 = Math.floor(x);
+    const i1 = Math.min(samples.length - 1, i0 + 1);
+    const t = x - i0;
+    out[i] = samples[i0]! * (1 - t) + samples[i1]! * t;
+  }
+  return out;
+}
+
+function extractNeuralTrainMel(filePath: string): MelSpectrogram | null {
+  const pcm = readPcmMonoNormalized(filePath);
+  if (!pcm || pcm.samples.length < 32) return null;
+  const samples = resampleMono(pcm.samples, pcm.sampleRate, NEURAL_SAMPLE_RATE);
+  return extractMelFromSamples(samples, NEURAL_SAMPLE_RATE, {
+    hopLength: NEURAL_HOP,
+  });
+}
+
 /**
  * Train neural encoder/decoder/vocoder over linked clips; update pack priors.
  */
@@ -156,7 +190,7 @@ export function runNeuralMelTrain(
 
   const encoder = createTextEncoder();
   const decoder = createMelDecoder();
-  const vocoder = createNeuralVocoder(160);
+  const vocoder = createNeuralVocoder(NEURAL_HOP);
   const encAdam = createAdam(0.01);
   const decAdam = createDecoderAdam(0.012);
 
@@ -172,9 +206,10 @@ export function runNeuralMelTrain(
   >();
 
   for (const clip of workClips) {
-    const mel = extractMelFromWav(clip.filePath);
+    const mel = extractNeuralTrainMel(clip.filePath);
     if (!mel) continue;
-    const trainMel = downsampleMel(mel, 64);
+    // Encoder/decoder TF still uses short windows; vocoder trains on fuller mel.
+    const trainMel = downsampleMel(mel, 96);
     const summary = melToSummary(mel);
     targets.set(clip.clipId, {
       mel,
@@ -344,14 +379,20 @@ export function runNeuralMelTrain(
     }
   }
 
-  // Train neural vocoder on first few clips
+  // Vocoder on fuller mel (not 64-frame TF crop) + more steps/clips.
   let vSteps = 0;
   let vi = 0;
   for (const entry of targets.values()) {
-    if (vi >= 3) break;
-    const r = trainNeuralVocoder(vocoder, entry.trainMel, entry.filePath, {
-      steps: 24,
-      lr: 0.015,
+    if (vi >= 8) break;
+    const vocMel =
+      entry.mel.frameCount > 220
+        ? downsampleMel(entry.mel, 220)
+        : entry.mel;
+    // Prefer 16 kHz resampled preview WAV if original SR differs — train
+    // against the same hop geometry as vocoder.synthesize.
+    const r = trainNeuralVocoder(vocoder, vocMel, entry.filePath, {
+      steps: 80,
+      lr: 0.012,
     });
     vSteps += r.steps;
     vi += 1;
@@ -377,7 +418,7 @@ export function runNeuralMelTrain(
   const finalLoss = losses[losses.length - 1]?.loss ?? initialLoss;
   const improved = finalLoss <= initialLoss + 1e-6;
 
-  // Save neural weights
+  // Save neural weights — include SR/hop so infer matches train geometry.
   const wPath = path.join(packDir, "neural-weights.json");
   fs.writeFileSync(
     wPath,
@@ -388,6 +429,8 @@ export function runNeuralMelTrain(
         backend: accel.activeBackend,
         cudaAvailable: accel.cudaAvailable,
         accelDetail: accel.detail,
+        sampleRate: NEURAL_SAMPLE_RATE,
+        hopLength: NEURAL_HOP,
         encoder: serializeTextEncoder(encoder),
         decoder: serializeMelDecoder(decoder),
         vocoder: serializeVocoder(vocoder),
@@ -413,7 +456,7 @@ export function runNeuralMelTrain(
     if (first && first.mel.frameCount <= 160 && first.mel.durationMs < 6000) {
       try {
         const samples = productionVocode(vocoder, first.mel, {
-          neuralBlend: 0.6,
+          neuralBlend: 0.8,
         });
         neuralPreview = writeVocoderPreview(
           packDir,

@@ -10,6 +10,7 @@ import {
 } from "../../tts/localSynthCache";
 import { parseWavInfo } from "../modelPack";
 import { synthesizeNeuralSpeech } from "../neural/infer";
+import { synthesizeUnitStitch } from "../unitStitchSynth";
 import { chunkSpeechText, crossfadeJoinInt16 } from "./chunking";
 import { cosyVoiceAvailable, synthesizeViaCosy } from "./cosySidecar";
 import { loadSpeakerPack, speakerPackPaths } from "./speakerPack";
@@ -39,7 +40,7 @@ export type PipelineSpeakResult = {
   ok: boolean;
   wavPath: string | null;
   detail: string;
-  backend: "cosyvoice" | "neural-mel" | "cache";
+  backend: "cosyvoice" | "unit-stitch" | "neural-mel" | "cache";
   chunks: number;
   normalizedText: string;
   speakerReady: boolean;
@@ -166,8 +167,35 @@ export function speakTokenPipeline(opts: PipelineSpeakOpts): PipelineSpeakResult
     }
   }
 
+  // Prefer recorded corpus stitch when coverage is high — tiny neural mel
+  // path is still noisy; unit WAVs are the intelligible voice the user trained.
+  const stitch = synthesizeUnitStitch(opts.packDir, norm.text, {
+    // Partial lexicon OK — uncovered words get formant fill (intelligible).
+    minCoverage: 0.35,
+  });
+  if (stitch.ok && stitch.wavPath) {
+    const wavPath = putCachedSynthWav(compositeKey, stitch.wavPath);
+    try {
+      if (stitch.wavPath !== wavPath && fs.existsSync(stitch.wavPath)) {
+        fs.unlinkSync(stitch.wavPath);
+      }
+    } catch {
+      /* ignore */
+    }
+    return {
+      ok: true,
+      wavPath,
+      detail: stitch.detail,
+      backend: "unit-stitch",
+      chunks: 1,
+      normalizedText: norm.text,
+      speakerReady,
+      cached: false,
+    };
+  }
+
   // Neural-mel Griffin-Lim must NOT be chunked for short replies: each chunk
-  // gets independent random phase → robotic jumps + crossfade whoosh.
+  // gets independent phase → robotic jumps + crossfade whoosh.
   // CosyVoice still benefits from sentence chunks on long text.
   const cosyProbe = cosyVoiceAvailable();
   const preferWhole =
@@ -212,6 +240,16 @@ export function speakTokenPipeline(opts: PipelineSpeakOpts): PipelineSpeakResult
         backend = "cosyvoice";
         continue;
       }
+    }
+    // Per-chunk: try word stitch before neural mush.
+    const chunkStitch = synthesizeUnitStitch(opts.packDir, ch.text, {
+      outPath: out,
+      minCoverage: 0.35,
+    });
+    if (chunkStitch.ok && chunkStitch.wavPath) {
+      chunkWavs.push(chunkStitch.wavPath);
+      backend = "unit-stitch";
+      continue;
     }
     const neural = synthesizeNeuralSpeech(opts.packDir, ch.text, {
       prosody: opts.prosody,
