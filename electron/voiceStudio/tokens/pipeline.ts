@@ -166,8 +166,16 @@ export function speakTokenPipeline(opts: PipelineSpeakOpts): PipelineSpeakResult
     }
   }
 
-  const chunks = chunkSpeechText(norm.text);
-  if (!chunks.length) {
+  // Neural-mel Griffin-Lim must NOT be chunked for short replies: each chunk
+  // gets independent random phase → robotic jumps + crossfade whoosh.
+  // CosyVoice still benefits from sentence chunks on long text.
+  const cosyProbe = cosyVoiceAvailable();
+  const preferWhole =
+    !cosyProbe.ok || norm.text.length < 280;
+  const chunks = preferWhole
+    ? [{ text: norm.text, index: 0 }]
+    : chunkSpeechText(norm.text);
+  if (!chunks.length || !chunks[0]!.text) {
     return {
       ok: false,
       wavPath: null,
@@ -184,7 +192,7 @@ export function speakTokenPipeline(opts: PipelineSpeakOpts): PipelineSpeakResult
   const chunkWavs: string[] = [];
   let backend: PipelineSpeakResult["backend"] = "neural-mel";
 
-  const cosy = cosyVoiceAvailable();
+  const cosy = cosyProbe;
   const cosyPt = speakerPackPaths(opts.projectRoot, style).cosyPt;
   const useCosy = cosy.ok && (fs.existsSync(cosyPt) || Boolean(pack?.meta.sourceWav));
 

@@ -55,7 +55,10 @@ jobs:
 
   # Unsigned DMG/ZIP until Apple Developer cert is wired.
   # First open: right-click → Open (Gatekeeper).
+  # Serialize after Windows — parallel publish to the same GitHub Release
+  # raced and dropped Windows assets / latest.yml (seen on v0.1.32).
   release-macos:
+    needs: [release-windows]
     runs-on: macos-latest
     timeout-minutes: 45
     steps:

@@ -178,7 +178,8 @@ export function synthesizeNeuralSpeech(
     loaded.sampleRate,
     loaded.hopLength,
   );
-  const blend = quality === "studio" ? 0.78 : quality === "fast" ? 0.5 : 0.65;
+  // Prefer neural share — old 0.45 hard-cap left mostly Griffin-Lim “robot”.
+  const blend = quality === "studio" ? 0.85 : quality === "fast" ? 0.65 : 0.78;
   const samples = productionVocode(loaded.vocoder, mel, { neuralBlend: blend });
   scaleSamplesInPlace(samples, energy);
   const outName = opts?.outName ?? `neural-synth-${Date.now().toString(36)}.wav`;
