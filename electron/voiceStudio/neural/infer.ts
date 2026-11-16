@@ -87,8 +87,20 @@ function framesToMel(
   sampleRate: number,
   hopLength: number,
 ): MelSpectrogram {
-  const f32 = new Float32Array(frameCount * MEL_N_MELS);
-  for (let i = 0; i < f32.length; i++) f32[i] = frames[i] ?? -8;
+  const raw = new Float32Array(frameCount * MEL_N_MELS);
+  for (let i = 0; i < raw.length; i++) raw[i] = frames[i] ?? -8;
+  // Temporal smooth (3-frame) — AR mel flicker → HF hiss after vocode.
+  const f32 = new Float32Array(raw.length);
+  for (let f = 0; f < frameCount; f++) {
+    const f0 = Math.max(0, f - 1);
+    const f2 = Math.min(frameCount - 1, f + 1);
+    for (let m = 0; m < MEL_N_MELS; m++) {
+      f32[f * MEL_N_MELS + m] =
+        0.25 * raw[f0 * MEL_N_MELS + m]! +
+        0.5 * raw[f * MEL_N_MELS + m]! +
+        0.25 * raw[f2 * MEL_N_MELS + m]!;
+    }
+  }
   const mean = new Float32Array(MEL_N_MELS);
   const std = new Float32Array(MEL_N_MELS);
   for (let m = 0; m < MEL_N_MELS; m++) {
@@ -170,17 +182,20 @@ export function synthesizeNeuralSpeech(
   const energy = clamp(opts?.prosody?.energy ?? 1, 0.55, 1.35);
   const quality = opts?.prosody?.quality ?? "balanced";
   // Slower / more pauses → more mel frames; fast quality caps ceiling.
+  // Russian needs ~2.4–3 frames/char at hop 160 / 16 kHz or phonemes smear.
   const durationMul = pauseScale / speed;
-  const qualityCap = quality === "fast" ? 160 : quality === "studio" ? 320 : 240;
-  const baseFrames = Math.round(clean.length * 1.8 * durationMul);
+  const qualityCap = quality === "fast" ? 200 : quality === "studio" ? 420 : 320;
+  const framesPerChar = quality === "fast" ? 2.1 : quality === "studio" ? 3.0 : 2.55;
+  const baseFrames = Math.round(clean.length * framesPerChar * durationMul);
 
   const { states } = encodeForward(loaded.encoder, clean);
   const maxFrames =
     opts?.maxFrames ??
-    Math.min(qualityCap, Math.max(24, baseFrames));
+    Math.min(qualityCap, Math.max(36, baseFrames));
   const decoded = decodeInfer(loaded.decoder, states, {
     maxFrames,
-    stopThreshold: quality === "fast" ? 0.62 : 0.55,
+    // Don't cut early — truncated mel → mushy unintelligible tails.
+    stopThreshold: quality === "fast" ? 0.72 : 0.78,
   });
   const mel = framesToMel(
     decoded.frames,
@@ -188,8 +203,8 @@ export function synthesizeNeuralSpeech(
     loaded.sampleRate,
     loaded.hopLength,
   );
-  // Prefer neural share — old 0.45 hard-cap left mostly Griffin-Lim “robot”.
-  const blend = quality === "studio" ? 0.85 : quality === "fast" ? 0.65 : 0.78;
+  // productionVocode picks the cleanest of GL / neural / blend by speechiness.
+  const blend = quality === "studio" ? 0.8 : quality === "fast" ? 0.55 : 0.7;
   const samples = productionVocode(loaded.vocoder, mel, { neuralBlend: blend });
   scaleSamplesInPlace(samples, energy);
   const outName = opts?.outName ?? `neural-synth-${Date.now().toString(36)}.wav`;

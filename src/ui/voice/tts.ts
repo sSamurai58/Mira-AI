@@ -451,9 +451,8 @@ async function playFragmentRun(
 }
 
 /**
- * Neural gate: only reject near-silence / clipped garbage.
- * Do NOT use the strict chat ZCR gate — Griffin-Lim synth is hissier than
- * mic speech and used to trip the gate → bad corpus clip-stitch fallback.
+ * Neural / stitch gate: reject silence, clipping, and HF noise mush
+ * (pre-fix Griffin-Lim often hit ZCR ≫ speech). Allow mild synth hiss.
  */
 export function audioBufferSoundsLikeNeuralSynth(buf: AudioBuffer): boolean {
   if (!buf || buf.length < 32) return false;
@@ -461,11 +460,17 @@ export function audioBufferSoundsLikeNeuralSynth(buf: AudioBuffer): boolean {
   const rms = channelRms(data);
   if (rms < 0.004 || rms > 0.99) return false;
   let peak = 0;
+  let zc = 0;
   for (let i = 0; i < data.length; i++) {
     const a = Math.abs(data[i]!);
     if (a > peak) peak = a;
+    if (i > 0 && (data[i - 1]! >= 0) !== (data[i]! >= 0)) zc += 1;
   }
-  return peak >= 0.02;
+  if (peak < 0.02) return false;
+  const zcrPerSec = zc / (data.length / Math.max(1, buf.sampleRate));
+  // Speech-ish ~200–1200/s; pure GL noise was ~5–8k/s.
+  if (zcrPerSec > 2200 || zcrPerSec < 40) return false;
+  return true;
 }
 
 /** Try neural synth for one phrase → shaped AudioBuffer, or null. */
