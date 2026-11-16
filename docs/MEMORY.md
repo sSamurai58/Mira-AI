@@ -13,7 +13,7 @@
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
 | Дорожная карта | Must + future F* закрыты (partial→done stubs where noted) |
 
-**Сейчас:** **0.1.34** релиз (Win+mac вместе). Разработка → **`develop`**.
+**Сейчас:** **0.1.34** релиз. На `cursor/voice-fix-all-6838` закрыты **V1–V19** (см. `docs/VOICE-AUDIT.md`). После merge — **переобучить** кастомные голоса (`weightsFormat: 2`).
 
 
 ## Решения
@@ -22,6 +22,7 @@
 
 | Дата | Решение | Почему |
 |------|---------|--------|
+| 2026-11-16 | **Voice V1–V19 fixed** | Vocoder/train/stitch/policy/tokens по `VOICE-FIX-PLAN`; retrain обязателен |
 | 2026-11-14 | **Ветки: develop / main** | Разработка на `develop`; в `main` только актуальный релиз; `.exe` не в git — GitHub Releases + `latest.yml`; см. `docs/BRANCHING.md` |
 | 2026-11-14 | **Релиз = Windows + macOS всегда** | Один тег `v*` → оба OS в одном GitHub Release; запрет отдельных OS-only релизов; gate `release-all` |
 | 2026-11-16 | **Релиз 0.1.34** (`v0.1.34`) | Разборчивый speak (unit-stitch + vocode); честный % ОЗУ; темы Carbon Mist / Silicon Valley / Ember Violet; Win+mac; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.34 |
