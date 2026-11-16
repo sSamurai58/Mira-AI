@@ -470,9 +470,15 @@ export function griffinLimFromMel(
     }
   }
 
+  // Deterministic phase continuity (not random) — random init → HF hiss /
+  // “robot” warble even after many Griffin-Lim iterations.
   const phase = new Float32Array(mel.frameCount * nFreqs);
-  for (let i = 0; i < phase.length; i++) {
-    phase[i] = Math.random() * Math.PI * 2;
+  for (let f = 0; f < mel.frameCount; f++) {
+    for (let k = 0; k < nFreqs; k++) {
+      // Linear phase ramp ≈ constant group delay; slight frame advance.
+      phase[f * nFreqs + k] =
+        ((2 * Math.PI * k * hop) / nFft) * f + (k * 0.37 + f * 0.11);
+    }
   }
 
   const win = hannWindow(nFft);

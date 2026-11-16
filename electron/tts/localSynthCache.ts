@@ -49,8 +49,8 @@ export function synthCacheKey(
   } = {},
 ): string {
   const payload = JSON.stringify({
-    // v2: neural-primary vocode + mild LPF (invalidate robotic Griffin-Lim caches)
-    v: 2,
+    // v3: unit-stitch prefer + speechiness vocode + clarity EQ (bust robot caches)
+    v: 3,
     voiceId,
     text: text.trim(),
     speed: prosody.speed ?? 1,
