@@ -12,6 +12,12 @@
 | [DESIGN.md](./DESIGN.md) | IA (4 корня), карта Настроек/Интеграций, токены, stubs |
 | [THEMES.md](./THEMES.md) | Каталог цветовых тем, акценты, токены по пресетам |
 | [ARHITECTURE.md](./ARHITECTURE.md) | Один процесс, пайплайн ASR→диалог→TTS, SQLite, границы |
+| [ARCHITECTURE.md](./ARCHITECTURE.md) | Ярлык для product-team → канон `ARHITECTURE.md` |
+| [TASKS.md](./TASKS.md) | Задачи и этапы (менеджер product-team) |
+| [DECISIONS.md](./DECISIONS.md) | ADR |
+| [GLOSSARY.md](./GLOSSARY.md) | Единые имена экранов / сущностей / ошибок |
+| [RELEASE.md](./RELEASE.md) | Чеклист выкладки |
+| [RISKS.md](./RISKS.md) | Риски и блокеры |
 | [WIP.md](./WIP.md) | Дорожная карта **P0–P11**, чеклисты, черновики → после реализации в основные docs |
 | [BRANCHING.md](./BRANCHING.md) | `develop` = разработка; `main` = только релизная версия; installers → GitHub Releases |
 
@@ -38,6 +44,7 @@
 17. **UX IA** — на главной только диалог; API/ключи/интеграции только в Настройках; Мастерская — хаб skills/протоколы/голоса/библиотека/**терминал**; **не плодить корневые табы** под каждую PRD-фичу (см. `DESIGN.md`).
 18. **Терминал (#16)** — встроенный PTY в Мастерской (опц. split из Диалога); опасные команды — confirm; prefs shell/шрифт — в Настройках.
 19. **Agent skills (дизайн/анимация)** — при работе над UI, motion, polish Mira читать on-demand скиллы из `.cursor/skills/` (источник: [emilkowalski/skills](https://github.com/emilkowalski/skills)); **не** путать с продуктовыми skills PRD #9; не грузить все сразу.
+20. **Agent skill product-team** — указания по разработке продукта идут через менеджера (`.cursor/skills/product-team/` → `manager/SKILL.md`); один ход = одна роль = один артефакт; `docs/` держит менеджер; **не** путать с runtime-каталогом skills (PRD #9). Upstream: [sSamurai58/skills/product-team](https://github.com/sSamurai58/skills/tree/main/product-team).
 20. **Профили / backup (F10/F11)** — ключи API не коммитить и не класть в export без явной опции пользователя; «забыть» — только с confirm и предупреждением про необратимость.
 21. **Doctor (F13)** — пользовательские сообщения об ошибках: причина простым языком + следующий шаг; сырые логи — в панели Doctor, не спамом на Home.
 22. **Ветки** — разработка в `develop` (фичи через `cursor/*` → PR в `develop`). В `main` только код актуального релиза для установки. Установщики `.exe`/`.zip`/`latest.yml` не коммитить: публиковать в GitHub Releases с тега `v*` на `main`. Подробности — `BRANCHING.md`.
