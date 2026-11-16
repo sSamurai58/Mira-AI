@@ -15,6 +15,18 @@ export type MiraChangelogEntry = {
 
 export const MIRA_CHANGELOG: MiraChangelogEntry[] = [
   {
+    version: "0.1.41",
+    date: "16.11.2026",
+    summary:
+      "Голос ElevenLabs всегда в списке, если ключ сохранён (не только при ok API).",
+    bullets: [
+      "При сохранённом ключе в «Голос» сразу есть «Ваш голос · … (ElevenLabs)»",
+      "Полный список аккаунта подмешивается, даже если /voices частично падает",
+      "EL-пункты сверху списка; повторная загрузка после гидрации ключа",
+      "Windows + macOS + Android одним тегом",
+    ],
+  },
+  {
     version: "0.1.40",
     date: "16.11.2026",
     summary:
