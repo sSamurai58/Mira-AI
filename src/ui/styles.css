@@ -2441,10 +2441,22 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   min-height: 0;
   height: 100%;
   overflow: hidden;
+  /* Isolate rail paints so chart hover doesn't dirty the chat column. */
+  contain: layout paint style;
+  content-visibility: auto;
 }
 
 .home-rail > .glass-card {
   flex: 0 0 auto;
+}
+
+/* Solid fill on rail cards — backdrop-filter under live SVG = hover jank. */
+.home-rail > .home-rail-card.glass-card {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background: color-mix(in srgb, var(--bg-elevated) 88%, var(--border)) !important;
+  background-image: none !important;
+  contain: layout paint;
 }
 
 .ring-row {
@@ -2466,16 +2478,6 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
 }
 .ring[data-tone="warning"] {
   color: var(--warning);
-}
-
-.ring-arc {
-  animation: draw-ring 1.8s var(--ease-out) both;
-}
-
-@keyframes draw-ring {
-  from {
-    stroke-dasharray: 0 200;
-  }
 }
 
 .ring-value {
@@ -2545,27 +2547,9 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   color: var(--load-ram);
 }
 
-.load-chart-live .load-line,
-.load-chart-live .load-area {
-  transition: d 700ms var(--ease-out);
-}
-
+/* No transition on SVG `d` / tip `r` — Chromium recomputes paths every frame. */
 .load-tip-dot {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: load-tip-pulse 1.6s ease-in-out infinite;
-}
-
-@keyframes load-tip-pulse {
-  0%,
-  100% {
-    opacity: 1;
-    r: 4.5;
-  }
-  50% {
-    opacity: 0.55;
-    r: 6;
-  }
+  pointer-events: none;
 }
 
 .chart-tip {
@@ -7584,6 +7568,17 @@ html[data-theme-family="apple"] .theme-select-menu {
     inset 0 1px 0 var(--apple-glass-highlight),
     0 10px 40px rgba(0, 0, 0, 0.18) !important;
   border-radius: var(--radius);
+}
+
+/* Home rail keeps solid glass — live chart hover + backdrop blur = stutter. */
+html[data-theme-family="apple"] .home-rail > .home-rail-card.glass-card {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  background: color-mix(
+    in srgb,
+    var(--apple-glass-bg) 92%,
+    var(--bg)
+  ) !important;
 }
 
 html[data-theme="apple-light"] .nav,

@@ -43,10 +43,10 @@ let cachedGpu: {
   source: SystemLoadSample["gpuSource"];
 } | null = null;
 
-/** GPU/ioreg is relatively expensive — reuse for a few seconds. */
-const GPU_CACHE_MS = 6_000;
+/** GPU/ioreg/PowerShell counters are expensive — reuse longer. */
+const GPU_CACHE_MS = 12_000;
 /** vm_stat / meminfo / powershell: avoid sync I/O every UI tick. */
-const RAM_CACHE_MS = 2_000;
+const RAM_CACHE_MS = 8_000;
 
 let cachedRam: {
   at: number;

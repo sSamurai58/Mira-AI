@@ -1,6 +1,8 @@
 import {
+  memo,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
@@ -13,9 +15,9 @@ import type { VoiceState } from "../voiceState";
 
 /** ~1 hour at 60s cadence after a short warm-up burst. */
 const SAMPLE_COUNT = 60;
-/** Keep IPC/vm_stat/powershell light — rings don't need 2.5s spam. */
-const POLL_MS = 4_000;
-const POLL_HIDDEN_MS = 20_000;
+/** Slow IPC — rings/chart don't need sub-5s spam (PowerShell GPU/RAM is costly). */
+const POLL_MS = 8_000;
+const POLL_HIDDEN_MS = 30_000;
 const SERIES_STEP_MS = 60_000;
 
 type LoadPoint = {
@@ -25,6 +27,17 @@ type LoadPoint = {
   ram: number;
 };
 
+type LoadSnap = {
+  series: LoadPoint[];
+  gpu: number | null;
+  ram: number;
+  ramUsedGb: number | null;
+  ramTotalGb: number | null;
+  vramGb: number | null;
+  vramTotalGb: number | null;
+  processRssGb: number | null;
+  source: "ipc" | "browser";
+};
 
 type HomeRailProps = {
   modelLabel: string;
@@ -39,17 +52,15 @@ export function HomeRail({
   voiceState = "idle",
 }: HomeRailProps) {
   const load = useLiveLoad(voiceState);
-  const journal = useActionLog();
-  const [now, setNow] = useState(() => Date.now());
 
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 4_000);
-    return () => window.clearInterval(id);
-  }, []);
+  const vramPct =
+    load.vramGb != null && load.vramTotalGb != null && load.vramTotalGb > 0
+      ? clamp(Math.round((load.vramGb / load.vramTotalGb) * 100), 0, 100)
+      : null;
 
   return (
     <aside className="home-rail">
-      <section className="glass-card">
+      <section className="glass-card home-rail-card">
         <h3 className="card-kicker">Ресурсы</h3>
         <div className="ring-row">
           <Ring
@@ -59,15 +70,15 @@ export function HomeRail({
             unavailable={load.gpu == null}
           />
           <Ring
-            value={load.vramPct}
+            value={vramPct}
             label="VRAM"
             sub={
               load.vramGb != null
-                ? `${load.vramGb.toFixed(1).replace(".", ",")} ГБ`
+                ? `${fmtGb(load.vramGb)} ГБ`
                 : undefined
             }
             tone="success"
-            unavailable={load.vramPct == null}
+            unavailable={vramPct == null}
           />
           <Ring
             value={load.ram}
@@ -90,7 +101,7 @@ export function HomeRail({
         </p>
       </section>
 
-      <section className="glass-card load-card">
+      <section className="glass-card home-rail-card load-card">
         <div className="load-card-head">
           <h3 className="card-kicker">Нагрузка за час</h3>
           <ul className="load-legend" aria-hidden>
@@ -99,50 +110,64 @@ export function HomeRail({
             <li data-series="ram">ОЗУ</li>
           </ul>
         </div>
-        <LoadChart points={load.series} clock={load.clock} />
+        <LoadChart points={load.series} />
       </section>
 
-      <section className="glass-card journal-card">
-        <h3 className="card-kicker">Журнал действий</h3>
-        <ol className="journal-list hide-scroll">
-          {journal.length === 0 ? (
-            <li className="journal-item" data-tone="accent">
+      <JournalCard />
+    </aside>
+  );
+}
+
+function JournalCard() {
+  const journal = useActionLog();
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 8_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  return (
+    <section className="glass-card home-rail-card journal-card">
+      <h3 className="card-kicker">Журнал действий</h3>
+      <ol className="journal-list hide-scroll">
+        {journal.length === 0 ? (
+          <li className="journal-item" data-tone="accent">
+            <div className="journal-dot" />
+            <div className="journal-body">
+              <div className="journal-title-row">
+                <span className="journal-title">Пока тихо</span>
+                <span className="mono tiny">—</span>
+              </div>
+              <p className="journal-reason">
+                Действия чата, голоса и подтверждений появятся здесь.
+              </p>
+              <span className="tag tag-accent">Система</span>
+            </div>
+          </li>
+        ) : (
+          journal.map((item) => (
+            <li
+              key={item.id}
+              className={`journal-item ${item.pending ? "is-pending" : ""}`}
+              data-tone={item.tone}
+            >
               <div className="journal-dot" />
               <div className="journal-body">
                 <div className="journal-title-row">
-                  <span className="journal-title">Пока тихо</span>
-                  <span className="mono tiny">—</span>
+                  <span className="journal-title">{item.title}</span>
+                  <span className="mono tiny">
+                    {formatActionLogTime(item.at, now)}
+                  </span>
                 </div>
-                <p className="journal-reason">
-                  Действия чата, голоса и подтверждений появятся здесь.
-                </p>
-                <span className="tag tag-accent">Система</span>
+                <p className="journal-reason">{item.reason}</p>
+                <span className={`tag tag-${item.tone}`}>{item.tag}</span>
               </div>
             </li>
-          ) : (
-            journal.map((item) => (
-              <li
-                key={item.id}
-                className={`journal-item ${item.pending ? "is-pending" : ""}`}
-                data-tone={item.tone}
-              >
-                <div className="journal-dot" />
-                <div className="journal-body">
-                  <div className="journal-title-row">
-                    <span className="journal-title">{item.title}</span>
-                    <span className="mono tiny">
-                      {formatActionLogTime(item.at, now)}
-                    </span>
-                  </div>
-                  <p className="journal-reason">{item.reason}</p>
-                  <span className={`tag tag-${item.tone}`}>{item.tag}</span>
-                </div>
-              </li>
-            ))
-          )}
-        </ol>
-      </section>
-    </aside>
+          ))
+        )}
+      </ol>
+    </section>
   );
 }
 
@@ -155,38 +180,40 @@ function fmtGb(v: number): string {
   return v.toFixed(1).replace(".", ",");
 }
 
-function useLiveLoad(_voiceState: VoiceState) {
-  const [series, setSeries] = useState<LoadPoint[]>([]);
-  const [gpu, setGpu] = useState<number | null>(null);
-  const [ram, setRam] = useState(0);
-  const [ramUsedGb, setRamUsedGb] = useState<number | null>(null);
-  const [ramTotalGb, setRamTotalGb] = useState<number | null>(null);
-  const [vramGb, setVramGb] = useState<number | null>(null);
-  const [vramTotalGb, setVramTotalGb] = useState<number | null>(null);
-  const [processRssGb, setProcessRssGb] = useState<number | null>(null);
-  const [clock, setClock] = useState(() => formatClock());
-  const [source, setSource] = useState<"ipc" | "browser">("browser");
+function useLiveLoad(_voiceState: VoiceState): LoadSnap {
+  const [snap, setSnap] = useState<LoadSnap>(() => ({
+    series: [],
+    gpu: null,
+    ram: 0,
+    ramUsedGb: null,
+    ramTotalGb: null,
+    vramGb: null,
+    vramTotalGb: null,
+    processRssGb: null,
+    source: "browser",
+  }));
   const lastSeriesAt = useRef(0);
   const seeded = useRef(false);
+  const seriesRef = useRef<LoadPoint[]>([]);
 
   useEffect(() => {
     let cancelled = false;
-    let frame = 0;
     let timer: number | null = null;
 
-    const pushSample = (point: LoadPoint, force = false) => {
-      setSeries((prev) => {
-        const warm = prev.length < 12;
-        const gap = warm ? POLL_MS : SERIES_STEP_MS;
-        const due =
-          force ||
-          lastSeriesAt.current === 0 ||
-          point.t - lastSeriesAt.current >= gap;
-        if (!due) return prev;
-        lastSeriesAt.current = point.t;
-        const rolled = prev.length >= SAMPLE_COUNT ? prev.slice(1) : prev;
-        return [...rolled, point];
-      });
+    const pushSample = (point: LoadPoint, force = false): LoadPoint[] => {
+      const prev = seriesRef.current;
+      const warm = prev.length < 12;
+      const gap = warm ? POLL_MS : SERIES_STEP_MS;
+      const due =
+        force ||
+        lastSeriesAt.current === 0 ||
+        point.t - lastSeriesAt.current >= gap;
+      if (!due) return prev;
+      lastSeriesAt.current = point.t;
+      const rolled = prev.length >= SAMPLE_COUNT ? prev.slice(1) : prev;
+      const next = [...rolled, point];
+      seriesRef.current = next;
+      return next;
     };
 
     const apply = (
@@ -205,29 +232,9 @@ function useLiveLoad(_voiceState: VoiceState) {
     ) => {
       if (cancelled) return;
       const t = sample.ts ?? Date.now();
-      setSource(via);
-      setRam(sample.ram);
-      setRamUsedGb(
-        sample.ramUsedGb != null && Number.isFinite(sample.ramUsedGb)
-          ? sample.ramUsedGb
-          : null,
-      );
-      setRamTotalGb(
-        sample.ramTotalGb != null && Number.isFinite(sample.ramTotalGb)
-          ? sample.ramTotalGb
-          : null,
-      );
-      setGpu(sample.gpu);
-      setVramGb(sample.vramUsedGb);
-      setVramTotalGb(sample.vramTotalGb);
-      setProcessRssGb(
-        sample.processRssGb != null && Number.isFinite(sample.processRssGb)
-          ? sample.processRssGb
-          : null,
-      );
       const force = !seeded.current;
       seeded.current = true;
-      pushSample(
+      const series = pushSample(
         {
           t,
           cpu: sample.cpu,
@@ -236,24 +243,40 @@ function useLiveLoad(_voiceState: VoiceState) {
         },
         force,
       );
+      setSnap({
+        series,
+        gpu: sample.gpu,
+        ram: sample.ram,
+        ramUsedGb:
+          sample.ramUsedGb != null && Number.isFinite(sample.ramUsedGb)
+            ? sample.ramUsedGb
+            : null,
+        ramTotalGb:
+          sample.ramTotalGb != null && Number.isFinite(sample.ramTotalGb)
+            ? sample.ramTotalGb
+            : null,
+        vramGb: sample.vramUsedGb,
+        vramTotalGb: sample.vramTotalGb,
+        processRssGb:
+          sample.processRssGb != null && Number.isFinite(sample.processRssGb)
+            ? sample.processRssGb
+            : null,
+        source: via,
+      });
     };
 
     const tick = async () => {
-      frame += 1;
       const mira = window.mira;
       if (mira?.getSystemLoad) {
         try {
           const sample = await mira.getSystemLoad();
           apply(sample, "ipc");
-          if (frame % 2 === 0) setClock(formatClock());
           return;
         } catch {
-          // fall through to browser best-effort
+          // fall through
         }
       }
-
       apply(sampleBrowserLoad(), "browser");
-      if (frame % 2 === 0) setClock(formatClock());
     };
 
     const schedule = () => {
@@ -281,23 +304,7 @@ function useLiveLoad(_voiceState: VoiceState) {
     };
   }, []);
 
-  const vramPct =
-    vramGb != null && vramTotalGb != null && vramTotalGb > 0
-      ? clamp(Math.round((vramGb / vramTotalGb) * 100), 0, 100)
-      : null;
-
-  return {
-    series,
-    gpu,
-    ram,
-    ramUsedGb,
-    ramTotalGb,
-    vramGb,
-    vramPct,
-    processRssGb,
-    clock,
-    source,
-  };
+  return snap;
 }
 
 function sampleBrowserLoad(): {
@@ -308,7 +315,6 @@ function sampleBrowserLoad(): {
   vramTotalGb: number | null;
   ts: number;
 } {
-  // Best-effort only: Chromium heap is not system RAM, but better than sine waves.
   const mem = (
     performance as Performance & {
       memory?: { usedJSHeapSize: number; jsHeapSizeLimit: number };
@@ -332,14 +338,6 @@ function sampleBrowserLoad(): {
   };
 }
 
-function formatClock(): string {
-  return new Date().toLocaleTimeString("ru-RU", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-}
-
 function formatTipTime(ts: number): string {
   return new Date(ts).toLocaleTimeString("ru-RU", {
     hour: "2-digit",
@@ -351,7 +349,7 @@ function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
 }
 
-function Ring({
+const Ring = memo(function Ring({
   value,
   label,
   sub,
@@ -380,7 +378,7 @@ function Ring({
           strokeWidth="5"
         />
         <circle
-          className="ring-arc ring-arc-live"
+          className="ring-arc"
           cx="32"
           cy="32"
           r={r}
@@ -390,10 +388,7 @@ function Ring({
           strokeLinecap="round"
           strokeDasharray={`${dash} ${c}`}
           transform="rotate(-90 32 32)"
-          style={{
-            transition: "stroke-dasharray 700ms var(--ease-out)",
-            opacity: unavailable ? 0.35 : 1,
-          }}
+          style={{ opacity: unavailable ? 0.35 : 1 }}
         />
         <text
           x="32"
@@ -413,7 +408,7 @@ function Ring({
       {sub ? <span className="mono tiny muted">{sub}</span> : null}
     </div>
   );
-}
+});
 
 const SERIES_META = [
   { key: "cpu" as const, color: "var(--success)", label: "CPU" },
@@ -421,80 +416,154 @@ const SERIES_META = [
   { key: "ram" as const, color: "var(--load-ram)", label: "ОЗУ" },
 ];
 
-function LoadChart({
-  points,
-  clock,
-}: {
-  points: LoadPoint[];
-  clock: string;
-}) {
+/**
+ * Paths are React-memoized; hover tip/guide mutate DOM refs so mousemove
+ * never rebuilds SVG paths (was the main home-rail jank source).
+ */
+const LoadChart = memo(function LoadChart({ points }: { points: LoadPoint[] }) {
   const uid = useId().replace(/:/g, "");
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const guideRef = useRef<SVGLineElement | null>(null);
+  const tipGRef = useRef<SVGGElement | null>(null);
+  const tipTimeRef = useRef<SVGTextElement | null>(null);
+  const tipCpuRef = useRef<SVGTextElement | null>(null);
+  const tipGpuRef = useRef<SVGTextElement | null>(null);
+  const tipRamRef = useRef<SVGTextElement | null>(null);
+  const dotRefs = useRef<Array<SVGCircleElement | null>>([null, null, null]);
+  const hoverIdxRef = useRef<number | null>(null);
+  const pointsRef = useRef(points);
+  pointsRef.current = points;
+
   const w = 300;
   const h = 120;
-  const n = Math.max(points.length, 2);
-  const step = w / (n - 1);
 
-  const yOf = (p: number) => h - (p / 100) * (h - 16) - 8;
-
-  const coordsFor = (key: "cpu" | "gpu" | "ram") =>
-    points.map((pt, i) => {
-      const raw = pt[key];
-      if (raw == null) return null;
-      return { x: i * step, y: yOf(raw), p: raw, i };
-    });
-
-  const pathFor = (
-    coords: Array<{ x: number; y: number } | null>,
-  ): string => {
-    const parts: string[] = [];
-    let drawing = false;
-    for (const c of coords) {
-      if (!c) {
-        drawing = false;
-        continue;
+  const geometry = useMemo(() => {
+    const n = Math.max(points.length, 2);
+    const step = w / (n - 1);
+    const yOf = (p: number) => h - (p / 100) * (h - 16) - 8;
+    const build = (key: "cpu" | "gpu" | "ram") => {
+      const coords: Array<{ x: number; y: number; p: number } | null> = [];
+      const parts: string[] = [];
+      let drawing = false;
+      for (let i = 0; i < points.length; i++) {
+        const raw = points[i]![key];
+        if (raw == null) {
+          coords.push(null);
+          drawing = false;
+          continue;
+        }
+        const c = { x: i * step, y: yOf(raw), p: raw };
+        coords.push(c);
+        parts.push(
+          `${drawing ? "L" : "M"} ${c.x.toFixed(1)} ${c.y.toFixed(1)}`,
+        );
+        drawing = true;
       }
-      parts.push(`${drawing ? "L" : "M"} ${c.x.toFixed(1)} ${c.y.toFixed(1)}`);
-      drawing = true;
+      const line = parts.join(" ");
+      const solid = coords.filter(Boolean) as Array<{
+        x: number;
+        y: number;
+      }>;
+      const area =
+        solid.length > 1 && line
+          ? `${line} L ${solid[solid.length - 1]!.x.toFixed(1)} ${h} L ${solid[0]!.x.toFixed(1)} ${h} Z`
+          : "";
+      return { line, area, coords, yOf, step };
+    };
+    return {
+      step,
+      yOf,
+      cpu: build("cpu"),
+      gpu: build("gpu"),
+      ram: build("ram"),
+    };
+  }, [points]);
+
+  const paintTip = (idx: number) => {
+    const pts = pointsRef.current;
+    const pt = pts[idx];
+    if (!pt) return;
+    const tipW = 118;
+    const x = pts.length <= 1 ? w : idx * geometry.step;
+    const tipX = Math.min(Math.max(4, x - tipW / 2), w - tipW - 4);
+    const guide = guideRef.current;
+    if (guide) {
+      guide.setAttribute("x1", String(x));
+      guide.setAttribute("x2", String(x));
     }
-    return parts.join(" ");
+    const tipG = tipGRef.current;
+    if (tipG) tipG.setAttribute("transform", `translate(${tipX}, 6)`);
+    tipTimeRef.current &&
+      (tipTimeRef.current.textContent = formatTipTime(pt.t));
+    tipCpuRef.current &&
+      (tipCpuRef.current.textContent = `CPU ${formatPct(pt.cpu)}`);
+    tipGpuRef.current &&
+      (tipGpuRef.current.textContent = `GPU ${formatPct(pt.gpu)}`);
+    tipRamRef.current &&
+      (tipRamRef.current.textContent = `ОЗУ ${formatPct(pt.ram)}`);
+    SERIES_META.forEach((s, i) => {
+      const dot = dotRefs.current[i];
+      if (!dot) return;
+      const v = pt[s.key];
+      if (v == null) {
+        dot.setAttribute("visibility", "hidden");
+        return;
+      }
+      dot.setAttribute("visibility", "visible");
+      dot.setAttribute("cx", String(x));
+      dot.setAttribute("cy", String(geometry.yOf(v)));
+    });
+    const svg = svgRef.current;
+    if (svg) {
+      svg.setAttribute(
+        "aria-label",
+        `Нагрузка за час. CPU ${formatPct(pt.cpu)}, GPU ${formatPct(pt.gpu)}, ОЗУ ${formatPct(pt.ram)}`,
+      );
+    }
   };
 
-  const activeIdx =
-    hoverIdx != null && points[hoverIdx]
-      ? hoverIdx
-      : Math.max(0, points.length - 1);
-  const active = points[activeIdx];
-  const tipXGuide = points.length <= 1 ? w : activeIdx * step;
-  const tipW = 118;
-  const tipH = 52;
-  const tipX = Math.min(Math.max(4, tipXGuide - tipW / 2), w - tipW - 4);
-  const tipY = 6;
+  // Keep tip on the latest sample when series grows (no hover).
+  useEffect(() => {
+    if (hoverIdxRef.current != null) return;
+    if (!points.length) return;
+    paintTip(points.length - 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- paint from latest points/geometry
+  }, [points, geometry]);
 
   const onMove = (ev: ReactMouseEvent<SVGSVGElement>) => {
-    if (!points.length || !svgRef.current) return;
+    const pts = pointsRef.current;
+    if (!pts.length || !svgRef.current) return;
     const rect = svgRef.current.getBoundingClientRect();
+    if (rect.width <= 0) return;
     const x = ((ev.clientX - rect.left) / rect.width) * w;
-    const idx = clamp(Math.round(x / step), 0, points.length - 1);
-    setHoverIdx(idx);
+    const idx = clamp(Math.round(x / geometry.step), 0, pts.length - 1);
+    if (hoverIdxRef.current === idx) return;
+    hoverIdxRef.current = idx;
+    paintTip(idx);
   };
 
-  const ariaBits = active
-    ? `CPU ${formatPct(active.cpu)}, GPU ${formatPct(active.gpu)}, ОЗУ ${formatPct(active.ram)}, ${clock}`
-    : `Нет данных, ${clock}`;
+  const onLeave = () => {
+    hoverIdxRef.current = null;
+    if (pointsRef.current.length) paintTip(pointsRef.current.length - 1);
+  };
+
+  const last = points.length ? points[points.length - 1] : null;
 
   return (
     <svg
       ref={svgRef}
-      className="load-chart load-chart-live"
+      className="load-chart"
       viewBox={`0 0 ${w} ${h}`}
       width="100%"
       height="120"
       role="img"
-      aria-label={`Нагрузка за час. ${ariaBits}`}
+      aria-label={
+        last
+          ? `Нагрузка за час. CPU ${formatPct(last.cpu)}, GPU ${formatPct(last.gpu)}, ОЗУ ${formatPct(last.ram)}`
+          : "Нагрузка за час. Нет данных"
+      }
       onMouseMove={onMove}
-      onMouseLeave={() => setHoverIdx(null)}
+      onMouseLeave={onLeave}
     >
       <defs>
         {SERIES_META.map((s) => (
@@ -523,29 +592,20 @@ function LoadChart({
         />
       ))}
       {SERIES_META.map((s) => {
-        const coords = coordsFor(s.key);
-        const line = pathFor(coords);
-        if (!line) return null;
-        const solid = coords.filter(Boolean) as Array<{
-          x: number;
-          y: number;
-        }>;
-        const area =
-          solid.length > 1
-            ? `${line} L ${solid[solid.length - 1]!.x.toFixed(1)} ${h} L ${solid[0]!.x.toFixed(1)} ${h} Z`
-            : "";
+        const built = geometry[s.key];
+        if (!built.line) return null;
         return (
           <g key={s.key} className={`load-series load-series-${s.key}`}>
-            {area ? (
+            {built.area ? (
               <path
                 className="load-area"
-                d={area}
+                d={built.area}
                 fill={`url(#loadFill-${s.key}-${uid})`}
               />
             ) : null}
             <path
               className="load-line"
-              d={line}
+              d={built.line}
               fill="none"
               stroke={s.color}
               strokeWidth="2.2"
@@ -555,51 +615,81 @@ function LoadChart({
           </g>
         );
       })}
-      {active ? (
+      {points.length ? (
         <>
           <line
-            x1={tipXGuide}
+            ref={guideRef}
+            x1={w}
             y1="8"
-            x2={tipXGuide}
+            x2={w}
             y2={h - 4}
             stroke="var(--text-muted)"
             strokeDasharray="3 4"
             strokeOpacity="0.7"
+            pointerEvents="none"
           />
-          {SERIES_META.map((s) => {
-            const v = active[s.key];
-            if (v == null) return null;
-            return (
-              <circle
-                key={s.key}
-                className="load-tip-dot"
-                cx={tipXGuide}
-                cy={yOf(v)}
-                r="3.8"
-                fill={s.color}
-              />
-            );
-          })}
-          <g transform={`translate(${tipX}, ${tipY})`}>
+          {SERIES_META.map((s, i) => (
+            <circle
+              key={s.key}
+              ref={(el) => {
+                dotRefs.current[i] = el;
+              }}
+              className="load-tip-dot"
+              cx={w}
+              cy={h / 2}
+              r="3.8"
+              fill={s.color}
+              pointerEvents="none"
+            />
+          ))}
+          <g
+            ref={tipGRef}
+            transform={`translate(${Math.max(4, w - 122)}, 6)`}
+            pointerEvents="none"
+          >
             <rect
-              width={tipW}
-              height={tipH}
+              width={118}
+              height={52}
               rx="6"
               fill="var(--bg)"
               stroke="var(--accent)"
               strokeOpacity="0.45"
             />
-            <text x="8" y="14" className="chart-tip" fill="var(--text-muted)">
-              {formatTipTime(active.t)}
+            <text
+              ref={tipTimeRef}
+              x="8"
+              y="14"
+              className="chart-tip"
+              fill="var(--text-muted)"
+            >
+              {last ? formatTipTime(last.t) : ""}
             </text>
-            <text x="8" y="28" className="chart-tip" fill="var(--success)">
-              CPU {formatPct(active.cpu)}
+            <text
+              ref={tipCpuRef}
+              x="8"
+              y="28"
+              className="chart-tip"
+              fill="var(--success)"
+            >
+              CPU {last ? formatPct(last.cpu) : "н/д"}
             </text>
-            <text x="62" y="28" className="chart-tip" fill="var(--accent)">
-              GPU {formatPct(active.gpu)}
+            <text
+              ref={tipGpuRef}
+              x="62"
+              y="28"
+              className="chart-tip"
+              fill="var(--accent)"
+            >
+              GPU {last ? formatPct(last.gpu) : "н/д"}
             </text>
-            <text x="8" y="42" className="chart-tip" fill="var(--load-ram)">
-              ОЗУ {formatPct(active.ram)}
+            <text
+              ref={tipRamRef}
+              x="8"
+              y="42"
+              className="chart-tip"
+              fill="var(--load-ram)"
+            >
+              ОЗУ {last ? formatPct(last.ram) : "н/д"}
             </text>
           </g>
         </>
@@ -616,4 +706,4 @@ function LoadChart({
       )}
     </svg>
   );
-}
+});

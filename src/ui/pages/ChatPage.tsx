@@ -961,28 +961,11 @@ export function ChatPage({
     });
   }, [noteReplyLatency, onError, onVoiceState, speakAssistant]);
 
-  // Home «Ответ» tile: keep a soft live readout around the last measured latency.
+  // Home «Ответ» tile — static readout (no 900ms wobble re-renders).
   useEffect(() => {
-    if (panel !== "home") {
-      const rounded = Math.round(replySecs * 10) / 10;
-      setReplyDisplay(`~${String(rounded).replace(".", ",")} с`);
-      return;
-    }
-    let alive = true;
-    const tick = () => {
-      if (!alive) return;
-      const wobble = Math.sin(performance.now() / 1800) * 0.03;
-      const v = Math.max(0.08, replySecs + wobble);
-      const rounded = Math.round(v * 10) / 10;
-      setReplyDisplay(`~${String(rounded).replace(".", ",")} с`);
-    };
-    tick();
-    const id = window.setInterval(tick, 900);
-    return () => {
-      alive = false;
-      window.clearInterval(id);
-    };
-  }, [panel, replySecs]);
+    const rounded = Math.round(replySecs * 10) / 10;
+    setReplyDisplay(`~${String(rounded).replace(".", ",")} с`);
+  }, [replySecs]);
 
   async function handleNewChat() {
     if (!window.mira || busy) return;
