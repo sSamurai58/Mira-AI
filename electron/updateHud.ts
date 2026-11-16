@@ -1,6 +1,9 @@
 /**
  * Always-on-top update toast window — visible above other apps, not only Mira.
  * Anchored to a corner of the Mira main window when it is visible.
+ *
+ * Windows note: fully transparent + alwaysOnTop("screen-saver") often eats
+ * mouse input (clicks pass through). Keep floating level + opaque panel.
  */
 import path from "node:path";
 import type { BrowserWindow, Rectangle } from "electron";
@@ -18,7 +21,8 @@ let ensureWindowInflight: Promise<BrowserWindow | null> | null = null;
 let dismissedKey: string | null = null;
 
 const WIDTH = 380;
-const HEIGHT = 168;
+/** Tall enough for error copy + actions; card fills the window. */
+const HEIGHT = 220;
 const MARGIN = 16;
 
 function dismissKeyFor(status: UpdateStatus): string {
@@ -49,14 +53,14 @@ export function closeUpdateHud(): void {
 }
 
 export function hideUpdateHud(): void {
-  if (updateHudWindow && !updateHudWindow.isDestroyed()) {
-    updateHudWindow.hide();
-  }
+  // Prefer destroy over hide: a hidden transparent always-on-top window can
+  // still sit in the z-order and steal / block clicks on Windows.
+  closeUpdateHud();
 }
 
 export function dismissUpdateHud(key?: string | null): void {
   if (key) dismissedKey = key;
-  hideUpdateHud();
+  closeUpdateHud();
 }
 
 /** Prefer Mira's visible bounds so the toast sits in Mira's corner — not mid-window. */
@@ -119,12 +123,38 @@ function closeOrphanUpdateWindows(keep?: BrowserWindow | null): void {
   }
 }
 
+function applyClickableAlwaysOnTop(win: BrowserWindow): void {
+  try {
+    // "floating" matches Mira HUD and still stays above apps; "screen-saver"
+    // on Windows often produces a layer that does not receive mouse clicks.
+    win.setAlwaysOnTop(true, "floating");
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  } catch {
+    try {
+      win.setAlwaysOnTop(true);
+    } catch {
+      /* platforms differ */
+    }
+  }
+  try {
+    win.setIgnoreMouseEvents(false);
+  } catch {
+    /* ignore */
+  }
+  try {
+    win.setFocusable(true);
+  } catch {
+    /* ignore */
+  }
+}
+
 async function ensureWindow(opts?: {
   isDev?: boolean;
 }): Promise<BrowserWindow | null> {
   if (typeof process.versions.electron !== "string") return null;
 
   if (updateHudWindow && !updateHudWindow.isDestroyed()) {
+    applyClickableAlwaysOnTop(updateHudWindow);
     return updateHudWindow;
   }
   if (ensureWindowInflight) return ensureWindowInflight;
@@ -132,6 +162,7 @@ async function ensureWindow(opts?: {
   ensureWindowInflight = (async () => {
     // Re-check after awaiting the lock — another caller may have finished.
     if (updateHudWindow && !updateHudWindow.isDestroyed()) {
+      applyClickableAlwaysOnTop(updateHudWindow);
       return updateHudWindow;
     }
 
@@ -142,23 +173,25 @@ async function ensureWindow(opts?: {
     const prefs = loadNotifyPrefs();
     const { x, y } = cornerOrigin(anchorRect(), prefs.position);
 
+    // Opaque frameless panel — transparent windows on Windows frequently
+    // ignore mouse hits even on painted pixels when always-on-top.
     const win = new BrowserWindow({
       width: WIDTH,
       height: HEIGHT,
       x,
       y,
       frame: false,
-      transparent: true,
+      transparent: false,
       resizable: false,
       maximizable: false,
       minimizable: false,
       fullscreenable: false,
       skipTaskbar: true,
       alwaysOnTop: true,
-      hasShadow: false,
+      hasShadow: true,
       focusable: true,
       show: false,
-      backgroundColor: "#00000000",
+      backgroundColor: "#14101c",
       title: "Mira Update",
       webPreferences: {
         preload: path.join(__dirname, "preload.js"),
@@ -168,17 +201,7 @@ async function ensureWindow(opts?: {
       },
     });
 
-    try {
-      // Highest practical level so the toast stays above other apps.
-      win.setAlwaysOnTop(true, "screen-saver");
-      win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-    } catch {
-      try {
-        win.setAlwaysOnTop(true, "floating");
-      } catch {
-        /* platforms differ */
-      }
-    }
+    applyClickableAlwaysOnTop(win);
 
     placeWindow(win, prefs.position);
     updateHudWindow = win;
@@ -196,6 +219,11 @@ async function ensureWindow(opts?: {
 
     win.on("closed", () => {
       if (updateHudWindow === win) updateHudWindow = null;
+    });
+
+    // If the page ever paints empty (dismissed), do not leave a click-blocker.
+    win.webContents.on("did-finish-load", () => {
+      applyClickableAlwaysOnTop(win);
     });
 
     return win;
@@ -240,13 +268,16 @@ export async function syncUpdateHud(
   if (!win || win.isDestroyed()) return;
 
   placeWindow(win, prefs.position);
+  applyClickableAlwaysOnTop(win);
   if (!win.isVisible()) {
-    // Don't steal focus from the active app.
+    // Don't steal focus from the active app — but keep mouse events.
     win.showInactive();
+    applyClickableAlwaysOnTop(win);
   }
 }
 
 export function repositionUpdateHud(): void {
   if (!updateHudWindow || updateHudWindow.isDestroyed()) return;
   placeWindow(updateHudWindow, loadNotifyPrefs().position);
+  applyClickableAlwaysOnTop(updateHudWindow);
 }
