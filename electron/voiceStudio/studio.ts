@@ -43,11 +43,14 @@ import {
 } from "../tts/localSynthCache";
 import {
   buildProjectAcousticCodebook,
+  chatterboxAvailable,
   cosyVoiceAvailable,
   exportFineTunePairs,
+  f5TtsAvailable,
   listSpeakerStyles,
   listStoredUtterances,
   projectTokenCoverage,
+  resolveExternalTtsOrder,
   saveSpeakerPack,
   speakerPackStatus,
   speakTokenPipeline,
@@ -2408,6 +2411,9 @@ export function getStudioSnapshot(projectId?: string) {
       }
     : null;
   const cosy = cosyVoiceAvailable();
+  const f5 = f5TtsAvailable();
+  const chatterbox = chatterboxAvailable();
+  const sidecarOrder = resolveExternalTtsOrder();
   const phrases = project ? listPhrases(project.id) : [];
   const clips = project ? listClips(project.id) : [];
   const linkedAccepted = clips.filter(
@@ -2424,6 +2430,11 @@ export function getStudioSnapshot(projectId?: string) {
       tokens,
       cosyAvailable: cosy.ok,
       cosyDetail: cosy.detail,
+      f5Available: f5.ok,
+      f5Detail: f5.detail,
+      chatterboxAvailable: chatterbox.ok,
+      chatterboxDetail: chatterbox.detail,
+      sidecarOrder,
     },
     trainHealth: readVoiceTrainHealth(project, linkedAccepted),
   };

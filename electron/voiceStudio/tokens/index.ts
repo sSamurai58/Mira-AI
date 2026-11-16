@@ -7,4 +7,7 @@ export * from "./tokenStore";
 export * from "./chunking";
 export * from "./pipeline";
 export * from "./cosySidecar";
+export * from "./f5Sidecar";
+export * from "./chatterboxSidecar";
+export * from "./externalTtsOrder";
 export * from "./xvector";

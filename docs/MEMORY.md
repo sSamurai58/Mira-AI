@@ -13,7 +13,7 @@
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`/`ARCHITECTURE`, `TASKS`, `DECISIONS`, `GLOSSARY`, `RELEASE`, `RISKS`, `VOICE-AUDIT`, `WIP` |
 | Дорожная карта | Must + future F* закрыты (partial→done stubs where noted) |
 
-**Сейчас:** **0.1.38** (Android-only APK). Обновления на планшете через GitHub APK; tablet side nav. После 0.1.35 — **переобучить** голос (`weightsFormat: 2`).
+**Сейчас:** **0.1.39** — F5/Chatterbox sidecars + Win/mac/Android. После 0.1.35 — **переобучить** голос (`weightsFormat: 2`).
 
 
 ## Решения
@@ -22,6 +22,8 @@
 
 | Дата | Решение | Почему |
 |------|---------|--------|
+| 2026-11-16 | **Релиз 0.1.39** (`v0.1.39`) | F5/Chatterbox/Cosy sidecar voice; Win+mac+Android |
+| 2026-11-16 | **External TTS: F5 → Chatterbox → Cosy sidecar** | Toy neural не клон; Python engines через Cosy-паттерн; см. `docs/EXTERNAL-TTS-SIDECARS.md` |
 | 2026-11-16 | **Релиз 0.1.38** (`apk/v0.1.38`) | Android updates UX (не browser-demo); tablet nav; только APK |
 | 2026-11-16 | **Релиз 0.1.37** (`v0.1.37`) | Android: debug-sign APK + Mira launcher icons; CI apksigner verify |
 | 2026-11-16 | **Релиз 0.1.36** (`v0.1.36`) | Tablet portrait/landscape; train lifecycle UI; Android Capacitor APK; Win+mac+Android |

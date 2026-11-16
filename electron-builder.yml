@@ -25,6 +25,10 @@ extraResources:
     to: icon.png
   - from: seed
     to: seed
+  - from: electron/voiceStudio/tokens
+    to: voice-sidecars
+    filter:
+      - "*.py"
 # Visible next to Mira.exe so install folder is not "only dll trash".
 extraFiles:
   - from: build/ЧИТАЙ-МЕНЯ.txt
