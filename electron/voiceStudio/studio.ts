@@ -2178,6 +2178,207 @@ export function resetVoicePhraseAudio(phraseId: string): {
   };
 }
 
+/** Lifecycle of neural train for Studio UI (progress / trained / needs retrain). */
+export type VoiceTrainHealth = {
+  hasWeights: boolean;
+  weightsFormat: number | null;
+  compatible: boolean;
+  vocoderReady: boolean;
+  trainedAt: string | null;
+  sampleRate: number | null;
+  hopLength: number | null;
+  metrics: {
+    epochs?: number;
+    steps?: number;
+    initialLoss?: number;
+    finalLoss?: number;
+    melTargets?: number;
+    improved?: boolean;
+    vocoderSteps?: number;
+  } | null;
+  phase:
+    | "empty"
+    | "collecting"
+    | "ready_to_train"
+    | "training"
+    | "trained"
+    | "trained_partial"
+    | "needs_retrain"
+    | "train_weak";
+  phaseLabel: string;
+  phaseHint: string;
+};
+
+function readVoiceTrainHealth(
+  project: VoiceProjectRow | null,
+  linkedAccepted: number,
+): VoiceTrainHealth {
+  const empty: VoiceTrainHealth = {
+    hasWeights: false,
+    weightsFormat: null,
+    compatible: false,
+    vocoderReady: false,
+    trainedAt: null,
+    sampleRate: null,
+    hopLength: null,
+    metrics: null,
+    phase: "empty",
+    phaseLabel: "Нет модели",
+    phaseHint: "Соберите фразы и запишите аудио, затем запустите обучение.",
+  };
+  if (!project) return empty;
+
+  const packDir = studioRoot(project.id, "model-pack");
+  const wPath = path.join(packDir, "neural-weights.json");
+  const mPath = path.join(packDir, "train-metrics.json");
+
+  let hasWeights = false;
+  let weightsFormat: number | null = null;
+  let compatible = false;
+  let vocoderReady = false;
+  let trainedAt: string | null = null;
+  let sampleRate: number | null = null;
+  let hopLength: number | null = null;
+
+  if (fs.existsSync(wPath)) {
+    try {
+      const raw = JSON.parse(fs.readFileSync(wPath, "utf8")) as {
+        weightsFormat?: number;
+        vocoderReady?: boolean;
+        trainedAt?: string;
+        sampleRate?: number;
+        hopLength?: number;
+      };
+      hasWeights = true;
+      weightsFormat = raw.weightsFormat ?? 1;
+      sampleRate = raw.sampleRate ?? 16000;
+      hopLength = raw.hopLength ?? 160;
+      trainedAt = raw.trainedAt ?? null;
+      compatible =
+        (weightsFormat ?? 0) >= 2 &&
+        sampleRate === 16000 &&
+        hopLength === 160;
+      vocoderReady = Boolean(raw.vocoderReady) && compatible;
+    } catch {
+      hasWeights = false;
+    }
+  }
+
+  let metrics: VoiceTrainHealth["metrics"] = null;
+  if (fs.existsSync(mPath)) {
+    try {
+      const raw = JSON.parse(fs.readFileSync(mPath, "utf8")) as {
+        epochs?: number;
+        steps?: number;
+        initialLoss?: number;
+        finalLoss?: number;
+        melTargets?: number;
+        improved?: boolean;
+        vocoderSteps?: number;
+      };
+      metrics = {
+        epochs: raw.epochs,
+        steps: raw.steps,
+        initialLoss: raw.initialLoss,
+        finalLoss: raw.finalLoss,
+        melTargets: raw.melTargets,
+        improved: raw.improved,
+        vocoderSteps: raw.vocoderSteps,
+      };
+    } catch {
+      metrics = null;
+    }
+  }
+
+  const status = project.status;
+  let phase: VoiceTrainHealth["phase"] = "collecting";
+  let phaseLabel = "Сбор корпуса";
+  let phaseHint =
+    "Запишите и привяжите аудио к фразам. Минимум 3 принятых клипа для сборки.";
+
+  if (status === "training") {
+    phase = "training";
+    phaseLabel = "Обучение…";
+    phaseHint =
+      project.recommendation?.trim() ||
+      "Идёт сборка: проверка → звук → слова → нейро-эпохи → каталог.";
+  } else if (hasWeights && !compatible) {
+    phase = "needs_retrain";
+    phaseLabel = "Нужно переобучить";
+    phaseHint = `Старые веса (format ${weightsFormat ?? "1"}) несовместимы с текущим пайплайном — нажмите «Пересобрать голос».`;
+  } else if (
+    hasWeights &&
+    metrics != null &&
+    (metrics.melTargets === 0 ||
+      (metrics.finalLoss != null &&
+        metrics.initialLoss != null &&
+        metrics.finalLoss >= 0.999 &&
+        metrics.initialLoss >= 0.999))
+  ) {
+    phase = "train_weak";
+    phaseLabel = "Обучение слабое — пересоберите";
+    phaseHint =
+      metrics.melTargets === 0
+        ? "mel-целей 0: нейросеть почти не училась на спектре. Добавьте привязанные клипы и пересоберите."
+        : "Loss не снизился. Проверьте корпус и запустите «Пересобрать голос».";
+  } else if (status === "ready" && hasWeights && compatible) {
+    phase = "trained";
+    phaseLabel = "Обучена";
+    phaseHint = vocoderReady
+      ? "Модель готова к речи (neural + vocoder)."
+      : "Модель готова; вокодер слабый — желательно ещё раз пересобрать на большем корпусе.";
+  } else if (
+    (status === "ready" || status === "ready_partial") &&
+    hasWeights &&
+    compatible
+  ) {
+    phase = "trained_partial";
+    phaseLabel = "Обучена (черновик)";
+    phaseHint =
+      "Базовая модель есть, но покрытие корпуса низкое — допишите фразы и дообучите.";
+  } else if (status === "ready" || status === "ready_partial") {
+    // Catalog voice without readable weights
+    phase = "needs_retrain";
+    phaseLabel = "Нужно переобучить";
+    phaseHint =
+      "В каталоге есть голос, но neural-weights не найдены или повреждены.";
+  } else if (
+    status === "ready_to_train" ||
+    (linkedAccepted >= 3 &&
+      (status === "collecting" ||
+        status === "processing" ||
+        status === "phrases" ||
+        status === "needs_data"))
+  ) {
+    phase = "ready_to_train";
+    phaseLabel = "Готов к обучению";
+    phaseHint = project.custom_voice_id
+      ? "Можно пересобрать голос с текущим корпусом."
+      : "Достаточно клипов — нажмите «Собрать голос».";
+  } else if (status === "created" || status === "phrases") {
+    phase = linkedAccepted > 0 ? "collecting" : "empty";
+    phaseLabel = linkedAccepted > 0 ? "Сбор корпуса" : "Нет модели";
+    phaseHint =
+      linkedAccepted > 0
+        ? "Продолжайте запись — нужно ≥3 принятых привязанных клипа."
+        : empty.phaseHint;
+  }
+
+  return {
+    hasWeights,
+    weightsFormat,
+    compatible,
+    vocoderReady,
+    trainedAt,
+    sampleRate,
+    hopLength,
+    metrics,
+    phase,
+    phaseLabel,
+    phaseHint,
+  };
+}
+
 export function getStudioSnapshot(projectId?: string) {
   const projects = listVoiceProjects();
   const project = projectId
@@ -2207,11 +2408,16 @@ export function getStudioSnapshot(projectId?: string) {
       }
     : null;
   const cosy = cosyVoiceAvailable();
+  const phrases = project ? listPhrases(project.id) : [];
+  const clips = project ? listClips(project.id) : [];
+  const linkedAccepted = clips.filter(
+    (c) => Number(c.accepted) > 0 && c.phrase_id,
+  ).length;
   return {
     projects,
     project,
-    phrases: project ? listPhrases(project.id) : [],
-    clips: project ? listClips(project.id) : [],
+    phrases,
+    clips,
     customVoices: listCustomVoices(),
     tokenPipeline: {
       speaker,
@@ -2219,6 +2425,7 @@ export function getStudioSnapshot(projectId?: string) {
       cosyAvailable: cosy.ok,
       cosyDetail: cosy.detail,
     },
+    trainHealth: readVoiceTrainHealth(project, linkedAccepted),
   };
 }
 

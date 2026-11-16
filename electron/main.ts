@@ -363,8 +363,8 @@ function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: 1280,
     height: 800,
-    minWidth: 960,
-    minHeight: 640,
+    minWidth: 720,
+    minHeight: 520,
     // Frameless: themed in-app titlebar (see TitleBar + mira:window-*).
     // Avoids OS accent-colored chrome (e.g. solid purple Windows title bar).
     frame: false,

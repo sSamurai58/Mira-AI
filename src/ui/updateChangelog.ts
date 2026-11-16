@@ -15,6 +15,18 @@ export type MiraChangelogEntry = {
 
 export const MIRA_CHANGELOG: MiraChangelogEntry[] = [
   {
+    version: "0.1.36",
+    date: "16.11.2026",
+    summary:
+      "Планшет portrait/landscape, Android APK, статус обучения голоса.",
+    bullets: [
+      "Компактный UI: icon-rail / drawer, Мастерская chips, denser Skills, full-bleed edit modal",
+      "Студия: прогресс обучения %, обучена / нужно дообучить (weightsFormat)",
+      "Android: Capacitor APK в том же GitHub Release (Win + mac + Android)",
+      "Electron minWidth 720 под планшетный preview",
+    ],
+  },
+  {
     version: "0.1.35",
     date: "16.11.2026",
     summary:

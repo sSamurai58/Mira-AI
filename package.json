@@ -1,6 +1,6 @@
 {
   "name": "mira-ai",
-  "version": "0.1.35",
+  "version": "0.1.36",
   "private": true,
   "description": "Mira — local voice AI assistant",
   "author": "Mira",
@@ -14,8 +14,12 @@
     "dev:electron": "concurrently -k \"vite\" \"wait-on http://127.0.0.1:5173 && npm run electron:dev\"",
     "electron:dev": "tsc -p tsconfig.electron.json && cross-env MIRA_DEV=1 ELECTRON_OZONE_PLATFORM_HINT=x11 electron . --use-gl=angle --use-angle=swiftshader --remote-debugging-port=9223",
     "build": "tsc -p tsconfig.app.json --noEmit && vite build && tsc -p tsconfig.electron.json",
+    "build:web": "tsc -p tsconfig.app.json --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
+    "cap:sync": "npm run build:web && npx cap sync android",
+    "pack:android": "npm run cap:sync && cd android && ./gradlew assembleRelease",
+    "pack:android:debug": "npm run cap:sync && cd android && ./gradlew assembleDebug",
     "brand-icons:vendor": "node scripts/vendor-brand-icons.mjs",
     "db:check": "tsx scripts/db-check.ts",
     "p1:smoke": "tsx scripts/p1-smoke.ts",
@@ -56,6 +60,10 @@
     "node": ">=22"
   },
   "dependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/core": "^8.6.2",
+    "@capacitor/status-bar": "^8.0.4",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "dotenv": "^18.0.10",
@@ -81,6 +89,7 @@
     "tsx": "^4.19.4",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
-    "wait-on": "^8.0.3"
+    "wait-on": "^8.0.3",
+    "@capacitor/cli": "^8.6.2"
   }
 }

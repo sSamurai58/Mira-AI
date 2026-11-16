@@ -4301,40 +4301,41 @@ select:disabled {
 }
 
 @media (max-width: 1100px) {
-  html,
-  body,
-  #root {
+  /* Legacy narrow desktop only when not in explicit tablet layout mode */
+  html:not([data-layout^="tablet"]),
+  html:not([data-layout^="tablet"]) body,
+  html:not([data-layout^="tablet"]) #root {
     overflow: auto;
   }
 
-  .app-shell {
+  html:not([data-layout^="tablet"]) .app-shell {
     overflow: auto;
     height: auto;
     max-height: none;
     contain: none;
   }
 
-  .app-shell-body {
+  html:not([data-layout^="tablet"]) .app-shell-body {
     grid-template-columns: 1fr;
     overflow: auto;
     height: auto;
   }
 
-  .nav {
+  html:not([data-layout^="tablet"]) .nav {
     height: auto;
     overflow: visible;
   }
 
-  .workspace,
-  .workspace-body,
-  .home-grid,
-  .home-center,
-  .home-rail {
+  html:not([data-layout^="tablet"]) .workspace,
+  html:not([data-layout^="tablet"]) .workspace-body,
+  html:not([data-layout^="tablet"]) .home-grid,
+  html:not([data-layout^="tablet"]) .home-center,
+  html:not([data-layout^="tablet"]) .home-rail {
     height: auto;
     overflow: visible;
   }
 
-  .home-grid {
+  html:not([data-layout^="tablet"]) .home-grid {
     grid-template-columns: 1fr;
   }
 
@@ -8141,4 +8142,470 @@ html[data-theme-family="apple"] .catalog-draft-card {
     saturate(var(--apple-glass-saturate));
   border: 1px dashed var(--apple-glass-border) !important;
   box-shadow: inset 0 1px 0 var(--apple-glass-highlight) !important;
+}
+
+/* Voice Studio — train lifecycle card */
+.vs-train-card {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid color-mix(in oklab, var(--border) 80%, transparent);
+  background: color-mix(in oklab, var(--bg-elevated, var(--panel)) 88%, transparent);
+}
+.vs-train-card--run {
+  border-color: color-mix(in oklab, var(--accent) 45%, var(--border));
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 18%, transparent);
+}
+.vs-train-card--ok {
+  border-color: color-mix(in oklab, #3bb273 40%, var(--border));
+}
+.vs-train-card--go {
+  border-color: color-mix(in oklab, var(--accent) 35%, var(--border));
+}
+.vs-train-card--warn {
+  border-color: color-mix(in oklab, #d4a017 40%, var(--border));
+}
+.vs-train-card--bad {
+  border-color: color-mix(in oklab, #e25555 45%, var(--border));
+  background: color-mix(in oklab, #e25555 8%, var(--bg-elevated, var(--panel)));
+}
+.vs-train-card__head {
+  display: grid;
+  gap: 0.2rem;
+}
+.vs-train-card__title {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+.vs-train-card__badge {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--fg) 35%, transparent);
+  flex: 0 0 auto;
+}
+.vs-train-card--run .vs-train-card__badge {
+  background: var(--accent, #3d8bfd);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 25%, transparent);
+  animation: vs-train-pulse 1.2s ease-in-out infinite;
+}
+.vs-train-card--ok .vs-train-card__badge {
+  background: #3bb273;
+}
+.vs-train-card--bad .vs-train-card__badge {
+  background: #e25555;
+}
+.vs-train-card--warn .vs-train-card__badge,
+.vs-train-card--go .vs-train-card__badge {
+  background: var(--accent, #3d8bfd);
+}
+@keyframes vs-train-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+.vs-train-card__pct {
+  margin-left: auto;
+  font-size: 1.05rem;
+  font-weight: 650;
+  color: var(--accent, #3d8bfd);
+}
+.vs-train-card__tag {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.12rem 0.4rem;
+  border-radius: 6px;
+  background: color-mix(in oklab, #e25555 18%, transparent);
+  color: color-mix(in oklab, #e25555 80%, var(--fg));
+}
+.vs-train-card__tag--ok {
+  background: color-mix(in oklab, #3bb273 18%, transparent);
+  color: color-mix(in oklab, #3bb273 85%, var(--fg));
+}
+.vs-train-card__hint {
+  margin: 0;
+  font-size: 0.88rem;
+  color: color-mix(in oklab, var(--fg) 72%, transparent);
+  line-height: 1.35;
+}
+.vs-train-card__bar {
+  height: 0.45rem;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in oklab, var(--fg) 12%, transparent);
+}
+.vs-train-card__bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent, #3d8bfd);
+  transition: width 0.25s ease;
+}
+.vs-train-card--ok .vs-train-card__bar-fill {
+  background: #3bb273;
+}
+.vs-train-card--bad .vs-train-card__bar-fill {
+  background: #e25555;
+}
+.vs-train-pipeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.25rem;
+}
+.vs-train-pipeline__step {
+  display: grid;
+  justify-items: center;
+  gap: 0.2rem;
+  font-size: 0.68rem;
+  text-align: center;
+  color: color-mix(in oklab, var(--fg) 45%, transparent);
+}
+.vs-train-pipeline__dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--fg) 22%, transparent);
+}
+.vs-train-pipeline__step--done {
+  color: color-mix(in oklab, var(--fg) 78%, transparent);
+}
+.vs-train-pipeline__step--done .vs-train-pipeline__dot {
+  background: #3bb273;
+}
+.vs-train-pipeline__step--active {
+  color: var(--fg);
+  font-weight: 600;
+}
+.vs-train-pipeline__step--active .vs-train-pipeline__dot {
+  background: var(--accent, #3d8bfd);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 22%, transparent);
+}
+.vs-train-card__live,
+.vs-train-card__meta {
+  font-size: 0.8rem;
+  color: color-mix(in oklab, var(--fg) 68%, transparent);
+}
+@media (max-width: 720px) {
+  .vs-train-pipeline {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* ========== Compact tablet layouts (portrait + landscape) ========== */
+.tablet-topbar,
+.nav-scrim {
+  display: none;
+}
+
+[data-layout^="tablet"] .app-shell-body {
+  grid-template-columns: var(--nav-compact-w, 72px) minmax(0, 1fr);
+  padding: 10px;
+  gap: 10px;
+}
+
+[data-layout="tablet-landscape"] {
+  --nav-compact-w: 76px;
+  --pad-screen: 10px;
+  --gap: 10px;
+  --rail-w: 260px;
+}
+
+[data-layout="tablet-landscape"] .nav--rail {
+  padding: 10px 8px;
+  gap: 4px;
+  align-items: stretch;
+}
+
+[data-layout="tablet-landscape"] .nav--rail .brand-row {
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+[data-layout="tablet-landscape"] .nav--rail .brand-name,
+[data-layout="tablet-landscape"] .nav--rail .brand-phase,
+[data-layout="tablet-landscape"] .nav--rail .btn-new-chat-label,
+[data-layout="tablet-landscape"] .nav--rail .nav-btn-label {
+  display: none;
+}
+
+[data-layout="tablet-landscape"] .nav--rail .btn-new-chat {
+  justify-content: center;
+  padding: 10px;
+  margin: 6px 0;
+}
+
+[data-layout="tablet-landscape"] .nav--rail .nav-btn {
+  justify-content: center;
+  padding: 10px 6px;
+  min-height: 44px;
+}
+
+[data-layout="tablet-landscape"] .nav--rail .nav-ico {
+  width: 22px;
+  height: 22px;
+}
+
+[data-layout="tablet-landscape"] .nav--rail .core-level-chip,
+[data-layout="tablet-landscape"] .nav--rail .core-level-chip * {
+  font-size: 0.72rem;
+}
+
+[data-layout="tablet-landscape"] .nav--rail .core-level-chip {
+  padding: 6px 4px;
+  text-align: center;
+}
+
+/* Portrait: drawer + top bar + optional bottom rail feel */
+[data-layout="tablet-portrait"] .tablet-topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  padding: 8px 10px;
+  padding-top: max(8px, env(safe-area-inset-top));
+  padding-left: max(10px, env(safe-area-inset-left));
+  padding-right: max(10px, env(safe-area-inset-right));
+  border-bottom: 1px solid var(--panel-line);
+  background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+  z-index: 3;
+}
+
+[data-layout="tablet-portrait"] .tablet-menu-btn,
+[data-layout="tablet-portrait"] .tablet-new-chat {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  font-size: 1.15rem;
+}
+
+[data-layout="tablet-portrait"] .tablet-topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+[data-layout="tablet-portrait"] .app-shell-body {
+  display: flex;
+  flex-direction: column;
+  grid-template-columns: unset;
+  padding: 8px;
+  gap: 8px;
+}
+
+[data-layout="tablet-portrait"] .app-shell-body > .workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+[data-layout="tablet-portrait"] .nav--drawer {
+  position: fixed;
+  z-index: 40;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: min(288px, 86vw);
+  transform: translateX(-105%);
+  transition: transform 180ms var(--ease-out, ease);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  box-shadow: 8px 0 28px color-mix(in srgb, #000 45%, transparent);
+}
+
+[data-layout="tablet-portrait"][data-nav-open="1"] .nav--drawer,
+[data-layout="tablet-portrait"] .app-shell[data-nav-open="1"] .nav--drawer {
+  transform: translateX(0);
+}
+
+/* data-nav-open lives on .app-shell */
+.app-shell[data-layout="tablet-portrait"][data-nav-open="1"] .nav--drawer {
+  transform: translateX(0);
+}
+
+.app-shell[data-layout="tablet-portrait"][data-nav-open="1"] .nav-scrim {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  border: 0;
+  background: color-mix(in srgb, #000 48%, transparent);
+  cursor: pointer;
+}
+
+/* Keep app shell filling viewport on tablets (undo old 1100 collapse) */
+html[data-layout^="tablet"],
+html[data-layout^="tablet"] body,
+html[data-layout^="tablet"] #root {
+  overflow: hidden;
+  height: 100%;
+}
+
+.app-shell[data-layout^="tablet"] {
+  overflow: hidden;
+  height: 100%;
+  max-height: 100%;
+}
+
+.app-shell[data-layout^="tablet"] .app-shell-body {
+  overflow: hidden;
+  height: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.app-shell[data-layout^="tablet"] .workspace,
+.app-shell[data-layout^="tablet"] .workspace-body {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Workshop: horizontal segment chips */
+[data-layout^="tablet"] .settings-layout.workshop-layout,
+[data-layout^="tablet"] .settings-layout {
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+[data-layout^="tablet"] .workshop-seg-nav.settings-nav,
+[data-layout^="tablet"] .settings-nav {
+  position: static;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-height: none;
+  gap: 6px;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+
+[data-layout^="tablet"] .settings-nav .nav-btn {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  min-height: 40px;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+}
+
+[data-layout="tablet-portrait"] .workshop-seg-label {
+  max-width: 9.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Chat toolbar compaction */
+[data-layout^="tablet"] .chat-toolbar {
+  gap: 6px;
+}
+
+[data-layout^="tablet"] .chat-toolbar .chat-toolbar-extra {
+  display: none;
+}
+
+[data-layout="tablet-portrait"] .chat-toolbar .chip,
+[data-layout="tablet-portrait"] .chat-toolbar .btn {
+  font-size: 0.82rem;
+  padding: 6px 10px;
+}
+
+[data-layout="tablet-portrait"] .voice-select {
+  flex: 1 1 100%;
+}
+
+/* Skills / paths cards — denser, touch-friendly */
+[data-layout="tablet-landscape"] .paths-grid {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+[data-layout="tablet-portrait"] .paths-grid {
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+[data-layout^="tablet"] .paths-card {
+  gap: 8px;
+  padding: 12px;
+}
+
+[data-layout^="tablet"] .paths-card .row .btn,
+[data-layout^="tablet"] .paths-card-actions .btn {
+  min-height: 40px;
+}
+
+/* Catalog / skill edit modal — almost full-bleed on tablet */
+[data-layout^="tablet"] .modal.modal-wide,
+[data-layout^="tablet"] .catalog-edit-modal {
+  width: min(960px, calc(100vw - 24px)) !important;
+  max-height: calc(100vh - 24px) !important;
+  max-width: calc(100vw - 24px) !important;
+}
+
+[data-layout="tablet-portrait"] .modal.modal-wide,
+[data-layout="tablet-portrait"] .catalog-edit-modal {
+  width: calc(100vw - 12px) !important;
+  max-height: calc(100vh - 12px) !important;
+  border-radius: 12px;
+}
+
+[data-layout^="tablet"] .catalog-edit-modal textarea,
+[data-layout^="tablet"] .catalog-edit-modal .md-preview {
+  max-height: min(36vh, 320px);
+}
+
+/* Voice studio: two columns on landscape tablet */
+[data-layout="tablet-landscape"] .workshop-main > .panel.stack,
+[data-layout="tablet-landscape"] .workshop-main {
+  min-width: 0;
+}
+
+[data-layout="tablet-landscape"] .vs-studio-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 12px;
+  align-items: start;
+}
+
+[data-layout^="tablet"] .vs-train-pipeline {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+[data-layout="tablet-portrait"] .vs-train-pipeline {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.2rem;
+}
+
+[data-layout^="tablet"] .home-grid {
+  grid-template-columns: 1fr;
+}
+
+[data-layout="tablet-landscape"] .home-grid {
+  grid-template-columns: minmax(0, 1fr) var(--rail-w);
+}
+
+[data-layout^="tablet"] .btn,
+[data-layout^="tablet"] .nav-btn,
+[data-layout^="tablet"] .chip {
+  touch-action: manipulation;
+}
+
+@media (max-width: 1280px) and (min-width: 821px) and (orientation: landscape) {
+  /* Fallback if JS hook late: prefer rail feel */
+  :root {
+    --nav-w: 76px;
+  }
 }

@@ -26,6 +26,10 @@ import {
 } from "./backgrounds";
 import { CoreLevelChip } from "./components/CoreLevelChip";
 import {
+  isTabletLayout,
+  useLayoutMode,
+} from "./hooks/useLayoutMode";
+import {
   CORE_PROGRESS_EVENT,
   coreLevelRingPct,
   loadCoreLevel,
@@ -189,6 +193,7 @@ export function App() {
   );
   const setNav = useCallback((id: RootNav) => {
     setNavState(id);
+    setNavOpen(false);
     const next = hashForNav(id);
     if (window.location.hash !== next) {
       window.location.hash = next;
@@ -220,6 +225,14 @@ export function App() {
     return true;
   });
   const [navLabels, setNavLabels] = useState(() => navItems());
+  const layoutMode = useLayoutMode();
+  const tablet = isTabletLayout(layoutMode);
+  const [navOpen, setNavOpen] = useState(false);
+
+  useEffect(() => {
+    // Close drawer when leaving portrait or switching section.
+    if (layoutMode !== "tablet-portrait") setNavOpen(false);
+  }, [layoutMode]);
 
   useEffect(() => {
     applyTheme(themeId);
@@ -425,16 +438,67 @@ export function App() {
 
   return (
     <AppConfirmProvider>
-    <div className="app-shell" data-voice={voiceState}>
+    <div
+      className="app-shell"
+      data-voice={voiceState}
+      data-layout={layoutMode}
+      data-nav-open={navOpen ? "1" : "0"}
+    >
       <div className="atmosphere" aria-hidden />
       <div className="atmosphere-mid" aria-hidden />
       <div className="atmosphere-grid" aria-hidden />
 
       <TitleBar />
 
+      {layoutMode === "tablet-portrait" ? (
+        <div className="tablet-topbar">
+          <button
+            type="button"
+            className="btn tablet-menu-btn"
+            aria-label="Меню"
+            aria-expanded={navOpen}
+            onClick={() => setNavOpen((v) => !v)}
+          >
+            ☰
+          </button>
+          <div className="tablet-topbar-brand">
+            <img
+              className="brand-logo"
+              src="./brand/mira-mark.svg"
+              width={22}
+              height={24}
+              alt=""
+              aria-hidden
+            />
+            <strong>{APP_NAME}</strong>
+            <span className="muted mono">v{APP_VERSION}</span>
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary tablet-new-chat"
+            onClick={requestNewChat}
+          >
+            +
+          </button>
+        </div>
+      ) : null}
+
+      {navOpen && layoutMode === "tablet-portrait" ? (
+        <button
+          type="button"
+          className="nav-scrim"
+          aria-label="Закрыть меню"
+          onClick={() => setNavOpen(false)}
+        />
+      ) : null}
+
       <div className="app-shell-body">
       <ErrorBoundary fallbackTitle="Навигация Mira сбойнула">
-        <aside className="nav">
+        <aside
+          className={`nav${tablet ? " nav--compact" : ""}${
+            layoutMode === "tablet-landscape" ? " nav--rail" : ""
+          }${layoutMode === "tablet-portrait" ? " nav--drawer" : ""}`}
+        >
           <div className="brand-row">
             <img
               className="brand-logo"
@@ -454,9 +518,10 @@ export function App() {
             type="button"
             className="btn-new-chat"
             onClick={requestNewChat}
+            title="Новая беседа"
           >
             <span aria-hidden>+</span>
-            Новая беседа
+            <span className="btn-new-chat-label">Новая беседа</span>
           </button>
 
           <nav className="nav-list" aria-label="Основное">
@@ -466,6 +531,7 @@ export function App() {
                 type="button"
                 className={`nav-btn ${nav === item.id ? "active" : ""}`}
                 data-tone={item.tone}
+                title={item.label}
                 onClick={() => setNav(item.id)}
               >
                 <NavIcon id={item.id} />
