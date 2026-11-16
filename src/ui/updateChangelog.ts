@@ -15,6 +15,18 @@ export type MiraChangelogEntry = {
 
 export const MIRA_CHANGELOG: MiraChangelogEntry[] = [
   {
+    version: "0.1.39",
+    date: "16.11.2026",
+    summary:
+      "Голос: sidecar F5-TTS / Chatterbox для настоящего clone (Electron).",
+    bullets: [
+      "speakTokenPipeline: stitch → F5 → Chatterbox → Cosy → neural",
+      "Voice Studio показывает статус sidecar; MIRA_TTS_SIDECAR=auto|f5|chatterbox|cosy|off",
+      "docs/EXTERNAL-TTS-SIDECARS.md; pip install f5-tts / chatterbox-tts",
+      "Windows + macOS + Android одним тегом",
+    ],
+  },
+  {
     version: "0.1.38",
     date: "16.11.2026",
     summary:
