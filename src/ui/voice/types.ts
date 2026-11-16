@@ -6,6 +6,8 @@ export type VoiceInfo = {
   default?: boolean;
   /** Studio custom voice (#15 → #11) */
   custom?: boolean;
+  /** Cloud ElevenLabs voice (`elevenlabs:<voiceId>`) */
+  elevenLabs?: boolean;
   previewPath?: string | null;
   projectId?: string | null;
 };

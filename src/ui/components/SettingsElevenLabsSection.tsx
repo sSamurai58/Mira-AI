@@ -11,6 +11,11 @@ import {
   saveSettingsEnv,
   type SettingsEnvSnapshot,
 } from "../settingsEnvClient";
+import {
+  catalogIdForElevenLabs,
+  notifyCatalogVoicesChanged,
+  setActiveVoiceId,
+} from "../voice/catalog";
 import { speakText, stopSpeaking } from "../voice/tts";
 import {
   DEFAULT_ELEVENLABS_VOICE_ID,
@@ -130,6 +135,8 @@ export function SettingsElevenLabsSection({
                 category: v.category,
               })),
             );
+            // Refresh chat/settings «Голос» dropdown with ElevenLabs entries.
+            notifyCatalogVoicesChanged();
           }
         } catch {
           /* optional */
@@ -181,6 +188,13 @@ export function SettingsElevenLabsSection({
     setNote(res.detail);
     setSavingKey(null);
     await refreshStatus(true);
+    const voiceId =
+      (draft.ELEVENLABS_VOICE_ID || "").trim() || DEFAULT_ELEVENLABS_VOICE_ID;
+    if (patch.ELEVENLABS_API_KEY || patch.ELEVENLABS_VOICE_ID) {
+      setActiveTtsEngine("elevenlabs");
+      setActiveVoiceId(catalogIdForElevenLabs(voiceId));
+      notifyCatalogVoicesChanged();
+    }
   }
 
   async function handleDeleteKey() {
@@ -339,7 +353,12 @@ export function SettingsElevenLabsSection({
               value: v.voiceId,
               label: `${v.name} (${v.category})`,
             }))}
-            onChange={(id) => setField("ELEVENLABS_VOICE_ID", id)}
+            onChange={(id) => {
+              setField("ELEVENLABS_VOICE_ID", id);
+              setActiveTtsEngine("elevenlabs");
+              setActiveVoiceId(catalogIdForElevenLabs(id));
+              notifyCatalogVoicesChanged();
+            }}
           />
         </Field>
       ) : null}

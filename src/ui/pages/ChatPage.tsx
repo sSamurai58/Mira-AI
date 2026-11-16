@@ -369,8 +369,13 @@ export function ChatPage({
       setEngineNote(getVoiceEngineStatus().detail);
     }
     void bootVoices();
+    const onCatalog = () => {
+      void bootVoices();
+    };
+    window.addEventListener("mira:catalog-voices-changed", onCatalog);
     return () => {
       cancelled = true;
+      window.removeEventListener("mira:catalog-voices-changed", onCatalog);
       stopSpeaking();
       asrRef.current?.stop();
       wakeRef.current?.stop();

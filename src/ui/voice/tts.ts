@@ -1,4 +1,8 @@
-import { isCustomVoiceId, resolveSpeechVoice } from "./catalog";
+import {
+  isCustomVoiceId,
+  isElevenLabsVoiceId,
+  resolveSpeechVoice,
+} from "./catalog";
 import {
   loadCustomVoiceCorpus,
   planCorpusSpeech,
@@ -940,9 +944,8 @@ export function speakText(
     activeBufferSource = null;
   }
 
-  // Explicit ElevenLabs engine always wins over catalog/studio voice id —
-  // otherwise Mira keeps speaking a system/studio voice while EL is "connected".
-  if (engine === "elevenlabs") {
+  // Explicit ElevenLabs engine or catalog EL voice → cloud Voice ID.
+  if (engine === "elevenlabs" || isElevenLabsVoiceId(voiceId)) {
     void speakElevenLabs(text, handlers, isCurrent);
     return;
   }
