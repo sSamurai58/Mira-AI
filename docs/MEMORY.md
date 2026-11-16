@@ -13,7 +13,7 @@
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
 | Дорожная карта | Must + future F* закрыты (partial→done stubs where noted) |
 
-**Сейчас:** **0.1.32** релиз (Win+mac вместе). Разработка → **`develop`**.
+**Сейчас:** **0.1.33** релиз (Win+mac вместе). Разработка → **`develop`**.
 
 
 ## Решения
@@ -24,6 +24,7 @@
 |------|---------|--------|
 | 2026-11-14 | **Ветки: develop / main** | Разработка на `develop`; в `main` только актуальный релиз; `.exe` не в git — GitHub Releases + `latest.yml`; см. `docs/BRANCHING.md` |
 | 2026-11-14 | **Релиз = Windows + macOS всегда** | Один тег `v*` → оба OS в одном GitHub Release; запрет отдельных OS-only релизов; gate `release-all` |
+| 2026-11-16 | **Релиз 0.1.33** (`v0.1.33`) | Менее роботный neural TTS (neural-primary, mild LPF, no short-chunk GL); serialize Win→mac publish; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.33 |
 | 2026-11-16 | **Релиз 0.1.32** (`v0.1.32`) | Hotfix: Update HUD кликабелен/закрывается (opaque floating, Esc/×, auto-hide error); Win+mac; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.32 |
 | 2026-11-16 | **Релиз 0.1.31** (`v0.1.31`) | TokenStore T0–T4: normalize/G2P/prosody/VQ/speaker pack; speak pipeline + Cosy sidecar; Win+mac; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.31 |
 | 2026-11-15 | **Релиз 0.1.30** (`v0.1.30`) | Fix: одно окно Update HUD при скачивании; Win+mac; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.30 |
