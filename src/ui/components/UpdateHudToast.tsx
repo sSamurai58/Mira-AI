@@ -262,15 +262,55 @@ export function UpdateHudToast({
     }
   }, [status, overlayWindow]);
 
+  // Overlay: Esc always closes (even if mouse is broken on a stuck layer).
+  useEffect(() => {
+    if (!overlayWindow) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        hide();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [overlayWindow, hide]);
+
+  // After user dismiss (or sticky auto-hide), destroy the always-on-top window
+  // so it cannot sit as an invisible click-blocker.
+  useEffect(() => {
+    if (!overlayWindow || !dismissed) return;
+    if (!window.mira?.dismissUpdateHud) return;
+    const ver =
+      status?.availableVersion ||
+      status?.channel ||
+      lastChannelRef.current ||
+      "idle";
+    const key =
+      status?.channel === "error"
+        ? `error:${ver}`
+        : `${status?.channel || "idle"}:${status?.availableVersion || ver}`;
+    void window.mira.dismissUpdateHud(key);
+  }, [overlayWindow, dismissed, status]);
+
   // Auto-dismiss by duration prefs (sticky when 0).
+  // Errors always auto-hide after 12s — sticky + unclickable overlay is worse.
   useEffect(() => {
     if (!status || dismissed) return;
     if (!prefs.hudEnabled) return;
-    if (prefs.durationSec <= 0) return;
     if (status.channel === "downloading") return;
+    const errorCapMs = 12_000;
+    const prefMs =
+      prefs.durationSec <= 0 ? 0 : prefs.durationSec * 1000;
+    const ms =
+      status.channel === "error"
+        ? prefMs > 0
+          ? Math.min(prefMs, errorCapMs)
+          : errorCapMs
+        : prefMs;
+    if (ms <= 0) return;
     const t = window.setTimeout(() => {
       hide();
-    }, prefs.durationSec * 1000);
+    }, ms);
     return () => window.clearTimeout(t);
   }, [status, dismissed, prefs.hudEnabled, prefs.durationSec, hide]);
 
@@ -329,7 +369,18 @@ export function UpdateHudToast({
     >
       <div className="mira-update-hud-glow" aria-hidden />
       <div className="mira-update-hud-body">
-        <div className="mira-update-hud-kicker">MIRA · UPDATE</div>
+        <div className="mira-update-hud-top">
+          <div className="mira-update-hud-kicker">MIRA · UPDATE</div>
+          <button
+            type="button"
+            className="mira-update-hud-close"
+            aria-label="Скрыть"
+            title="Скрыть (Esc)"
+            onClick={hide}
+          >
+            ×
+          </button>
+        </div>
         <div className="mira-update-hud-title">{title}</div>
         {!detailRepeatsTitle ? (
           <p className="mira-update-hud-detail">{detail}</p>
