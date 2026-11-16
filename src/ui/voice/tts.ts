@@ -843,16 +843,13 @@ async function speakElevenLabs(
 
   const gate = gateExternalTtsWithGrant();
   if (!gate.allow) {
-    if (gate.needsConfirm) {
-      // Auto-grant once after UI/voice confirm path; fall back to Web Speech now.
-      handlers.onStatus?.(gate.reason);
-      handlers.onError?.(gate.reason);
-      // Soft fallback so chat is not stuck; caller may re-request after confirm.
-      speakWebSpeech(clean, null, handlers, isCurrent);
-      return;
-    }
+    // Do not silently swap to system voice when the user asked for ElevenLabs.
     handlers.onStatus?.(gate.reason);
-    speakWebSpeech(clean, null, handlers, isCurrent);
+    handlers.onError?.(
+      gate.needsConfirm
+        ? `${gate.reason}. Подтвердите облачный TTS или оставьте движок ElevenLabs.`
+        : gate.reason,
+    );
     return;
   }
 
@@ -875,15 +872,17 @@ async function speakElevenLabs(
   }
   if (!isCurrent()) return;
   if (!result.ok || !result.dataUrl) {
-    handlers.onStatus?.(
+    handlers.onError?.(
       result.detail ||
-        "ElevenLabs не ответил — запасной Web Speech",
+        "ElevenLabs не ответил. Проверьте ключ, Voice ID и баланс.",
     );
-    speakWebSpeech(clean, null, handlers, isCurrent);
     return;
   }
 
-  handlers.onStatus?.(result.detail || "ElevenLabs");
+  handlers.onStatus?.(
+    result.detail ||
+      `ElevenLabs · ${result.voiceId ? `voice ${result.voiceId.slice(0, 8)}…` : "ok"}`,
+  );
 
   // Decode + speech-likeness gate before play — never blast corrupt stream/PCM.
   try {
@@ -891,10 +890,9 @@ async function speakElevenLabs(
     const buf = await decodeDataUrlToBuffer(ctx, result.dataUrl);
     if (!isCurrent()) return;
     if (!audioBufferSoundsLikeSpeech(buf)) {
-      handlers.onStatus?.(
-        "ElevenLabs: аудио похоже на шум — запасной Web Speech",
+      handlers.onError?.(
+        "ElevenLabs вернул аудио, но оно похоже на шум — системный голос не подставляем.",
       );
-      speakWebSpeech(clean, null, handlers, isCurrent);
       return;
     }
     handlers.onStart?.();
@@ -903,10 +901,9 @@ async function speakElevenLabs(
     handlers.onEnd?.();
   } catch {
     if (!isCurrent()) return;
-    handlers.onStatus?.(
-      "ElevenLabs: не удалось декодировать — запасной Web Speech",
+    handlers.onError?.(
+      "ElevenLabs: не удалось декодировать аудио. Системный голос не подставляем.",
     );
-    speakWebSpeech(clean, null, handlers, isCurrent);
   }
 }
 
@@ -943,15 +940,17 @@ export function speakText(
     activeBufferSource = null;
   }
 
+  // Explicit ElevenLabs engine always wins over catalog/studio voice id —
+  // otherwise Mira keeps speaking a system/studio voice while EL is "connected".
+  if (engine === "elevenlabs") {
+    void speakElevenLabs(text, handlers, isCurrent);
+    return;
+  }
+
   // Custom / Voice Studio: neural pack if trained, else parametric settings.
   // Never cloud; never cut/stitch recording clips for playback.
   if (isCustomVoiceId(voiceId) && voiceId) {
     void speakCustomVoice(text, voiceId, handlers, isCurrent);
-    return;
-  }
-
-  if (engine === "elevenlabs") {
-    void speakElevenLabs(text, handlers, isCurrent);
     return;
   }
 
