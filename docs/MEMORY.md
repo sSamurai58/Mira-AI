@@ -154,7 +154,9 @@
 
 | ID | Статус | Описание | Где | Заметки |
 |----|--------|----------|-----|---------|
-| — | — | Открытых багов нет: приложения ещё нет | — | Появляются вместе с кодом |
+| V1–V6 | open | Кастомный TTS неразборчив (vocoder/train/stitch/SR) | voiceStudio neural + unitStitch | `docs/VOICE-AUDIT.md` |
+| V7–V14 | open | TokenStore не драйвит speak; GL по ZCR; coverage 0.35 | tokens/pipeline, vocoder | P1 |
+| V15–V19 | open | Packing/lex/стерео/gate | tokenStore, modelPack, tts.ts | P2 |
 
 Шаблон:
 
