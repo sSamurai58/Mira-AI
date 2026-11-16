@@ -7,7 +7,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { miraRoot } from "../appPaths";
 
-const MAX_ENTRIES = 96;
+/** Keep disk cache small — each WAV is ~100–400 KB; 96 was multi‑ten MB. */
+const MAX_ENTRIES = 32;
 
 type CacheIndex = {
   entries: Array<{ key: string; file: string; at: number; bytes: number }>;
@@ -49,8 +50,8 @@ export function synthCacheKey(
   } = {},
 ): string {
   const payload = JSON.stringify({
-    // v2: neural-primary vocode + mild LPF (invalidate robotic Griffin-Lim caches)
-    v: 2,
+    // v3: unit-stitch prefer + speechiness vocode + clarity EQ (bust robot caches)
+    v: 3,
     voiceId,
     text: text.trim(),
     speed: prosody.speed ?? 1,

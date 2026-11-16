@@ -396,7 +396,8 @@ export function decodeInfer(
     prevMel = Float64Array.from(step.mel);
     prevStop = step.stopProb;
     count += 1;
-    if (f > 8 && step.stopProb >= stopThreshold) break;
+    // Stay long enough for consonants to land; early stop → unintelligible mush.
+    if (f > 20 && step.stopProb >= stopThreshold) break;
   }
   return {
     frames: Float64Array.from(frames),

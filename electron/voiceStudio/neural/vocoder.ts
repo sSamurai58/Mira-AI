@@ -69,8 +69,10 @@ export function loadVocoder(data: SerializedVocoder): NeuralVocoder {
 }
 
 /**
- * Mild speech-band tidy: DC block (~70 Hz) + gentle high shelf cut (~7.5 kHz).
- * Previous 3.4 kHz LPF (applied 3×) made Griffin-Lim sound like telephone noise.
+ * Speech intelligibility tidy:
+ * - DC / rumble cut (~80 Hz)
+ * - mild presence lift ~1.2–2.8 kHz (formants / consonants)
+ * - stronger hiss cut above ~5.5 kHz (Griffin-Lim noise lives here)
  */
 export function speechBandPostFilter(
   samples: Float32Array,
@@ -79,30 +81,73 @@ export function speechBandPostFilter(
   const out = new Float32Array(samples.length);
   if (!samples.length) return out;
   const dt = 1 / Math.max(1, sampleRate);
-  const hpRc = 1 / (2 * Math.PI * 70);
-  // Keep most of the 16 kHz Nyquist band — only tame extreme hiss.
-  const lpHz = Math.min(7500, sampleRate * 0.45);
+  const hpRc = 1 / (2 * Math.PI * 80);
+  const lpHz = Math.min(5500, sampleRate * 0.34);
   const lpRc = 1 / (2 * Math.PI * lpHz);
   const hpA = hpRc / (hpRc + dt);
   const lpA = dt / (lpRc + dt);
+  // Presence peaking via parallel band (approx 1.8 kHz).
+  const peakHz = Math.min(1800, sampleRate * 0.12);
+  const peakRc = 1 / (2 * Math.PI * peakHz);
+  const peakA = dt / (peakRc + dt);
+  const presenceGain = 0.28;
   let hpPrevX = 0;
   let hpPrevY = 0;
   let lpY = 0;
+  let bandY = 0;
+  let bandPrev = 0;
   for (let i = 0; i < samples.length; i++) {
     const x = samples[i]!;
     const hpY = hpA * (hpPrevY + x - hpPrevX);
     hpPrevX = x;
     hpPrevY = hpY;
     lpY += lpA * (hpY - lpY);
-    out[i] = lpY;
+    bandY += peakA * (hpY - bandY);
+    const band = bandY - bandPrev;
+    bandPrev = bandY;
+    out[i] = lpY + presenceGain * band;
   }
+  // Gentle floor on micro-hiss only — aggressive gates killed speech ZCR.
+  const win = Math.max(32, Math.floor(sampleRate * 0.01));
+  let run = 0;
+  let envPeak = 1e-8;
+  const env = new Float32Array(out.length);
+  for (let i = 0; i < out.length; i++) {
+    run += out[i]! * out[i]!;
+    if (i >= win) run -= out[i - win]! * out[i - win]!;
+    env[i] = Math.sqrt(Math.max(0, run / win));
+    if (env[i]! > envPeak) envPeak = env[i]!;
+  }
+  const gate = envPeak * 0.02;
+  for (let i = 0; i < out.length; i++) {
+    if (env[i]! < gate) {
+      out[i]! *= env[i]! / Math.max(gate, 1e-8);
+    }
+  }
+
   let peak = 1e-8;
+  let sumSq = 0;
+  for (let i = 0; i < out.length; i++) {
+    const a = Math.abs(out[i]!);
+    if (a > peak) peak = a;
+    sumSq += out[i]! * out[i]!;
+  }
+  const rms = Math.sqrt(sumSq / Math.max(1, out.length));
+  // Target healthier RMS so speech isn't a few spikes in silence.
+  const targetRms = Math.min(0.22, peak * 0.35);
+  const rmsScale = rms > 1e-6 ? Math.min(3.2, targetRms / rms) : 1;
+  const scale = Math.min(0.92 / peak, rmsScale);
+  for (let i = 0; i < out.length; i++) out[i]! *= scale;
+  // Final safety peak
+  peak = 1e-8;
   for (let i = 0; i < out.length; i++) {
     const a = Math.abs(out[i]!);
     if (a > peak) peak = a;
   }
-  const scale = 0.92 / peak;
-  for (let i = 0; i < out.length; i++) out[i]! *= scale;
+  if (peak > 0.95) {
+    const s = 0.92 / peak;
+    for (let i = 0; i < out.length; i++) out[i]! *= s;
+  }
   return out;
 }
 
@@ -112,9 +157,32 @@ export function speechBandPostFilter(
  */
 export function highQualityReconstructFromMel(
   mel: MelSpectrogram,
-  iterations = 24,
+  iterations = 32,
 ): Float32Array {
-  return griffinLimFromMel(mel, Math.max(16, iterations));
+  return griffinLimFromMel(mel, Math.max(24, iterations));
+}
+
+/** Rough “how speech-like” score — lower HF chaos is better. */
+function speechinessScore(samples: Float32Array, sampleRate: number): number {
+  if (samples.length < 32) return -1e9;
+  let zc = 0;
+  for (let i = 1; i < samples.length; i++) {
+    if ((samples[i - 1]! >= 0) !== (samples[i]! >= 0)) zc += 1;
+  }
+  const zcr = zc / (samples.length / Math.max(1, sampleRate));
+  let energy = 0;
+  let hf = 0;
+  // Cheap HF proxy: |diff| energy vs |sample| energy.
+  for (let i = 1; i < samples.length; i++) {
+    const a = Math.abs(samples[i]!);
+    energy += a * a;
+    const d = samples[i]! - samples[i - 1]!;
+    hf += d * d;
+  }
+  const tilt = energy > 1e-12 ? hf / energy : 10;
+  // Prefer ~200–900 ZCR/s and moderate spectral tilt.
+  const zcPenalty = Math.abs(zcr - 450) / 450;
+  return -(zcPenalty * 2 + tilt * 0.35);
 }
 
 /** Neural frame synthesis: mel → hop waveform samples. */
@@ -173,30 +241,42 @@ function hann(n: number): Float32Array {
 }
 
 /**
- * Blend neural vocoder with Griffin-Lim base.
- * Prefer neural when present — GL alone is the classic “electronic robot” timbre.
- * Single post-filter pass (no triple 3.4 kHz squash).
+ * Choose the cleaner of neural / Griffin-Lim / light blend.
+ * Blind high neuralBlend on a weak MLP + noisy GL often yields HF hiss
+ * with envelopes that only *look* like word boundaries.
  */
 export function productionVocode(
   voc: NeuralVocoder | null,
   mel: MelSpectrogram,
   opts?: { neuralBlend?: number },
 ): Float32Array {
-  const hq = highQualityReconstructFromMel(mel, 36);
+  const hq = highQualityReconstructFromMel(mel, 40);
   if (!voc) return speechBandPostFilter(hq, mel.sampleRate);
   const neural = vocoderSynthesize(voc, mel);
-  // Allow studio-quality blend up to ~0.85 (was hard-capped at 0.45 → mostly GL).
-  const blend = Math.min(0.85, Math.max(0.35, opts?.neuralBlend ?? 0.7));
+  const blendHint = Math.min(0.9, Math.max(0.2, opts?.neuralBlend ?? 0.75));
   const n = Math.min(hq.length, neural.length);
   const mixed = new Float32Array(Math.max(hq.length, neural.length));
   for (let i = 0; i < n; i++) {
-    mixed[i] = (1 - blend) * hq[i]! + blend * neural[i]!;
+    mixed[i] = (1 - blendHint) * hq[i]! + blendHint * neural[i]!;
   }
   if (hq.length > n) mixed.set(hq.subarray(n), n);
   else if (neural.length > n) {
     for (let i = n; i < neural.length; i++) mixed[i] = neural[i]!;
   }
-  return speechBandPostFilter(mixed, mel.sampleRate);
+
+  const sr = mel.sampleRate;
+  const candidates: Float32Array[] = [hq, neural, mixed];
+  let best = candidates[0]!;
+  let bestScore = speechinessScore(best, sr);
+  for (let i = 1; i < candidates.length; i++) {
+    const c = candidates[i]!;
+    const s = speechinessScore(c, sr);
+    if (s > bestScore) {
+      best = c;
+      bestScore = s;
+    }
+  }
+  return speechBandPostFilter(best, sr);
 }
 
 export type VocoderTrainResult = {
@@ -205,8 +285,28 @@ export type VocoderTrainResult = {
   initialL1: number;
 };
 
+function resampleMonoLinear(
+  samples: Float32Array,
+  fromRate: number,
+  toRate: number,
+): Float32Array {
+  if (fromRate === toRate || samples.length < 2) return samples;
+  const ratio = toRate / Math.max(1, fromRate);
+  const n = Math.max(1, Math.round(samples.length * ratio));
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = i / ratio;
+    const i0 = Math.floor(x);
+    const i1 = Math.min(samples.length - 1, i0 + 1);
+    const t = x - i0;
+    out[i] = samples[i0]! * (1 - t) + samples[i1]! * t;
+  }
+  return out;
+}
+
 /**
  * Train neural vocoder to match PCM from mel frames (Adam / L1).
+ * PCM is resampled to mel.sampleRate so hop-length targets match infer.
  */
 export function trainNeuralVocoder(
   voc: NeuralVocoder,
@@ -216,6 +316,7 @@ export function trainNeuralVocoder(
 ): VocoderTrainResult {
   const pcm = readPcmMonoNormalized(wavPath);
   if (!pcm) return { steps: 0, finalL1: 1, initialL1: 1 };
+  const wave = resampleMonoLinear(pcm.samples, pcm.sampleRate, mel.sampleRate);
   const hop = voc.hop;
   const steps = opts?.steps ?? 40;
   const adam = createAdam(opts?.lr ?? 0.012);
@@ -236,7 +337,7 @@ export function trainNeuralVocoder(
     let loss = 0;
     let count = 0;
     // Subsample frames for speed
-    const stride = Math.max(1, Math.floor(mel.frameCount / 24));
+    const stride = Math.max(1, Math.floor(mel.frameCount / 32));
     for (let f = 0; f < mel.frameCount; f += stride) {
       const melFrame = new Float64Array(MEL_N_MELS);
       for (let m = 0; m < MEL_N_MELS; m++) {
@@ -244,16 +345,12 @@ export function trainNeuralVocoder(
       }
       const { samples, h, pre } = vocoderFrame(voc, melFrame);
       const start = Math.min(
-        pcm.samples.length - hop,
-        Math.floor((f * mel.hopLength * pcm.sampleRate) / mel.sampleRate),
+        Math.max(0, wave.length - hop),
+        f * mel.hopLength,
       );
-      const safeStart = Math.max(0, start);
       const dSamples = new Float64Array(hop);
       for (let i = 0; i < hop; i++) {
-        const tgt =
-          safeStart + i < pcm.samples.length
-            ? pcm.samples[safeStart + i]!
-            : 0;
+        const tgt = start + i < wave.length ? wave[start + i]! : 0;
         const diff = samples[i]! - tgt;
         loss += Math.abs(diff);
         dSamples[i] = diff === 0 ? 0 : diff > 0 ? 1 / hop : -1 / hop;

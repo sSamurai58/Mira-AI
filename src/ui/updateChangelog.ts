@@ -15,6 +15,18 @@ export type MiraChangelogEntry = {
 
 export const MIRA_CHANGELOG: MiraChangelogEntry[] = [
   {
+    version: "0.1.34",
+    date: "16.11.2026",
+    summary:
+      "Разборчивее локальный голос, честный % ОЗУ и три новые темы DESIGN.",
+    bullets: [
+      "Speak: склейка корпуса + formant fill; чище vocode; train 16 кГц/hop 160",
+      "ОЗУ: available-based % (не file cache), RSS Миры, легче кэши/WebGL",
+      "Темы: Carbon Mist, Silicon Valley, Ember Violet",
+      "Кэш TTS сброшен (v3); Windows + macOS одним тегом",
+    ],
+  },
+  {
     version: "0.1.33",
     date: "16.11.2026",
     summary: "Менее «роботный» нейро-голос: меньше Griffin-Lim и телефонного фильтра.",

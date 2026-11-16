@@ -19,6 +19,9 @@ export type ThemeId =
   | "void-orchid"
   | "signal-spectrum"
   | "neon-lux"
+  | "carbon-mist"
+  | "silicon-valley"
+  | "ember-violet"
   | "apple-light"
   | "apple-dark";
 
@@ -281,6 +284,60 @@ export const THEMES: ThemeDefinition[] = [
       ...baseDanger,
       terminalBg: "#0D0303",
       terminalFg: "#EFF8FF",
+    },
+  },
+  {
+    id: "carbon-mist",
+    name: "Carbon Mist",
+    tokens: {
+      bg: "#1F1F1F",
+      bgElevated: "#575757",
+      border: "#888888",
+      text: "#D4D4D4",
+      textMuted: "#999999",
+      accent: "#D4D4D4",
+      accentFg: "#1F1F1F",
+      danger: "#F87171",
+      warning: "#999999",
+      success: "#888888",
+      terminalBg: "#1F1F1F",
+      terminalFg: "#D4D4D4",
+    },
+  },
+  {
+    id: "silicon-valley",
+    name: "Silicon Valley",
+    tokens: {
+      bg: "#334155",
+      bgElevated: "#1E40AF",
+      border: "#60A5FA66",
+      text: "#F8FAFC",
+      textMuted: "#94A3B8",
+      accent: "#60A5FA",
+      accentFg: "#0F172A",
+      ...baseDanger,
+      terminalBg: "#334155",
+      terminalFg: "#F8FAFC",
+    },
+  },
+  {
+    // Same Volcanic Ash swatches as catalog reference, purple-led accent
+    // (orange-led twin already lives as volcanic-ash).
+    id: "ember-violet",
+    name: "Ember Violet",
+    tokens: {
+      bg: "#212529",
+      bgElevated: "#2C3035",
+      border: "#FB560766",
+      text: "#E9ECEF",
+      textMuted: "#ADB5BD",
+      accent: "#8338EC",
+      accentFg: "#FFFFFF",
+      danger: "#FB5607",
+      warning: "#FB5607",
+      success: "#8338EC",
+      terminalBg: "#212529",
+      terminalFg: "#E9ECEF",
     },
   },
   {
