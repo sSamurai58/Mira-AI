@@ -139,18 +139,20 @@ jobs:
         run: |
           set -euo pipefail
           npm run build:web
+          node scripts/android-icons.mjs
           npx cap sync android
           cd android
           chmod +x gradlew
-          # Prefer unsigned release APK for GitHub Releases (no Play keystore yet).
-          ./gradlew assembleRelease --no-daemon \
-            -Dorg.gradle.jvmargs="-Xmx4g" \
-            || ./gradlew assembleDebug --no-daemon
+          # Release is signed with Android debug keystore (sideload-safe).
+          ./gradlew assembleRelease --no-daemon -Dorg.gradle.jvmargs="-Xmx4g"
           VER="${GITHUB_REF_NAME#v}"
           mkdir -p ../release-android
-          SRC=$(find app/build/outputs/apk -name '*.apk' | head -n 1)
-          test -n "$SRC"
+          SRC="app/build/outputs/apk/release/app-release.apk"
+          test -f "$SRC"
           cp "$SRC" "../release-android/Mira-${VER}-android.apk"
+          # Fail CI if APK is unsigned (Android: «пакет недействителен»).
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs \
+            "../release-android/Mira-${VER}-android.apk"
           ls -la ../release-android
 
       - name: Upload Android APK to GitHub Release
