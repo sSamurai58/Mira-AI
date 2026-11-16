@@ -50,6 +50,7 @@ import {
 } from "../electron/voiceStudio/melSpectrogram";
 import { NEURAL_TTS_CURRICULUM } from "../electron/voiceStudio/melTrainer";
 import {
+  getCustomVoiceSpeakerStatus,
   synthesizeCustomVoiceNeural,
   submitVoicePreference,
   getVoicePreferenceCandidates,
@@ -768,14 +769,31 @@ async function main() {
     "trained voice corpus should expose accepted phrase clips",
   );
 
-  // Neural inference path must produce a WAV.
+  // Neural inference path must produce a WAV (token pipeline → neural-mel).
   const synth = synthesizeCustomVoiceNeural(
     trained.voice!.id,
     "Проверка нейро синтеза.",
   );
   assert.equal(synth.ok, true, synth.detail);
   assert.ok(synth.wavPath && fs.existsSync(synth.wavPath), "neural wav");
-  assert.equal(synth.method, "neural-mel-cpu-v1");
+  assert.ok(
+    synth.method === "neural-mel-cpu-v1" ||
+      (synth.method ?? "").startsWith("token-pipeline-"),
+    `unexpected method ${synth.method}`,
+  );
+  assert.equal(synth.pipeline ?? "token-v1", "token-v1");
+
+  // Speaker pack + TokenStore must exist after train.
+  const speaker = getCustomVoiceSpeakerStatus(trained.voice!.id);
+  assert.equal(speaker.ok, true, speaker.detail);
+  assert.equal(speaker.hasSpeaker, true, "speaker pack after train");
+  const snapTok = getStudioSnapshot(project.id);
+  assert.ok(
+    (snapTok.tokenPipeline?.tokens?.stored ?? 0) >= 1,
+    "token utterances",
+  );
+  assert.ok(snapTok.tokenPipeline?.tokens?.codebook, "acoustic codebook");
+  assert.ok((snapTok.tokenPipeline?.tokens?.ftPairs ?? 0) >= 1, "FT pairs");
 
   // RLHF preference loop (A/B) when previews exist.
   const prefs = getVoicePreferenceCandidates(trained.voice!.id);

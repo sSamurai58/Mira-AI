@@ -1,6 +1,6 @@
 {
   "name": "mira-ai",
-  "version": "0.1.30",
+  "version": "0.1.31",
   "private": true,
   "description": "Mira — local voice AI assistant",
   "author": "Mira",
@@ -42,6 +42,7 @@
     "custom-commands:smoke": "tsx scripts/custom-commands-smoke.ts",
     "protocol-sequence:smoke": "tsx scripts/protocol-sequence-smoke.ts",
     "voice-pipeline:smoke": "tsx scripts/voice-pipeline-smoke.ts",
+    "voice-token:smoke": "tsx scripts/voice-token-smoke.ts",
     "pack": "npm run build && electron-builder --config electron-builder.yml",
     "pack:dir": "npm run build && electron-builder --config electron-builder.yml --dir",
     "pack:win": "npm run build && electron-builder --win --x64 --config electron-builder.yml --publish never",

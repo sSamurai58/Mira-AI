@@ -7,6 +7,7 @@ import {
   buildVoiceModelPack,
   ensureSlicableWav,
   normalizeLexKey,
+  parseWavInfo,
   prunePhraseFromVoicePack,
   readVoiceModelPack,
   tokenizeSpeechWords,
@@ -40,6 +41,18 @@ import {
   putCachedSynthWav,
   synthCacheKey,
 } from "../tts/localSynthCache";
+import {
+  buildProjectAcousticCodebook,
+  cosyVoiceAvailable,
+  exportFineTunePairs,
+  listSpeakerStyles,
+  listStoredUtterances,
+  projectTokenCoverage,
+  saveSpeakerPack,
+  speakerPackStatus,
+  speakTokenPipeline,
+  tokenizeAndStoreUtterance,
+} from "./tokens";
 import {
   accumulatePhraseIntoStats,
   buildCorpusLexStats,
@@ -1549,6 +1562,44 @@ export async function trainVoiceModel(
     )
     .get(voiceId) as CustomVoiceRow;
 
+  // Token pipeline post-train: speaker pack + codebook + utterance tokens + FT pairs
+  try {
+    emit("publish", 96, "Speaker pack + TokenStore…");
+    const projectRoot = studioRoot(projectId);
+    const sourceWav =
+      (preview && fs.existsSync(preview) ? preview : null) ||
+      linkedClips.find((c) => fs.existsSync(c.filePath))?.filePath ||
+      null;
+    if (sourceWav) {
+      saveSpeakerPack({
+        projectRoot,
+        voiceId,
+        projectId,
+        label: project.name,
+        style: "default",
+        sourceWav,
+      });
+    }
+    const wavs = linkedClips
+      .filter((c) => fs.existsSync(c.filePath))
+      .map((c) => c.filePath);
+    if (wavs.length) buildProjectAcousticCodebook(projectRoot, wavs);
+    const ftPairs: Array<{ wavPath: string; text: string }> = [];
+    for (const c of linkedClips) {
+      if (!fs.existsSync(c.filePath) || !c.phraseText.trim()) continue;
+      tokenizeAndStoreUtterance({
+        projectRoot,
+        text: c.phraseText,
+        clipPath: c.filePath,
+        writeAcoustic: true,
+      });
+      ftPairs.push({ wavPath: c.filePath, text: c.phraseText });
+    }
+    if (ftPairs.length) exportFineTunePairs(projectRoot, ftPairs);
+  } catch (err) {
+    console.error("[mira] token pipeline post-train", err);
+  }
+
   emit("done", 100, detail);
 
   return {
@@ -2132,12 +2183,42 @@ export function getStudioSnapshot(projectId?: string) {
   const project = projectId
     ? getVoiceProject(projectId)
     : projects[0] ?? null;
+  const projectRoot = project ? studioRoot(project.id) : null;
+  const speaker = projectRoot ? speakerPackStatus(projectRoot) : null;
+  const tokens = projectRoot
+    ? {
+        ...projectTokenCoverage(projectRoot),
+        stored: listStoredUtterances(projectRoot).length,
+        codebook: fs.existsSync(
+          path.join(projectRoot, "tokens", "codebook.json"),
+        ),
+        ftPairs: (() => {
+          const man = path.join(projectRoot, "corpus", "pairs", "manifest.json");
+          if (!fs.existsSync(man)) return 0;
+          try {
+            const j = JSON.parse(fs.readFileSync(man, "utf8")) as {
+              count?: number;
+            };
+            return j.count ?? 0;
+          } catch {
+            return 0;
+          }
+        })(),
+      }
+    : null;
+  const cosy = cosyVoiceAvailable();
   return {
     projects,
     project,
     phrases: project ? listPhrases(project.id) : [],
     clips: project ? listClips(project.id) : [],
     customVoices: listCustomVoices(),
+    tokenPipeline: {
+      speaker,
+      tokens,
+      cosyAvailable: cosy.ok,
+      cosyDetail: cosy.detail,
+    },
   };
 }
 
@@ -2204,7 +2285,7 @@ export type CustomVoiceNeuralProsody = {
   quality?: "fast" | "balanced" | "studio";
 };
 
-/** Neural inference: text → encoder → decoder → vocoder WAV (+ disk cache). */
+/** Neural inference via token pipeline (T0→T4) + disk cache. */
 export function synthesizeCustomVoiceNeural(
   voiceId: string,
   text: string,
@@ -2217,6 +2298,11 @@ export function synthesizeCustomVoiceNeural(
   durationMs?: number;
   method?: string;
   cached?: boolean;
+  pipeline?: string;
+  chunks?: number;
+  speakerReady?: boolean;
+  normalizedText?: string;
+  backend?: string;
 } {
   const voice = getCustomVoice(voiceId);
   if (!voice) throw new Error("Голос не найден");
@@ -2228,7 +2314,50 @@ export function synthesizeCustomVoiceNeural(
       detail: "Пустой текст",
     };
   }
-  const packDir = studioRoot(voice.project_id, "model-pack");
+  const projectRoot = studioRoot(voice.project_id);
+  const packDir = path.join(projectRoot, "model-pack");
+
+  // Pipeline owns normalize + chunk + Cosy/neural + its own cache key.
+  const piped = speakTokenPipeline({
+    projectRoot,
+    packDir,
+    text: clean,
+    voiceId,
+    style: "default",
+    storeTokens: true,
+    prosody: {
+      speed: prosody?.speed,
+      pauseScale: prosody?.pauseScale,
+      energy: prosody?.energy,
+      quality: prosody?.quality,
+    },
+  });
+  if (piped.ok && piped.wavPath) {
+    let durationMs: number | undefined;
+    try {
+      const info = parseWavInfo(piped.wavPath);
+      if (info) {
+        durationMs = Math.round((info.dataSize / 2 / info.sampleRate) * 1000);
+      }
+    } catch {
+      /* ignore */
+    }
+    return {
+      ok: true,
+      wavPath: piped.wavPath,
+      cached: Boolean(piped.cached),
+      durationMs,
+      method: `token-pipeline-${piped.backend}`,
+      pipeline: "token-v1",
+      chunks: piped.chunks,
+      speakerReady: piped.speakerReady,
+      normalizedText: piped.normalizedText,
+      backend: piped.backend,
+      detail: piped.detail,
+    };
+  }
+
+  // Legacy fallback if token path cannot synth (no weights / no Cosy).
   const key = synthCacheKey(voiceId, clean, prosody ?? {});
   const cachedPath = getCachedSynthWav(key);
   if (cachedPath) {
@@ -2238,6 +2367,7 @@ export function synthesizeCustomVoiceNeural(
       cached: true,
       detail: "Нейро-синтез (кэш)",
       method: "neural-mel-cpu-v1",
+      pipeline: "legacy-neural",
     };
   }
   const result = synthesizeNeuralSpeech(packDir, clean, { prosody });
@@ -2246,7 +2376,10 @@ export function synthesizeCustomVoiceNeural(
       ok: false,
       wavPath: null,
       detail:
+        piped.detail ||
         "Нейро-веса не найдены или текст пуст. Соберите голос (neural-weights.json).",
+      speakerReady: piped.speakerReady,
+      normalizedText: piped.normalizedText,
     };
   }
   const wavPath = putCachedSynthWav(key, result.wavPath);
@@ -2257,7 +2390,39 @@ export function synthesizeCustomVoiceNeural(
     frameCount: result.frameCount,
     durationMs: result.durationMs,
     method: result.method,
+    pipeline: "legacy-neural",
     detail: `Нейро-синтез ${result.frameCount} кадров · ${Math.round(result.durationMs)} мс`,
+  };
+}
+
+/** Speaker pack + style list for a custom voice (TokenStore T4). */
+export function getCustomVoiceSpeakerStatus(voiceId: string): {
+  ok: boolean;
+  detail: string;
+  hasSpeaker: boolean;
+  styles: ReturnType<typeof listSpeakerStyles>;
+  status: ReturnType<typeof speakerPackStatus> | null;
+} {
+  const voice = getCustomVoice(voiceId);
+  if (!voice) {
+    return {
+      ok: false,
+      detail: "Голос не найден",
+      hasSpeaker: false,
+      styles: [],
+      status: null,
+    };
+  }
+  const projectRoot = studioRoot(voice.project_id);
+  const status = speakerPackStatus(projectRoot);
+  return {
+    ok: true,
+    detail: status.defaultReady
+      ? `Speaker pack · ${status.styles.length} стил.`
+      : "Speaker pack ещё не сохранён — обучите голос",
+    hasSpeaker: status.defaultReady,
+    styles: listSpeakerStyles(projectRoot),
+    status,
   };
 }
 

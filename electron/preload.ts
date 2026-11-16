@@ -372,6 +372,8 @@ contextBridge.exposeInMainWorld("mira", {
   ) => call("mira:synthesize-custom-voice-neural", voiceId, text, prosody),
   warmupCustomVoiceNeural: (voiceId: string) =>
     call("mira:warmup-custom-voice-neural", voiceId),
+  getCustomVoiceSpeakerStatus: (voiceId: string) =>
+    call("mira:custom-voice-speaker-status", voiceId),
   getElevenLabsStatus: (probe?: boolean) =>
     call("mira:elevenlabs-status", probe ?? false),
   synthesizeElevenLabs: (payload: {

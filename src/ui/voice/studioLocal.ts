@@ -75,6 +75,12 @@ export function localStudioSnapshot(projectId?: string) {
       ? store.clips.filter((c) => c.project_id === project.id)
       : [],
     customVoices: store.customVoices,
+    tokenPipeline: {
+      speaker: null,
+      tokens: null,
+      cosyAvailable: false,
+      cosyDetail: "Browser-demo · TokenStore только в Electron",
+    },
   };
 }
 

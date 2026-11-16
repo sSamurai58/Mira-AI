@@ -15,6 +15,18 @@ export type MiraChangelogEntry = {
 
 export const MIRA_CHANGELOG: MiraChangelogEntry[] = [
   {
+    version: "0.1.31",
+    date: "16.11.2026",
+    summary:
+      "TokenStore голоса: нормализация текста, speaker pack, чанки со склейкой.",
+    bullets: [
+      "Студия: после обучения сохраняется speaker pack (отпечаток голоса) и TokenStore T0–T3",
+      "Речь: числа→слова, фонемы/просодия, чанки с crossfade; CosyVoice sidecar опционально",
+      "Кэш синтеза учитывает нормализованный текст и стиль; в UI статус TokenStore",
+      "Релиз Windows + macOS одним тегом",
+    ],
+  },
+  {
     version: "0.1.30",
     date: "15.11.2026",
     summary: "Одно окно Update HUD при скачивании обновления.",

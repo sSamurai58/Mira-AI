@@ -199,6 +199,22 @@ export function VoiceStudioPanel(props: {
     finalLoss?: number;
     melTargets?: number;
   } | null>(null);
+  const [tokenPipeline, setTokenPipeline] = useState<{
+    speaker: {
+      styles: string[];
+      defaultReady: boolean;
+      cosyPtReady: boolean;
+    } | null;
+    tokens: {
+      utterances: number;
+      symbolCounts: Array<{ symbol: string; count: number }>;
+      stored: number;
+      codebook: boolean;
+      ftPairs: number;
+    } | null;
+    cosyAvailable: boolean;
+    cosyDetail: string;
+  } | null>(null);
 
   const TRAIN_STEP_RU: Record<string, string> = {
     validate: "проверка записей",
@@ -233,6 +249,7 @@ export function VoiceStudioPanel(props: {
     setProject(snap.project);
     setPhrases(snap.phrases);
     setClips(snap.clips);
+    setTokenPipeline(snap.tokenPipeline ?? null);
     if (snap.project) {
       setEditName(snap.project.name);
       setEditLang(snap.project.lang);
@@ -973,6 +990,26 @@ export function VoiceStudioPanel(props: {
                 ? ` · catalog ${project.custom_voice_id}`
                 : ""}
             </div>
+            {tokenPipeline ? (
+              <div className="muted mono" style={{ fontSize: "0.85rem" }}>
+                TokenStore: speaker{" "}
+                {tokenPipeline.speaker?.defaultReady ? "✓" : "—"}
+                {tokenPipeline.speaker?.styles?.length
+                  ? ` (${tokenPipeline.speaker.styles.join(", ")})`
+                  : ""}
+                {" · "}
+                utt {tokenPipeline.tokens?.stored ?? 0}
+                {" · "}
+                codebook {tokenPipeline.tokens?.codebook ? "✓" : "—"}
+                {" · "}
+                FT-pairs {tokenPipeline.tokens?.ftPairs ?? 0}
+                {" · "}
+                Cosy{" "}
+                {tokenPipeline.cosyAvailable
+                  ? "sidecar"
+                  : "off (Mira neural)"}
+              </div>
+            ) : null}
             {needMoreClips > 0 ? (
               <p className="muted" style={{ margin: 0 }}>
                 Нужно ещё ≈{needMoreClips} клип
