@@ -101,14 +101,19 @@ export function SettingsVoiceSection() {
 
   useEffect(() => {
     let cancelled = false;
-    void listCatalogVoices().then((list) => {
-      if (cancelled) return;
-      setVoices(list);
-      setActiveVoiceIdState(getActiveVoiceId(list));
-      setEngineDetail(getVoiceEngineStatus().detail);
-    });
+    const load = () => {
+      void listCatalogVoices().then((list) => {
+        if (cancelled) return;
+        setVoices(list);
+        setActiveVoiceIdState(getActiveVoiceId(list));
+        setEngineDetail(getVoiceEngineStatus().detail);
+      });
+    };
+    load();
+    window.addEventListener("mira:catalog-voices-changed", load);
     return () => {
       cancelled = true;
+      window.removeEventListener("mira:catalog-voices-changed", load);
       stopSpeaking();
       if (previewTimer.current != null) {
         window.clearTimeout(previewTimer.current);
@@ -246,8 +251,16 @@ export function SettingsVoiceSection() {
               label: `${eng.label}${eng.ready ? "" : eng.id === "elevenlabs" ? " (нужен Electron)" : " (недоступен)"}`,
             }))}
             onChange={(id) => {
-              setTtsEngine(setActiveTtsEngine(id as TtsEngineId));
+              const next = setActiveTtsEngine(id as TtsEngineId);
+              setTtsEngine(next);
               setEngineDetail(getVoiceEngineStatus().detail);
+              // ElevenLabs: engine choice is the voice source — don't keep
+              // implying a system/studio catalog voice is what you hear.
+              if (next === "elevenlabs") {
+                setEngineDetail(
+                  "ElevenLabs — голос из Voice ID (не системный каталог)",
+                );
+              }
             }}
           />
         </Field>
@@ -268,7 +281,10 @@ export function SettingsVoiceSection() {
             Системные голоса не найдены. Откройте Mira в Electron/Chrome.
           </p>
         ) : (
-          <Field label="Активный голос" hint="Каталог студии + системные">
+          <Field
+            label="Активный голос"
+            hint="Студия · ElevenLabs (если ключ сохранён) · системные"
+          >
             <ThemeSelect
               aria-label="Активный голос"
               value={activeVoiceId ?? ""}
@@ -279,11 +295,14 @@ export function SettingsVoiceSection() {
               onChange={(id) => {
                 setActiveVoiceId(id);
                 setActiveVoiceIdState(id);
-                // Studio voices → force local neural-pack engine.
-                if (isCustomVoiceId(id) && ttsEngine === "elevenlabs") {
-                  setTtsEngine(setActiveTtsEngine("neural-pack"));
-                  setEngineDetail(getVoiceEngineStatus().detail);
-                }
+                setTtsEngine(
+                  isCustomVoiceId(id)
+                    ? "neural-pack"
+                    : id.startsWith("elevenlabs:")
+                      ? "elevenlabs"
+                      : getActiveTtsEngine(),
+                );
+                setEngineDetail(getVoiceEngineStatus().detail);
               }}
             />
           </Field>

@@ -1,6 +1,7 @@
 /**
  * Policy for sending audio/text outside the device (cloud TTS, remote proofread).
  */
+import { getActiveTtsEngine } from "./ttsEngines";
 
 export type ExternalPolicy = {
   /** When true, cloud TTS / external calls are forbidden without confirm */
@@ -57,6 +58,11 @@ export function gateExternalTts(): ExternalGate {
       reason: "Внешние вызовы запрещены (режим личных заметок)",
       needsConfirm: false,
     };
+  }
+  // Choosing engine «ElevenLabs» is explicit consent — do not soft-fallback
+  // to system Web Speech just because confirmEachExternal defaults to true.
+  if (getActiveTtsEngine() === "elevenlabs") {
+    return { allow: true };
   }
   if (p.confirmEachExternal) {
     return {

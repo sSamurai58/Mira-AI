@@ -60,13 +60,18 @@ export function WorkshopPage() {
 
   useEffect(() => {
     let cancelled = false;
-    void listCatalogVoices().then((list) => {
-      if (cancelled) return;
-      setVoices(list);
-      setActiveId(getActiveVoiceId(list));
-    });
+    const load = () => {
+      void listCatalogVoices().then((list) => {
+        if (cancelled) return;
+        setVoices(list);
+        setActiveId(getActiveVoiceId(list));
+      });
+    };
+    load();
+    window.addEventListener("mira:catalog-voices-changed", load);
     return () => {
       cancelled = true;
+      window.removeEventListener("mira:catalog-voices-changed", load);
       stopSpeaking();
     };
   }, []);

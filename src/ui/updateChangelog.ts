@@ -15,6 +15,18 @@ export type MiraChangelogEntry = {
 
 export const MIRA_CHANGELOG: MiraChangelogEntry[] = [
   {
+    version: "0.1.40",
+    date: "16.11.2026",
+    summary:
+      "ElevenLabs: выбранный Voice ID в списке «Голос», без подмены на системный.",
+    bullets: [
+      "Каталог Голос показывает голоса аккаунта ElevenLabs при сохранённом ключе",
+      "Движок ElevenLabs больше не падает тихо в Web Speech / Irina",
+      "Выбор EL-голоса пишет ELEVENLABS_VOICE_ID и включает облачный TTS",
+      "Windows + macOS + Android одним тегом",
+    ],
+  },
+  {
     version: "0.1.39",
     date: "16.11.2026",
     summary:
