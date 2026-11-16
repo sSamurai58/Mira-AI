@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -8,13 +8,27 @@ const execFileAsync = promisify(execFile);
 
 export type SystemLoadSample = {
   cpu: number;
+  /** System RAM pressure % (available-based — not «file cache = used»). */
   ram: number;
   ramUsedGb: number;
   ramTotalGb: number;
   gpu: number | null;
   vramUsedGb: number | null;
   vramTotalGb: number | null;
-  gpuSource: "nvidia-smi" | "windows-counter" | "drm" | "none";
+  gpuSource:
+    | "nvidia-smi"
+    | "windows-counter"
+    | "drm"
+    | "macos-ioreg"
+    | "none";
+  /** How RAM % was computed. */
+  ramSource:
+    | "os-freemem"
+    | "macos-vm-stat"
+    | "linux-meminfo"
+    | "windows-available";
+  /** This Mira process working set / RSS (GB). */
+  processRssGb: number | null;
   ts: number;
 };
 
@@ -29,7 +43,18 @@ let cachedGpu: {
   source: SystemLoadSample["gpuSource"];
 } | null = null;
 
-const GPU_CACHE_MS = 4000;
+/** GPU/ioreg is relatively expensive — reuse for a few seconds. */
+const GPU_CACHE_MS = 6_000;
+/** vm_stat / meminfo / powershell: avoid sync I/O every UI tick. */
+const RAM_CACHE_MS = 2_000;
+
+let cachedRam: {
+  at: number;
+  ram: number;
+  ramUsedGb: number;
+  ramTotalGb: number;
+  ramSource: SystemLoadSample["ramSource"];
+} | null = null;
 
 function clampPct(n: number): number {
   if (!Number.isFinite(n)) return 0;
@@ -60,19 +85,192 @@ function sampleCpuPct(): number {
   return clampPct((1 - idleDelta / totalDelta) * 100);
 }
 
-function sampleRam(): {
+function sampleRamOsFreemem(): {
   ram: number;
   ramUsedGb: number;
   ramTotalGb: number;
+  ramSource: SystemLoadSample["ramSource"];
 } {
   const total = os.totalmem();
   const free = os.freemem();
   const used = Math.max(0, total - free);
   return {
-    ram: clampPct((used / total) * 100),
+    ram: clampPct((used / Math.max(1, total)) * 100),
     ramUsedGb: Number((used / 1024 ** 3).toFixed(2)),
     ramTotalGb: Number((total / 1024 ** 3).toFixed(2)),
+    ramSource: "os-freemem",
   };
+}
+
+/**
+ * macOS: os.freemem() is "completely free" only — file cache looks like 100% used.
+ * Activity Monitor style: available ≈ free + inactive + speculative + purgeable.
+ */
+function sampleRamMacosVmStat(): {
+  ram: number;
+  ramUsedGb: number;
+  ramTotalGb: number;
+  ramSource: SystemLoadSample["ramSource"];
+} | null {
+  if (process.platform !== "darwin") return null;
+  try {
+    const out = execFileSync("/usr/bin/vm_stat", {
+      encoding: "utf8",
+      timeout: 1500,
+    });
+    const pageSizeMatch = out.match(/page size of\s+(\d+)/i);
+    const pageSize = pageSizeMatch ? Number(pageSizeMatch[1]) : 4096;
+    const pages = (label: string): number => {
+      const m = out.match(new RegExp(`${label}:\\s+([\\d,]+)\\.?`, "i"));
+      return m ? Number(m[1]!.replace(/,/g, "")) : 0;
+    };
+    const free = pages("Pages free");
+    const inactive = pages("Pages inactive");
+    const speculative = pages("Pages speculative");
+    const purgeable = pages("Pages purgeable");
+    const availablePages = free + inactive + speculative + purgeable;
+    if (availablePages <= 0 && free <= 0) return null;
+    const total = os.totalmem();
+    const available = Math.min(total, availablePages * pageSize);
+    const used = Math.max(0, total - available);
+    return {
+      ram: clampPct((used / Math.max(1, total)) * 100),
+      ramUsedGb: Number((used / 1024 ** 3).toFixed(2)),
+      ramTotalGb: Number((total / 1024 ** 3).toFixed(2)),
+      ramSource: "macos-vm-stat",
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Linux: MemAvailable from /proc/meminfo (same idea as free -h). */
+function sampleRamLinuxMeminfo(): {
+  ram: number;
+  ramUsedGb: number;
+  ramTotalGb: number;
+  ramSource: SystemLoadSample["ramSource"];
+} | null {
+  if (process.platform !== "linux") return null;
+  try {
+    const raw = fs.readFileSync("/proc/meminfo", "utf8");
+    const num = (key: string): number | null => {
+      const m = raw.match(new RegExp(`^${key}:\\s+(\\d+)`, "m"));
+      return m ? Number(m[1]) * 1024 : null;
+    };
+    const total = num("MemTotal");
+    const available = num("MemAvailable");
+    if (!total || available == null) return null;
+    const used = Math.max(0, total - available);
+    return {
+      ram: clampPct((used / total) * 100),
+      ramUsedGb: Number((used / 1024 ** 3).toFixed(2)),
+      ramTotalGb: Number((total / 1024 ** 3).toFixed(2)),
+      ramSource: "linux-meminfo",
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Windows: Task Manager «Available» (standby counts as reusable).
+ * os.freemem() alone often under-reports available → inflated «used %».
+ */
+function sampleRamWindowsAvailable(): {
+  ram: number;
+  ramUsedGb: number;
+  ramTotalGb: number;
+  ramSource: SystemLoadSample["ramSource"];
+} | null {
+  if (process.platform !== "win32") return null;
+  try {
+    const script = [
+      "$ErrorActionPreference = 'Stop'",
+      "$c = (Get-Counter '\\Memory\\Available MBytes').CounterSamples[0].CookedValue",
+      "$t = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1MB)",
+      "Write-Output \"$c,$t\"",
+    ].join("; ");
+    const out = execFileSync(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-Command", script],
+      { encoding: "utf8", timeout: 3500, windowsHide: true },
+    );
+    const line = String(out).trim().split(/\r?\n/).pop() ?? "";
+    const [availStr, totalStr] = line.split(",").map((s) => s.trim());
+    const availMiB = Number(String(availStr).replace(",", "."));
+    const totalMiB = Number(String(totalStr).replace(",", "."));
+    if (!Number.isFinite(availMiB) || !Number.isFinite(totalMiB) || totalMiB <= 0) {
+      return null;
+    }
+    const total = totalMiB * 1024 * 1024;
+    const available = Math.min(total, availMiB * 1024 * 1024);
+    const used = Math.max(0, total - available);
+    return {
+      ram: clampPct((used / total) * 100),
+      ramUsedGb: Number((used / 1024 ** 3).toFixed(2)),
+      ramTotalGb: Number((total / 1024 ** 3).toFixed(2)),
+      ramSource: "windows-available",
+    };
+  } catch {
+    return null;
+  }
+}
+
+function sampleRam(): {
+  ram: number;
+  ramUsedGb: number;
+  ramTotalGb: number;
+  ramSource: SystemLoadSample["ramSource"];
+} {
+  const now = Date.now();
+  if (cachedRam && now - cachedRam.at < RAM_CACHE_MS) {
+    return {
+      ram: cachedRam.ram,
+      ramUsedGb: cachedRam.ramUsedGb,
+      ramTotalGb: cachedRam.ramTotalGb,
+      ramSource: cachedRam.ramSource,
+    };
+  }
+  const next =
+    sampleRamMacosVmStat() ||
+    sampleRamLinuxMeminfo() ||
+    sampleRamWindowsAvailable() ||
+    sampleRamOsFreemem();
+  cachedRam = { at: now, ...next };
+  return next;
+}
+
+/**
+ * Mira working set in GB — sum of all Electron/Chromium helper processes
+ * when available (renderer + GPU + utility), else main-process RSS only.
+ */
+function sampleProcessRssGb(): number | null {
+  try {
+    // Lazy require so this module stays usable in non-Electron smokes.
+    const { app } = require("electron") as typeof import("electron");
+    if (typeof app?.getAppMetrics === "function") {
+      const metrics = app.getAppMetrics();
+      let bytes = 0;
+      for (const m of metrics) {
+        const w = m.memory?.workingSetSize;
+        // Electron reports workingSetSize in KB.
+        if (typeof w === "number" && Number.isFinite(w) && w > 0) {
+          bytes += w * 1024;
+        }
+      }
+      if (bytes > 0) return Number((bytes / 1024 ** 3).toFixed(2));
+    }
+  } catch {
+    // fall through
+  }
+  try {
+    const rss = process.memoryUsage().rss;
+    if (!Number.isFinite(rss) || rss <= 0) return null;
+    return Number((rss / 1024 ** 3).toFixed(2));
+  } catch {
+    return null;
+  }
 }
 
 async function tryNvidiaSmi(): Promise<{
@@ -153,6 +351,53 @@ function tryDrmGpuBusy(): number | null {
   }
 }
 
+/**
+ * macOS / Apple Silicon: IOAccelerator PerformanceStatistics.
+ * Unified memory → report GPU util when present; "VRAM" ≈ in-use accelerator memory.
+ */
+async function tryMacosIoregGpu(): Promise<{
+  gpu: number | null;
+  vramUsedGb: number | null;
+  vramTotalGb: number | null;
+} | null> {
+  if (process.platform !== "darwin") return null;
+  try {
+    const { stdout } = await execFileAsync(
+      "/usr/sbin/ioreg",
+      ["-r", "-d", "1", "-c", "IOAccelerator"],
+      { timeout: 2500 },
+    );
+    const utilMatch =
+      stdout.match(/"Device Utilization %"\s*=\s*(\d+)/) ||
+      stdout.match(/"Renderer Utilization %"\s*=\s*(\d+)/) ||
+      stdout.match(/"Tiler Utilization %"\s*=\s*(\d+)/);
+    const inUseMatch =
+      stdout.match(/"In use system memory"\s*=\s*(\d+)/) ||
+      stdout.match(/"In use system memory"\s*=\s*<([0-9a-fA-F]+)>/);
+    let gpu: number | null = null;
+    if (utilMatch) gpu = clampPct(Number(utilMatch[1]));
+    let vramUsedGb: number | null = null;
+    if (inUseMatch) {
+      let bytes = Number(inUseMatch[1]);
+      if (!Number.isFinite(bytes) && inUseMatch[1]) {
+        bytes = parseInt(inUseMatch[1]!, 16);
+      }
+      if (Number.isFinite(bytes) && bytes > 0) {
+        vramUsedGb = Number((bytes / 1024 ** 3).toFixed(2));
+      }
+    }
+    // Unified memory ceiling ≈ system RAM (honest for Apple Silicon).
+    const vramTotalGb =
+      vramUsedGb != null
+        ? Number((os.totalmem() / 1024 ** 3).toFixed(2))
+        : null;
+    if (gpu == null && vramUsedGb == null) return null;
+    return { gpu, vramUsedGb, vramTotalGb };
+  } catch {
+    return null;
+  }
+}
+
 async function sampleGpu(): Promise<{
   gpu: number | null;
   vramUsedGb: number | null;
@@ -200,6 +445,23 @@ async function sampleGpu(): Promise<{
       vramUsedGb: null,
       vramTotalGb: null,
       source: "windows-counter",
+    };
+  }
+
+  const mac = await tryMacosIoregGpu();
+  if (mac) {
+    cachedGpu = {
+      at: now,
+      gpu: mac.gpu,
+      vramUsedGb: mac.vramUsedGb,
+      vramTotalGb: mac.vramTotalGb,
+      source: "macos-ioreg",
+    };
+    return {
+      gpu: mac.gpu,
+      vramUsedGb: mac.vramUsedGb,
+      vramTotalGb: mac.vramTotalGb,
+      source: "macos-ioreg",
     };
   }
 
@@ -253,6 +515,8 @@ export async function sampleSystemLoad(): Promise<SystemLoadSample> {
     vramUsedGb: gpu.vramUsedGb,
     vramTotalGb: gpu.vramTotalGb,
     gpuSource: gpu.source,
+    ramSource: ram.ramSource,
+    processRssGb: sampleProcessRssGb(),
     ts: Date.now(),
   };
 }

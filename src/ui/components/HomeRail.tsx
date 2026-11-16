@@ -13,7 +13,9 @@ import type { VoiceState } from "../voiceState";
 
 /** ~1 hour at 60s cadence after a short warm-up burst. */
 const SAMPLE_COUNT = 60;
-const POLL_MS = 2500;
+/** Keep IPC/vm_stat/powershell light — rings don't need 2.5s spam. */
+const POLL_MS = 4_000;
+const POLL_HIDDEN_MS = 20_000;
 const SERIES_STEP_MS = 60_000;
 
 type LoadPoint = {
@@ -67,11 +69,23 @@ export function HomeRail({
             tone="success"
             unavailable={load.vramPct == null}
           />
-          <Ring value={load.ram} label="ОЗУ" tone="warning" />
+          <Ring
+            value={load.ram}
+            label="ОЗУ"
+            sub={
+              load.ramUsedGb != null && load.ramTotalGb != null
+                ? `${fmtGb(load.ramUsedGb)}/${fmtGb(load.ramTotalGb)} ГБ`
+                : undefined
+            }
+            tone="warning"
+          />
         </div>
         <p className="mono tiny muted" style={{ margin: "12px 0 0" }}>
           модель · {modelLabel}
           {voiceNote ? ` · ${voiceNote}` : ""}
+          {load.processRssGb != null
+            ? ` · Mira ${fmtGb(load.processRssGb)} ГБ`
+            : ""}
           {load.source === "ipc" ? "" : " · метрики: браузер"}
         </p>
       </section>
@@ -137,12 +151,19 @@ function formatPct(v: number | null | undefined): string {
   return `${Math.round(v)}%`;
 }
 
+function fmtGb(v: number): string {
+  return v.toFixed(1).replace(".", ",");
+}
+
 function useLiveLoad(_voiceState: VoiceState) {
   const [series, setSeries] = useState<LoadPoint[]>([]);
   const [gpu, setGpu] = useState<number | null>(null);
   const [ram, setRam] = useState(0);
+  const [ramUsedGb, setRamUsedGb] = useState<number | null>(null);
+  const [ramTotalGb, setRamTotalGb] = useState<number | null>(null);
   const [vramGb, setVramGb] = useState<number | null>(null);
   const [vramTotalGb, setVramTotalGb] = useState<number | null>(null);
+  const [processRssGb, setProcessRssGb] = useState<number | null>(null);
   const [clock, setClock] = useState(() => formatClock());
   const [source, setSource] = useState<"ipc" | "browser">("browser");
   const lastSeriesAt = useRef(0);
@@ -151,6 +172,7 @@ function useLiveLoad(_voiceState: VoiceState) {
   useEffect(() => {
     let cancelled = false;
     let frame = 0;
+    let timer: number | null = null;
 
     const pushSample = (point: LoadPoint, force = false) => {
       setSeries((prev) => {
@@ -171,9 +193,12 @@ function useLiveLoad(_voiceState: VoiceState) {
       sample: {
         cpu: number;
         ram: number;
+        ramUsedGb?: number;
+        ramTotalGb?: number;
         gpu: number | null;
         vramUsedGb: number | null;
         vramTotalGb: number | null;
+        processRssGb?: number | null;
         ts?: number;
       },
       via: "ipc" | "browser",
@@ -182,9 +207,24 @@ function useLiveLoad(_voiceState: VoiceState) {
       const t = sample.ts ?? Date.now();
       setSource(via);
       setRam(sample.ram);
+      setRamUsedGb(
+        sample.ramUsedGb != null && Number.isFinite(sample.ramUsedGb)
+          ? sample.ramUsedGb
+          : null,
+      );
+      setRamTotalGb(
+        sample.ramTotalGb != null && Number.isFinite(sample.ramTotalGb)
+          ? sample.ramTotalGb
+          : null,
+      );
       setGpu(sample.gpu);
       setVramGb(sample.vramUsedGb);
       setVramTotalGb(sample.vramTotalGb);
+      setProcessRssGb(
+        sample.processRssGb != null && Number.isFinite(sample.processRssGb)
+          ? sample.processRssGb
+          : null,
+      );
       const force = !seeded.current;
       seeded.current = true;
       pushSample(
@@ -216,14 +256,28 @@ function useLiveLoad(_voiceState: VoiceState) {
       if (frame % 2 === 0) setClock(formatClock());
     };
 
+    const schedule = () => {
+      if (timer != null) window.clearInterval(timer);
+      const ms =
+        document.visibilityState === "hidden" ? POLL_HIDDEN_MS : POLL_MS;
+      timer = window.setInterval(() => {
+        void tick();
+      }, ms);
+    };
+
+    const onVis = () => {
+      schedule();
+      if (document.visibilityState === "visible") void tick();
+    };
+
     void tick();
-    const id = window.setInterval(() => {
-      void tick();
-    }, POLL_MS);
+    schedule();
+    document.addEventListener("visibilitychange", onVis);
 
     return () => {
       cancelled = true;
-      window.clearInterval(id);
+      if (timer != null) window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVis);
     };
   }, []);
 
@@ -236,8 +290,11 @@ function useLiveLoad(_voiceState: VoiceState) {
     series,
     gpu,
     ram,
+    ramUsedGb,
+    ramTotalGb,
     vramGb,
     vramPct,
+    processRssGb,
     clock,
     source,
   };

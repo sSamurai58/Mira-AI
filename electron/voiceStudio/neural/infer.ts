@@ -34,8 +34,9 @@ type PackCacheEntry = {
   pack: LoadedNeuralPack;
 };
 
-/** In-memory pack cache — avoids re-parsing multi‑MB weights every utterance. */
+/** In-memory pack cache — one voice at a time (weights are multi‑MB JSON). */
 const packCache = new Map<string, PackCacheEntry>();
+const PACK_CACHE_MAX = 1;
 
 export function loadNeuralPack(packDir: string): LoadedNeuralPack | null {
   const file = path.join(packDir, "neural-weights.json");
@@ -59,11 +60,20 @@ export function loadNeuralPack(packDir: string): LoadedNeuralPack | null {
       sampleRate: raw.sampleRate ?? 16000,
       hopLength: raw.hopLength ?? 160,
     };
+    // Drop other voices so RAM does not accumulate across catalog switches.
+    if (!packCache.has(packDir) && packCache.size >= PACK_CACHE_MAX) {
+      packCache.clear();
+    }
     packCache.set(packDir, { mtimeMs, pack });
     return pack;
   } catch {
     return null;
   }
+}
+
+/** Drop cached neural weights (call on idle / voice switch if needed). */
+export function clearNeuralPackCache(): void {
+  packCache.clear();
 }
 
 /** Force-load pack into memory (warmup). */
