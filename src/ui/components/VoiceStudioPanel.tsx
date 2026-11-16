@@ -32,6 +32,58 @@ function statusLabel(status: string) {
   return STATUS_LABEL[status] ?? status;
 }
 
+type TrainHealth = NonNullable<
+  Awaited<ReturnType<NonNullable<Window["mira"]>["voiceStudioSnapshot"]>>["trainHealth"]
+>;
+
+const TRAIN_PIPELINE: Array<{ id: string; label: string }> = [
+  { id: "validate", label: "Проверка" },
+  { id: "features", label: "Звук" },
+  { id: "segment", label: "Слова" },
+  { id: "lexicon", label: "Словарь" },
+  { id: "epochs", label: "Нейро" },
+  { id: "pack", label: "Пак" },
+  { id: "publish", label: "Каталог" },
+];
+
+function trainPhaseTone(
+  phase: TrainHealth["phase"] | "training_live",
+): "idle" | "go" | "run" | "ok" | "warn" | "bad" {
+  switch (phase) {
+    case "training":
+    case "training_live":
+      return "run";
+    case "trained":
+      return "ok";
+    case "trained_partial":
+    case "ready_to_train":
+      return "go";
+    case "needs_retrain":
+    case "train_weak":
+      return "bad";
+    case "collecting":
+      return "warn";
+    default:
+      return "idle";
+  }
+}
+
+function pipelineStepState(
+  stepId: string,
+  activeStep: string | null,
+  done: boolean,
+): "pending" | "active" | "done" {
+  if (done) return "done";
+  if (!activeStep) return "pending";
+  const order = TRAIN_PIPELINE.map((s) => s.id);
+  const activeIdx = order.indexOf(activeStep);
+  const idx = order.indexOf(stepId);
+  if (activeIdx < 0) return "pending";
+  if (idx < activeIdx) return "done";
+  if (idx === activeIdx) return "active";
+  return "pending";
+}
+
 type CurriculumUiRow = {
   concept: string;
   neural: string;
@@ -215,6 +267,7 @@ export function VoiceStudioPanel(props: {
     cosyAvailable: boolean;
     cosyDetail: string;
   } | null>(null);
+  const [trainHealth, setTrainHealth] = useState<TrainHealth | null>(null);
 
   const TRAIN_STEP_RU: Record<string, string> = {
     validate: "проверка записей",
@@ -250,6 +303,17 @@ export function VoiceStudioPanel(props: {
     setPhrases(snap.phrases);
     setClips(snap.clips);
     setTokenPipeline(snap.tokenPipeline ?? null);
+    setTrainHealth(snap.trainHealth ?? null);
+    if (snap.trainHealth?.metrics) {
+      const m = snap.trainHealth.metrics;
+      setLastTrainMetrics({
+        epochs: m.epochs,
+        trainSteps: m.steps,
+        initialLoss: m.initialLoss,
+        finalLoss: m.finalLoss,
+        melTargets: m.melTargets,
+      });
+    }
     if (snap.project) {
       setEditName(snap.project.name);
       setEditLang(snap.project.lang);
@@ -979,10 +1043,192 @@ export function VoiceStudioPanel(props: {
                 placeholder="ru-RU"
               />
             </label>
-            <div className="muted">
-              Статус: <strong>{statusLabel(project.status)}</strong>
-              {project.recommendation ? ` · ${project.recommendation}` : ""}
-            </div>
+            {(() => {
+              const live = busy === "train";
+              const phase = live
+                ? ("training" as const)
+                : (trainHealth?.phase ??
+                  (project.status === "training"
+                    ? "training"
+                    : project.status === "ready"
+                      ? "trained"
+                      : project.status === "ready_partial"
+                        ? "trained_partial"
+                        : project.status === "ready_to_train"
+                          ? "ready_to_train"
+                          : "collecting"));
+              const tone = trainPhaseTone(live ? "training_live" : phase);
+              const label = live
+                ? "Обучение…"
+                : (trainHealth?.phaseLabel ?? statusLabel(project.status));
+              const hint = live
+                ? trainProgress?.label ||
+                  "Идёт сборка: проверка → звук → слова → нейро → каталог."
+                : trainHealth?.phaseHint ||
+                  project.recommendation ||
+                  "";
+              const pct = live
+                ? Math.max(0, Math.min(100, trainProgress?.pct ?? 0))
+                : phase === "trained"
+                  ? 100
+                  : phase === "trained_partial"
+                    ? 85
+                    : phase === "ready_to_train"
+                      ? Math.min(40, 10 + coveragePct / 3)
+                      : phase === "needs_retrain" || phase === "train_weak"
+                        ? 100
+                        : Math.min(35, coveragePct);
+              const activeStep =
+                live && trainProgress
+                  ? trainProgress.step
+                  : phase === "trained" ||
+                      phase === "trained_partial" ||
+                      phase === "needs_retrain" ||
+                      phase === "train_weak"
+                    ? "publish"
+                    : null;
+              const pipelineDone =
+                !live &&
+                (phase === "trained" ||
+                  phase === "trained_partial" ||
+                  phase === "needs_retrain" ||
+                  phase === "train_weak");
+              const needsAction =
+                phase === "needs_retrain" || phase === "train_weak";
+              return (
+                <div
+                  className={`vs-train-card vs-train-card--${tone}`}
+                  aria-live="polite"
+                >
+                  <div className="vs-train-card__head">
+                    <div className="vs-train-card__title">
+                      <span className="vs-train-card__badge" aria-hidden />
+                      <strong>{label}</strong>
+                      {live ? (
+                        <span className="vs-train-card__pct mono">
+                          {pct}%
+                        </span>
+                      ) : needsAction ? (
+                        <span className="vs-train-card__tag">дообучить</span>
+                      ) : phase === "trained" ? (
+                        <span className="vs-train-card__tag vs-train-card__tag--ok">
+                          готово
+                        </span>
+                      ) : null}
+                    </div>
+                    {hint ? (
+                      <p className="vs-train-card__hint">{hint}</p>
+                    ) : null}
+                  </div>
+                  <div
+                    className="vs-train-card__bar"
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.round(pct)}
+                    aria-label="Прогресс обучения"
+                  >
+                    <div
+                      className="vs-train-card__bar-fill"
+                      style={{ width: `${Math.max(live ? 2 : 0, pct)}%` }}
+                    />
+                  </div>
+                  <ol className="vs-train-pipeline">
+                    {TRAIN_PIPELINE.map((step) => {
+                      const st = pipelineStepState(
+                        step.id,
+                        activeStep === "done" || activeStep === "error"
+                          ? "publish"
+                          : activeStep,
+                        pipelineDone && !needsAction
+                          ? true
+                          : pipelineDone && needsAction
+                            ? step.id !== "epochs" &&
+                              step.id !== "pack" &&
+                              step.id !== "publish"
+                                ? true
+                                : false
+                            : false,
+                      );
+                      // When needs retrain, mark neural+ as warn-done visually via active on epochs
+                      const show =
+                        needsAction && !live && step.id === "epochs"
+                          ? "active"
+                          : st;
+                      return (
+                        <li
+                          key={step.id}
+                          className={`vs-train-pipeline__step vs-train-pipeline__step--${show}`}
+                        >
+                          <span className="vs-train-pipeline__dot" />
+                          <span>{step.label}</span>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                  {live && trainProgress ? (
+                    <div className="vs-train-card__live mono">
+                      {TRAIN_STEP_RU[trainProgress.step] ?? trainProgress.step}
+                      {trainProgress.epoch != null &&
+                      trainProgress.epochs != null
+                        ? ` · эпоха ${trainProgress.epoch}/${trainProgress.epochs}`
+                        : ""}
+                      {trainProgress.loss != null
+                        ? ` · loss ${trainProgress.loss.toFixed(4)}`
+                        : ""}
+                      {trainProgress.melL1 != null
+                        ? ` · mel L1 ${trainProgress.melL1.toFixed(4)}`
+                        : ""}
+                    </div>
+                  ) : null}
+                  {!live && trainHealth?.hasWeights ? (
+                    <div className="vs-train-card__meta mono">
+                      format {trainHealth.weightsFormat ?? "—"}
+                      {trainHealth.compatible ? " ✓" : " ✗"}
+                      {" · "}
+                      vocoder {trainHealth.vocoderReady ? "✓" : "—"}
+                      {trainHealth.sampleRate
+                        ? ` · ${trainHealth.sampleRate / 1000} кГц`
+                        : ""}
+                      {trainHealth.trainedAt
+                        ? ` · ${new Date(trainHealth.trainedAt).toLocaleString("ru-RU")}`
+                        : ""}
+                    </div>
+                  ) : null}
+                  {!live &&
+                  (lastTrainMetrics?.finalLoss != null ||
+                    trainHealth?.metrics?.finalLoss != null) ? (
+                    <div className="vs-train-card__meta mono">
+                      Последнее: эпох{" "}
+                      {lastTrainMetrics?.epochs ??
+                        trainHealth?.metrics?.epochs ??
+                        "—"}{" "}
+                      · шагов{" "}
+                      {lastTrainMetrics?.trainSteps ??
+                        trainHealth?.metrics?.steps ??
+                        "—"}{" "}
+                      · loss{" "}
+                      {(
+                        lastTrainMetrics?.initialLoss ??
+                        trainHealth?.metrics?.initialLoss
+                      )?.toFixed(4) ?? "—"}{" "}
+                      →{" "}
+                      {(
+                        lastTrainMetrics?.finalLoss ??
+                        trainHealth?.metrics?.finalLoss
+                      )?.toFixed(4) ?? "—"}
+                      {(lastTrainMetrics?.melTargets ??
+                        trainHealth?.metrics?.melTargets) != null
+                        ? ` · mel-целей ${
+                            lastTrainMetrics?.melTargets ??
+                            trainHealth?.metrics?.melTargets
+                          }`
+                        : ""}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })()}
             <div className="muted mono">
               Корпус: фраз {phrases.length} · принятых аудио {acceptedClips} ·
               привязано {linkedAccepted} · покрытие {coveragePct}%
@@ -1019,7 +1265,8 @@ export function VoiceStudioPanel(props: {
               </p>
             ) : (
               <p className="muted" style={{ margin: 0 }}>
-                Клипов достаточно для базовой сборки (≥{TARGET_CLIPS} привязанных).
+                Клипов достаточно для базовой сборки (≥{TARGET_CLIPS}{" "}
+                привязанных).
               </p>
             )}
             <div className="row" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
@@ -1049,9 +1296,12 @@ export function VoiceStudioPanel(props: {
                       ? `Эпоха ${trainProgress.epoch ?? "…"} · loss ${trainProgress.loss.toFixed(4)}`
                       : `Сборка ${trainProgress.pct}%`
                     : "Сборка…"
-                  : project.custom_voice_id
-                    ? "Пересобрать голос"
-                    : "Собрать голос"}
+                  : trainHealth?.phase === "needs_retrain" ||
+                      trainHealth?.phase === "train_weak"
+                    ? "Переобучить голос"
+                    : project.custom_voice_id
+                      ? "Пересобрать голос"
+                      : "Собрать голос"}
               </button>
               <button
                 type="button"
@@ -1071,61 +1321,6 @@ export function VoiceStudioPanel(props: {
               >
                 {busy === "clone" ? "Клон…" : "Clone → ElevenLabs"}
               </button>
-              {busy === "train" && trainProgress ? (
-                <div
-                  className="muted"
-                  style={{ flex: "1 1 100%", fontSize: "0.9rem" }}
-                  aria-live="polite"
-                >
-                  <strong>{trainProgress.pct}%</strong>
-                  {` · ${TRAIN_STEP_RU[trainProgress.step] ?? trainProgress.step} · ${trainProgress.label}`}
-                  {trainProgress.loss != null ? (
-                    <div className="mono" style={{ marginTop: "0.2rem" }}>
-                      loss={trainProgress.loss.toFixed(4)}
-                      {trainProgress.melL1 != null
-                        ? ` · mel L1=${trainProgress.melL1.toFixed(4)}`
-                        : ""}
-                      {trainProgress.epoch != null &&
-                      trainProgress.epochs != null
-                        ? ` · эпоха ${trainProgress.epoch}/${trainProgress.epochs}`
-                        : ""}
-                    </div>
-                  ) : null}
-                  <div
-                    style={{
-                      marginTop: "0.35rem",
-                      height: "0.35rem",
-                      background:
-                        "color-mix(in oklab, var(--fg) 12%, transparent)",
-                      borderRadius: "999px",
-                      overflow: "hidden",
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: `${Math.max(2, Math.min(100, trainProgress.pct))}%`,
-                        height: "100%",
-                        background: "var(--accent, #3d8bfd)",
-                        transition: "width 0.25s ease",
-                      }}
-                    />
-                  </div>
-                </div>
-              ) : null}
-              {lastTrainMetrics?.finalLoss != null ? (
-                <div
-                  className="muted mono"
-                  style={{ flex: "1 1 100%", fontSize: "0.85rem" }}
-                >
-                  Последнее обучение: эпох {lastTrainMetrics.epochs ?? "—"} ·
-                  шагов {lastTrainMetrics.trainSteps ?? "—"} · loss{" "}
-                  {lastTrainMetrics.initialLoss?.toFixed(4) ?? "—"} →{" "}
-                  {lastTrainMetrics.finalLoss.toFixed(4)}
-                  {lastTrainMetrics.melTargets != null
-                    ? ` · mel-целей ${lastTrainMetrics.melTargets}`
-                    : ""}
-                </div>
-              ) : null}
               {lastCurriculum.length > 0 ? (
                 <details
                   className="muted"

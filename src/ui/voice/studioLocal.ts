@@ -67,19 +67,68 @@ export function localStudioSnapshot(projectId?: string) {
   const project = projectId
     ? store.projects.find((p) => p.id === projectId) ?? null
     : store.projects[0] ?? null;
+  const clips = project
+    ? store.clips.filter((c) => c.project_id === project.id)
+    : [];
+  const linkedAccepted = clips.filter((c) => c.accepted && c.phrase_id).length;
+  const status = project?.status ?? "created";
+  let phase:
+    | "empty"
+    | "collecting"
+    | "ready_to_train"
+    | "training"
+    | "trained"
+    | "trained_partial"
+    | "needs_retrain"
+    | "train_weak" = "empty";
+  let phaseLabel = "Нет модели";
+  let phaseHint =
+    "Соберите фразы и запишите аудио, затем запустите обучение.";
+  if (status === "training") {
+    phase = "training";
+    phaseLabel = "Обучение…";
+    phaseHint = "Идёт сборка модели (browser-demo).";
+  } else if (status === "ready") {
+    phase = "trained";
+    phaseLabel = "Обучена";
+    phaseHint = "Browser-demo · модель в localStorage.";
+  } else if (status === "ready_partial") {
+    phase = "trained_partial";
+    phaseLabel = "Обучена (черновик)";
+    phaseHint = "Базовая сборка есть — можно дозаписать и пересобрать.";
+  } else if (status === "ready_to_train" || linkedAccepted >= 3) {
+    phase = "ready_to_train";
+    phaseLabel = "Готов к обучению";
+    phaseHint = "Нажмите «Собрать голос».";
+  } else if (linkedAccepted > 0) {
+    phase = "collecting";
+    phaseLabel = "Сбор корпуса";
+    phaseHint = "Нужно ≥3 принятых привязанных клипа.";
+  }
   return {
     projects: store.projects,
     project,
     phrases: project ? phrasesForProject(store, project.id) : [],
-    clips: project
-      ? store.clips.filter((c) => c.project_id === project.id)
-      : [],
+    clips,
     customVoices: store.customVoices,
     tokenPipeline: {
       speaker: null,
       tokens: null,
       cosyAvailable: false,
       cosyDetail: "Browser-demo · TokenStore только в Electron",
+    },
+    trainHealth: {
+      hasWeights: Boolean(project?.custom_voice_id),
+      weightsFormat: project?.custom_voice_id ? 2 : null,
+      compatible: Boolean(project?.custom_voice_id),
+      vocoderReady: Boolean(project?.custom_voice_id),
+      trainedAt: null,
+      sampleRate: 16000,
+      hopLength: 160,
+      metrics: null,
+      phase,
+      phaseLabel,
+      phaseHint,
     },
   };
 }

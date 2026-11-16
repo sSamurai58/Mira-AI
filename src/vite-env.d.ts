@@ -765,6 +765,35 @@ interface MiraBridge {
       cosyAvailable: boolean;
       cosyDetail: string;
     };
+    trainHealth?: {
+      hasWeights: boolean;
+      weightsFormat: number | null;
+      compatible: boolean;
+      vocoderReady: boolean;
+      trainedAt: string | null;
+      sampleRate: number | null;
+      hopLength: number | null;
+      metrics: {
+        epochs?: number;
+        steps?: number;
+        initialLoss?: number;
+        finalLoss?: number;
+        melTargets?: number;
+        improved?: boolean;
+        vocoderSteps?: number;
+      } | null;
+      phase:
+        | "empty"
+        | "collecting"
+        | "ready_to_train"
+        | "training"
+        | "trained"
+        | "trained_partial"
+        | "needs_retrain"
+        | "train_weak";
+      phaseLabel: string;
+      phaseHint: string;
+    };
   }>;
   listVoiceProjects: () => Promise<MiraVoiceProject[]>;
   listCustomVoices: () => Promise<MiraCustomVoice[]>;
