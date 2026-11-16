@@ -1,5 +1,23 @@
 apply plugin: 'com.android.application'
 
+def miraVersionName = "0.1.37"
+def miraVersionCode = 37
+try {
+    def pkg = new File(rootProject.projectDir, '../package.json')
+    if (pkg.exists()) {
+        def m = (pkg.getText('UTF-8') =~ /"version"\s*:\s*"([^"]+)"/)
+        if (m.find()) {
+            miraVersionName = m.group(1)
+            def parts = miraVersionName.tokenize('.')
+            // 0.1.37 → 137; keep monotonic for Play/sideload upgrades
+            miraVersionCode = parts.collect { it as int }.with {
+                get(0) * 10000 + get(1) * 100 + (size() > 2 ? get(2) : 0)
+            }
+        }
+    }
+} catch (Exception ignored) {
+}
+
 android {
     namespace = "ai.mira.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,8 +25,8 @@ android {
         applicationId "ai.mira.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode miraVersionCode
+        versionName miraVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,10 +34,41 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        // Sideload / GitHub Releases: sign with Android debug key until Play keystore is wired.
+        ciDebug {
+            def home = System.properties['user.home']
+            def ks = file("${home}/.android/debug.keystore")
+            if (!ks.exists()) {
+                // Create on first CI run
+                def cmd = [
+                    'keytool', '-genkeypair', '-v',
+                    '-keystore', ks.absolutePath,
+                    '-storepass', 'android',
+                    '-alias', 'androiddebugkey',
+                    '-keypass', 'android',
+                    '-keyalg', 'RSA', '-keysize', '2048',
+                    '-validity', '10000',
+                    '-dname', 'CN=Android Debug,O=Android,C=US'
+                ]
+                ks.parentFile.mkdirs()
+                def proc = cmd.execute()
+                proc.waitForProcessOutput(System.out, System.err)
+            }
+            storeFile ks
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.ciDebug
+        }
+        debug {
+            signingConfig signingConfigs.ciDebug
         }
     }
 }

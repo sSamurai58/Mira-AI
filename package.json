@@ -1,6 +1,6 @@
 {
   "name": "mira-ai",
-  "version": "0.1.36",
+  "version": "0.1.37",
   "private": true,
   "description": "Mira — local voice AI assistant",
   "author": "Mira",
@@ -17,7 +17,8 @@
     "build:web": "tsc -p tsconfig.app.json --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
-    "cap:sync": "npm run build:web && npx cap sync android",
+    "android:icons": "node scripts/android-icons.mjs",
+    "cap:sync": "npm run build:web && npm run android:icons && npx cap sync android",
     "pack:android": "npm run cap:sync && cd android && ./gradlew assembleRelease",
     "pack:android:debug": "npm run cap:sync && cd android && ./gradlew assembleDebug",
     "brand-icons:vendor": "node scripts/vendor-brand-icons.mjs",

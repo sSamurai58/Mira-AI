@@ -15,6 +15,18 @@ export type MiraChangelogEntry = {
 
 export const MIRA_CHANGELOG: MiraChangelogEntry[] = [
   {
+    version: "0.1.37",
+    date: "16.11.2026",
+    summary:
+      "Android APK ставится: подпись + иконка Mira.",
+    bullets: [
+      "APK подписан (debug keystore) — больше не «пакет недействителен»",
+      "Launcher icon = Mira mark; versionName из package.json",
+      "CI проверяет apksigner verify перед upload",
+      "Windows + macOS + Android одним тегом",
+    ],
+  },
+  {
     version: "0.1.36",
     date: "16.11.2026",
     summary:

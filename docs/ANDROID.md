@@ -27,11 +27,14 @@ npm run pack:android         # release APK (unsigned / debug-signed by Gradle de
 APK: `Mira-<version>-android.apk` в том же GitHub Release.
 
 ## Ограничения v1
-- Без Play Store signing key в CI (пока debug/unsigned release)
+- Sideload APK подписан **Android debug keystore** (ставится с «Неизвестные источники»). Play Store key — позже.
 - Без полного локального нейро-TTS Electron
 - Терминал / desktop automation / update gate — desktop-only
 
+## Иконка
+`node scripts/android-icons.mjs` → mipmaps из `build/icon-512.png` (Mira mark). CI вызывает перед `assembleRelease`.
+
 ## Следующие шаги
-- Подписать release keystore через GitHub Secrets
+- Подписать release keystore через GitHub Secrets (`MIRA_ANDROID_STORE_*`)
 - Deep-link / mic runtime permission UX
 - Опционально: Capacitor filesystem для корпуса голоса

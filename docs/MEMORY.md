@@ -13,7 +13,7 @@
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`/`ARCHITECTURE`, `TASKS`, `DECISIONS`, `GLOSSARY`, `RELEASE`, `RISKS`, `VOICE-AUDIT`, `WIP` |
 | Дорожная карта | Must + future F* закрыты (partial→done stubs where noted) |
 
-**Сейчас:** **0.1.36** релиз (Win+mac+Android). Планшет UI + Capacitor APK. После 0.1.35 — **переобучить** голос (`weightsFormat: 2`).
+**Сейчас:** **0.1.37** релиз (Win+mac+Android). Android APK подписан + иконка Mira. После 0.1.35 — **переобучить** голос (`weightsFormat: 2`).
 
 
 ## Решения
@@ -22,6 +22,7 @@
 
 | Дата | Решение | Почему |
 |------|---------|--------|
+| 2026-11-16 | **Релиз 0.1.37** (`v0.1.37`) | Android: debug-sign APK + Mira launcher icons; CI apksigner verify |
 | 2026-11-16 | **Релиз 0.1.36** (`v0.1.36`) | Tablet portrait/landscape; train lifecycle UI; Android Capacitor APK; Win+mac+Android |
 | 2026-11-16 | **Релиз = Win+mac+Android** | Один тег → три платформы; gate `release-all` |
 | 2026-11-16 | **Релиз 0.1.35** (`v0.1.35`) | Voice V1–V19; update relaunch+gate; home-rail perf; skills/MCP modal; product-team skill; Win+mac |

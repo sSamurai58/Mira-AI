@@ -2,25 +2,22 @@
 
 ## Версия / имя выпуска
 
-**0.1.36** — планшетная адаптация, статус обучения голоса, Android APK.
+**0.1.37** — Android APK signed + Mira icon (fix «пакет недействителен»).
 
 ## Критерий «выпуск закрыт»
-- [x] Пайплайн на релизной ветке
-- [x] Секреты не в репозитории
+- [x] APK подписан (`apksigner verify`)
+- [x] Иконка Mira в mipmaps
 - [ ] CI release Win + mac + Android зелёный
-- [ ] `latest.yml` / mac yml + `Mira-*-android.apk` на GitHub Releases
+- [ ] GitHub Release published (не draft)
 
-## Чеклист выкладки
-- [x] Tablet portrait/landscape compact shell
-- [x] Voice train lifecycle card
-- [x] Capacitor Android + Release job
-- [x] bump `package.json` → 0.1.36 + changelog
-- [ ] Тег `v0.1.36` → Release workflow
-- [ ] Gate `release-all`
+## Чеклист
+- [x] `signingConfigs.ciDebug` на release buildType
+- [x] `scripts/android-icons.mjs`
+- [x] bump 0.1.37
+- [ ] Тег `v0.1.37`
 
 ## Откат
-- предыдущий GitHub Release `v0.1.35`
+- `v0.1.36` (Win/mac ок; Android APK был unsigned)
 
 ## Заметки
-- Android = WebView UI (не полный Electron); см. `docs/ANDROID.md`
-- После 0.1.35 всё ещё нужен retrain кастомного голоса (`weightsFormat: 2`)
+- 0.1.36 Android не ставился: unsigned release → «пакет недействителен»
