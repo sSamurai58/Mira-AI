@@ -76,7 +76,9 @@ export function saveSpeakerPack(opts: {
   };
 
   fs.writeFileSync(paths.meta, JSON.stringify(meta, null, 2), "utf8");
-  fs.writeFileSync(paths.emb, Buffer.from(extracted.emb.buffer));
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { bufferFromView } = require("./bufferView") as typeof import("./bufferView");
+  fs.writeFileSync(paths.emb, bufferFromView(extracted.emb));
 
   return { meta, emb: extracted.emb, dir: paths.dir };
 }

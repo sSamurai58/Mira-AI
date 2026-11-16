@@ -25,7 +25,9 @@ export type AcousticCodebook = {
 };
 
 function hashCentroids(c: Float32Array): string {
-  return crypto.createHash("sha256").update(Buffer.from(c.buffer)).digest("hex").slice(0, 16);
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { bufferFromView } = require("./bufferView") as typeof import("./bufferView");
+  return crypto.createHash("sha256").update(bufferFromView(c)).digest("hex").slice(0, 16);
 }
 
 function nearest(centroids: Float32Array, size: number, dim: number, vec: Float32Array): number {

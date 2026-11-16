@@ -46,6 +46,11 @@ export type VoicePackLexiconEntry = {
   provisional?: boolean;
   /** Unit-selection prior from mel refinement (higher = preferred). */
   score?: number;
+  /**
+   * File is a full phrase WAV — stitch must slice [startMs,endMs] (V5).
+   * Never play the whole file as one word.
+   */
+  needsSlice?: boolean;
 };
 
 export type VoiceModelPack = {
@@ -113,8 +118,48 @@ export type TrainProgressEvent = {
 export function normalizeLexKey(raw: string): string {
   return raw
     .toLowerCase()
+    .replace(/ё/g, "е")
     .replace(/[^\p{L}\p{N}]+/gu, "")
     .trim();
+}
+
+/** Linear resample int16 PCM (planar frames) to target SR; always mono out. */
+export function resamplePcmInt16Mono(
+  pcm: Buffer,
+  fromRate: number,
+  toRate: number,
+  channels: number,
+): { pcm: Buffer; sampleRate: number; channels: 1 } {
+  const ch = Math.max(1, channels);
+  const frames = Math.floor(pcm.length / (2 * ch));
+  const mono = new Float32Array(frames);
+  for (let f = 0; f < frames; f++) {
+    let s = 0;
+    for (let c = 0; c < ch; c++) {
+      s += pcm.readInt16LE((f * ch + c) * 2);
+    }
+    mono[f] = s / ch / 32768;
+  }
+  let samples = mono;
+  if (fromRate !== toRate && frames > 1) {
+    const ratio = toRate / Math.max(1, fromRate);
+    const n = Math.max(1, Math.round(frames * ratio));
+    const out = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const x = i / ratio;
+      const i0 = Math.floor(x);
+      const i1 = Math.min(frames - 1, i0 + 1);
+      const t = x - i0;
+      out[i] = mono[i0]! * (1 - t) + mono[i1]! * t;
+    }
+    samples = out;
+  }
+  const outBuf = Buffer.alloc(samples.length * 2);
+  for (let i = 0; i < samples.length; i++) {
+    const v = Math.max(-1, Math.min(1, samples[i]!));
+    outBuf.writeInt16LE((v * 32767) | 0, i * 2);
+  }
+  return { pcm: outBuf, sampleRate: toRate, channels: 1 };
 }
 
 /** Split phrase text into speakable tokens (words). */
@@ -497,8 +542,9 @@ export function stitchPcmInt16OverlapAdd(
   opts?: { minCrossfadeMs?: number; maxCrossfadeMs?: number },
 ): { pcm: Buffer; sampleRate: number; channels: number } | null {
   if (!parts.length) return null;
-  const sampleRate = parts[0]!.sampleRate;
-  const channels = parts[0]!.channels;
+  const CANON_SR = 16_000;
+  const sampleRate = CANON_SR;
+  const channels = 1;
   const minXf = Math.max(8, Math.floor(((opts?.minCrossfadeMs ?? 22) / 1000) * sampleRate));
   const maxXf = Math.max(
     minXf,
@@ -514,14 +560,18 @@ export function stitchPcmInt16OverlapAdd(
     return out;
   };
 
-  let acc = toFloat(parts[0]!.pcm, parts[0]!.channels);
-  let refRms = Math.max(1e-5, pcmInt16Rms(parts[0]!.pcm, parts[0]!.channels));
+  // Resample + mono before stitch (V6 / V18) — never silently drop SR mismatches.
+  const normalized = parts.map((p) =>
+    resamplePcmInt16Mono(p.pcm, p.sampleRate, CANON_SR, p.channels),
+  );
 
-  for (let i = 1; i < parts.length; i++) {
-    const part = parts[i]!;
-    if (part.sampleRate !== sampleRate) continue;
-    let next = toFloat(part.pcm, part.channels);
-    const nextRms = Math.max(1e-5, pcmInt16Rms(part.pcm, part.channels));
+  let acc = toFloat(normalized[0]!.pcm, 1);
+  let refRms = Math.max(1e-5, pcmInt16Rms(normalized[0]!.pcm, 1));
+
+  for (let i = 1; i < normalized.length; i++) {
+    const part = normalized[i]!;
+    let next = toFloat(part.pcm, 1);
+    const nextRms = Math.max(1e-5, pcmInt16Rms(part.pcm, 1));
     // Level-match next unit toward running reference (avoid stepped loudness).
     const gain = Math.max(0.65, Math.min(1.45, refRms / nextRms));
     if (Math.abs(gain - 1) > 0.04) {
@@ -530,16 +580,15 @@ export function stitchPcmInt16OverlapAdd(
     refRms = refRms * 0.7 + nextRms * gain * 0.3;
 
     const edgePrev = pcmInt16Rms(
-      parts[i - 1]!.pcm,
-      parts[i - 1]!.channels,
+      normalized[i - 1]!.pcm,
+      1,
       Math.max(
         0,
-        Math.floor(parts[i - 1]!.pcm.length / (2 * parts[i - 1]!.channels)) -
-          minXf,
+        Math.floor(normalized[i - 1]!.pcm.length / 2) - minXf,
       ),
       minXf,
     );
-    const edgeNext = pcmInt16Rms(part.pcm, part.channels, 0, minXf);
+    const edgeNext = pcmInt16Rms(part.pcm, 1, 0, minXf);
     const edge = Math.max(edgePrev, edgeNext);
     // Louder / mismatched joins → longer adaptive crossfade.
     const t = Math.max(0, Math.min(1, (edge - 0.02) / 0.12));
@@ -757,6 +806,8 @@ export function buildVoiceModelPack(opts: {
       const endMs = bound.endMs;
       const key = normalizeLexKey(word);
       if (!key) return;
+      // V10 MVP: reject crumbs shorter than 80 ms from primary lexicon.
+      if (endMs - startMs < 80) return;
 
       const unitId = `w-${clip.phraseId.slice(0, 6)}-${wIdx}-${crypto
         .createHash("sha1")
@@ -767,12 +818,14 @@ export function buildVoiceModelPack(opts: {
       let file = phrasePath;
       let kind: VoicePackUnitKind = "word";
 
+      let needsSlice = false;
       if (sliceWavToFile(clip.filePath, outFile, startMs, endMs)) {
         file = outFile;
       } else {
-        // Non-WAV, tiny, or truncated crumb: keep phrase span as fragment.
+        // Keep phrase file but mark needsSlice — never play whole WAV as word (V5).
         kind = "fragment";
         file = phrasePath;
+        needsSlice = true;
         try {
           if (fs.existsSync(outFile)) fs.unlinkSync(outFile);
         } catch {
@@ -799,6 +852,7 @@ export function buildVoiceModelPack(opts: {
         startMs,
         endMs,
         sourcePhraseId: clip.phraseId,
+        needsSlice: needsSlice || undefined,
       };
       if (!lexicon[key]) lexicon[key] = [];
       // Prefer real audio: drop provisional placeholders for this key.
