@@ -3086,13 +3086,42 @@ html[data-bg-pattern="hex-mesh"] .atmosphere-grid {
   /* Always above shell chrome / atmosphere — never under a blank layer. */
   position: fixed;
   inset: 0;
-  z-index: 40;
+  /* Above TitleBar / workshop nav / sticky chrome */
+  z-index: 240;
   display: grid;
   place-items: center;
+  padding: 20px;
+  overflow: auto;
+  overscroll-behavior: contain;
   background: rgba(0, 0, 0, 0.72);
   animation: fade-in 160ms var(--ease-out);
   -webkit-app-region: no-drag;
   app-region: no-drag;
+  /* Kill pointer events to the app while the backdrop is up */
+  touch-action: none;
+}
+
+/* Modal open: freeze every in-app scroller so the dialog cannot ride the page */
+html.mira-modal-open,
+html.mira-modal-open body {
+  overflow: hidden !important;
+}
+
+html.mira-modal-open .settings-layout > .panel.stack,
+html.mira-modal-open .workspace-body > .stack,
+html.mira-modal-open .workspace-body > .workshop-layout,
+html.mira-modal-open .workspace-body > .page-stack,
+html.mira-modal-open .workspace-body > .settings-layout {
+  overflow: hidden !important;
+  overscroll-behavior: none;
+}
+
+html.mira-modal-open .app-shell {
+  pointer-events: none;
+}
+
+html.mira-modal-open .modal-backdrop {
+  pointer-events: auto;
 }
 
 .modal {
@@ -4530,32 +4559,39 @@ select:disabled {
 }
 
 .catalog-panel .catalog-sort-controls {
-  display: grid;
-  grid-template-columns: minmax(160px, 220px) auto;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  width: max-content;
-  max-width: 100%;
+  width: 100%;
+  max-width: min(100%, 720px);
+  justify-content: flex-end;
 }
 
 .catalog-panel .catalog-sort-controls .theme-select {
-  width: 100%;
-  min-width: 0;
-  max-width: none;
+  flex: 1 1 160px;
+  width: auto;
+  min-width: 140px;
+  max-width: 220px;
 }
 
 .catalog-panel .catalog-sort-controls .btn {
-  justify-self: start;
+  flex: 0 0 auto;
   white-space: nowrap;
-  /* Match ThemeSelect trigger height so «+ Создать» sits flush with the field. */
+  /* Match ThemeSelect trigger height so actions sit flush with the field. */
   padding-top: 12px;
   padding-bottom: 12px;
 }
 
-@media (max-width: 520px) {
+@media (max-width: 720px) {
   .catalog-panel .catalog-sort-controls {
-    grid-template-columns: minmax(0, 1fr) auto;
-    width: 100%;
+    justify-content: stretch;
+    max-width: 100%;
+  }
+
+  .catalog-panel .catalog-sort-controls .theme-select {
+    flex: 1 1 100%;
+    max-width: none;
   }
 }
 
@@ -6786,18 +6822,24 @@ body.mira-update-hud-root #root {
 }
 
 .paths-card-actions {
+  display: flex;
   margin-top: auto;
-  gap: 8px;
-  flex-wrap: nowrap;
+  gap: 6px;
+  flex-wrap: wrap;
   padding-top: 2px;
+  align-items: stretch;
 }
 
 .paths-card-actions .btn {
-  flex: 1 1 0;
+  flex: 1 1 calc(50% - 6px);
   justify-content: center;
   min-width: 0;
   padding-inline: 10px;
   font-size: 0.82rem;
+}
+
+.paths-card-actions .paths-delete-btn {
+  flex: 1 1 calc(50% - 6px);
 }
 
 .paths-open-btn {
@@ -6816,7 +6858,8 @@ body.mira-update-hud-root #root {
 }
 
 .paths-delete-btn {
-  flex: 0 0 auto;
+  /* Keep delete visible; sizing comes from .paths-card-actions .btn */
+  color: color-mix(in srgb, var(--danger) 88%, var(--text));
 }
 
 .paths-kind-toggle {
