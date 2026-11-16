@@ -13,7 +13,8 @@
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`, `WIP` |
 | Дорожная карта | Must + future F* закрыты (partial→done stubs where noted) |
 
-**Сейчас:** **0.1.34** релиз (Win+mac вместе). Разработка → **`develop`**.
+**Сейчас:** **0.1.34** релиз (Win+mac вместе). Разработка → **`develop`**.  
+**Голос:** аудит 2026-11-16 — речь кастомного голоса системно неразборчива; см. `docs/VOICE-AUDIT.md` (V1–V19). Починка ещё не влита.
 
 
 ## Решения
@@ -22,6 +23,7 @@
 
 | Дата | Решение | Почему |
 |------|---------|--------|
+| 2026-11-16 | **Аудит голоса → VOICE-AUDIT.md** | TokenStore не драйвит синтез; vocoder Hann=hop; downsampleMel портит targets; stitch игнорит start/endMs; GL по ZCR. Чинить по P0 V1–V6 |
 | 2026-11-14 | **Ветки: develop / main** | Разработка на `develop`; в `main` только актуальный релиз; `.exe` не в git — GitHub Releases + `latest.yml`; см. `docs/BRANCHING.md` |
 | 2026-11-14 | **Релиз = Windows + macOS всегда** | Один тег `v*` → оба OS в одном GitHub Release; запрет отдельных OS-only релизов; gate `release-all` |
 | 2026-11-16 | **Релиз 0.1.34** (`v0.1.34`) | Разборчивый speak (unit-stitch + vocode); честный % ОЗУ; темы Carbon Mist / Silicon Valley / Ember Violet; Win+mac; https://github.com/sSamurai58/Mira-AI/releases/tag/v0.1.34 |
@@ -197,6 +199,7 @@
 | 2026-11-14 | Релиз **0.1.15** (`v0.1.15`) — paths-cards Integrations/API/Skills/Protocols, Terminal, notify prefs |
 | 2026-11-14 | Релиз **0.1.16** (`v0.1.16`) — protocol command sequences, settings panels, HUD sounds, chat UX |
 | 2026-11-14 | Релиз **0.1.17** (`v0.1.17`) — update HUD always-on-top, mic picker/spectrum, protocol steps, chat/composer polish |
+| 2026-11-16 | Аудит голоса: `docs/VOICE-AUDIT.md` (V1–V19); кастомный TTS системно неразборчив |
 
 ---
 
