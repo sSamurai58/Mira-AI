@@ -285,8 +285,28 @@ export type VocoderTrainResult = {
   initialL1: number;
 };
 
+function resampleMonoLinear(
+  samples: Float32Array,
+  fromRate: number,
+  toRate: number,
+): Float32Array {
+  if (fromRate === toRate || samples.length < 2) return samples;
+  const ratio = toRate / Math.max(1, fromRate);
+  const n = Math.max(1, Math.round(samples.length * ratio));
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = i / ratio;
+    const i0 = Math.floor(x);
+    const i1 = Math.min(samples.length - 1, i0 + 1);
+    const t = x - i0;
+    out[i] = samples[i0]! * (1 - t) + samples[i1]! * t;
+  }
+  return out;
+}
+
 /**
  * Train neural vocoder to match PCM from mel frames (Adam / L1).
+ * PCM is resampled to mel.sampleRate so hop-length targets match infer.
  */
 export function trainNeuralVocoder(
   voc: NeuralVocoder,
@@ -296,6 +316,7 @@ export function trainNeuralVocoder(
 ): VocoderTrainResult {
   const pcm = readPcmMonoNormalized(wavPath);
   if (!pcm) return { steps: 0, finalL1: 1, initialL1: 1 };
+  const wave = resampleMonoLinear(pcm.samples, pcm.sampleRate, mel.sampleRate);
   const hop = voc.hop;
   const steps = opts?.steps ?? 40;
   const adam = createAdam(opts?.lr ?? 0.012);
@@ -316,7 +337,7 @@ export function trainNeuralVocoder(
     let loss = 0;
     let count = 0;
     // Subsample frames for speed
-    const stride = Math.max(1, Math.floor(mel.frameCount / 24));
+    const stride = Math.max(1, Math.floor(mel.frameCount / 32));
     for (let f = 0; f < mel.frameCount; f += stride) {
       const melFrame = new Float64Array(MEL_N_MELS);
       for (let m = 0; m < MEL_N_MELS; m++) {
@@ -324,16 +345,12 @@ export function trainNeuralVocoder(
       }
       const { samples, h, pre } = vocoderFrame(voc, melFrame);
       const start = Math.min(
-        pcm.samples.length - hop,
-        Math.floor((f * mel.hopLength * pcm.sampleRate) / mel.sampleRate),
+        Math.max(0, wave.length - hop),
+        f * mel.hopLength,
       );
-      const safeStart = Math.max(0, start);
       const dSamples = new Float64Array(hop);
       for (let i = 0; i < hop; i++) {
-        const tgt =
-          safeStart + i < pcm.samples.length
-            ? pcm.samples[safeStart + i]!
-            : 0;
+        const tgt = start + i < wave.length ? wave[start + i]! : 0;
         const diff = samples[i]! - tgt;
         loss += Math.abs(diff);
         dSamples[i] = diff === 0 ? 0 : diff > 0 ? 1 / hop : -1 / hop;
