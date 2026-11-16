@@ -76,7 +76,8 @@ jobs:
           set -euo pipefail
           VER="${{ steps.target.outputs.ver }}"
           npm run build:web
-          node scripts/android-icons.mjs
+          # icons already committed in android/app/src/main/res/mipmap-*
+          # node scripts/android-icons.mjs  # needs Pillow; skip on CI
           npx cap sync android
           cd android
           chmod +x gradlew
