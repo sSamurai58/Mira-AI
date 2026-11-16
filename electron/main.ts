@@ -549,6 +549,16 @@ app.whenReady().then(async () => {
   }
 
   try {
+    // Windows: clear update lock, remember Mira.exe path, retarget shortcuts
+    // to userData launcher so mid-install clicks show «Мира обновляется».
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { bootUpdateGate } = require("./updateGate") as typeof import("./updateGate");
+    bootUpdateGate();
+  } catch (err) {
+    console.error("[mira] update gate boot failed", err);
+  }
+
+  try {
     const prefs = loadNotifyPrefs();
     syncTrayFromPrefs();
     applyLoginItem(prefs.startWithOs);

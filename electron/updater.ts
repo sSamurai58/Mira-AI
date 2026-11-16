@@ -444,6 +444,15 @@ export async function downloadUpdate(): Promise<UpdateStatus> {
  */
 function prepareForUpdateInstall(): void {
   try {
+    // Windows: lock + retarget shortcuts + «Мира обновляется» window so a
+    // mid-install click does not hit the broken-shortcut shell dialog.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const gate = require("./updateGate") as typeof import("./updateGate");
+    gate.beginUpdateGate();
+  } catch {
+    /* optional */
+  }
+  try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const tray = require("./tray") as typeof import("./tray");
     tray.setAllowQuit(true);
