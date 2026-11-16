@@ -490,7 +490,14 @@ async function tryNeuralPhraseBuffer(
     const buf = await decodeClip(ctx, neural.wavPath, decodeCache);
     if (!isCurrent()) return null;
     if (!audioBufferSoundsLikeNeuralSynth(buf)) return null;
-    const shaped = applyVoiceFx(ctx, buf, getVoiceSettings());
+    // Neural already baked speed/pause into mel frame count — do not time-scale
+    // again (double resample = smear / chipmunk on Griffin-Lim).
+    const vs = getVoiceSettings();
+    const shaped = applyVoiceFx(ctx, buf, {
+      ...vs,
+      speed: 1,
+      pauseScale: 1,
+    });
     const detail = neural.cached
       ? "Нейро-синтез (кэш)"
       : neural.detail || "Нейро-синтез (encoder→decoder→vocoder)";

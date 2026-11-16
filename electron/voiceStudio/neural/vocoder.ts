@@ -69,9 +69,8 @@ export function loadVocoder(data: SerializedVocoder): NeuralVocoder {
 }
 
 /**
- * Speech-band post-filter: DC block (~80 Hz) + low-pass (~3.4 kHz).
- * Griffin-Lim residuals are hissy (high ZCR); without this the renderer
- * speech-likeness gate rejects synth and used to fall back to clip stitching.
+ * Mild speech-band tidy: DC block (~70 Hz) + gentle high shelf cut (~7.5 kHz).
+ * Previous 3.4 kHz LPF (applied 3×) made Griffin-Lim sound like telephone noise.
  */
 export function speechBandPostFilter(
   samples: Float32Array,
@@ -80,8 +79,10 @@ export function speechBandPostFilter(
   const out = new Float32Array(samples.length);
   if (!samples.length) return out;
   const dt = 1 / Math.max(1, sampleRate);
-  const hpRc = 1 / (2 * Math.PI * 80);
-  const lpRc = 1 / (2 * Math.PI * 3400);
+  const hpRc = 1 / (2 * Math.PI * 70);
+  // Keep most of the 16 kHz Nyquist band — only tame extreme hiss.
+  const lpHz = Math.min(7500, sampleRate * 0.45);
+  const lpRc = 1 / (2 * Math.PI * lpHz);
   const hpA = hpRc / (hpRc + dt);
   const lpA = dt / (lpRc + dt);
   let hpPrevX = 0;
@@ -107,14 +108,13 @@ export function speechBandPostFilter(
 
 /**
  * Improved multi-iteration reconstruction from mel (better than short Griffin-Lim preview).
- * Uses more iterations + speech-band post-filter (not a muddy one-pole).
+ * Filter is applied once by productionVocode — avoid triple-filtering here.
  */
 export function highQualityReconstructFromMel(
   mel: MelSpectrogram,
   iterations = 24,
 ): Float32Array {
-  const base = griffinLimFromMel(mel, Math.max(12, iterations));
-  return speechBandPostFilter(base, mel.sampleRate);
+  return griffinLimFromMel(mel, Math.max(16, iterations));
 }
 
 /** Neural frame synthesis: mel → hop waveform samples. */
@@ -173,23 +173,20 @@ function hann(n: number): Float32Array {
 }
 
 /**
- * Blend neural vocoder residual with high-quality iterative reconstruction.
- * Production path: neural carries fine detail; HQ base carries phase structure.
+ * Blend neural vocoder with Griffin-Lim base.
+ * Prefer neural when present — GL alone is the classic “electronic robot” timbre.
+ * Single post-filter pass (no triple 3.4 kHz squash).
  */
 export function productionVocode(
   voc: NeuralVocoder | null,
   mel: MelSpectrogram,
   opts?: { neuralBlend?: number },
 ): Float32Array {
-  // More Griffin-Lim iterations → stabler phase; neural residual is detail only.
-  const hq = highQualityReconstructFromMel(mel, 28);
-  if (!voc) return hq;
-  const neural = speechBandPostFilter(
-    vocoderSynthesize(voc, mel),
-    mel.sampleRate,
-  );
-  // Cap neural blend — residual MLP is noisy; HQ carries intelligibility.
-  const blend = Math.min(0.45, opts?.neuralBlend ?? 0.35);
+  const hq = highQualityReconstructFromMel(mel, 36);
+  if (!voc) return speechBandPostFilter(hq, mel.sampleRate);
+  const neural = vocoderSynthesize(voc, mel);
+  // Allow studio-quality blend up to ~0.85 (was hard-capped at 0.45 → mostly GL).
+  const blend = Math.min(0.85, Math.max(0.35, opts?.neuralBlend ?? 0.7));
   const n = Math.min(hq.length, neural.length);
   const mixed = new Float32Array(Math.max(hq.length, neural.length));
   for (let i = 0; i < n; i++) {
