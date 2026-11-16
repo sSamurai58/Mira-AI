@@ -15,6 +15,18 @@ export type MiraChangelogEntry = {
 
 export const MIRA_CHANGELOG: MiraChangelogEntry[] = [
   {
+    version: "0.1.38",
+    date: "16.11.2026",
+    summary:
+      "Планшет: обновления APK в Настройках + боковой nav как на десктопе.",
+    bullets: [
+      "Android/Capacitor: реальная versionName вместо 0.0.2-demo / browser-demo",
+      "Проверка GitHub Releases на Mira-*-android.apk, скачать/установить APK",
+      "Electron updater без изменений (desktop)",
+      "Tablet side nav / dialog full width (из 0.1.37+)",
+    ],
+  },
+  {
     version: "0.1.37",
     date: "16.11.2026",
     summary:

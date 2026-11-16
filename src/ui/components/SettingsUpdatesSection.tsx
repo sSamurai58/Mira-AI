@@ -4,6 +4,14 @@ import {
   MIRA_CHANGELOG,
   normalizeMiraVersion,
 } from "../updateChangelog";
+import {
+  checkAndroidUpdates,
+  downloadAndroidUpdate,
+  getAndroidUpdateStatus,
+  installAndroidUpdate,
+  isAndroidUpdaterActive,
+  openAndroidReleasesPage,
+} from "../androidUpdater";
 import { StubBadge } from "./StubBadge";
 import { IntegCard } from "./SettingsFormBits";
 
@@ -12,11 +20,11 @@ const CHANGELOG_PREVIEW_COUNT = 5;
 
 const DEMO_STATUS: MiraUpdateStatus = {
   channel: "idle",
-  currentVersion: "0.0.2-demo",
+  currentVersion: APP_VERSION,
   availableVersion: null,
   progress: null,
   detail:
-    "Browser-demo: обновления работают в установленном Electron-приложении через GitHub Releases.",
+    "Browser-demo: обновления работают в установленном Electron-приложении или в Android APK с GitHub Releases.",
   canCheck: false,
   canDownload: false,
   canInstall: false,
@@ -29,14 +37,37 @@ export function SettingsUpdatesSection() {
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [changelogExpanded, setChangelogExpanded] = useState(false);
+  const [androidMode, setAndroidMode] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     let unsub: (() => void) | undefined;
 
     async function boot() {
+      if (isAndroidUpdaterActive()) {
+        setAndroidMode(true);
+        try {
+          const st = await getAndroidUpdateStatus();
+          if (!cancelled) setStatus(st);
+        } catch {
+          if (!cancelled) {
+            setStatus({
+              ...DEMO_STATUS,
+              currentVersion: APP_VERSION,
+              packaged: true,
+              canCheck: true,
+              detail: "Android: не удалось получить статус обновлений",
+            });
+          }
+        }
+        return;
+      }
+
       if (!window.mira?.getUpdateStatus) {
-        setStatus(DEMO_STATUS);
+        setStatus({
+          ...DEMO_STATUS,
+          currentVersion: APP_VERSION,
+        });
         return;
       }
       try {
@@ -46,6 +77,7 @@ export function SettingsUpdatesSection() {
         if (!cancelled) {
           setStatus({
             ...DEMO_STATUS,
+            currentVersion: APP_VERSION,
             detail: "Не удалось получить статус обновлений",
           });
         }
@@ -63,10 +95,16 @@ export function SettingsUpdatesSection() {
   }, []);
 
   async function check() {
-    if (!window.mira?.checkForUpdates) return;
     setBusy("check");
     setNote(null);
     try {
+      if (androidMode) {
+        const st = await checkAndroidUpdates();
+        setStatus(st);
+        setNote(st.detail);
+        return;
+      }
+      if (!window.mira?.checkForUpdates) return;
       const st = await window.mira.checkForUpdates();
       setStatus(st);
       setNote(st.detail);
@@ -78,10 +116,16 @@ export function SettingsUpdatesSection() {
   }
 
   async function download() {
-    if (!window.mira?.downloadUpdate) return;
     setBusy("download");
     setNote(null);
     try {
+      if (androidMode) {
+        const st = await downloadAndroidUpdate();
+        setStatus(st);
+        setNote(st.detail);
+        return;
+      }
+      if (!window.mira?.downloadUpdate) return;
       const st = await window.mira.downloadUpdate();
       setStatus(st);
       setNote(st.detail);
@@ -93,10 +137,16 @@ export function SettingsUpdatesSection() {
   }
 
   async function install() {
-    if (!window.mira?.quitAndInstall) return;
     setBusy("install");
     setNote(null);
     try {
+      if (androidMode) {
+        const res = await installAndroidUpdate();
+        setStatus(res.status);
+        setNote(res.detail);
+        return;
+      }
+      if (!window.mira?.quitAndInstall) return;
       const res = await window.mira.quitAndInstall();
       setNote(res.detail);
     } catch (err) {
@@ -110,6 +160,11 @@ export function SettingsUpdatesSection() {
     setBusy("releases");
     setNote(null);
     try {
+      if (androidMode) {
+        const res = await openAndroidReleasesPage();
+        setNote(res.detail);
+        return;
+      }
       if (window.mira?.openReleasesPage) {
         const res = await window.mira.openReleasesPage();
         setNote(res.detail);
@@ -134,15 +189,46 @@ export function SettingsUpdatesSection() {
     error: "нет связи / ошибка",
   };
 
-  // Badge must follow product build version (APP_VERSION), not demo updater stub.
+  // Badge must follow product build version (APP_VERSION / native versionName).
   const currentNorm =
-    normalizeMiraVersion(APP_VERSION) ||
-    normalizeMiraVersion(status.currentVersion);
+    normalizeMiraVersion(status.currentVersion) ||
+    normalizeMiraVersion(APP_VERSION);
 
   const changelogHasMore = MIRA_CHANGELOG.length > CHANGELOG_PREVIEW_COUNT;
   const visibleChangelog = changelogExpanded
     ? MIRA_CHANGELOG
     : MIRA_CHANGELOG.slice(0, CHANGELOG_PREVIEW_COUNT);
+
+  const intro = androidMode
+    ? "Релизы с GitHub. На планшете/Android Mira проверяет asset Mira-*-android.apk и открывает установку APK."
+    : "Релизы с GitHub. После скачивания установка проходит тихо при перезапуске (без мастера NSIS). Можно нажать «Обновить и перезапустить» или просто закрыть Mira — обновление применится само.";
+
+  const kicker = androidMode ? "Capacitor Android" : "electron-updater";
+  const cardTitle = androidMode ? "GitHub Releases · APK" : "GitHub Releases";
+  const purpose = androidMode
+    ? "Проверка новой версии APK и установка поверх текущей сборки."
+    : "Проверка, скачивание и установка новой версии без ручной переустановки.";
+
+  const howto = androidMode ? (
+    <ol>
+      <li>«Проверить обновления» — ищем свежий Mira-*-android.apk.</li>
+      <li>«Скачать APK» / «Установить APK» — открываем файл для установки.</li>
+      <li>
+        Разрешите установку из этого источника, если Android спросит.
+      </li>
+    </ol>
+  ) : (
+    <ol>
+      <li>«Проверить обновления» → «Скачать».</li>
+      <li>
+        «Обновить и перезапустить» — тихая установка и запуск новой версии.
+      </li>
+      <li>
+        Или просто закройте Mira: обновление встанет при выходе, без окон
+        установщика.
+      </li>
+    </ol>
+  );
 
   return (
     <>
@@ -151,28 +237,14 @@ export function SettingsUpdatesSection() {
         <StubBadge label="RELEASE" />
       </div>
       <p className="muted" style={{ margin: 0 }}>
-        Релизы с GitHub. После скачивания установка проходит тихо при
-        перезапуске (без мастера NSIS). Можно нажать «Обновить и перезапустить»
-        или просто закрыть Mira — обновление применится само.
+        {intro}
       </p>
 
       <IntegCard
-        kicker="electron-updater"
-        title="GitHub Releases"
-        purpose="Проверка, скачивание и установка новой версии без ручной переустановки."
-        howto={
-          <ol>
-            <li>«Проверить обновления» → «Скачать».</li>
-            <li>
-              «Обновить и перезапустить» — тихая установка и запуск новой
-              версии.
-            </li>
-            <li>
-              Или просто закройте Mira: обновление встанет при выходе, без
-              окон установщика.
-            </li>
-          </ol>
-        }
+        kicker={kicker}
+        title={cardTitle}
+        purpose={purpose}
+        howto={howto}
         footer={
           <div className="integ-actions">
             <button
@@ -189,7 +261,11 @@ export function SettingsUpdatesSection() {
               disabled={busy !== null || !status.canDownload}
               onClick={() => void download()}
             >
-              {busy === "download" ? "Скачивание…" : "Скачать"}
+              {busy === "download"
+                ? "Скачивание…"
+                : androidMode
+                  ? "Скачать APK"
+                  : "Скачать"}
             </button>
             <button
               type="button"
@@ -197,7 +273,13 @@ export function SettingsUpdatesSection() {
               disabled={busy !== null || !status.canInstall}
               onClick={() => void install()}
             >
-              {busy === "install" ? "Перезапуск…" : "Обновить и перезапустить"}
+              {busy === "install"
+                ? androidMode
+                  ? "Открываю…"
+                  : "Перезапуск…"
+                : androidMode
+                  ? "Установить APK"
+                  : "Обновить и перезапустить"}
             </button>
             <button
               type="button"
@@ -247,16 +329,24 @@ export function SettingsUpdatesSection() {
             <div className="update-progress">
               <div
                 className="update-progress-bar"
-                style={{ width: `${Math.max(0, Math.min(100, status.progress))}%` }}
+                style={{
+                  width: `${Math.max(0, Math.min(100, status.progress))}%`,
+                }}
               />
             </div>
             <span className="settings-field-hint">{status.progress}%</span>
           </div>
         ) : null}
-        {!status.packaged ? (
+        {!status.packaged && !androidMode ? (
           <p className="integ-banner">
             Сейчас не packaged-сборка. Кнопки активируются после `npm run pack` /
-            установки Mira с GitHub Releases.
+            установки Mira с GitHub Releases (Desktop) или установки Android APK.
+          </p>
+        ) : null}
+        {androidMode ? (
+          <p className="integ-banner">
+            Android APK: версия из package / versionName. Обновление — новый
+            Mira-*-android.apk из GitHub Releases.
           </p>
         ) : null}
       </IntegCard>
