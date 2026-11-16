@@ -81,13 +81,21 @@ export function buildProsodyPlan(
   };
 }
 
-/** Serialize prosody as interleaved float32 [dur, f0, energy] × N */
+const PROSODY_MAGIC = 0x4d505232; // "MPR2"
+
+/** Serialize prosody v2: magic + globals + [dur, f0, energy] × N (V16). */
 export function encodeProsodyBinary(plan: ProsodyPlan): Buffer {
   const n = plan.frames.length;
-  const buf = Buffer.alloc(4 + n * 12);
-  buf.writeUInt32LE(n, 0);
+  const header = 4 + 4 + 16; // magic, n, 4×float globals
+  const buf = Buffer.alloc(header + n * 12);
+  buf.writeUInt32LE(PROSODY_MAGIC, 0);
+  buf.writeUInt32LE(n, 4);
+  buf.writeFloatLE(plan.globalSpeed, 8);
+  buf.writeFloatLE(plan.globalPauseScale, 12);
+  buf.writeFloatLE(plan.globalEnergy, 16);
+  buf.writeFloatLE(plan.seed ?? 0, 20);
   for (let i = 0; i < n; i++) {
-    const o = 4 + i * 12;
+    const o = header + i * 12;
     const f = plan.frames[i]!;
     buf.writeFloatLE(f.dur, o);
     buf.writeFloatLE(f.f0Hz, o + 4);
@@ -98,6 +106,23 @@ export function encodeProsodyBinary(plan: ProsodyPlan): Buffer {
 
 export function decodeProsodyBinary(buf: Buffer): ProsodyFrame[] {
   if (buf.length < 4) return [];
+  const magic = buf.readUInt32LE(0);
+  if (magic === PROSODY_MAGIC) {
+    const n = buf.readUInt32LE(4);
+    const header = 24;
+    const frames: ProsodyFrame[] = [];
+    for (let i = 0; i < n; i++) {
+      const o = header + i * 12;
+      if (o + 12 > buf.length) break;
+      frames.push({
+        dur: buf.readFloatLE(o),
+        f0Hz: buf.readFloatLE(o + 4),
+        energyDb: buf.readFloatLE(o + 8),
+      });
+    }
+    return frames;
+  }
+  // Legacy v1: bare n + frames (no globals).
   const n = buf.readUInt32LE(0);
   const frames: ProsodyFrame[] = [];
   for (let i = 0; i < n; i++) {
@@ -110,4 +135,23 @@ export function decodeProsodyBinary(buf: Buffer): ProsodyFrame[] {
     });
   }
   return frames;
+}
+
+/** Decode v2 globals when present; defaults otherwise. */
+export function decodeProsodyGlobals(buf: Buffer): {
+  globalSpeed: number;
+  globalPauseScale: number;
+  globalEnergy: number;
+  seed?: number;
+} {
+  if (buf.length >= 24 && buf.readUInt32LE(0) === PROSODY_MAGIC) {
+    const seed = buf.readFloatLE(20);
+    return {
+      globalSpeed: buf.readFloatLE(8),
+      globalPauseScale: buf.readFloatLE(12),
+      globalEnergy: buf.readFloatLE(16),
+      seed: seed !== 0 ? seed : undefined,
+    };
+  }
+  return { globalSpeed: 1, globalPauseScale: 1, globalEnergy: 1 };
 }

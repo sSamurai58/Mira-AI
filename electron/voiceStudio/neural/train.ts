@@ -118,21 +118,37 @@ function durationPenalty(
   return Math.min(0.6, gap * 0.8);
 }
 
-function downsampleMel(mel: MelSpectrogram, maxFrames: number): MelSpectrogram {
-  if (mel.frameCount <= maxFrames) return mel;
-  const step = mel.frameCount / maxFrames;
-  const frames = new Float32Array(maxFrames * mel.nMels);
-  for (let f = 0; f < maxFrames; f++) {
-    const src = Math.min(mel.frameCount - 1, Math.floor(f * step));
-    for (let m = 0; m < mel.nMels; m++) {
-      frames[f * mel.nMels + m] = mel.frames[src * mel.nMels + m]!;
-    }
+/**
+ * Contiguous time crop (V3/V4) — preserves hop timeline.
+ * Global downsampleMel scrambled mel↔PCM (frame f vs pcm at f*hop).
+ */
+function cropMelWindow(
+  mel: MelSpectrogram,
+  maxFrames: number,
+  startFrame?: number,
+): { mel: MelSpectrogram; srcFrameOffset: number } {
+  if (mel.frameCount <= maxFrames) {
+    return { mel, srcFrameOffset: 0 };
   }
+  const maxStart = mel.frameCount - maxFrames;
+  const start =
+    startFrame != null
+      ? Math.max(0, Math.min(maxStart, startFrame))
+      : Math.floor(Math.random() * (maxStart + 1));
+  const frames = new Float32Array(maxFrames * mel.nMels);
+  frames.set(
+    mel.frames.subarray(start * mel.nMels, (start + maxFrames) * mel.nMels),
+  );
+  const hop = mel.hopLength || NEURAL_HOP;
+  const durationMs = (maxFrames * hop) / Math.max(1, mel.sampleRate) * 1000;
   return {
-    ...mel,
-    frames,
-    frameCount: maxFrames,
-    durationMs: mel.durationMs,
+    mel: {
+      ...mel,
+      frames,
+      frameCount: maxFrames,
+      durationMs,
+    },
+    srcFrameOffset: start,
   };
 }
 
@@ -199,6 +215,7 @@ export function runNeuralMelTrain(
     {
       mel: MelSpectrogram;
       trainMel: MelSpectrogram;
+      trainSrcOffset: number;
       summary: MelSummary;
       phraseText: string;
       filePath: string;
@@ -208,12 +225,13 @@ export function runNeuralMelTrain(
   for (const clip of workClips) {
     const mel = extractNeuralTrainMel(clip.filePath);
     if (!mel) continue;
-    // Encoder/decoder TF still uses short windows; vocoder trains on fuller mel.
-    const trainMel = downsampleMel(mel, 96);
+    // Contiguous ≤96-frame crop (V4) — same hop timeline as infer.
+    const { mel: trainMel, srcFrameOffset } = cropMelWindow(mel, 96);
     const summary = melToSummary(mel);
     targets.set(clip.clipId, {
       mel,
       trainMel,
+      trainSrcOffset: srcFrameOffset,
       summary,
       phraseText: clip.phraseText,
       filePath: clip.filePath,
@@ -379,21 +397,19 @@ export function runNeuralMelTrain(
     }
   }
 
-  // Vocoder on fuller mel (not 64-frame TF crop) + more steps/clips.
+  // Vocoder on contiguous mel crops; PCM indexed by srcFrameOffset (V3).
   let vSteps = 0;
   let vi = 0;
+  let vocoderImproved = false;
   for (const entry of targets.values()) {
     if (vi >= 8) break;
-    const vocMel =
-      entry.mel.frameCount > 220
-        ? downsampleMel(entry.mel, 220)
-        : entry.mel;
-    // Prefer 16 kHz resampled preview WAV if original SR differs — train
-    // against the same hop geometry as vocoder.synthesize.
+    const { mel: vocMel, srcFrameOffset } = cropMelWindow(entry.mel, 220);
     const r = trainNeuralVocoder(vocoder, vocMel, entry.filePath, {
       steps: 80,
       lr: 0.012,
+      srcFrameOffset,
     });
+    if (r.finalL1 < r.initialL1) vocoderImproved = true;
     vSteps += r.steps;
     vi += 1;
   }
@@ -418,22 +434,28 @@ export function runNeuralMelTrain(
   const finalLoss = losses[losses.length - 1]?.loss ?? initialLoss;
   const improved = finalLoss <= initialLoss + 1e-6;
 
-  // Save neural weights — include SR/hop so infer matches train geometry.
+  // Save neural weights — weightsFormat 2 = post V1–V4 geometry (V14).
   const wPath = path.join(packDir, "neural-weights.json");
   fs.writeFileSync(
     wPath,
     JSON.stringify(
       {
         version: 1,
+        weightsFormat: 2,
         method: NEURAL_METHOD,
         backend: accel.activeBackend,
         cudaAvailable: accel.cudaAvailable,
         accelDetail: accel.detail,
         sampleRate: NEURAL_SAMPLE_RATE,
         hopLength: NEURAL_HOP,
+        vocoderReady: vocoderImproved || vocoderSteps > 0,
+        vocoder: {
+          ...serializeVocoder(vocoder),
+          ola: "abut-xfade",
+          hop: NEURAL_HOP,
+        },
         encoder: serializeTextEncoder(encoder),
         decoder: serializeMelDecoder(decoder),
-        vocoder: serializeVocoder(vocoder),
         trainedAt: new Date().toISOString(),
         epochs,
         finalLoss,

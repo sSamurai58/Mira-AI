@@ -41,17 +41,52 @@ function resolveUnitFile(packDir: string, file: string): string | null {
 
 function readWavPcmPart(
   wavPath: string,
+  opts?: { startMs?: number; endMs?: number; needsSlice?: boolean },
 ): { pcm: Buffer; sampleRate: number; channels: number } | null {
   const info = parseWavInfo(wavPath);
   if (!info || info.bitsPerSample !== 16) return null;
   const buf = fs.readFileSync(wavPath);
   if (buf.length < info.dataOffset + info.dataSize) return null;
-  const pcm = Buffer.from(
+  let pcm = Buffer.from(
     buf.buffer,
     buf.byteOffset + info.dataOffset,
     info.dataSize,
   );
-  return { pcm, sampleRate: info.sampleRate, channels: info.channels };
+  const ch = info.channels;
+  const frameBytes = ch * 2;
+  // V5: slice by startMs/endMs when entry points at a full phrase WAV.
+  if (
+    opts?.needsSlice ||
+    (opts?.startMs != null &&
+      opts?.endMs != null &&
+      opts.endMs > opts.startMs &&
+      opts.endMs - opts.startMs < info.durationMs * 0.85)
+  ) {
+    const startMs = Math.max(0, opts.startMs ?? 0);
+    const endMs = Math.max(startMs + 40, opts.endMs ?? info.durationMs);
+    const startF = Math.floor((startMs / 1000) * info.sampleRate);
+    const endF = Math.min(
+      Math.floor(pcm.length / frameBytes),
+      Math.ceil((endMs / 1000) * info.sampleRate),
+    );
+    if (endF > startF + 8) {
+      pcm = pcm.subarray(startF * frameBytes, endF * frameBytes);
+    } else if (opts?.needsSlice) {
+      return null;
+    }
+  }
+  // V18: downmix to mono for stitch.
+  if (ch > 1) {
+    const frames = Math.floor(pcm.length / frameBytes);
+    const mono = Buffer.alloc(frames * 2);
+    for (let f = 0; f < frames; f++) {
+      let s = 0;
+      for (let c = 0; c < ch; c++) s += pcm.readInt16LE((f * ch + c) * 2);
+      mono.writeInt16LE((s / ch) | 0, f * 2);
+    }
+    pcm = mono;
+  }
+  return { pcm, sampleRate: info.sampleRate, channels: 1 };
 }
 
 function pickBestEntry(
@@ -210,18 +245,22 @@ export function synthesizeUnitStitch(
     const key = normalizeLexKey(w);
     const picked = pickBestEntry(pack.lexicon[key], packDir);
     if (picked) {
-      const part = readWavPcmPart(picked.file);
+      const part = readWavPcmPart(picked.file, {
+        startMs: picked.entry.startMs,
+        endMs: picked.entry.endMs,
+        needsSlice: picked.entry.needsSlice,
+      });
       if (part && part.pcm.length >= 64) {
-        targetSr = part.sampleRate;
-        targetCh = part.channels;
+        targetSr = 16000;
+        targetCh = 1;
         parts.push(part);
         covered += 1;
         continue;
       }
     }
-    // Uncovered word → formant fill (intelligible phonemes, not clone).
+    // Uncovered word → formant fill (last resort; coverage gate in V9).
     const fillPath = path.join(fillDir, `f-${wi}-${Date.now().toString(36)}.wav`);
-    writeParametricFillWav(w, fillPath, { sampleRate: targetSr, speed: 1 });
+    writeParametricFillWav(w, fillPath, { sampleRate: 16000, speed: 1 });
     const part = readWavPcmPart(fillPath);
     try {
       fs.unlinkSync(fillPath);
@@ -233,30 +272,13 @@ export function synthesizeUnitStitch(
     filled += 1;
   }
 
-  const coverage = covered / words.length;
-  // Allow stitch when we have real audio for most words, OR full fill for short text.
-  const allowFillOnly = words.length <= 4 && parts.length === words.length;
-  if (
-    parts.length === 0 ||
-    (coverage < minCoverage && !allowFillOnly && covered === 0)
-  ) {
+  const coverage = covered / Math.max(1, words.length);
+  // V9: require real lexicon coverage; do not ship mid-sentence formant robots.
+  if (parts.length === 0 || coverage < minCoverage) {
     return {
       ok: false,
       wavPath: null,
-      detail: `Склейка: покрытие ${(coverage * 100).toFixed(0)}% < ${(minCoverage * 100).toFixed(0)}%`,
-      coverage,
-      words: words.length,
-      covered,
-      usedPhraseExact: false,
-    };
-  }
-  // If coverage is low but we filled gaps, still stitch when ≥1 real unit
-  // or short all-fill utterance.
-  if (coverage < minCoverage && covered === 0 && !allowFillOnly) {
-    return {
-      ok: false,
-      wavPath: null,
-      detail: `Склейка: нет аудио-юнитов (${filled} formant fill)`,
+      detail: `Склейка: покрытие ${(coverage * 100).toFixed(0)}% < ${(minCoverage * 100).toFixed(0)}% (нужно больше записей)`,
       coverage,
       words: words.length,
       covered,

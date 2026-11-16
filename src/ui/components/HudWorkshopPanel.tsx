@@ -118,7 +118,7 @@ export function HudWorkshopPanel() {
       void refreshData();
       void refreshHudOpen();
     });
-    const tick = window.setInterval(() => setNow(Date.now()), 250);
+    const tick = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => {
       cancelled = true;
       unsubPrefs?.();

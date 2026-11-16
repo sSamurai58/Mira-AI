@@ -27,6 +27,10 @@ export type LoadedNeuralPack = {
   vocoder: NeuralVocoder | null;
   sampleRate: number;
   hopLength: number;
+  weightsFormat: number;
+  vocoderReady: boolean;
+  /** False when pack predates V1–V4 geometry — caller should refuse neural. */
+  compatible: boolean;
 };
 
 type PackCacheEntry = {
@@ -49,16 +53,30 @@ export function loadNeuralPack(packDir: string): LoadedNeuralPack | null {
     const raw = JSON.parse(fs.readFileSync(file, "utf8")) as {
       encoder: import("./textEncoder").SerializedTextEncoder;
       decoder: import("./melDecoder").SerializedMelDecoder;
-      vocoder?: import("./vocoder").SerializedVocoder;
+      vocoder?: import("./vocoder").SerializedVocoder & {
+        ola?: string;
+      };
       sampleRate?: number;
       hopLength?: number;
+      weightsFormat?: number;
+      vocoderReady?: boolean;
     };
+    const weightsFormat = raw.weightsFormat ?? 1;
+    const sampleRate = raw.sampleRate ?? 16000;
+    const hopLength = raw.hopLength ?? 160;
+    // V14: format≥2 + 16k/160 required for post-fix neural path.
+    const compatible =
+      weightsFormat >= 2 && sampleRate === 16000 && hopLength === 160;
     const pack: LoadedNeuralPack = {
       encoder: loadTextEncoder(raw.encoder),
       decoder: loadMelDecoder(raw.decoder),
-      vocoder: raw.vocoder ? loadVocoder(raw.vocoder) : null,
-      sampleRate: raw.sampleRate ?? 16000,
-      hopLength: raw.hopLength ?? 160,
+      vocoder:
+        compatible && raw.vocoder ? loadVocoder(raw.vocoder) : null,
+      sampleRate,
+      hopLength,
+      weightsFormat,
+      vocoderReady: Boolean(raw.vocoderReady) && compatible,
+      compatible,
     };
     // Drop other voices so RAM does not accumulate across catalog switches.
     if (!packCache.has(packDir) && packCache.size >= PACK_CACHE_MAX) {
@@ -176,6 +194,10 @@ export function synthesizeNeuralSpeech(
   if (!clean) return null;
   const loaded = loadNeuralPack(packDir);
   if (!loaded) return null;
+  if (!loaded.compatible) {
+    // Stale pack — do not emit 100 Hz buzz / mismatched hop garbage (V14).
+    return null;
+  }
 
   const speed = clamp(opts?.prosody?.speed ?? 1, 0.75, 1.35);
   const pauseScale = clamp(opts?.prosody?.pauseScale ?? 1, 0.75, 1.4);
@@ -203,9 +225,11 @@ export function synthesizeNeuralSpeech(
     loaded.sampleRate,
     loaded.hopLength,
   );
-  // productionVocode picks the cleanest of GL / neural / blend by speechiness.
-  const blend = quality === "studio" ? 0.8 : quality === "fast" ? 0.55 : 0.7;
-  const samples = productionVocode(loaded.vocoder, mel, { neuralBlend: blend });
+  const blend = quality === "studio" ? 0.92 : quality === "fast" ? 0.88 : 0.9;
+  const samples = productionVocode(loaded.vocoder, mel, {
+    neuralBlend: blend,
+    vocoderReady: loaded.vocoderReady || Boolean(loaded.vocoder),
+  });
   scaleSamplesInPlace(samples, energy);
   const outName = opts?.outName ?? `neural-synth-${Date.now().toString(36)}.wav`;
   const outDir = path.join(packDir, "synth");

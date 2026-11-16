@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
+import { useModalLock } from "../hooks/useModalLock";
 import {
   joinSkillFolder,
   sanitizeParentFolder,
@@ -72,6 +73,8 @@ export function CatalogEditModal({
   const [newFolderId, setNewFolderId] = useState("");
   const [folderNote, setFolderNote] = useState("");
   const [extraFolders, setExtraFolders] = useState<string[]>([]);
+
+  useModalLock(open);
 
   useEffect(() => {
     if (open) {

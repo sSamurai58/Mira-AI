@@ -281,7 +281,18 @@ export function serializeTextEncoder(enc: TextEncoder): SerializedTextEncoder {
 
 export function loadTextEncoder(data: SerializedTextEncoder): TextEncoder {
   const enc = createTextEncoder();
-  if (data.emb.length === enc.emb.length) enc.emb.set(data.emb);
+  // V17: never mix random emb with trained proj/out on vocab mismatch.
+  if (data.emb.length !== enc.emb.length) {
+    throw new Error(
+      `textEncoder emb size mismatch: pack ${data.emb.length} vs ${enc.emb.length} — retrain required`,
+    );
+  }
+  if (data.vocabSize != null && data.vocabSize !== VOCAB_SIZE) {
+    throw new Error(
+      `textEncoder vocab mismatch: pack ${data.vocabSize} vs ${VOCAB_SIZE} — retrain required`,
+    );
+  }
+  enc.emb.set(data.emb);
   enc.proj = loadDense(data.proj);
   enc.out = loadDense(data.out);
   return enc;

@@ -170,7 +170,7 @@ export function HudPage() {
       }
     }
     void refresh();
-    const id = window.setInterval(() => void refresh(), 2000);
+    const id = window.setInterval(() => void refresh(), 8_000);
     const unsubTick = window.mira?.onHudTick?.(() => void refresh());
     return () => {
       cancelled = true;
@@ -186,7 +186,7 @@ export function HudPage() {
       if (show("clock")) {
         setClock(formatChatTime(new Date(t).toISOString()));
       }
-    }, 250);
+    }, 1_000);
     return () => window.clearInterval(id);
   }, [widgets.join("|")]);
 

@@ -15,6 +15,19 @@ export type MiraChangelogEntry = {
 
 export const MIRA_CHANGELOG: MiraChangelogEntry[] = [
   {
+    version: "0.1.35",
+    date: "16.11.2026",
+    summary:
+      "Голос V1–V19, автообновление снова открывает Mira, легче rail, Skills/MCP.",
+    bullets: [
+      "Кастомный голос: vocoder без пилы, stitch по start/endMs, coverage≥75%, weightsFormat 2 (нужен retrain)",
+      "После тихой установки Mira открывается; во время update — «Мира обновляется», не ошибка ярлыка",
+      "Home rail: без лагов на hover Ресурсов/Нагрузки; реже опрос метрик",
+      "Skills/MCP: модалка с lock/portal scroll; product-team skill в .cursor/skills",
+      "Windows + macOS одним тегом",
+    ],
+  },
+  {
     version: "0.1.34",
     date: "16.11.2026",
     summary:

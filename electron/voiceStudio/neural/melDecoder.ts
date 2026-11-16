@@ -91,7 +91,16 @@ export function decoderStep(
   prevStop: number,
   querySeed?: Vec,
 ): DecoderStepCache {
-  const query = querySeed ?? prevMel;
+  // V12: query from scaled tanh(prevMel), not raw log-mel (avoids uniform attn).
+  const query =
+    querySeed ??
+    (() => {
+      const q = new Float64Array(prevMel.length);
+      for (let i = 0; i < prevMel.length; i++) {
+        q[i] = Math.tanh(prevMel[i]! / 4);
+      }
+      return q;
+    })();
   const { context, weights } = softAttention(encoderStates, query);
   const input = new Float64Array(ENC_OUT + MEL_N_MELS + 1);
   input.set(context.subarray(0, ENC_OUT), 0);
@@ -101,8 +110,12 @@ export function decoderStep(
   const { y: hPre } = denseForward(dec.in1, input);
   const h = tanhArr(hPre);
   const { y: melPre } = denseForward(dec.outMel, h);
-  // Mel as linear (log-mel space already)
-  const mel = Float64Array.from(melPre);
+  // V12: clamp log-mel to training-ish range (stops GL explosion).
+  const mel = new Float64Array(MEL_N_MELS);
+  for (let m = 0; m < MEL_N_MELS; m++) {
+    const v = melPre[m]!;
+    mel[m] = Math.max(-12, Math.min(2, v));
+  }
   const { y: stopY } = denseForward(dec.stopHead, h);
   const stopLogit = stopY[0]!;
   const stopProb = sigmoid(stopLogit);

@@ -1,6 +1,9 @@
 import { app, shell } from "electron";
 import { autoUpdater } from "electron-updater";
 
+/** True once we handed off to the NSIS/mac installer (avoid re-entry). */
+let installHandedOff = false;
+
 export type UpdateChannel =
   | "idle"
   | "checking"
@@ -260,8 +263,10 @@ export function initUpdater(send: Broadcast): void {
   wired = true;
 
   autoUpdater.autoDownload = false;
-  // After download: install silently on quit (/S). No NSIS wizard.
-  autoUpdater.autoInstallOnAppQuit = true;
+  // electron-updater's built-in on-quit install calls install(true, false) —
+  // silent WITHOUT --force-run, so Mira never relaunches. We install ourselves
+  // via quitAndInstall(true, true) / installDownloadedUpdateOnQuit().
+  autoUpdater.autoInstallOnAppQuit = false;
   autoUpdater.autoRunAppAfterInstall = true;
   // Keep provider path coherent with electron-builder publish.github
   // (latest.yml / latest-linux.yml on GitHub Releases for current versioning).
@@ -328,7 +333,7 @@ export function initUpdater(send: Broadcast): void {
       channel: "downloaded",
       availableVersion: info.version,
       progress: 100,
-      detail: `Версия ${info.version} скачана. Установится тихо при перезапуске — без окна установщика.`,
+      detail: `Версия ${info.version} скачана. Установится тихо и Mira откроется снова.`,
       canDownload: false,
       canInstall: true,
     });
@@ -432,6 +437,43 @@ export async function downloadUpdate(): Promise<UpdateStatus> {
   }
 }
 
+/**
+ * Prepare process to truly exit so the installer can replace files and the
+ * new Mira can take the single-instance lock (tray/closeToTray otherwise
+ * keeps the old process alive → new instance exits immediately).
+ */
+function prepareForUpdateInstall(): void {
+  try {
+    // Windows: lock + retarget shortcuts + «Мира обновляется» window so a
+    // mid-install click does not hit the broken-shortcut shell dialog.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const gate = require("./updateGate") as typeof import("./updateGate");
+    gate.beginUpdateGate();
+  } catch {
+    /* optional */
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const tray = require("./tray") as typeof import("./tray");
+    tray.setAllowQuit(true);
+    tray.destroyTray();
+  } catch {
+    /* tray optional in tests */
+  }
+  try {
+    if (typeof app.releaseSingleInstanceLock === "function") {
+      app.releaseSingleInstanceLock();
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Silent install + relaunch. Always pass isForceRunAfter=true — without
+ * `--force-run` NSIS finishes and Mira stays closed (common "после обновления
+ * не открывается").
+ */
 export function quitAndInstall(): { ok: boolean; detail: string } {
   if (!app.isPackaged) {
     return { ok: false, detail: "Только в установленном приложении" };
@@ -442,9 +484,53 @@ export function quitAndInstall(): { ok: boolean; detail: string } {
       detail: "Нет скачанного обновления. Сначала скачайте.",
     };
   }
-  // isSilent=true → NSIS /S (no wizard); isForceRunAfter=true → relaunch Mira
-  setTimeout(() => autoUpdater.quitAndInstall(true, true), 250);
+  if (installHandedOff) {
+    return { ok: true, detail: "Установка уже запущена…" };
+  }
+  installHandedOff = true;
+  prepareForUpdateInstall();
+  // isSilent=true → NSIS /S; isForceRunAfter=true → --force-run (relaunch)
+  setTimeout(() => {
+    try {
+      autoUpdater.quitAndInstall(true, true);
+    } catch (err) {
+      installHandedOff = false;
+      setStatus({
+        channel: "error",
+        detail: humanizeUpdateError(err),
+        canInstall: true,
+      });
+    }
+  }, 200);
   return { ok: true, detail: "Тихая установка и перезапуск…" };
+}
+
+/**
+ * Called from main `before-quit`: if an update is downloaded, hand off to the
+ * installer with --force-run instead of leaving the user on a closed app.
+ * Returns true when quit should be deferred (installer will quit for us).
+ */
+export function installDownloadedUpdateOnQuit(): boolean {
+  if (!app.isPackaged || installHandedOff) return false;
+  if (status.channel !== "downloaded") return false;
+  installHandedOff = true;
+  prepareForUpdateInstall();
+  try {
+    autoUpdater.quitAndInstall(true, true);
+    return true;
+  } catch (err) {
+    installHandedOff = false;
+    setStatus({
+      channel: "error",
+      detail: humanizeUpdateError(err),
+      canInstall: true,
+    });
+    return false;
+  }
+}
+
+export function isUpdateInstallHandedOff(): boolean {
+  return installHandedOff;
 }
 
 export async function openReleasesPage(): Promise<{ ok: boolean; detail: string }> {

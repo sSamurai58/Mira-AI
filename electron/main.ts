@@ -73,6 +73,7 @@ import {
   downloadUpdate,
   getUpdateStatus,
   initUpdater,
+  installDownloadedUpdateOnQuit,
   openReleasesPage,
   pushUpdateStatus,
   quitAndInstall,
@@ -264,14 +265,18 @@ if (process.env.MIRA_DISABLE_GPU === "1") {
   app.disableHardwareAcceleration();
 }
 
-const gotSingleInstanceLock = app.requestSingleInstanceLock();
-if (!gotSingleInstanceLock) {
-  app.quit();
-} else {
+/**
+ * After NSIS `--force-run` the dying process may still hold the lock briefly.
+ * Retry once so post-update relaunch does not silently `app.quit()`.
+ */
+let gotSingleInstanceLock = app.requestSingleInstanceLock();
+
+function wireSecondInstanceHandler(): void {
   app.on("second-instance", () => {
     // Prefer main shell — never focus overlay HUD / update toast.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { getMainBrowserWindow } = require("./windowRoles") as typeof import("./windowRoles");
+    const { getMainBrowserWindow } =
+      require("./windowRoles") as typeof import("./windowRoles");
     let win = getMainBrowserWindow();
     if (!win) {
       createWindow();
@@ -282,6 +287,25 @@ if (!gotSingleInstanceLock) {
     win.show();
     win.focus();
   });
+}
+
+async function ensureSingleInstanceLock(): Promise<boolean> {
+  if (gotSingleInstanceLock) {
+    wireSecondInstanceHandler();
+    return true;
+  }
+  if (!app.isPackaged) {
+    app.quit();
+    return false;
+  }
+  await new Promise((r) => setTimeout(r, 1600));
+  gotSingleInstanceLock = app.requestSingleInstanceLock();
+  if (!gotSingleInstanceLock) {
+    app.quit();
+    return false;
+  }
+  wireSecondInstanceHandler();
+  return true;
 }
 
 
@@ -485,7 +509,9 @@ function broadcast(channel: string, payload: unknown): void {
   }
 }
 
-if (gotSingleInstanceLock) app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  if (!(await ensureSingleInstanceLock())) return;
+
   // Make window appear even if later init throws (common on Windows install).
   let bootError: string | null = null;
   try {
@@ -520,6 +546,16 @@ if (gotSingleInstanceLock) app.whenReady().then(() => {
     initUpdater(broadcast);
   } catch (err) {
     console.error("[mira] updater init failed", err);
+  }
+
+  try {
+    // Windows: clear update lock, remember Mira.exe path, retarget shortcuts
+    // to userData launcher so mid-install clicks show «Мира обновляется».
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { bootUpdateGate } = require("./updateGate") as typeof import("./updateGate");
+    bootUpdateGate();
+  } catch (err) {
+    console.error("[mira] update gate boot failed", err);
   }
 
   try {
@@ -1750,5 +1786,8 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", () => {
   setAllowQuit(true);
+  // If an update is waiting, install with --force-run so Mira relaunches.
+  // electron-updater's autoInstallOnAppQuit uses forceRun=false (app stays closed).
+  void installDownloadedUpdateOnQuit();
 });
 

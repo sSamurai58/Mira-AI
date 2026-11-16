@@ -162,29 +162,6 @@ export function highQualityReconstructFromMel(
   return griffinLimFromMel(mel, Math.max(24, iterations));
 }
 
-/** Rough “how speech-like” score — lower HF chaos is better. */
-function speechinessScore(samples: Float32Array, sampleRate: number): number {
-  if (samples.length < 32) return -1e9;
-  let zc = 0;
-  for (let i = 1; i < samples.length; i++) {
-    if ((samples[i - 1]! >= 0) !== (samples[i]! >= 0)) zc += 1;
-  }
-  const zcr = zc / (samples.length / Math.max(1, sampleRate));
-  let energy = 0;
-  let hf = 0;
-  // Cheap HF proxy: |diff| energy vs |sample| energy.
-  for (let i = 1; i < samples.length; i++) {
-    const a = Math.abs(samples[i]!);
-    energy += a * a;
-    const d = samples[i]! - samples[i - 1]!;
-    hf += d * d;
-  }
-  const tilt = energy > 1e-12 ? hf / energy : 10;
-  // Prefer ~200–900 ZCR/s and moderate spectral tilt.
-  const zcPenalty = Math.abs(zcr - 450) / 450;
-  return -(zcPenalty * 2 + tilt * 0.35);
-}
-
 /** Neural frame synthesis: mel → hop waveform samples. */
 export function vocoderFrame(
   voc: NeuralVocoder,
@@ -196,30 +173,53 @@ export function vocoderFrame(
   return { samples, h, pre };
 }
 
+/** Crossfade width between abutting hop frames (V1: no Hann/w²). */
+const HOP_XFADE = 16;
+
+/**
+ * Place one hop frame into `out` at `start` with a short linear crossfade.
+ * Same placement used at infer (V1) — train targets raw hop PCM (V2).
+ */
+export function placeHopFrame(
+  out: Float32Array,
+  start: number,
+  samples: ArrayLike<number>,
+  hop: number,
+  xfade = HOP_XFADE,
+): void {
+  const n = Math.min(hop, samples.length);
+  const fade = Math.min(xfade, Math.floor(n / 2), start);
+  for (let i = 0; i < n; i++) {
+    const idx = start + i;
+    if (idx < 0 || idx >= out.length) continue;
+    const s = samples[i]!;
+    if (i < fade && start > 0) {
+      const t = i / Math.max(1, fade);
+      out[idx] = out[idx]! * (1 - t) + s * t;
+    } else {
+      out[idx] = s;
+    }
+  }
+}
+
+/**
+ * Mel → waveform. Abutting hops + short crossfade (no Hann of length=hop).
+ * Old path did out+=s*w; out/=w² → edge gain s/w ≈ 100 Hz buzz (V1).
+ */
 export function vocoderSynthesize(
   voc: NeuralVocoder,
   mel: MelSpectrogram,
 ): Float32Array {
   const hop = voc.hop;
-  const outLen = Math.max(hop, (mel.frameCount - 1) * hop + hop);
+  const outLen = Math.max(hop, mel.frameCount * hop);
   const out = new Float32Array(outLen);
-  const norm = new Float32Array(outLen);
-  const win = hann(hop);
   for (let f = 0; f < mel.frameCount; f++) {
     const melFrame = new Float64Array(MEL_N_MELS);
     for (let m = 0; m < MEL_N_MELS; m++) {
       melFrame[m] = mel.frames[f * mel.nMels + m]!;
     }
     const { samples } = vocoderFrame(voc, melFrame);
-    const start = f * hop;
-    for (let i = 0; i < hop; i++) {
-      const w = win[i]!;
-      out[start + i]! += samples[i]! * w;
-      norm[start + i]! += w * w;
-    }
-  }
-  for (let i = 0; i < outLen; i++) {
-    if (norm[i]! > 1e-8) out[i]! /= norm[i]!;
+    placeHopFrame(out, f * hop, samples, hop);
   }
   // Peak normalize
   let peak = 1e-8;
@@ -232,51 +232,54 @@ export function vocoderSynthesize(
   return out;
 }
 
-function hann(n: number): Float32Array {
-  const w = new Float32Array(n);
-  for (let i = 0; i < n; i++) {
-    w[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / Math.max(1, n - 1)));
-  }
-  return w;
+function alignWaveLength(a: Float32Array, b: Float32Array): {
+  a: Float32Array;
+  b: Float32Array;
+  n: number;
+} {
+  const n = Math.min(a.length, b.length);
+  return {
+    a: a.length === n ? a : a.subarray(0, n),
+    b: b.length === n ? b : b.subarray(0, n),
+    n,
+  };
 }
 
 /**
- * Choose the cleaner of neural / Griffin-Lim / light blend.
- * Blind high neuralBlend on a weak MLP + noisy GL often yields HF hiss
- * with envelopes that only *look* like word boundaries.
+ * Neural-primary vocode. Griffin-Lim is fallback only — ZCR "speechiness"
+ * must not pick hissy GL over neural (V8). Lengths aligned before blend (V11).
  */
 export function productionVocode(
   voc: NeuralVocoder | null,
   mel: MelSpectrogram,
-  opts?: { neuralBlend?: number },
+  opts?: { neuralBlend?: number; vocoderReady?: boolean },
 ): Float32Array {
-  const hq = highQualityReconstructFromMel(mel, 40);
-  if (!voc) return speechBandPostFilter(hq, mel.sampleRate);
+  if (!voc) {
+    return speechBandPostFilter(
+      highQualityReconstructFromMel(mel, 40),
+      mel.sampleRate,
+    );
+  }
   const neural = vocoderSynthesize(voc, mel);
-  const blendHint = Math.min(0.9, Math.max(0.2, opts?.neuralBlend ?? 0.75));
-  const n = Math.min(hq.length, neural.length);
-  const mixed = new Float32Array(Math.max(hq.length, neural.length));
-  for (let i = 0; i < n; i++) {
-    mixed[i] = (1 - blendHint) * hq[i]! + blendHint * neural[i]!;
-  }
-  if (hq.length > n) mixed.set(hq.subarray(n), n);
-  else if (neural.length > n) {
-    for (let i = n; i < neural.length; i++) mixed[i] = neural[i]!;
-  }
-
-  const sr = mel.sampleRate;
-  const candidates: Float32Array[] = [hq, neural, mixed];
-  let best = candidates[0]!;
-  let bestScore = speechinessScore(best, sr);
-  for (let i = 1; i < candidates.length; i++) {
-    const c = candidates[i]!;
-    const s = speechinessScore(c, sr);
-    if (s > bestScore) {
-      best = c;
-      bestScore = s;
+  const ready = opts?.vocoderReady !== false;
+  // Prefer neural whenever we have weights; optional light GL mix only.
+  if (ready) {
+    const blendHint = Math.min(0.95, Math.max(0.85, opts?.neuralBlend ?? 0.9));
+    if (blendHint >= 0.99) {
+      return speechBandPostFilter(neural, mel.sampleRate);
     }
+    const hq = highQualityReconstructFromMel(mel, 40);
+    const { a: nWav, b: gWav, n } = alignWaveLength(neural, hq);
+    const mixed = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      mixed[i] = blendHint * nWav[i]! + (1 - blendHint) * gWav[i]!;
+    }
+    return speechBandPostFilter(mixed, mel.sampleRate);
   }
-  return speechBandPostFilter(best, sr);
+  return speechBandPostFilter(
+    highQualityReconstructFromMel(mel, 40),
+    mel.sampleRate,
+  );
 }
 
 export type VocoderTrainResult = {
@@ -306,18 +309,21 @@ function resampleMonoLinear(
 
 /**
  * Train neural vocoder to match PCM from mel frames (Adam / L1).
- * PCM is resampled to mel.sampleRate so hop-length targets match infer.
+ * Targets = raw hop PCM at f*hop — same as placeHopFrame/infer (V2).
+ * `srcFrameOffset` maps crop-local frame index → original mel frame (V3).
  */
 export function trainNeuralVocoder(
   voc: NeuralVocoder,
   mel: MelSpectrogram,
   wavPath: string,
-  opts?: { steps?: number; lr?: number },
+  opts?: { steps?: number; lr?: number; srcFrameOffset?: number },
 ): VocoderTrainResult {
   const pcm = readPcmMonoNormalized(wavPath);
   if (!pcm) return { steps: 0, finalL1: 1, initialL1: 1 };
   const wave = resampleMonoLinear(pcm.samples, pcm.sampleRate, mel.sampleRate);
   const hop = voc.hop;
+  const hopLen = mel.hopLength || hop;
+  const frameOff = Math.max(0, opts?.srcFrameOffset ?? 0);
   const steps = opts?.steps ?? 40;
   const adam = createAdam(opts?.lr ?? 0.012);
   const dNetW = zeros(voc.net.w.length);
@@ -336,7 +342,6 @@ export function trainNeuralVocoder(
     zeroGrad(dOutB);
     let loss = 0;
     let count = 0;
-    // Subsample frames for speed
     const stride = Math.max(1, Math.floor(mel.frameCount / 32));
     for (let f = 0; f < mel.frameCount; f += stride) {
       const melFrame = new Float64Array(MEL_N_MELS);
@@ -344,9 +349,10 @@ export function trainNeuralVocoder(
         melFrame[m] = mel.frames[f * mel.nMels + m]!;
       }
       const { samples, h, pre } = vocoderFrame(voc, melFrame);
+      const srcFrame = frameOff + f;
       const start = Math.min(
         Math.max(0, wave.length - hop),
-        f * mel.hopLength,
+        srcFrame * hopLen,
       );
       const dSamples = new Float64Array(hop);
       for (let i = 0; i < hop; i++) {

@@ -94,20 +94,40 @@ function writePcm16Wav(
   fs.writeFileSync(outPath, Buffer.concat([header, body]));
 }
 
-/** Join chunk WAVs with crossfade (32 ms). */
+/** Join chunk WAVs with crossfade (32 ms), always @ 16 kHz (V6). */
 function joinChunkWavs(wavPaths: string[], outPath: string): boolean {
   if (!wavPaths.length) return false;
   if (wavPaths.length === 1) {
     fs.copyFileSync(wavPaths[0]!, outPath);
     return true;
   }
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { resamplePcmInt16Mono } =
+    require("../modelPack") as typeof import("../modelPack");
   const parts: Int16Array[] = [];
-  let sr = 16000;
+  const sr = 16000;
   for (const p of wavPaths) {
     const info = parseWavInfo(p);
-    if (info) sr = info.sampleRate;
-    const pcm = readWavPcm16Mono(p);
-    if (pcm) parts.push(pcm);
+    if (!info || info.bitsPerSample !== 16) continue;
+    const buf = fs.readFileSync(p);
+    const raw = Buffer.from(
+      buf.buffer,
+      buf.byteOffset + info.dataOffset,
+      info.dataSize,
+    );
+    const mono = resamplePcmInt16Mono(
+      raw,
+      info.sampleRate,
+      sr,
+      info.channels,
+    );
+    parts.push(
+      new Int16Array(
+        mono.pcm.buffer,
+        mono.pcm.byteOffset,
+        mono.pcm.byteLength / 2,
+      ),
+    );
   }
   if (!parts.length) return false;
   const joined = crossfadeJoinInt16(parts, sr, 32);
@@ -155,6 +175,8 @@ export function speakTokenPipeline(opts: PipelineSpeakOpts): PipelineSpeakResult
     };
   }
 
+  // V7 E1: TokenStore is analysis/storage only — does not drive synthesis.
+  // Still persist for studio/debug when asked; speak uses stitch → neural.
   if (opts.storeTokens) {
     try {
       tokenizeAndStoreUtterance({
@@ -167,11 +189,9 @@ export function speakTokenPipeline(opts: PipelineSpeakOpts): PipelineSpeakResult
     }
   }
 
-  // Prefer recorded corpus stitch when coverage is high — tiny neural mel
-  // path is still noisy; unit WAVs are the intelligible voice the user trained.
+  // Prefer recorded corpus stitch when coverage is high (V9: ≥75%).
   const stitch = synthesizeUnitStitch(opts.packDir, norm.text, {
-    // Partial lexicon OK — uncovered words get formant fill (intelligible).
-    minCoverage: 0.35,
+    minCoverage: 0.75,
   });
   if (stitch.ok && stitch.wavPath) {
     const wavPath = putCachedSynthWav(compositeKey, stitch.wavPath);

@@ -1,6 +1,13 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+} from "react";
+import { createPortal } from "react-dom";
 import { StubBadge } from "./StubBadge";
 import { McpBrandIcon } from "./McpBrandIcon";
+import { useModalLock } from "../hooks/useModalLock";
 import {
   MCP_AUTH_LABEL,
   MCP_CONNECTORS,
@@ -278,8 +285,32 @@ function McpConnectorModal(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [c.id]);
 
-  return (
-    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+  useModalLock(true);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const modal = (
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onClick={onClose}
+      onWheel={(e) => {
+        // Never let wheel events bubble to the settings scroller behind.
+        if (!(e.target as Element | null)?.closest?.(".modal")) {
+          e.preventDefault();
+        }
+        e.stopPropagation();
+      }}
+    >
       <div
         className="modal modal-wide mcp-connector-modal"
         role="dialog"
@@ -507,4 +538,7 @@ function McpConnectorModal(props: {
       </div>
     </div>
   );
+
+  if (typeof document === "undefined") return modal;
+  return createPortal(modal, document.body);
 }

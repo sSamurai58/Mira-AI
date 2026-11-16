@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { useModalLock } from "../hooks/useModalLock";
 import { emitActionLog } from "../actionLog";
 import {
   createLocalSkillFolder,
@@ -132,6 +133,7 @@ export function SkillsPanel() {
     busy: boolean;
     note: string;
   } | null>(null);
+  useModalLock(folderDialog != null);
   const [draftsRev, setDraftsRev] = useState(0);
 
   const refresh = useCallback(async () => {
