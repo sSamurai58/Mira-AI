@@ -227,11 +227,6 @@ function GeneralSection() {
   );
   const [dangerous, setDangerous] = useState("");
   const [note, setNote] = useState<string | null>(null);
-  const [profiles, setProfiles] = useState<
-    Array<{ id: string; name: string }>
-  >([]);
-  const [activeProfileId, setActiveProfileId] = useState<string>("");
-  const [newProfileName, setNewProfileName] = useState("");
   const [hudOpen, setHudOpen] = useState(false);
 
   useEffect(() => {
@@ -240,15 +235,6 @@ function GeneralSection() {
       setMode(p.mode);
       setDangerous(p.dangerousList.join(", "));
     });
-    void window.mira.getProfilesSnapshot?.().then((s) => {
-      setProfiles(
-        (s.profiles as Array<{ id: string; name: string }>).map((p) => ({
-          id: p.id,
-          name: p.name,
-        })),
-      );
-      setActiveProfileId(s.activeId);
-    });
     void window.mira.getHudPolicy?.().then((h) => setHudOpen(h.open));
   }, []);
 
@@ -256,11 +242,11 @@ function GeneralSection() {
     <>
       <div className="row">
         <h2 style={{ margin: 0, fontSize: "1.05rem" }}>Общие</h2>
-        <StubBadge label="F8/F10/F12" />
+        <StubBadge label="F8/F12" />
       </div>
       <p className="muted" style={{ margin: 0 }}>
-        F8 язык UI/ASR. F10 профили (ключи только в .env). F12 режим confirm.
-        HUD.
+        F8 язык UI/ASR. F12 режим confirm. HUD. Профили F10 сняты — доступ через
+        Администрирование.
       </p>
 
       <label className="stack">
@@ -326,54 +312,6 @@ function GeneralSection() {
       >
         Сохранить confirm policy
       </button>
-
-      <div className="row">
-        <h3 style={{ margin: 0, fontSize: "0.95rem" }}>Профили (F10)</h3>
-      </div>
-      <label className="stack">
-        <span className="muted">Активный профиль</span>
-        <ThemeSelect
-          aria-label="Активный профиль"
-          value={activeProfileId}
-          options={profiles.map((p) => ({ value: p.id, label: p.name }))}
-          onChange={(id) => {
-            setActiveProfileId(id);
-            if (!window.mira?.setActiveProfile) return;
-            void window.mira.setActiveProfile(id).then(() => {
-              setNote(`Активный профиль → ${id}`);
-            });
-          }}
-        />
-      </label>
-      <div className="row">
-        <input
-          value={newProfileName}
-          onChange={(e) => setNewProfileName(e.target.value)}
-          placeholder="Имя нового профиля"
-        />
-        <button
-          type="button"
-          className="btn"
-          onClick={() => {
-            if (!window.mira?.upsertProfile || !newProfileName.trim()) return;
-            void window.mira
-              .upsertProfile({ name: newProfileName.trim() })
-              .then(async () => {
-                const s = await window.mira!.getProfilesSnapshot();
-                setProfiles(
-                  (s.profiles as Array<{ id: string; name: string }>).map(
-                    (p) => ({ id: p.id, name: p.name }),
-                  ),
-                );
-                setActiveProfileId(s.activeId);
-                setNewProfileName("");
-                setNote("Профиль создан (ключи API не копируются в JSON)");
-              });
-          }}
-        >
-          Добавить
-        </button>
-      </div>
 
       <div className="row">
         <button

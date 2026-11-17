@@ -16,6 +16,7 @@ import { UpdateHudToast } from "./components/UpdateHudToast";
 import { ChatPage } from "./pages/ChatPage";
 import { HudPage } from "./pages/HudPage";
 import { MemoryPage } from "./pages/MemoryPage";
+import { AdminPage } from "./pages/AdminPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { TranslatePage } from "./pages/TranslatePage";
 import { WorkshopPage } from "./pages/WorkshopPage";
@@ -55,6 +56,7 @@ type RootNav =
   | "memory"
   | "workshop"
   | "translate"
+  | "admin"
   | "settings";
 
 function navItems(): {
@@ -69,6 +71,7 @@ function navItems(): {
     { id: "memory", label: t("memory", lang), tone: "success" },
     { id: "workshop", label: t("workshop", lang), tone: "warning" },
     { id: "translate", label: t("translate", lang), tone: "translate" },
+    { id: "admin", label: t("admin", lang), tone: "warning" },
     { id: "settings", label: t("settings", lang), tone: "danger" },
   ];
 }
@@ -140,6 +143,14 @@ function NavIcon({ id }: { id: RootNav }) {
       </svg>
     );
   }
+  if (id === "admin") {
+    return (
+      <svg {...common}>
+        <path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z" />
+        <path d="M9.5 12.2l1.7 1.7 3.3-3.5" />
+      </svg>
+    );
+  }
   return (
     <svg {...common}>
       <circle cx="12" cy="12" r="3" />
@@ -159,6 +170,9 @@ export function App() {
 
   function navFromHash(hash: string): RootNav {
     if (hash.includes("settings")) return "settings";
+    if (hash.includes("admin") || hash.includes("administration")) {
+      return "admin";
+    }
     if (hash.includes("translate") || hash.includes("translator")) {
       return "translate";
     }
@@ -181,6 +195,8 @@ export function App() {
         return "#/workshop";
       case "translate":
         return "#/translate";
+      case "admin":
+        return "#/admin";
       case "settings":
         return "#/settings";
       default:
@@ -585,7 +601,9 @@ export function App() {
             ) : null}
             {nav === "workshop" ? <WorkshopPage /> : null}
             {nav === "translate" ? <TranslatePage /> : null}
-            {nav === "settings" ? (              <SettingsPage
+            {nav === "admin" ? <AdminPage /> : null}
+            {nav === "settings" ? (
+              <SettingsPage
                 themeId={themeId}
                 onThemeChange={setThemeId}
                 bgPatternId={bgPatternId}

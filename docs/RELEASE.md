@@ -2,22 +2,21 @@
 
 ## Версия / имя выпуска
 
-**0.1.37** — Android APK signed + Mira icon (fix «пакет недействителен»).
+**0.1.42** — Администрирование + фон-голос A (Windows-only hotfix).
 
 ## Критерий «выпуск закрыт»
-- [x] APK подписан (`apksigner verify`)
-- [x] Иконка Mira в mipmaps
-- [ ] CI release Win + mac + Android зелёный
+- [ ] Windows installer published (`win/v0.1.42` → Release `v0.1.42`)
 - [ ] GitHub Release published (не draft)
+- [ ] macOS / Android — не в этом hotfix
 
 ## Чеклист
-- [x] `signingConfigs.ciDebug` на release buildType
-- [x] `scripts/android-icons.mjs`
-- [x] bump 0.1.37
-- [ ] Тег `v0.1.37`
+- [x] bump 0.1.42
+- [x] Admin + BG learn A на main (через merge)
+- [ ] Тег `win/v0.1.42`
+- [ ] Тег/Release `v0.1.42` (создаётся workflow при необходимости)
 
 ## Откат
-- `v0.1.36` (Win/mac ок; Android APK был unsigned)
+- `v0.1.41` (EL voices visible; полный Win+mac+Android)
 
 ## Заметки
-- 0.1.36 Android не ставился: unsigned release → «пакет недействителен»
+- Полный `v*` (Win+mac+Android) не запускаем — только Windows.

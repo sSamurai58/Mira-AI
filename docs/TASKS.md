@@ -2,7 +2,7 @@
 
 ## Всего
 
-4
+5
 
 ## Готово
 
@@ -10,9 +10,20 @@
 
 ## В работе
 
-2
+1
 
 ## Задачи
+
+### Фон-обучение голоса A
+- [x] capture EL + owner corpus + stitch rebuild
+- [ ] сетевой sync outbound
+- [ ] per-user голос — позже
+
+### Администрирование v1
+- [x] UI + access store + ключи create/edit
+- [x] F10 UI снят
+- [ ] Роли — полные права
+- [ ] enforce ключей на клиентах
 
 ### Подключить product-team к разработке
 - скопировать пакет в `.cursor/skills/product-team`
