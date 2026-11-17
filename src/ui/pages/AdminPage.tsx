@@ -379,14 +379,6 @@ export function AdminPage() {
     await refresh();
   }
 
-  function toggleSort(k: SortKey) {
-    if (sortKey === k) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setSortKey(k);
-      setSortDir("asc");
-    }
-  }
-
   return (
     <div className="settings-layout workshop-layout">
       <nav className="settings-nav workshop-seg-nav" aria-label="Администрирование">
@@ -470,32 +462,38 @@ export function AdminPage() {
 
         {segment === "users-info" ? (
           <>
-            <div className="row" style={{ flexWrap: "wrap", gap: "0.5rem" }}>
+            <div className="row" style={{ flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
               <input
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
                 placeholder="Поиск…"
                 style={{ flex: 1, minWidth: 160 }}
               />
-              {(
-                [
-                  ["name", "Имя"],
-                  ["status", "Статус"],
-                  ["expires", "Срок ключа"],
-                  ["devices", "Устройства"],
-                  ["messages", "Сообщения"],
-                ] as Array<[SortKey, string]>
-              ).map(([k, label]) => (
-                <button
-                  key={k}
-                  type="button"
-                  className={`btn${sortKey === k ? " btn-primary" : ""}`}
-                  onClick={() => toggleSort(k)}
+              <label className="row" style={{ gap: "0.4rem", alignItems: "center", margin: 0 }}>
+                <span className="muted">Сортировка</span>
+                <select
+                  aria-label="Сортировка списка пользователей"
+                  value={sortKey}
+                  onChange={(e) => {
+                    setSortKey(e.target.value as SortKey);
+                    setSortDir("asc");
+                  }}
                 >
-                  {label}
-                  {sortKey === k ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
-                </button>
-              ))}
+                  <option value="name">Имя</option>
+                  <option value="status">Статус</option>
+                  <option value="expires">Срок ключа</option>
+                  <option value="devices">Устройства</option>
+                  <option value="messages">Сообщения</option>
+                </select>
+              </label>
+              <button
+                type="button"
+                className="btn"
+                title={sortDir === "asc" ? "По возрастанию" : "По убыванию"}
+                onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+              >
+                {sortDir === "asc" ? "↑ возр." : "↓ убыв."}
+              </button>
             </div>
 
             <div className="row" style={{ alignItems: "flex-start", gap: "1rem" }}>
