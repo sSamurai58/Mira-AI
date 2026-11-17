@@ -2,21 +2,19 @@
 
 ## Версия / имя выпуска
 
-**0.1.42** — Администрирование + фон-голос A (Windows-only hotfix).
+**0.1.43** — ключи `MIRA-XXXX…`, срок пресетами, сортировка (Windows-only).
 
 ## Критерий «выпуск закрыт»
-- [ ] Windows installer published (`win/v0.1.42` → Release `v0.1.42`)
+- [ ] Windows installer published (`win/v0.1.43` → Release `v0.1.43`)
 - [ ] GitHub Release published (не draft)
 - [ ] macOS / Android — не в этом hotfix
 
 ## Чеклист
-- [x] bump 0.1.42
-- [x] Admin + BG learn A на main (через merge)
-- [ ] Тег `win/v0.1.42`
-- [ ] Тег/Release `v0.1.42` (создаётся workflow при необходимости)
+- [x] bump 0.1.43
+- [ ] Тег `win/v0.1.43` (без полного `v*` если возможно)
 
 ## Откат
-- `v0.1.41` (EL voices visible; полный Win+mac+Android)
+- `v0.1.42` (Админ + фон-голос A)
 
 ## Заметки
-- Полный `v*` (Win+mac+Android) не запускаем — только Windows.
+- Только Windows via `win/v*`. Не пушить голый `v0.1.43`, чтобы не стартовать полный Release.
