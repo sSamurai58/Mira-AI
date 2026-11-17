@@ -70,17 +70,110 @@ type AccessStats = {
 
 type SortKey = "name" | "status" | "expires" | "devices" | "messages";
 
-function defaultExpiryDays(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
+/** Sentinel for «навсегда» (stored as far-future ISO). */
+const FOREVER_ISO = "9999-12-31T23:59:59.000Z";
+
+type ExpiryPreset = "1m" | "3m" | "6m" | "1y" | "forever" | "custom";
+
+const EXPIRY_PRESETS: Array<{ id: ExpiryPreset; label: string }> = [
+  { id: "1m", label: "1 месяц" },
+  { id: "3m", label: "3 месяца" },
+  { id: "6m", label: "6 месяцев" },
+  { id: "1y", label: "1 год" },
+  { id: "forever", label: "Навсегда" },
+  { id: "custom", label: "Свой" },
+];
+
+function addMonths(from: Date, months: number): Date {
+  const d = new Date(from.getTime());
+  d.setMonth(d.getMonth() + months);
+  return d;
+}
+
+function toDateInputValue(isoOrDate: string | Date): string {
+  const d = typeof isoOrDate === "string" ? new Date(isoOrDate) : isoOrDate;
+  if (Number.isNaN(d.getTime())) return new Date().toISOString().slice(0, 10);
   return d.toISOString().slice(0, 10);
+}
+
+function isForeverExpiry(iso: string): boolean {
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return false;
+  // Anything in year 9000+ counts as forever.
+  return new Date(t).getUTCFullYear() >= 9000;
+}
+
+function expiresAtFromPreset(
+  preset: ExpiryPreset,
+  customDate: string,
+  from: Date = new Date(),
+): string {
+  if (preset === "forever") return FOREVER_ISO;
+  if (preset === "custom") {
+    const d = new Date(customDate);
+    if (Number.isNaN(d.getTime())) throw new Error("Некорректная дата");
+    d.setHours(23, 59, 59, 0);
+    return d.toISOString();
+  }
+  const months =
+    preset === "1m" ? 1 : preset === "3m" ? 3 : preset === "6m" ? 6 : 12;
+  const d = addMonths(from, months);
+  d.setHours(23, 59, 59, 0);
+  return d.toISOString();
+}
+
+function formatExpiryLabel(iso: string): string {
+  if (isForeverExpiry(iso)) return "навсегда";
+  return new Date(iso).toLocaleDateString("ru-RU");
 }
 
 function keyStatus(k: AccessKey | undefined): string {
   if (!k) return "нет ключа";
   if (k.revoked) return "отозван";
+  if (isForeverExpiry(k.expiresAt)) return "активен";
   if (Date.parse(k.expiresAt) < Date.now()) return "истёк";
   return "активен";
+}
+
+function ExpiryPresetField(props: {
+  label: string;
+  preset: ExpiryPreset;
+  customDate: string;
+  onPreset: (p: ExpiryPreset) => void;
+  onCustomDate: (v: string) => void;
+}) {
+  return (
+    <div className="stack" style={{ gap: "0.4rem" }}>
+      <span className="muted">{props.label}</span>
+      <div className="row" style={{ flexWrap: "wrap", gap: "0.35rem" }}>
+        {EXPIRY_PRESETS.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            className={`btn${props.preset === p.id ? " btn-primary" : ""}`}
+            onClick={() => props.onPreset(p.id)}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+      {props.preset === "custom" ? (
+        <input
+          type="date"
+          value={props.customDate}
+          onChange={(e) => props.onCustomDate(e.target.value)}
+        />
+      ) : props.preset !== "forever" ? (
+        <span className="muted" style={{ fontSize: "0.85rem" }}>
+          До {formatExpiryLabel(expiresAtFromPreset(props.preset, props.customDate))}
+        </span>
+      ) : (
+        <span className="muted" style={{ fontSize: "0.85rem" }}>
+          Без срока окончания
+        </span>
+      )}
+    </div>
+  );
 }
 
 export function AdminPage() {
@@ -99,10 +192,15 @@ export function AdminPage() {
   const [newUserNote, setNewUserNote] = useState("");
   const [keyUserName, setKeyUserName] = useState("");
   const [keyUserId, setKeyUserId] = useState("");
-  const [keyExpires, setKeyExpires] = useState(() => defaultExpiryDays(30));
+  const [keyExpiryPreset, setKeyExpiryPreset] = useState<ExpiryPreset>("1m");
+  const [keyCustomDate, setKeyCustomDate] = useState(() =>
+    toDateInputValue(addMonths(new Date(), 1)),
+  );
   const [keyDevices, setKeyDevices] = useState(1);
   const [editKeyId, setEditKeyId] = useState<string | null>(null);
-  const [editExpires, setEditExpires] = useState("");
+  const [editExpiryPreset, setEditExpiryPreset] =
+    useState<ExpiryPreset>("1m");
+  const [editCustomDate, setEditCustomDate] = useState("");
   const [editDevices, setEditDevices] = useState(1);
 
   const [bgStatus, setBgStatus] = useState<{
@@ -242,23 +340,38 @@ export function AdminPage() {
 
   async function createKey() {
     if (!window.mira?.createAccessKey) return;
+    let expiresAt: string;
+    try {
+      expiresAt = expiresAtFromPreset(keyExpiryPreset, keyCustomDate);
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : String(err));
+      return;
+    }
     const res = await window.mira.createAccessKey({
       userId: keyUserId || undefined,
       userName: keyUserName || undefined,
-      expiresAt: new Date(keyExpires).toISOString(),
+      expiresAt,
       maxDevices: keyDevices,
     });
     setKeyUserName("");
     setKeyUserId("");
+    setKeyExpiryPreset("1m");
     setNote(`Ключ создан: ${(res.key as AccessKey).token}`);
     await refresh();
   }
 
   async function saveKeyEdit() {
     if (!window.mira?.updateAccessKey || !editKeyId) return;
+    let expiresAt: string;
+    try {
+      expiresAt = expiresAtFromPreset(editExpiryPreset, editCustomDate);
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : String(err));
+      return;
+    }
     await window.mira.updateAccessKey({
       keyId: editKeyId,
-      expiresAt: new Date(editExpires).toISOString(),
+      expiresAt,
       maxDevices: editDevices,
     });
     setNote("Ключ обновлён (срок / устройства)");
@@ -491,7 +604,7 @@ export function AdminPage() {
                       <br />
                       Срок:{" "}
                       {selectedKey
-                        ? new Date(selectedKey.expiresAt).toLocaleString("ru-RU")
+                        ? formatExpiryLabel(selectedKey.expiresAt)
                         : "—"}
                       <br />
                       Устройства:{" "}
@@ -567,14 +680,13 @@ export function AdminPage() {
                   placeholder="Имя нового пользователя"
                 />
               ) : null}
-              <label className="stack">
-                <span className="muted">Срок действия (дата)</span>
-                <input
-                  type="date"
-                  value={keyExpires}
-                  onChange={(e) => setKeyExpires(e.target.value)}
-                />
-              </label>
+              <ExpiryPresetField
+                label="Срок действия"
+                preset={keyExpiryPreset}
+                customDate={keyCustomDate}
+                onPreset={setKeyExpiryPreset}
+                onCustomDate={setKeyCustomDate}
+              />
               <label className="stack">
                 <span className="muted">Кол-во устройств</span>
                 <input
@@ -604,20 +716,21 @@ export function AdminPage() {
                       {k.token}
                     </code>
                     <span className="muted" style={{ fontSize: "0.85rem" }}>
-                      {u?.name ?? k.userId} · до{" "}
-                      {new Date(k.expiresAt).toLocaleDateString("ru-RU")} · устр.{" "}
-                      {k.devices.length}/{k.maxDevices}
+                      {u?.name ?? k.userId} ·{" "}
+                      {isForeverExpiry(k.expiresAt)
+                        ? "навсегда"
+                        : `до ${formatExpiryLabel(k.expiresAt)}`}{" "}
+                      · устр. {k.devices.length}/{k.maxDevices}
                     </span>
                     {editing ? (
                       <>
-                        <label className="stack">
-                          <span className="muted">Продлить до</span>
-                          <input
-                            type="date"
-                            value={editExpires}
-                            onChange={(e) => setEditExpires(e.target.value)}
-                          />
-                        </label>
+                        <ExpiryPresetField
+                          label="Продлить"
+                          preset={editExpiryPreset}
+                          customDate={editCustomDate}
+                          onPreset={setEditExpiryPreset}
+                          onCustomDate={setEditCustomDate}
+                        />
                         <label className="stack">
                           <span className="muted">Кол-во устройств</span>
                           <input
@@ -654,8 +767,16 @@ export function AdminPage() {
                           className="btn"
                           onClick={() => {
                             setEditKeyId(k.id);
-                            setEditExpires(k.expiresAt.slice(0, 10));
                             setEditDevices(k.maxDevices);
+                            if (isForeverExpiry(k.expiresAt)) {
+                              setEditExpiryPreset("forever");
+                              setEditCustomDate(
+                                toDateInputValue(addMonths(new Date(), 1)),
+                              );
+                            } else {
+                              setEditExpiryPreset("custom");
+                              setEditCustomDate(toDateInputValue(k.expiresAt));
+                            }
                           }}
                         >
                           Редактировать
