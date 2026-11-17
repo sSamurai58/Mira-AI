@@ -15,6 +15,18 @@ export type MiraChangelogEntry = {
 
 export const MIRA_CHANGELOG: MiraChangelogEntry[] = [
   {
+    version: "0.1.43",
+    date: "17.11.2026",
+    summary:
+      "Ключи доступа: формат MIRA-XXXX… и срок пресетами.",
+    bullets: [
+      "Формат ключа MIRA-XXXX-XXXX-XXXX-XXXX",
+      "Срок: 1 / 3 / 6 месяцев, год, навсегда, свой",
+      "Сортировка пользователей — явный select",
+      "Windows-only hotfix (тег win/v0.1.43)",
+    ],
+  },
+  {
     version: "0.1.42",
     date: "17.11.2026",
     summary:

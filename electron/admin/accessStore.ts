@@ -103,8 +103,17 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+/** Charset for MIRA-XXXX-XXXX-XXXX-XXXX (no ambiguous 0/O/1/I/l). */
+const KEY_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz";
+
+/** Format: MIRA-8f6H-hd85-GZ7H-8gPi (4 groups × 4 chars). */
 function mintToken(): string {
-  return `mira_${crypto.randomBytes(18).toString("base64url")}`;
+  const bytes = crypto.randomBytes(16);
+  let raw = "";
+  for (let i = 0; i < 16; i++) {
+    raw += KEY_ALPHABET[bytes[i]! % KEY_ALPHABET.length]!;
+  }
+  return `MIRA-${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}-${raw.slice(12, 16)}`;
 }
 
 export function listAccessRoles(): AccessRole[] {

@@ -99,6 +99,8 @@
 |-------|-----|
 | UI | `src/ui/pages/AdminPage.tsx`, nav в `App.tsx` перед Настройками |
 | Store | `electron/admin/accessStore.ts` → `data/admin/access.json` |
+| Формат ключа | `MIRA-XXXX-XXXX-XXXX-XXXX` (напр. `MIRA-8f6H-hd85-GZ7H-8gPi`) |
+| Срок ключа UI | пресеты: 1 мес / 3 / 6 / год / навсегда / свой (дата) |
 | IPC | `mira:access-*` в main/preload |
 | F10 UI | снят из Настройки → Общие |
 
