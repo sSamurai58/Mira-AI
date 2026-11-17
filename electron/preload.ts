@@ -407,6 +407,46 @@ contextBridge.exposeInMainWorld("mira", {
     description?: string;
     filePaths: string[];
   }) => call("mira:elevenlabs-clone-voice", payload),
+  getAccessSnapshot: () => call("mira:access-snapshot"),
+  listAccessUsers: () => call("mira:access-list-users"),
+  listAccessKeys: () => call("mira:access-list-keys"),
+  listAccessRoles: () => call("mira:access-list-roles"),
+  upsertAccessUser: (payload: {
+    id?: string;
+    name: string;
+    note?: string;
+    roleId?: string;
+    status?: "active" | "blocked";
+  }) => call("mira:access-upsert-user", payload),
+  deleteAccessUser: (userId: string) =>
+    call("mira:access-delete-user", userId),
+  createAccessKey: (payload: {
+    userId?: string;
+    userName?: string;
+    label?: string;
+    expiresAt: string;
+    maxDevices: number;
+  }) => call("mira:access-create-key", payload),
+  updateAccessKey: (payload: {
+    keyId: string;
+    expiresAt?: string;
+    maxDevices?: number;
+    label?: string;
+    revoked?: boolean;
+  }) => call("mira:access-update-key", payload),
+  recordAccessUsage: (payload: {
+    userId?: string;
+    keyToken?: string;
+    sessionsDelta?: number;
+    messagesDelta?: number;
+  }) => call("mira:access-record-usage", payload),
+  mirrorMiraLevel: (payload: { level: number; xp: number }) =>
+    call("mira:access-mirror-mira-level", payload),
+  getBgLearnStatus: () => call("mira:bg-learn-status"),
+  setBgLearnOwnerMode: (ownerMode: boolean) =>
+    call("mira:bg-learn-set-owner", ownerMode),
+  ingestBgLearnOutbound: () => call("mira:bg-learn-ingest-outbound"),
+  rebuildBgLearnPack: () => call("mira:bg-learn-rebuild"),
   mcpRuntimeList: () => call("mira:mcp-runtime-list"),
   mcpRuntimeStatus: (connectorId?: string) =>
     call("mira:mcp-runtime-status", connectorId),

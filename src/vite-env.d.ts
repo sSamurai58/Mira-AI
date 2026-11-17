@@ -1004,6 +1004,76 @@ interface MiraBridge {
     modelId?: string;
     voiceId?: string;
   }>;
+  getAccessSnapshot?: () => Promise<{
+    users: unknown[];
+    keys: unknown[];
+    roles: unknown[];
+    stats: Record<string, unknown>;
+  }>;
+  upsertAccessUser?: (payload: {
+    id?: string;
+    name: string;
+    note?: string;
+    roleId?: string;
+    status?: "active" | "blocked";
+  }) => Promise<unknown>;
+  deleteAccessUser?: (userId: string) => Promise<{ ok: boolean }>;
+  createAccessKey?: (payload: {
+    userId?: string;
+    userName?: string;
+    label?: string;
+    expiresAt: string;
+    maxDevices: number;
+  }) => Promise<{ user: unknown; key: unknown }>;
+  updateAccessKey?: (payload: {
+    keyId: string;
+    expiresAt?: string;
+    maxDevices?: number;
+    label?: string;
+    revoked?: boolean;
+  }) => Promise<unknown>;
+  mirrorMiraLevel?: (payload: {
+    level: number;
+    xp: number;
+  }) => Promise<{ ok: boolean }>;
+  getBgLearnStatus?: () => Promise<{
+    ownerMode: boolean;
+    projectId: string | null;
+    pendingSinceRebuild: number;
+    lastRebuildAt: string | null;
+    lastError: string | null;
+    pairsIngested: number;
+    pairsQueued: number;
+    rebuilds: number;
+    outboundCount: number;
+    phraseCount: number;
+    acceptedClips: number;
+    rebuildRunning: boolean;
+  }>;
+  setBgLearnOwnerMode?: (ownerMode: boolean) => Promise<{
+    ownerMode: boolean;
+    projectId: string | null;
+    pendingSinceRebuild: number;
+    lastRebuildAt: string | null;
+    lastError: string | null;
+    pairsIngested: number;
+    pairsQueued: number;
+    rebuilds: number;
+    outboundCount: number;
+    phraseCount: number;
+    acceptedClips: number;
+    rebuildRunning: boolean;
+  }>;
+  ingestBgLearnOutbound?: () => Promise<{
+    ingested: number;
+    skipped: number;
+    detail: string;
+  }>;
+  rebuildBgLearnPack?: () => Promise<{
+    ok: boolean;
+    detail: string;
+    report?: unknown;
+  }>;
   listElevenLabsModels?: () => Promise<
     Array<{ id: string; label: string; detail: string }>
   >;

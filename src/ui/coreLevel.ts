@@ -72,6 +72,11 @@ function loadXpWatermark(): number {
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
+/** Public XP watermark for admin stats / mirrors. */
+export function loadCoreXp(): number {
+  return loadXpWatermark();
+}
+
 function saveXpWatermark(xp: number): void {
   const safe = Number.isFinite(xp) && xp > 0 ? xp : 0;
   localStorage.setItem(XP_KEY, String(safe));

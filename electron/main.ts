@@ -144,6 +144,24 @@ import {
   synthesizeElevenLabs,
 } from "./tts/elevenlabs";
 import {
+  createAccessKey,
+  deleteAccessUser,
+  getAccessSnapshot,
+  listAccessKeys,
+  listAccessRoles,
+  listAccessUsers,
+  mirrorMiraLevel,
+  recordAccessUsage,
+  updateAccessKey,
+  upsertAccessUser,
+} from "./admin/accessStore";
+import {
+  getBgLearnStatus,
+  ingestOutboundQueue,
+  rebuildBgStitchPack,
+  setBgLearnOwnerMode,
+} from "./voiceBgLearn/bgLearn";
+import {
   completeOAuthWithCode,
   connectMcp,
   disconnectMcp,
@@ -1187,6 +1205,89 @@ app.whenReady().then(async () => {
       }),
     { privileged: true },
   );
+
+  on("mira:access-snapshot", () => getAccessSnapshot());
+  on("mira:access-list-users", () => listAccessUsers());
+  on("mira:access-list-keys", () => listAccessKeys());
+  on("mira:access-list-roles", () => listAccessRoles());
+  on(
+    "mira:access-upsert-user",
+    (
+      _e,
+      payload: {
+        id?: string;
+        name: string;
+        note?: string;
+        roleId?: string;
+        status?: "active" | "blocked";
+      },
+    ) => upsertAccessUser(payload),
+    { privileged: true },
+  );
+  on(
+    "mira:access-delete-user",
+    (_e, userId: string) => deleteAccessUser(userId),
+    { privileged: true },
+  );
+  on(
+    "mira:access-create-key",
+    (
+      _e,
+      payload: {
+        userId?: string;
+        userName?: string;
+        label?: string;
+        expiresAt: string;
+        maxDevices: number;
+      },
+    ) => createAccessKey(payload),
+    { privileged: true },
+  );
+  on(
+    "mira:access-update-key",
+    (
+      _e,
+      payload: {
+        keyId: string;
+        expiresAt?: string;
+        maxDevices?: number;
+        label?: string;
+        revoked?: boolean;
+      },
+    ) => updateAccessKey(payload),
+    { privileged: true },
+  );
+  on(
+    "mira:access-record-usage",
+    (
+      _e,
+      payload: {
+        userId?: string;
+        keyToken?: string;
+        sessionsDelta?: number;
+        messagesDelta?: number;
+      },
+    ) => recordAccessUsage(payload ?? {}),
+  );
+  on(
+    "mira:access-mirror-mira-level",
+    (_e, payload: { level: number; xp: number }) => {
+      mirrorMiraLevel(Number(payload?.level) || 1, Number(payload?.xp) || 0);
+      return { ok: true };
+    },
+  );
+  on("mira:bg-learn-status", () => getBgLearnStatus());
+  on(
+    "mira:bg-learn-set-owner",
+    (_e, ownerMode: boolean) => setBgLearnOwnerMode(Boolean(ownerMode)),
+    { privileged: true },
+  );
+  on("mira:bg-learn-ingest-outbound", () => ingestOutboundQueue(), {
+    privileged: true,
+  });
+  on("mira:bg-learn-rebuild", () => rebuildBgStitchPack(), {
+    privileged: true,
+  });
   on("mira:mcp-runtime-list", () => listMcpRuntimeStatuses());
   on("mira:mcp-runtime-status", (_e, connectorId?: string) =>
     getMcpRuntimeStatus(connectorId),

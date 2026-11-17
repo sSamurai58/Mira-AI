@@ -522,6 +522,21 @@ export async function synthesizeElevenLabs(opts: {
 
   const audioBase64 = buf.toString("base64");
   const mimeType = sniffed.mimeType;
+
+  // Voice BG learn A: durable text↔EL audio pairs (owner corpus / outbound queue).
+  try {
+    const { captureElevenLabsPair } = await import("../voiceBgLearn/bgLearn");
+    captureElevenLabsPair({
+      text: clean,
+      voiceId,
+      modelId,
+      mimeType,
+      audio: buf,
+    });
+  } catch {
+    /* never break speak */
+  }
+
   return {
     ok: true,
     detail: `ElevenLabs · ${modelId}${useStream ? " · stream" : ""}`,
