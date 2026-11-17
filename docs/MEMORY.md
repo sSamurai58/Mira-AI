@@ -13,7 +13,7 @@
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`/`ARCHITECTURE`, `TASKS`, `DECISIONS`, `GLOSSARY`, `RELEASE`, `RISKS`, `VOICE-AUDIT`, `WIP` |
 | Дорожная карта | Must + future F* закрыты (partial→done stubs where noted) |
 
-**Сейчас:** **Администрирование v1** + **фон-голос A** в коде (ветка docs/impl). Роли — stub; сетевой sync ключей/outbound — позже.
+**Сейчас:** **релиз 0.1.42** (Windows-only `win/v0.1.42`) — Администрирование v1 + фон-голос A.
 
 
 ## Решения
@@ -24,6 +24,7 @@
 |------|---------|--------|
 | 2026-11-16 | **Админ = корневой раздел перед Настройками** | Mira по сути админка; видит/пользуется только владелец; v1 Windows |
 | 2026-11-16 | **Отказ от F10-профилей как модели** | Заказчик: делаем иначе через админ-контур; снос кода — отдельной задачей после discovery |
+| 2026-11-17 | **Релиз 0.1.42** (`win/v0.1.42`) | Админ + фон-голос A; Windows-only |
 | 2026-11-17 | **Админ + фон-голос A в коде** | AdminPage; access.json; EL capture→BG corpus; F10 UI снят |
 | 2026-11-17 | **Фон-голос v1 = A (unit-stitch)** | Не B/C; ToS ок; per-user позже |
 | 2026-11-17 | **Сбор пар на всех; корпус+train у владельца** | ownerMode + outbound; см. `VOICE-BG-LEARN.md` |
