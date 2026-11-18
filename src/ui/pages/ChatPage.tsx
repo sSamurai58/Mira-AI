@@ -27,8 +27,6 @@ import {
   formatChatTime,
 } from "../chat/timeLabels";
 import { CoreOrb } from "../components/CoreOrb";
-import { HomeRail } from "../components/HomeRail";
-import { HudCorners } from "../components/HudCorners";
 import { ThemeSelect } from "../components/ThemeSelect";
 import { notifyCoreProgress } from "../coreLevel";
 import {
@@ -65,7 +63,7 @@ import { acquireMicLevel, releaseMicLevel } from "../voice/micLevel";
 import { runInPhase } from "../voice/modelQueue";
 import { statusPhrase } from "../voice/statusPhrases";
 import { normalizeForTts } from "../voice/ttsNormalize";
-import { getActiveTtsEngine, listTtsEngines } from "../voice/ttsEngines";
+import { getActiveTtsEngine } from "../voice/ttsEngines";
 import { speakText, stopSpeaking } from "../voice/tts";
 import type { VoiceInfo } from "../voice/types";
 import { vadPushLevel, resetVadSession } from "../voice/vadSegments";
@@ -135,10 +133,6 @@ export function ChatPage({
   const [attachNote, setAttachNote] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   /** Last measured first-token / reply latency (seconds); Home «Ответ» tile. */
-  const [replySecs, setReplySecs] = useState(0.4);
-  const [replyDisplay, setReplyDisplay] = useState("~0,4 с");
-  const [micLevel, setMicLevel] = useState(0);
-  const [ttsHud, setTtsHud] = useState("TTS…");
   const requestIdRef = useRef<string | null>(null);
   const replyStartRef = useRef<number | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -272,60 +266,33 @@ export function ChatPage({
     syncStickyDate(el);
   }, [threadItems, showDialog, sessionId, syncStickyDate]);
 
-  // Home TTS engine status (EL key/quota/fallback).
+  // EL key → refresh voice catalog (no HUD readout).
   useEffect(() => {
     let cancelled = false;
-    async function refreshTtsHud() {
+    async function refreshElCatalog() {
       const engine = getActiveTtsEngine();
-      const info = listTtsEngines().find((e) => e.id === engine);
-      if (engine === "elevenlabs" && window.mira?.getElevenLabsStatus) {
-        try {
-          const st = await window.mira.getElevenLabsStatus(false);
-          if (cancelled) return;
-          const quota =
-            st.characterCount != null && st.characterLimit != null
-              ? ` · ${(st.characterLimit - st.characterCount).toLocaleString("ru-RU")} симв.`
-              : "";
-          setTtsHud(
-            st.hasKey
-              ? `EL ${st.connected ? "ok" : "ключ"}${quota}`
-              : "EL нет ключа → fallback",
-          );
-          // Ensure Голос dropdown picks up EL entries once key is known.
-          if (st.hasKey) {
-            window.dispatchEvent(new Event("mira:catalog-voices-changed"));
-          }
-          return;
-        } catch {
-          /* fall through */
-        }
-      }
-      if (!cancelled) {
-        setTtsHud(
-          engine === "parametric"
-            ? "Параметрический"
-            : engine === "neural-pack"
-              ? "Neural pack"
-              : engine === "elevenlabs"
-                ? "EL (нужен Electron)"
-                : info?.label || "Web Speech",
-        );
+      if (engine !== "elevenlabs" || !window.mira?.getElevenLabsStatus) return;
+      try {
+        const st = await window.mira.getElevenLabsStatus(false);
+        if (cancelled || !st.hasKey) return;
+        window.dispatchEvent(new Event("mira:catalog-voices-changed"));
+      } catch {
+        /* ignore */
       }
     }
-    void refreshTtsHud();
-    const id = window.setInterval(() => void refreshTtsHud(), 12_000);
+    void refreshElCatalog();
+    const id = window.setInterval(() => void refreshElCatalog(), 12_000);
     return () => {
       cancelled = true;
       window.clearInterval(id);
     };
   }, []);
 
-  // Mic level for HUD bars when listening only.
+  // Mic level → VAD only while listening (no wave HUD).
   // Never open the mic while TTS is playing — speakers→mic feedback is the
   // classic “озвучки нет, одни помехи/скрипы” regression from 0.1.11 HUD.
   useEffect(() => {
     if (voiceState !== "listening") {
-      setMicLevel(0);
       return;
     }
     let cancelled = false;
@@ -340,7 +307,6 @@ export function ChatPage({
       const tick = () => {
         if (cancelled) return;
         const lvl = read?.() ?? 0;
-        setMicLevel(lvl);
         vadPushLevel(lvl);
         raf = requestAnimationFrame(tick);
       };
@@ -544,8 +510,6 @@ export function ChatPage({
 
   const noteReplyLatency = useCallback((startedAt: number | null) => {
     if (startedAt == null) return;
-    const secs = Math.min(9.9, Math.max(0.08, (performance.now() - startedAt) / 1000));
-    setReplySecs(secs);
     replyStartRef.current = null;
   }, []);
 
@@ -566,7 +530,7 @@ export function ChatPage({
       const display =
         trimmed ||
         (files.length
-          ? `📎 ${files.map((f) => f.name).join(", ")}`
+          ? files.map((f) => f.name).join(", ")
           : "");
       emitActionLog({
         title: "Сообщение отправлено",
@@ -748,7 +712,7 @@ export function ChatPage({
       const display =
         trimmed ||
         (files.length
-          ? `📎 ${files.map((f) => f.name).join(", ")}`
+          ? files.map((f) => f.name).join(", ")
           : "");
 
       const nowIso = new Date().toISOString();
@@ -976,12 +940,6 @@ export function ChatPage({
       }
     });
   }, [noteReplyLatency, onError, onVoiceState, speakAssistant]);
-
-  // Home «Ответ» tile — static readout (no 900ms wobble re-renders).
-  useEffect(() => {
-    const rounded = Math.round(replySecs * 10) / 10;
-    setReplyDisplay(`~${String(rounded).replace(".", ",")} с`);
-  }, [replySecs]);
 
   async function handleNewChat() {
     if (!window.mira || busy) return;
@@ -1240,21 +1198,12 @@ export function ChatPage({
 
   const greeting =
     voiceState === "listening"
-      ? "Привет! Я слушаю. Чем займёмся?"
+      ? "Слушаю"
       : voiceState === "thinking"
-        ? "Думаю…"
+        ? "Думаю"
         : voiceState === "speaking"
-          ? "Говорю…"
-          : "Готова. Скажите или напишите.";
-
-  const waveActive =
-    voiceState === "listening" || voiceState === "speaking" || Boolean(interim);
-  const voiceOn = Boolean(activeVoiceId);
-  const waveClass = waveActive
-    ? "wave is-live"
-    : voiceOn
-      ? "wave is-idle is-voice-on"
-      : "wave is-idle";
+          ? "Говорю"
+          : "Mira";
 
   const showHome = panel === "home";
   const levelPctClamped = Math.min(100, Math.max(0, coreProgressPct));
@@ -1264,33 +1213,8 @@ export function ChatPage({
       <div className="home-center">
         {showHome ? (
           <section className="glass-card core-card">
-            <HudCorners />
             <header className="core-head">
               <h2 className="greeting">{greeting}</h2>
-              <div className="pill-row state-pills">
-                <span
-                  className="pill"
-                  data-active={
-                    voiceState === "listening" || voiceState === "idle"
-                      ? "true"
-                      : "false"
-                  }
-                >
-                  Слушает
-                </span>
-                <span
-                  className="pill"
-                  data-active={voiceState === "thinking" ? "true" : "false"}
-                >
-                  Думает
-                </span>
-                <span
-                  className="pill"
-                  data-active={voiceState === "speaking" ? "true" : "false"}
-                >
-                  Говорит
-                </span>
-              </div>
             </header>
 
             <div className="core-card-grid">
@@ -1307,7 +1231,6 @@ export function ChatPage({
                   aria-label={`Уровень ядра ${coreLevel}`}
                 >
                   <div className="core-level-value is-live">
-                    <span className="core-level-aura" aria-hidden />
                     <strong>{coreLevel}</strong>
                     <span className="muted">уровень</span>
                     <span
@@ -1322,81 +1245,16 @@ export function ChatPage({
                   </div>
                 </div>
                 <p className="core-level-caption muted">
-                  Уровень ядра {coreLevel} ·{" "}
-                  {Math.round(levelPctClamped)}% до {coreLevel + 1} · растёт с
-                  диалогами и обучением
+                  Уровень {coreLevel} · {Math.round(levelPctClamped)}%
                 </p>
               </div>
 
-              <div className="core-meta">
-                <div className="stat-row">
-                  <div className="stat-block is-live">
-                    <span className="stat-label">Модель</span>
-                    <div className="stat-value" title={modelLabel}>
-                      {modelLabel}
-                    </div>
-                  </div>
-                  <div className="stat-block is-live">
-                    <span className="stat-label">Ответ</span>
-                    <div className="stat-value g2 is-ticking">{replyDisplay}</div>
-                  </div>
-                  <div
-                    className={`stat-block is-live${voiceOn ? " is-voice-on" : ""}`}
-                  >
-                    <span className="stat-label">Голос</span>
-                    <div className="stat-value g3">
-                      {voiceOn ? "on" : "n/a"}
-                    </div>
-                  </div>
-                  <div className="stat-block is-live" title="Движок TTS">
-                    <span className="stat-label">TTS</span>
-                    <div className="stat-value g2" style={{ fontSize: "0.78rem" }}>
-                      {ttsHud}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="voice-panel is-live">
-                  <div className="voice-panel-top">
-                    <h4>Голосовой ввод</h4>
-                    {interim ? (
-                      <span className="mono tiny voice-interim">{interim}</span>
-                    ) : (
-                      <span className="muted tiny">
-                        PTT и чат — во вкладке «Диалог»
-                      </span>
-                    )}
-                  </div>
-                  <div className={waveClass} aria-hidden>
-                    {Array.from({ length: 36 }, (_, i) => {
-                      const base = 18 + ((i * 37) % 55);
-                      const live =
-                        micLevel > 0.02
-                          ? Math.min(
-                              100,
-                              base + micLevel * 90 * (0.55 + ((i * 13) % 10) / 20),
-                            )
-                          : base;
-                      return (
-                        <span
-                          key={i}
-                          style={{
-                            height: `${live}%`,
-                            animationDelay: `${(i % 7) * 0.08}s`,
-                          }}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="core-hint-row">
-                  <p className="muted" style={{ margin: 0 }}>
-                    {voiceState === "speaking"
-                      ? "Говорю — нажмите «Перебить» или Space, чтобы остановить и сразу слушать."
-                      : "Ядро реагирует на голос и ответы. Чтобы писать или говорить с Мирой — откройте «Диалог»."}
-                  </p>
-                </div>
+              <div className="core-hint-row">
+                <p className="muted" style={{ margin: 0 }}>
+                  {voiceState === "speaking"
+                    ? "Перебить — кнопка или Space."
+                    : "Откройте «Диалог», чтобы писать или говорить."}
+                </p>
               </div>
             </div>
           </section>
@@ -1548,7 +1406,7 @@ export function ChatPage({
                         <div className="bubble-attach-list">
                           {item.bubble.attachments.map((a) => (
                             <span key={a.name} className="attach-chip">
-                              {a.kind === "image" ? "🖼" : "📎"} {a.name}
+                              {a.kind === "image" ? "img" : "file"} {a.name}
                             </span>
                           ))}
                         </div>
@@ -1601,30 +1459,11 @@ export function ChatPage({
             ) : null}
           </div>
 
-          <div className="hint-chips">
-            {[
-              "Что на камере",
-              "Включи ТВ",
-              "Покажи модель",
-              "Новая заметка",
-            ].map((label) => (
-              <button
-                key={label}
-                type="button"
-                className="hint-chip"
-                disabled={busy}
-                onClick={() => void sendText(label)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
           {pendingFiles.length > 0 ? (
             <div className="attach-pending">
               {pendingFiles.map((f) => (
                 <span key={f.id} className="attach-chip is-pending">
-                  {f.kind === "image" ? "🖼" : "📎"} {f.name}
+                  {f.kind === "image" ? "img" : "file"} {f.name}
                   <button
                     type="button"
                     className="attach-chip-x"
@@ -1741,19 +1580,6 @@ export function ChatPage({
         ) : null}
       </div>
 
-      {showHome ? (
-        <HomeRail
-          modelLabel={modelLabel}
-          voiceNote={
-            activeVoiceId
-              ? isCustomVoiceId(activeVoiceId)
-                ? "студия"
-                : "voice on"
-              : "voice n/a"
-          }
-          voiceState={voiceState}
-        />
-      ) : null}
     </div>
   );
 }

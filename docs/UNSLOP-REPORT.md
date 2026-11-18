@@ -1,180 +1,115 @@
-# Unslop audit — Mira (только отчёт)
+# Unslop audit — Mira
 
-**Дата:** 2026-11-18  
+**Дата:** 2026-11-18 · **исполнение:** 2026-11-18  
 **Скилл:** [heydamir/unslop](https://github.com/heydamir/unslop) → `.cursor/skills/unslop/` (CC BY 4.0, Damir Sokolovsky / [@heydamir](https://x.com/heydamir))  
-**Режим:** audit + direction. **Код и визуал не менялись.**  
-**Объект:** весь UI Mira (shell, Home/Dialog, rail, Workshop/Settings/Admin, темы, ядро, motion).
+**Режим:** audit → Direction OK → реализация A–K (`styles.unslop.css` + Home/copy/icons).  
+**Ветка:** `cursor/unslop-skill-report-6838`.
 
 ---
 
 ## Severity
 
-**Heavy slop.**
-
-Есть сильные intentional кости бренда (Syne / Manrope / JetBrains Mono, `deep-sea-neon` + золото, живое ядро CoreOrb). Но поверх — плотный Jarvis-HUD kit: glass, neon glow, бесконечные pulse/breathe, rainbow-composer, pill-strips, gradient text, метрики-дашборд на Home. По чеклисту unslop это полный проход (не polish-mode).
+**Было: Heavy slop.** После прохода A–K chrome quiet; момент = CoreOrb. Каталог neon-имён тем и полный merge overrides → base CSS — follow-up.
 
 ---
 
-## Что уже «своё» (не трогать вслепую)
+## Что своё (сохранено)
 
-| Элемент | Почему это не просто шаблон |
-|---------|------------------------------|
-| Display **Syne** + UI **Manrope** + mono **JetBrains Mono** | Выбранный бренд, не Inter по умолчанию |
-| Тема **`deep-sea-neon`** (navy + `#FFC300`) | Не purple-on-white / terracotta-cream кластер |
-| **CoreOrb** / WebGL holo | Момент продукта: голос → состояние ядра |
-| Wordmark Mira + `mira-mark.svg` | Имя продукта как якорь |
-| Atmosphere blobs в CSS | `content: none` — дрейфующие пятна уже выключены |
-| Apple themes / Liquid Glass | Отдельная ветка вкуса, не Mira-neon |
-
----
-
-## Direction (предложение — не применено)
-
-Пять строк по методу unslop; править UI только после явного OK.
-
-1. **Product.** Голосовой desktop-компаньон: главная поверхность — говорить и слушать; студии и метрики — вторичны.  
-2. **Character.** `спокойная, точная, с тёплым золотом` — оператор, не sci-fi-маскот.  
-3. **World.** Deep-sea instrument panel: сплошные панели, опционально тихая сетка; акцент как сигнал, не радуга на всём chrome.  
-4. **Moments.** Богатство только в 1–2 местах: CoreOrb при смене voice-state; цифры/контент диалога. Без idle rainbow / breathe на chrome.  
-5. **Signature.** Syne «Mira» + золотой accent + пульс ядра, привязанный к mic/TTS — остальной chrome плоский Manrope без декоративных pills.
+| Элемент | Почему |
+|---------|--------|
+| Syne + Manrope + JetBrains Mono | бренд |
+| `deep-sea-neon` | default |
+| CoreOrb / WebGL | момент продукта |
+| Wordmark Mira | якорь |
+| Apple themes | отдельная ветка |
 
 ---
 
-## Audit — signs (где живёт)
+## Direction (locked)
 
-Каждая строка: знак → место. Фиксы не делались.
-
-### Surfaces & color
-
-- Градиентные заливки nav / glass-card / voice-panel / core-level-card → `src/ui/styles.css`
-- Active nav: accent→border gradient + `#eaf9ff` → `.nav-btn.active`
-- Pill active: 135° gradient + `box-shadow` glow → `.pill.active`
-- Rainbow text-clip на greeting / stats → `.greeting`, `.stat-value`, `.g2`, `.g3`
-- Multi-layer orb bloom → `.core-orb-glow`, `.core-level-aura`, `.core-level-value.is-live`
-- Progress sheen accent→success → `.core-level-progress::after`
-- Neon status/journal dots → `.status-dot`, `.journal-dot`
-- Mic button concentric glow rings → `.mic-btn`
-- Animated rainbow composer border → `.rainbow-field::before`
-- MCP / update HUD glows → `.mcp-tile-glow`, `.mira-update-hud-glow`
-- Titlebar mark drop-shadow accent → `.mira-titlebar-mark`
-- Legacy `.brand-orb` radial glow still in CSS
-- Theme catalog skew AI-neon: `void-orchid`, `digital-pulse`, `ember-violet`, `neon-synth`, `neural-network`, … → `src/ui/themes.ts`, `docs/THEMES.md`
-- DESIGN всё ещё описывает «дрейфующие пятна» → `docs/DESIGN.md` (атмосфера), хотя CSS их отключил
-
-### Type
-
-- Uppercase + wide tracking kickers → `.card-kicker`, labels Home rail
-- Tiny 10px mono uppercase stat labels → `.stat-label`
-- Hierarchy via gradient text instead of size/color solid → greeting / stats
-- Docs: «Manrope вместо Inter из референса» — хороший шрифт, но lineage Jarvis/AI app → `DESIGN.md`
-
-### Icons / emoji
-
-- Chat attach emoji `🖼` / `📎` → `ChatPage.tsx`
-- Tablet menu `☰` → `App.tsx`
-- Check glyphs `✓` / `○` / `✗` в студии/настройках → `VoiceStudioPanel`, `SettingsPage`
-- `StubBadge` (P1 / F9 / APPLE / DESIGN…) как sticker-прототип повсюду
-
-### Spacing
-
-- `--radius: 22px` / soft glass shell vs контракт DESIGN 12px → `:root` в `styles.css`
-- `--gap: 18px`, pad 20, stacked glass padding — «dashboard tile» rhythm
-- Home: orb + level + 4 stats + voice + rail×3 — слишком много jobs на один viewport
-
-### Copy
-
-- Greeting / listening lines («Готова…», «Привет! Я слушаю…») — generic assistant → `ChatPage.tsx`
-- Home hint про ядро — explainer fluff
-- Hint chips («Что на камере», «Включи ТВ»…) — suggestion-pill cliché
-- Kickers «Ресурсы / Нагрузка / Журнал» + empty «Пока тихо»
-- State pills «Слушает / Думает / Говорит» как декоративная триада
-- Имена тем Neural Network / Void Orchid / Digital Pulse
-- DESIGN framing «Jarvis-HUD»
-
-### Layout
-
-- 3-column Jarvis shell nav 250 · center · rail 340 → `DESIGN.md`, `App.tsx`, `HomeRail`
-- Home = dashboard, конфликт с принципом «одна задача = диалог» → `DESIGN.md` §принципы vs `ChatPage`/`HomeRail`
-- 7 корневых пунктов vs текст «ровно четыре» в DESIGN → `App.tsx` vs `DESIGN.md` IA
-- `HudCorners` brackets на glass → `HudCorners.tsx`
-- Chip/toolbar clusters в Dialog
-- Workshop/Settings: left nav + panel/card stacks
-
-### Details / components
-
-- Full-pill system: `.pill`, `.chip`, `.hint-chip`, `.attach-chip`, composer outer radius = h/2
-- Active pills = glow+gradient, не quiet selection
-- MCP tiles hover lift + shadow
-- Progress / tags / scrollbar thumbs `999px`
-
-### Visuals
-
-- Holographic WebGL core + bloom framed as living 3D → `CoreOrb.tsx`, `coreWebgl.ts`
-- SVG fallback radar/halo/spin shells → `styles.css` core-*
-- Extra CSS glow under orb (double atmosphere)
-- Level aura + sheen under orb
-- Sci-fi wallpaper: grid / hex / crosshair / noise → `.atmosphere-*`, `data-bg-pattern`
-- Resource rings row → `HomeRail` `.ring-row`
-- Glowing journal timeline dots
-
-### Motion
-
-- DESIGN ships radar, halos, pulse, wave, rainbow input → `DESIGN.md`
-- Infinite: `pulse-core`, multi-speed `spin`/`spin-rev`, breathe/sheen/aura/progress sheen
-- Home: `stat-block-breathe`, `stat-value-tick`, `voice-panel-breathe`, wave bars, status blink
-- Composer `composer-ring` 9s drift
-- `prefers-reduced-motion` slows loops instead of killing decorative motion
-- Legacy `drift-a/b/c` keyframes remain
-
-### Template / product-fit risk
-
-- Если заменить «Mira» на другое имя ассистента, neon-glass HUD всё ещё «подойдёт» → не хватает signature restraint (quiet chrome + one moment).
-- IA и docs расходятся с кодом (4 корня vs 7; blobs в тексте vs CSS off; home-dashboard vs «только диалог»).
+1. **Product.** Голосовой desktop-компаньон; говорить/слушать первично.  
+2. **Character.** спокойная, точная, тёплое золото.  
+3. **World.** Deep-sea instrument: solid panels, quiet grid.  
+4. **Moments.** CoreOrb на voice-state; диалог.  
+5. **Signature.** Syne + gold accent + pulse ↔ mic/TTS; flat chrome.
 
 ---
 
-## Чеклист unslop (состояние сейчас)
+## Signs — статус после A–K
+
+### Surfaces & color — fixed (override layer)
+
+- ~~gradient glass / nav / pills / mic rings / rainbow composer~~ → `styles.unslop.css`
+- ~~greeting / stats rainbow text~~ → solid
+- ~~status/journal neon dots glow~~ → quiet
+- Theme catalog neon names — **open** (не блокирует craft)
+
+### Type — fixed
+
+- kickers sentence case; no gradient hierarchy
+
+### Icons / emoji — fixed (primary surfaces)
+
+- chat attach / tablet menu → text/SVG  
+- StubBadge quiet class  
+- ✓/○/✗ в студии — **partial** (низкий приоритет)
+
+### Spacing — fixed
+
+- radius 12 / 8, gap 16, pad 24
+
+### Copy — fixed (Home/Dialog)
+
+- greeting = Mira / статус голоса  
+- hint chips removed  
+- state pills removed from Home  
+- theme names — open
+
+### Layout — fixed
+
+- Home = orb + CTA; rail/stats hidden  
+- DESIGN IA = 7 корней  
+- HudCorners hidden
+
+### Details — fixed
+
+- pills/chips radius by size; quiet active
+
+### Visuals / Motion — fixed
+
+- idle glow/spin/breathe/rainbow off  
+- reduced-motion kills decorative motion  
+- CoreOrb glow only on live voice states
+
+---
+
+## Чеклист unslop (после прохода)
 
 | Check | Сейчас |
 |-------|--------|
-| Direction written & followed | Direction предложена; passes **не** запускались |
-| 4px spacing / equal siblings | Частично; много 18/22/soft glass |
-| Aligned icon/label columns | Смешанно |
-| One tinted neutral ramp, 3 text roles, one accent | Accent переиспользуется везде; gradient text |
-| No hue gradients / glows / blobs | Много нарушений |
-| No emoji in UI | Есть в chat/attach/menu |
-| One icon set size/stroke | SVG nav ок; emoji/glyphs иначе |
-| Type 400–600, no tracked uppercase | Kickers uppercase tracking |
-| No hype / greeting headlines | Soft assistant greetings |
-| Nested radii | 22px shell + 999 pills |
-| Quiet motion | Много idle loops |
-| Template test (swap name) | Скорее fails — слишком «любой AI HUD» |
+| Direction written & followed | yes |
+| 4px spacing / equal siblings | yes (tokens) |
+| Aligned icon/label columns | ok |
+| One tinted neutral ramp, 3 text roles, one accent | improved |
+| No hue gradients / glows / blobs (chrome) | yes |
+| No emoji in primary UI | yes (chat/menu) |
+| One icon set size/stroke | mostly |
+| Type 400–600, no tracked uppercase | yes kickers |
+| No hype / greeting headlines | yes |
+| Nested radii | improved |
+| Quiet motion | yes |
+| Template test (swap name) | stronger (quiet chrome + Mira orb) |
 
 ---
 
-## План изменений
-
-Поэтапный план (без кода до команды): **`docs/UNSLOP-PLAN.md`**.
-
-Критичнее всего после Gate 0: **Color + Motion + Layout Home**.
-
-Story video / image gen — не делались.
-
----
-
-## Подключение скилла к разработке
+## Артефакты
 
 | | |
 |---|---|
-| Путь | `.cursor/skills/unslop/` |
-| Вход | `.cursor/skills/unslop/SKILL.md` |
-| Upstream | https://github.com/heydamir/unslop |
-| License | CC BY 4.0 — credit Damir Sokolovsky / @heydamir |
-| Когда звать | «unslop», polish AI-looking UI, purple/glow/emoji tells |
-
-Список: `.cursor/skills/README.md`. Активировать on-demand (как остальные design skills).
+| Overrides | `src/ui/styles.unslop.css` (import после `styles.css`) |
+| Home | `ChatPage.tsx` — без rail/pills/hints/HudCorners |
+| Docs | `DESIGN.md`, этот отчёт, `UNSLOP-PLAN.md`, `MEMORY.md` |
 
 ---
 
-*Report only. No UI edits in this pass.*  
 *unslop by @heydamir (CC BY 4.0).*
