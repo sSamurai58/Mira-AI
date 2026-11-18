@@ -152,13 +152,11 @@
 
 ---
 
-## Рекомендуемый порядок (если позже скажете «unslop»)
+## План изменений
 
-По SKILL — девять passes, **сначала confirm direction**:
+Поэтапный план (без кода до команды): **`docs/UNSLOP-PLAN.md`**.
 
-1. Spacing → 2. Color → 3. Icons → 4. Copy → 5. Type → 6. Layout → 7. Details → 8. Visuals → 9. Motion  
-
-Для Mira критичнее всего: **Color + Motion + Layout Home** (убрать glow/rainbow idle; вернуть Home к одному job; chrome quiet; CoreOrb = единственный living moment).
+Критичнее всего после Gate 0: **Color + Motion + Layout Home**.
 
 Story video / image gen — не делались.
 

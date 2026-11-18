@@ -13,7 +13,7 @@
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`/`ARCHITECTURE`, `TASKS`, `DECISIONS`, `GLOSSARY`, `RELEASE`, `RISKS`, `VOICE-AUDIT`, `WIP` |
 | Дорожная карта | Must + future F* закрыты (partial→done stubs where noted) |
 
-**Сейчас:** скилл **unslop** подключён (`.cursor/skills/unslop`); audit дизайна — `docs/UNSLOP-REPORT.md` (**без правок UI**). Релиз **0.1.43** Win.
+**Сейчас:** unslop audit + **план** `docs/UNSLOP-PLAN.md` (этапы A–K). UI **не меняем** до команды. Ждём confirm Direction.
 
 
 ## Решения
@@ -24,7 +24,8 @@
 |------|---------|--------|
 | 2026-11-16 | **Админ = корневой раздел перед Настройками** | Mira по сути админка; видит/пользуется только владелец; v1 Windows |
 | 2026-11-16 | **Отказ от F10-профилей как модели** | Заказчик: делаем иначе через админ-контур; снос кода — отдельной задачей после discovery |
-| 2026-11-18 | **unslop → `.cursor/skills/unslop`** | Upstream heydamir/unslop; audit heavy slop → `docs/UNSLOP-REPORT.md`; UI не меняли |
+| 2026-11-18 | **Unslop-план A–K без кода** | `docs/UNSLOP-PLAN.md`; старт только по команде после OK Direction |
+| 2026-11-18 | **unslop → `.cursor/skills/unslop`** | Upstream heydamir/unslop; audit → `docs/UNSLOP-REPORT.md`; UI не меняли |
 | 2026-11-17 | **Релиз 0.1.43** (`win/v0.1.43`) | MIRA-XXXX ключи; срок пресетами; Windows-only |
 | 2026-11-17 | **Релиз 0.1.42** (`win/v0.1.42`) | Админ + фон-голос A; Windows-only |
 | 2026-11-17 | **Админ + фон-голос A в коде** | AdminPage; access.json; EL capture→BG corpus; F10 UI снят |

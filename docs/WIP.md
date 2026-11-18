@@ -461,6 +461,19 @@ UX: **Создать → фразы → загрузить → Mira сама о�
 
 Мысли: v1 локальный owner; удалённые клиенты — later.
 
+## 2026-11-18 — Unslop Mira (план, без кода)
+
+Источник: `docs/UNSLOP-REPORT.md` → план **`docs/UNSLOP-PLAN.md`**.  
+Скилл: `.cursor/skills/unslop/`. UI не трогаем до команды.
+
+- [x] Audit (heavy)
+- [x] Поэтапный план A–K + Gate 0 Direction
+- [ ] Confirm Direction пользователем
+- [ ] Этапы A→K по команде
+- [ ] Закрыть signs в отчёте
+
+Мысли: не стартовать C/J/G без OK direction.
+
 ## Шаблон новой темы
 
 ```markdown

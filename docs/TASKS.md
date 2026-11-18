@@ -14,6 +14,12 @@
 
 ## Задачи
 
+### Unslop UI (план only)
+- [x] skill + audit `docs/UNSLOP-REPORT.md`
+- [x] план `docs/UNSLOP-PLAN.md`
+- [ ] confirm Direction
+- [ ] этапы A–K — только по команде
+
 ### Фон-обучение голоса A
 - [x] capture EL + owner corpus + stitch rebuild
 - [ ] сетевой sync outbound
