@@ -13,7 +13,7 @@
 | Документы | `MEMORY`, `RULES`, `PRD`, `DESIGN`, `THEMES`, `ARHITECTURE`/`ARCHITECTURE`, `TASKS`, `DECISIONS`, `GLOSSARY`, `RELEASE`, `RISKS`, `VOICE-AUDIT`, `WIP` |
 | Дорожная карта | Must + future F* закрыты (partial→done stubs where noted) |
 
-**Сейчас:** unslop A–K **сделан** (`styles.unslop.css` + Home quiet). Ждём review / релиз по команде.
+**Сейчас:** релиз **0.1.44** Windows-only (`win/v0.1.44`); macOS/Android — по команде.
 
 
 ## Решения
@@ -22,6 +22,7 @@
 
 | Дата | Решение | Почему |
 |------|---------|--------|
+| 2026-11-18 | **Релиз 0.1.44** (`win/v0.1.44`) | Unslop A–K; Windows сейчас; остальные OS по команде |
 | 2026-11-18 | **Unslop A–K: quiet chrome, Home = CoreOrb+CTA** | «делай unslop»; Direction locked; overrides + ChatPage |
 | 2026-11-18 | **Direction unslop locked** | спокойная/точная/gold · deep-sea instrument · момент = CoreOrb |
 | 2026-11-16 | **Админ = корневой раздел перед Настройками** | Mira по сути админка; видит/пользуется только владелец; v1 Windows |

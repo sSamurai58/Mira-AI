@@ -15,6 +15,18 @@ export type MiraChangelogEntry = {
 
 export const MIRA_CHANGELOG: MiraChangelogEntry[] = [
   {
+    version: "0.1.44",
+    date: "18.11.2026",
+    summary:
+      "Unslop: спокойный chrome, Home = ядро Mira.",
+    bullets: [
+      "Quiet chrome: без rainbow/glow/idle breathe на оболочке",
+      "Home: CoreOrb + короткий CTA; rail, pills и hint-chips убраны",
+      "Типографика и иконки: solid text, без emoji в меню/вложениях",
+      "Windows-only hotfix (тег win/v0.1.44); macOS/Android — по команде",
+    ],
+  },
+  {
     version: "0.1.43",
     date: "17.11.2026",
     summary:
