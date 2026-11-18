@@ -17,6 +17,19 @@
 
 Обновление: re-copy sparse tree `product-team` из upstream.
 
+## unslop (Damir Sokolovsky)
+
+Источник: https://github.com/heydamir/unslop  
+Лицензия: **CC BY 4.0** (credit: Damir Sokolovsky / [@heydamir](https://x.com/heydamir)).
+
+| | |
+|---|---|
+| Путь | `.cursor/skills/unslop/` |
+| Вход | [`unslop/SKILL.md`](./unslop/SKILL.md) |
+| Отчёт audit Mira | `docs/UNSLOP-REPORT.md` |
+
+Когда: UI выглядит AI-generated (purple gradients, glows, emoji labels, uneven spacing). Сначала audit + direction, правки — только после OK.
+
 ## design & animation (Emil Kowalski)
 
 Источник: https://github.com/emilkowalski/skills

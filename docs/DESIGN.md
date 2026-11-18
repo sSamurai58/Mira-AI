@@ -28,6 +28,7 @@
 | Когда | Скилл |
 |-------|--------|
 | Общий вкус / polish UI | `emil-design-eng` |
+| Снять AI-slop / redline UI | `unslop` ([heydamir/unslop](https://github.com/heydamir/unslop); audit: `docs/UNSLOP-REPORT.md`) |
 | Собрать анимацию с нуля | `animate` |
 | Ревью / улучшить / найти / убрать motion | `review-animations` · `improve-animations` · `find-animation-opportunities` · `remove-animations` |
 | Несколько элементов вместе | `choreograph` |
